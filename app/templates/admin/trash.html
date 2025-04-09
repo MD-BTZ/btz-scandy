@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Papierkorb{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h1 class="card-title text-2xl mb-4">
+                <i class="fas fa-trash-alt mr-2"></i>
+                Papierkorb
+            </h1>
+
+            <div class="tabs tabs-boxed mb-6">
+                <a class="tab tab-active" onclick="showTab('tools')" id="toolsTab">
+                    <i class="fas fa-tools mr-2"></i>
+                    Werkzeuge
+                </a>
+                <a class="tab" onclick="showTab('consumables')" id="consumablesTab">
+                    <i class="fas fa-box-open mr-2"></i>
+                    Verbrauchsmaterial
+                </a>
+                <a class="tab" onclick="showTab('workers')" id="workersTab">
+                    <i class="fas fa-users mr-2"></i>
+                    Mitarbeiter
+                </a>
+            </div>
+
+            <!-- Werkzeuge -->
+            <div id="toolsContent" class="tab-content">
+                <div class="card bg-base-100 shadow">
+                    <div class="card-body">
+                        <div class="overflow-x-auto">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Name</th>
+                                        <th>Kategorie</th>
+                                        <th>Standort</th>
+                                        <th>Gelöscht am</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tool in tools %}
+                                    <tr>
+                                        <td>{{ tool.barcode }}</td>
+                                        <td>{{ tool.name }}</td>
+                                        <td>{{ tool.category }}</td>
+                                        <td>{{ tool.location }}</td>
+                                        <td>{{ tool.deleted_at|format_datetime }}</td>
+                                        <td>
+                                            <button onclick="restoreItem('tool', '{{ tool.barcode }}')" 
+                                                    class="btn btn-sm btn-primary">
+                                                <i class="fas fa-undo mr-2"></i>
+                                                Wiederherstellen
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">
+                                            Keine gelöschten Werkzeuge vorhanden
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verbrauchsmaterial -->
+            <div id="consumablesContent" class="tab-content hidden">
+                <div class="card bg-base-100 shadow">
+                    <div class="card-body">
+                        <div class="overflow-x-auto">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Name</th>
+                                        <th>Kategorie</th>
+                                        <th>Standort</th>
+                                        <th>Gelöscht am</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for consumable in consumables %}
+                                    <tr>
+                                        <td>{{ consumable.barcode }}</td>
+                                        <td>{{ consumable.name }}</td>
+                                        <td>{{ consumable.category }}</td>
+                                        <td>{{ consumable.location }}</td>
+                                        <td>{{ consumable.deleted_at|format_datetime }}</td>
+                                        <td>
+                                            <button onclick="restoreItem('consumable', '{{ consumable.barcode }}')" 
+                                                    class="btn btn-sm btn-primary">
+                                                <i class="fas fa-undo mr-2"></i>
+                                                Wiederherstellen
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">
+                                            Kein gelöschtes Verbrauchsmaterial vorhanden
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mitarbeiter -->
+            <div id="workersContent" class="tab-content hidden">
+                <div class="card bg-base-100 shadow">
+                    <div class="card-body">
+                        <div class="overflow-x-auto">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Name</th>
+                                        <th>Abteilung</th>
+                                        <th>Gelöscht am</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for worker in workers %}
+                                    <tr>
+                                        <td>{{ worker.barcode }}</td>
+                                        <td>{{ worker.firstname }} {{ worker.lastname }}</td>
+                                        <td>{{ worker.department }}</td>
+                                        <td>{{ worker.deleted_at|format_datetime }}</td>
+                                        <td>
+                                            <button onclick="restoreItem('worker', '{{ worker.barcode }}')" 
+                                                    class="btn btn-sm btn-primary">
+                                                <i class="fas fa-undo mr-2"></i>
+                                                Wiederherstellen
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4">
+                                            Keine gelöschten Mitarbeiter vorhanden
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    // Alle Tab-Inhalte ausblenden
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Alle Tabs deaktivieren
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('tab-active');
+    });
+    
+    // Gewählten Tab-Inhalt anzeigen
+    document.getElementById(tabName + 'Content').classList.remove('hidden');
+    
+    // Gewählten Tab aktivieren
+    document.getElementById(tabName + 'Tab').classList.add('tab-active');
+}
+
+function restoreItem(type, barcode) {
+    if (confirm('Möchten Sie diesen Eintrag wirklich wiederherstellen?')) {
+        fetch(`/admin/trash/restore/${type}/${barcode}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Fehler beim Wiederherstellen: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Wiederherstellen');
+        });
+    }
+}
+</script>
+{% endblock %}

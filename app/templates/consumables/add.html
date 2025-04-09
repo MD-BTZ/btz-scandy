@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Verbrauchsmaterial hinzufügen{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">Neues Verbrauchsmaterial</h1>
+            <div class="flex gap-2">
+                <a href="{{ url_for('consumables.index') }}" class="btn btn-ghost">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Zurück
+                </a>
+            </div>
+        </div>
+
+        <!-- Formular -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('consumables.add') }}">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Name</span>
+                            </label>
+                            <input type="text" name="name" class="input input-bordered" required>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Barcode</span>
+                            </label>
+                            <input type="text" name="barcode" class="input input-bordered" required>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Beschreibung</span>
+                            </label>
+                            <textarea name="description" class="textarea textarea-bordered"></textarea>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Kategorie</span>
+                            </label>
+                            <select name="category" class="select select-bordered" required>
+                                <option value="">Bitte wählen...</option>
+                                {% for category in categories %}
+                                    <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Standort</span>
+                            </label>
+                            <select name="location" class="select select-bordered" required>
+                                <option value="">Bitte wählen...</option>
+                                {% for location in locations %}
+                                    <option value="{{ location }}">{{ location }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Aktueller Bestand</span>
+                            </label>
+                            <input type="number" name="quantity" class="input input-bordered" value="0" required>
+                        </div>
+
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Mindestbestand</span>
+                            </label>
+                            <input type="number" name="min_quantity" class="input input-bordered" value="0" required>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>
+                            Speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

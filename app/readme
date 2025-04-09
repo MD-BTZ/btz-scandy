@@ -1,0 +1,528 @@
+# Scandy - Technische Dokumentation
+
+## Inhaltsverzeichnis
+1. [Systemübersicht](#1-systemübersicht)
+2. [Technische Architektur](#2-technische-architektur)
+3. [Datenbankstruktur](#3-datenbankstruktur)
+4. [Kernfunktionen](#4-kernfunktionen)
+5. [Frontend](#5-frontend)
+6. [API & Integration](#6-api--integration)
+7. [Erweiterung & Anpassung](#7-erweiterung--anpassung)
+8. [Wartung & Troubleshooting](#8-wartung--troubleshooting)
+
+## 1. Systemübersicht
+
+### 1.1 Zweck
+Scandy ist ein Inventarverwaltungssystem für:
+- Werkzeugverwaltung
+- Verbrauchsmaterialverwaltung
+- Ausleihverwaltung
+- Mitarbeiterverwaltung
+
+### 1.2 Hauptfunktionen
+- Barcode-basierte Ausleihe/Rückgabe
+- Bestandsverwaltung
+- Nutzer- und Rechteverwaltung
+- Reporting und Historie
+
+## 2. Technische Architektur
+
+### 2.1 Technologie-Stack
+- Backend: Python/Flask
+- Frontend: HTML5, JavaScript, TailwindCSS/DaisyUI
+- Datenbank: SQLite
+- Authentifizierung: Session-basiert
+
+### 2.2 Projektstruktur
+/app
+├── config/ # Konfigurationsdateien
+├── models/ # Datenbankmodelle
+├── routes/ # Route Handler
+├── static/ # Statische Dateien
+├── templates/ # HTML Templates
+├── utils/ # Hilfsfunktionen
+└── main.py # App-Initialisierung
+
+### 2.3 Kernmodule
+
+#### models/database.py
+python
+class Database:
+"""Zentrale Datenbankverbindung"""
+@staticmethod
+def get_db():
+if 'db' not in g:
+g.db = sqlite3.connect(DATABASE_PATH)
+g.db.row_factory = sqlite3.Row
+return g.db
+#### routes/admin.py
+
+Ctrl+K to generate a command
+Traceback (most recent call last):
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\run.py", line 5, in <module>
+    app = create_app()
+          ^^^^^^^^^^^^
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\app\__init__.py", line 28, in create_app
+    from .routes import index, inventory, admin, auth, api
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\app\routes\__init__.py", line 3, in <module>
+    from app.routes import (
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\app\routes\admin.py", line 8, in <module>
+    from .inventory import get_tools_stats, get_workers_stats, get_consumables_stats, get_current_lendings
+ImportError: cannot import name 'get_tools_stats' from 'app.routes.inventory' (C:\Users\wosch\Documents\GitHub\scan\Scandy\app\routes\inventory.py)
+
+Ah, die Statistik-Funktionen müssen noch in inventory.py definiert werden. Lass uns diese hinzufügen:
+Diese Funktionen werden vom Dashboard verwendet, um die verschiedenen Statistiken zu berechnen. Sie sollten am Anfang der inventory.py Datei eingefügt werden, nach den Imports aber vor den Route-Definitionen.
+Die Funktionen:
+1. get_tools_stats: Zählt alle Werkzeuge und wie viele davon ausgeliehen sind
+get_workers_stats: Zählt alle aktiven Mitarbeiter
+get_consumables_stats: Zählt Verbrauchsmaterialien und wie viele nachbestellt werden müssen
+4. get_current_lendings: Listet alle aktuell ausgeliehenen Werkzeuge auf
+
+=== Server-Start ===
+
+ * Debugger is active!
+ * Debugger PIN: 428-517-245
+Fehler beim Laden des Dashboards: Could not build url for endpoint '/admin/add_tool'. Did you mean 'admin.add_tool' instead?
+127.0.0.1 - - [16/Dec/2024 22:23:39] "GET /admin/dashboard HTTP/1.1" 500 -
+
+
+Der Fehler liegt in der URL-Generierung. In der dashboard-Funktion müssen wir die URLs ohne führenden Schrägstrich definieren:
+Die Route-Namen müssen exakt mit den Blueprint-Routen übereinstimmen, ohne führenden Schrägstrich. Flask's url_for erwartet die Route-Namen in der Form blueprint_name.route_name.
+@dashboard.html liegt der fehler vielleicht im template?
+
+Ja, der Fehler liegt im Template. In dashboard.html wird versucht, url_for(urls.add_tool) zu verwenden, aber die URLs werden falsch referenziert. Hier ist die Korrektur:
+Der Hauptunterschied ist die Art, wie wir auf die URLs zugreifen. Statt url_for(urls.add_tool) verwenden wir jetzt urls['add_tool'], da urls ein Dictionary ist, das bereits die fertigen URLs enthält. Die URLs wurden bereits in der Route mit url_for() generiert und an das Template übergeben.
+
+ * Debugger is active!
+ * Debugger PIN: 428-517-245
+Fehler beim Laden des Dashboards: Could not build url for endpoint '/admin/add_tool'. Did you mean 'admin.add_tool' instead?
+127.0.0.1 - - [16/Dec/2024 22:24:34] "GET /admin/dashboard HTTP/1.1" 500 -
+Fehler beim Laden des Dashboards: 'settings' is undefined
+127.0.0.1 - - [16/Dec/2024 22:25:36] "GET /admin/dashboard HTTP/1.1" 500 -
+
+Es gibt zwei Probleme zu lösen:
+1. Die URL-Endpoints müssen korrekt sein
+Die settings Variable fehlt
+Hier ist die korrigierte dashboard-Funktion:
+Die Änderungen sind:
+1. Die URL-Endpoints wurden von admin.add_* zu inventory.add_* geändert, da die Routen im inventory Blueprint definiert sind
+Die settings Variable wurde hinzugefügt und wird aus der Datenbank geladen
+Standardwerte für die Farben wurden hinzugefügt, falls keine Einstellungen in der Datenbank vorhanden sind
+Die settings Variable wird jetzt auch an das Template übergeben
+Dies sollte beide Fehler beheben.
+jetzt müssten wir den color picker wieder zum laufen bekommen. wir brauchen nur einen für die farbe der buttons und bedienelemente der zweite ist unwichtig.
+
+Lass uns den Color Picker vereinfachen und nur für die Primärfarbe behalten:
+Und in der admin.py Route müssen wir den entsprechenden Endpoint anpassen:
+Dies vereinfacht den Color Picker auf eine einzige Farbe für Buttons und UI-Elemente. Die Farbe wird in der settings-Tabelle gespeichert und beim Laden der Seite angewendet.
+die farbe wird nicht angewendet. auch wenn ich die meldung bekomme das die farbe gespeichert wird.
+
+Wir müssen die ausgewählte Farbe in der base.html Template anwenden. Hier ist die Lösung:
+1. Zuerst in der admin.py Route sicherstellen, dass die Settings weitergegeben werden:
+Dann in der base.html die Farbe anwenden:
+3. Und in der update_design Route sicherstellen, dass der Eintrag existiert:
+Diese Änderungen sollten bewirken, dass:
+1. Die Einstellungen vor jeder Anfrage geladen werden
+Die Farbe als CSS-Variable definiert wird
+3. Die Farbe auf alle relevanten UI-Elemente angewendet wird
+Die Einstellung korrekt in der Datenbank gespeichert wird
+=== Server-Start ===
+
+ * Debugger is active!
+ * Debugger PIN: 428-517-245
+Fehler beim Laden der Einstellungen: name 'g' is not defined
+127.0.0.1 - - [16/Dec/2024 22:30:54] "GET /admin/dashboard HTTP/1.1" 500 -
+Traceback (most recent call last):
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\app\routes\admin.py", line 388, in load_settings
+    g.settings = settings
+NameError: name 'g' is not defined
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 1498, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 1476, in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 878, in full_dispatch_request
+    rv = self.preprocess_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\site-packages\flask\app.py", line 1253, in preprocess_request
+    rv = self.ensure_sync(before_func)()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\wosch\Documents\GitHub\scan\Scandy\app\routes\admin.py", line 391, in load_settings
+    g.settings = {'primary_color': '#3B82F6'}
+NameError: name 'g' is not defined
+127.0.0.1 - - [16/Dec/2024 22:30:54] "GET /admin/dashboard?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 304 -
+127.0.0.1 - - [16/Dec/2024 22:30:54] "GET /admin/dashboard?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 304 -
+127.0.0.1 - - [16/Dec/2024 22:30:55] "GET /admin/dashboard?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+
+Wir müssen g von Flask importieren. Hier ist die korrigierte Version der admin.py:
+Der Fehler trat auf, weil wir g nicht importiert hatten. g ist ein spezielles Flask-Objekt für globale Variablen innerhalb einer Request-Lebensdauer. Mit dem Import sollte es jetzt funktionieren.
+Die Farbe sollte nun:
+1. In der Datenbank gespeichert werden
+Vor jeder Anfrage in g.settings geladen werden
+Im Template verfügbar sein
+Auf die UI-Elemente angewendet werden
+@app kannst du zu allen routen, modulen, datenbanken und allen wichtigen teilen des programms eine readme schreiben die genau beschreibt wie alles miteinander interagiert?
+
+Hier ist eine ausführliche README für das Scandy-System:
+Scandy - Inventarverwaltungssystem
+Systemarchitektur
+1. Datenbankstruktur
+Die Hauptdatenbank (inventory.db) enthält folgende Tabellen:
+tools: Werkzeugverwaltung
+consumables: Verbrauchsmaterialien
+workers: Mitarbeiterdaten
+lendings: Ausleihvorgänge
+settings: Systemeinstellungen
+system_logs: Systemprotokollierung
+Referenz:
+2. Hauptmodule
+a) Datenbankmanagement
+Database Klasse: Zentrale Datenbankverbindung
+SchemaManager: Verwaltet Datenbankschema und Migrationen
+Migrations-System für Datenbankaktualisierungen
+b) Routen-System
+Alle Routen sind in Blueprints organisiert:
+admin.py: Admin-Dashboard und Verwaltungsfunktionen
+inventory.py: Inventarverwaltung
+api.py: REST-API Endpunkte
+auth.py: Authentifizierung
+c) Template-System
+Basis-Template (base.html)
+Modulare Templates pro Funktionsbereich
+Dynamisches Styling über Settings-System
+3. Kernfunktionen
+Ausleihe-System
+Quick-Scan für schnelle Ausleihe/Rückgabe
+Manuelle Ausleihe über Admin-Interface
+Automatische Statusaktualisierung
+Historie-Tracking
+Inventarverwaltung
+CRUD-Operationen für Werkzeuge/Material
+Barcode-basierte Identifikation
+Bestandsüberwachung
+Kategorisierung und Standortverwaltung
+4. Datenfluss
+Ausleihe-Prozess:
+Barcode-Scan → API-Endpoint → Datenbank-Update
+Status-Änderung → System-Log → UI-Update
+Inventar-Management:
+UI-Aktion → Route → Datenbank
+Datenbank → Template-Rendering → UI
+5. Sicherheit
+Login-System mit @login_required Decorator
+Admin-Bereich mit @admin_required
+CSRF-Schutz in Formularen
+Logging aller kritischen Operationen
+6. Erweiterbarkeit
+Das System ist modular aufgebaut und kann erweitert werden durch:
+Neue Blueprint-Module
+Datenbank-Migrationen
+Template-Erweiterungen
+API-Endpunkte
+7. Konfiguration
+Systemeinstellungen werden verwaltet über:
+settings-Tabelle in der Datenbank
+Umgebungsvariablen
+Konfigurationsdateien
+8. Fehlerbehandlung
+Zentrales Logging-System
+Fehler-Templates
+API-Fehlermeldungen
+Transaktionssicherheit in der Datenbank
+9. Frontend
+Responsive Design
+DaisyUI/Tailwind für Styling
+Dynamische Farbschemata
+JavaScript für interaktive Funktionen
+10. Installation & Setup
+Datenbank initialisieren:
+Migrationen ausführen:
+Server starten:
+Diese Dokumentation bietet einen Überblick über die Systemarchitektur und das Zusammenspiel der verschiedenen Komponenten. Für detailliertere Informationen zu einzelnen Modulen siehe die entsprechenden Codedateien und Kommentare.
+kannst du das nochmal in eine datei schreiben und auch darauf eingehen in welchen oprdnern und dateien welche teile sind und was wofür da ist? 
+
+Ich erstelle eine umfassende README.md für das Projekt:
+/app
+├── config/
+│ ├── db_schema.json # Datenbankschema-Definition
+│ └── settings.py # Globale Einstellungen
+├── models/
+│ ├── database.py # Datenbankverbindung & Operationen
+│ └── schema_manager.py # Verwaltung des Datenbankschemas
+├── routes/
+│ ├── admin.py # Admin-Dashboard & Verwaltung
+│ ├── api.py # REST-API Endpunkte
+│ ├── auth.py # Authentifizierung
+│ ├── inventory.py # Inventarverwaltung
+│ ├── tools.py # Werkzeugverwaltung
+│ └── workers.py # Mitarbeiterverwaltung
+├── static/
+│ ├── css/ # Stylesheets
+│ ├── js/ # JavaScript-Dateien
+│ └── images/ # Bilder und Icons
+├── templates/
+│ ├── admin/ # Admin-Bereich Templates
+│ ├── inventory/ # Inventar Templates
+│ └── base.html # Basis-Template
+├── utils/
+│ ├── decorators.py # Auth-Decorators
+│ └── helpers.py # Hilfsfunktionen
+└── main.py # Hauptanwendung
+Diese README bietet einen umfassenden Überblick über das System und seine Komponenten. Sie kann als Referenz für Entwickler und als Dokumentation für das Projekt dienen.
+kannst du das alles zu einer ausführlichen konstruktiven dokumentation über die app zusammenfügen? sie soll dazu dienen die app zu verstehen und verändern zu können.
+
+Ich erstelle eine ausführliche technische Dokumentation für die Scandy App:
+/app
+├── config/ # Konfigurationsdateien
+├── models/ # Datenbankmodelle
+├── routes/ # Route Handler
+├── static/ # Statische Dateien
+├── templates/ # HTML Templates
+├── utils/ # Hilfsfunktionen
+└── main.py # App-Initialisierung
+
+
+### 2.3 Kernmodule
+
+#### models/database.pypython
+class Database:
+"""Zentrale Datenbankverbindung"""
+@staticmethod
+def get_db():
+if 'db' not in g:
+g.db = sqlite3.connect(DATABASE_PATH)
+g.db.row_factory = sqlite3.Row
+return g.db
+
+#### routes/admin.py
+python
+@bp.route('/dashboard')
+@admin_required
+def dashboard():
+"""Admin Dashboard mit Statistiken und Verwaltung"""
+with Database.get_db() as conn:
+stats = get_dashboard_stats(conn)
+return render_template('admin/dashboard.html', stats=stats)
+
+
+## 3. Datenbankstruktur
+
+### 3.1 Haupttabellen
+
+#### tools
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- name
+- status
+- location
+- category
+
+#### consumables
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- name
+- quantity
+- min_quantity
+- location
+
+#### workers
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- firstname
+- lastname
+- department
+
+#### lendings
+- id (PRIMARY KEY)
+- tool_barcode (FOREIGN KEY)
+- worker_barcode (FOREIGN KEY)
+- lent_at
+- returned_at
+
+### 3.2 Datenbankoperationen
+
+#### Beispiel: Werkzeug ausleihen
+
+python
+def lend_tool(tool_barcode, worker_barcode):
+with Database.get_db() as conn:
+conn.execute('''
+INSERT INTO lendings (tool_barcode, worker_barcode, lent_at)
+VALUES (?, ?, CURRENT_TIMESTAMP)
+''', [tool_barcode, worker_barcode])
+conn.commit()
+
+
+## 4. Kernfunktionen
+
+### 4.1 Ausleihe-System
+
+#### Quick-Scan Prozess
+1. Barcode scannen (scanner.js)
+2. API-Anfrage an /api/scan
+3. Datenbankaktualisierung
+4. UI-Update
+
+
+javascript
+// scanner.js
+async function processBarcode(barcode) {
+const response = await fetch('/api/scan', {
+method: 'POST',
+body: JSON.stringify({ barcode })
+});
+updateUI(await response.json());
+}
+
+
+### 4.2 Inventarverwaltung
+
+#### Werkzeug hinzufügen
+
+python
+@bp.route('/add_tool', methods=['POST'])
+@admin_required
+def add_tool():
+data = request.form
+with Database.get_db() as conn:
+conn.execute('''
+INSERT INTO tools (barcode, name, category, location)
+VALUES (?, ?, ?, ?)
+''', [data['barcode'], data['name'],
+data['category'], data['location']])
+conn.commit()
+
+
+## 5. Frontend
+
+### 5.1 Template-Struktur
+
+#### base.html
+
+html
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+<title>{% block title %}{% endblock %} - Scandy</title>
+<link href="/static/css/tailwind.css" rel="stylesheet">
+</head>
+<body>
+<nav><!-- Navigation --></nav>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>
+
+
+
+### 5.2 Styling
+
+#### Farbanpassung
+
+html
+<style>
+:root {
+--primary-color: {{ g.settings.primary_color }};
+}
+.btn-primary {
+background-color: var(--primary-color);
+}
+</style>
+
+
+## 6. API & Integration
+
+### 6.1 API-Endpunkte
+
+#### Scan-Verarbeitung
+
+python
+@bp.route('/api/scan', methods=['POST'])
+def process_scan():
+data = request.get_json()
+barcode = data['barcode']
+# Barcode verarbeiten
+result = process_barcode(barcode)
+return jsonify(result)
+
+
+### 6.2 Authentifizierung
+
+#### Login-Prozess
+
+python
+@bp.route('/login', methods=['POST'])
+def login():
+if check_credentials(request.form):
+session['user_id'] = get_user_id()
+return redirect(url_for('index'))
+return render_template('login.html', error=True)
+
+
+## 7. Erweiterung & Anpassung
+
+### 7.1 Neue Funktionen hinzufügen
+
+1. Route erstellen:
+
+python
+@bp.route('/new_feature')
+def new_feature():
+return render_template('new_feature.html')
+
+
+2. Template erstellen:
+
+html
+{% extends "base.html" %}
+{% block content %}
+<!-- Neue Funktionalität -->
+{% endblock %}
+
+
+3. JavaScript hinzufügen:
+
+javascript
+// static/js/new_feature.js
+document.addEventListener('DOMContentLoaded', () => {
+// Neue Funktionalität
+});
+
+
+### 7.2 Datenbankänderungen
+
+1. Schema aktualisieren (db_schema.json)
+2. Migration erstellen:
+
+python
+def migrate():
+with Database.get_db() as conn:
+conn.execute('''
+ALTER TABLE table_name
+ADD COLUMN new_column TEXT
+''')
+
+
+## 8. Wartung & Troubleshooting
+
+### 8.1 Logging
+python
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(name)
+def critical_operation():
+try:
+# Operation
+logger.info("Operation erfolgreich")
+except Exception as e:
+logger.error(f"Fehler: {str(e)}")

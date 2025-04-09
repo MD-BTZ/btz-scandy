@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Neues Ticket{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="flex items-center mb-6">
+        <a href="{{ url_for('main.index') }}" class="btn btn-ghost btn-sm">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="text-2xl font-bold ml-2">Neues Ticket</h1>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <form id="ticketForm" method="POST" class="space-y-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Titel</span>
+                    </label>
+                    <input type="text" name="title" class="input input-bordered" required
+                           placeholder="Kurze Beschreibung des Problems">
+                </div>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Beschreibung</span>
+                    </label>
+                    <textarea name="description" class="textarea textarea-bordered h-24" required
+                              placeholder="Detaillierte Beschreibung des Problems"></textarea>
+                </div>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Zugewiesen an</span>
+                    </label>
+                    <input type="text" name="assigned_to" class="input input-bordered"
+                           placeholder="Name des zuständigen Mitarbeiters">
+                </div>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Priorität</span>
+                    </label>
+                    <select name="priority" class="select select-bordered">
+                        <option value="niedrig">Niedrig</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="hoch">Hoch</option>
+                        <option value="kritisch">Kritisch</option>
+                    </select>
+                </div>
+
+                <div class="card-actions justify-end mt-4">
+                    <a href="{{ url_for('main.index') }}" class="btn">Abbrechen</a>
+                    <button type="submit" class="btn btn-primary">Ticket erstellen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('ticketForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        priority: formData.get('priority'),
+        assigned_to: formData.get('assigned_to')
+    };
+    
+    const submitButton = this.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Wird erstellt...';
+    
+    try {
+        const response = await fetch('{{ url_for("tickets.create") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', 'Ticket wurde erfolgreich erstellt');
+            // Formular zurücksetzen
+            this.reset();
+            // Nach kurzer Verzögerung zurück zur Hauptseite
+            setTimeout(() => {
+                window.location.href = '{{ url_for("main.index") }}';
+            }, 1500);
+        } else {
+            showToast('error', result.message || 'Fehler beim Erstellen des Tickets');
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Ticket erstellen';
+        }
+    } catch (error) {
+        console.error('Fehler:', error);
+        showToast('error', 'Fehler beim Erstellen des Tickets');
+        submitButton.disabled = false;
+        submitButton.innerHTML = 'Ticket erstellen';
+    }
+});</script>
+{% endblock %} 

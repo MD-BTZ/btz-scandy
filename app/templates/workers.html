@@ -1,0 +1,306 @@
+<!-- templates/workers.html -->
+{% extends "base.html" %}
+
+{% block title %}Mitarbeiter{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Mitarbeiter</h2>
+            {% if session.get('is_admin') %}
+            <a href="{{ url_for(routes.ADD_WORKER) }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Neuer Mitarbeiter
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Filter-Bereich -->
+        <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Suchfeld -->
+            <div>
+                <label class="block text-sm font-medium mb-1">Suche</label>
+                <input type="text" id="searchInput"
+                       class="input input-bordered w-full"
+                       placeholder="Name, Barcode...">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Bereich</label>
+                <select id="filterBereich" class="select select-bordered w-full">
+                    <option value="">Alle Bereiche</option>
+                    <option value="Medien und Digitales">Medien und Digitales</option>
+                    <option value="Technik">Technik</option>
+                    <option value="Kaufmännisches">Kaufmännisches</option>
+                    <option value="Service">Service</option>
+                    <option value="APE">APE</option>
+                    <option value="Mitarbeiter">Mitarbeiter</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tabelle -->
+        <div class="w-full">
+            <table id="workersTable" class="table">
+                <thead class="bg-base-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer">
+                            Name <i class="fas fa-sort ml-1"></i>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer">
+                            Bereich <i class="fas fa-sort ml-1"></i>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer">
+                            Email <i class="fas fa-sort ml-1"></i>
+                        </th>
+                        <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider w-40">Barcode</th>
+                        {% if session.get('is_admin') %}
+                        <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider no-sort">Aktionen</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="bg-base-100 divide-y divide-base-200">
+                    {% for worker in workers %}
+                    <tr class="hover:bg-base-200">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <a href="{{ url_for(routes.WORKER_DETAILS, barcode=worker.barcode) }}"
+                                   class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 inline-block
+                                        font-inter font-semibold tracking-tight hover:scale-[1.02] transform transition-all">
+                                    <span class="font-normal text-sm text-gray-600">{{ worker.firstname }}</span>
+                                    <span class="ml-1">{{ worker.lastname }}</span>
+                                </a>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-3 py-1.5 rounded-lg font-medium inline-block font-inter tracking-tight
+                                {% if worker.department == 'Medien und Digitales' %}
+                                    bg-purple-100 text-purple-800
+                                {% elif worker.department == 'Technik' %}
+                                    bg-yellow-100 text-yellow-800
+                                {% elif worker.department == 'Kaufmännisches' %}
+                                    bg-blue-100 text-blue-800
+                                {% elif worker.department == 'Service' %}
+                                    bg-pink-100 text-pink-800
+                                {% elif worker.department == 'APE' %}
+                                    bg-green-100 text-green-800
+                                {% else %}
+                                    bg-gray-100 text-gray-800
+                                {% endif %}">
+                                <i class="fas fa-{% if worker.department == 'Medien und Digitales' %}laptop
+                                            {% elif worker.department == 'Technik' %}wrench
+                                            {% elif worker.department == 'Kaufmännisches' %}chart-line
+                                            {% elif worker.department == 'Service' %}concierge-bell
+                                            {% elif worker.department == 'APE' %}seedling
+                                            {% else %}user
+                                            {% endif %} mr-2"></i>
+                                {{ worker.department or 'Mitarbeiter' }}
+                            </span>
+                        </td>
+                        {% if session.get('is_admin') %}
+                        <td class="px-6 py-4">{{ worker.email or '-' }}</td>
+                        {% endif %}
+                        <td class="px-6 py-4 text-center w-40">
+                            <button onclick="showBarcodeModal('{{ worker.barcode }}')" 
+                                    class="px-3 py-1.5 rounded-lg bg-base-200 hover:bg-base-300 inline-flex justify-center">
+                                <svg class="barcode h-8" 
+                                     jsbarcode-value="{{ worker.barcode }}"
+                                     jsbarcode-width="1"
+                                     jsbarcode-height="30"
+                                     jsbarcode-fontSize="12">
+                                </svg>
+                            </button>
+                        </td>
+                        {% if session.get('is_admin') %}
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="showDeleteModal('{{ worker.barcode }}')"
+                                    class="btn btn-sm btn-ghost text-error hover:bg-error hover:text-white">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Barcode Modal -->
+<div id="barcodeModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-xl">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">Barcode</h3>
+            <button onclick="closeBarcodeModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="flex justify-center mb-4">
+            <svg id="modalBarcode" class="barcode"></svg>
+        </div>
+        <div class="text-center text-gray-600" id="modalBarcodeText"></div>
+    </div>
+</div>
+
+<!-- Delete Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-xl">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-red-600">Mitarbeiter löschen</h3>
+            <button onclick="closeDeleteModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <p class="mb-4">Sind Sie sicher, dass Sie diesen Mitarbeiter löschen möchten?</p>
+        <div class="flex justify-end space-x-4">
+            <button onclick="closeDeleteModal()" 
+                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
+                Abbrechen
+            </button>
+            <button onclick="confirmDelete()" 
+                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                Löschen
+            </button>
+        </div>
+        <input type="hidden" id="deleteBarcode" value="">
+    </div>
+</div>
+
+<script>
+let currentDeleteBarcode = null;
+
+function showDeleteModal(barcode) {
+    currentDeleteBarcode = barcode;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    currentDeleteBarcode = null;
+}
+
+function confirmDelete() {
+    if (!currentDeleteBarcode) return;
+    
+    fetch(`/workers/${currentDeleteBarcode}/delete`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert(result.message || 'Fehler beim Löschen');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Fehler beim Löschen');
+    });
+}
+
+function showBarcodeModal(barcode) {
+    const modal = document.getElementById('barcodeModal');
+    const modalBarcode = document.getElementById('modalBarcode');
+    const modalBarcodeText = document.getElementById('modalBarcodeText');
+    
+    modalBarcode.setAttribute('jsbarcode-value', barcode);
+    modalBarcodeText.textContent = barcode;
+    
+    JsBarcode("#modalBarcode").init();
+    modal.classList.remove('hidden');
+}
+
+function closeBarcodeModal() {
+    const modal = document.getElementById('barcodeModal');
+    modal.classList.add('hidden');
+}
+
+// Initialisiere alle Barcodes beim Laden
+window.onload = function() {
+    JsBarcode(".barcode").init();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const filterBereich = document.getElementById('filterBereich');
+    const workersTable = document.querySelector('table tbody');
+    let workers = Array.from(workersTable.querySelectorAll('tr'));
+    let sortDirection = {};
+
+    // Filter-Funktion
+    function filterWorkers() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedBereich = filterBereich.value.toLowerCase();
+
+        workers.forEach(row => {
+            // Name aus den verschachtelten Spans holen
+            const firstNameSpan = row.querySelector('td:nth-child(1) span:first-child');
+            const lastNameSpan = row.querySelector('td:nth-child(1) span:last-child');
+            const name = `${firstNameSpan.textContent} ${lastNameSpan.textContent}`.toLowerCase();
+            
+            // Bereich aus dem Text nach dem Icon extrahieren
+            const bereichCell = row.querySelector('td:nth-child(2)');
+            const bereich = bereichCell.textContent.trim().toLowerCase();
+
+            const email = row.querySelector('td:nth-child(3)').textContent.toLowerCase();
+            // Barcode aus dem Button-Attribut holen
+            const barcodeBtn = row.querySelector('td:nth-child(4) button');
+            const barcode = barcodeBtn.getAttribute('onclick').split("'")[1].toLowerCase();
+
+            const matchesSearch = name.includes(searchTerm) || 
+                                email.includes(searchTerm) || 
+                                barcode.includes(searchTerm);
+            const matchesBereich = !selectedBereich || bereich.includes(selectedBereich);
+
+            row.style.display = matchesSearch && matchesBereich ? '' : 'none';
+        });
+    }
+
+    // Sortier-Funktion
+    function sortTable(columnIndex, type = 'text') {
+        const direction = sortDirection[columnIndex] = !sortDirection[columnIndex];
+
+        workers.sort((a, b) => {
+            let aValue = a.querySelector(`td:nth-child(${columnIndex + 1})`).textContent;
+            let bValue = b.querySelector(`td:nth-child(${columnIndex + 1})`).textContent;
+
+            if (type === 'number') {
+                aValue = parseFloat(aValue) || 0;
+                bValue = parseFloat(bValue) || 0;
+            }
+
+            if (direction) {
+                return aValue > bValue ? 1 : -1;
+            } else {
+                return aValue < bValue ? 1 : -1;
+            }
+        });
+
+        // Tabelle neu aufbauen
+        workers.forEach(row => workersTable.appendChild(row));
+    }
+
+    // Event Listener
+    searchInput.addEventListener('input', filterWorkers);
+    filterBereich.addEventListener('change', filterWorkers);
+
+    // Sortier-Header hinzufügen
+    document.querySelectorAll('th').forEach((th, index) => {
+        if (!th.classList.contains('no-sort')) {
+            th.style.cursor = 'pointer';
+            th.addEventListener('click', () => sortTable(index));
+        }
+    });
+});
+</script>
+{% endblock %}

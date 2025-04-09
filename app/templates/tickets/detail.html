@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex items-center mb-6">
+        <a href="{{ url_for('tickets.index') }}" class="btn btn-ghost btn-sm mr-4">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="text-2xl font-bold">Ticket #{{ ticket.id }}</h1>
+        <span class="badge badge-{{ 
+            'success' if ticket.status == 'gelöst' 
+            else 'warning' if ticket.status == 'in_bearbeitung' 
+            else 'error' 
+        }} ml-4">
+            {{ ticket.status }}
+        </span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Ticket Details -->
+        <div class="lg:col-span-2">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">{{ ticket.title }}</h2>
+                    <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+                </div>
+            </div>
+
+            <!-- Notizen Historie -->
+            <div class="card bg-base-100 shadow-xl mt-6">
+                <div class="card-body">
+                    <h3 class="font-bold mb-4">Notizen Historie</h3>
+                    {% if notes %}
+                        {% for note in notes %}
+                        <div class="mb-4 last:mb-0">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-medium">{{ note.created_by }}</span>
+                                <span class="text-sm text-base-content/60">{{ note.created_at }}</span>
+                            </div>
+                            <p class="whitespace-pre-wrap">{{ note.note }}</p>
+                            <div class="divider"></div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-base-content/60">Noch keine Notizen vorhanden.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Meta Informationen -->
+        <div class="lg:col-span-1">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="font-bold mb-4">Details</h3>
+                    
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Status</span>
+                        <p>{{ ticket.status }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Priorität</span>
+                        <p>{{ ticket.priority }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Erstellt von</span>
+                        <p>{{ ticket.created_by }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Erstellt am</span>
+                        <p>{{ ticket.created_at }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Zugewiesen an</span>
+                        <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
+                    </div>
+
+                    {% if ticket.resolved_at %}
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Gelöst am</span>
+                        <p>{{ ticket.resolved_at }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if session.get('is_admin') %}
+                    <div class="divider"></div>
+                    
+                    <button onclick="document.getElementById('updateModal').showModal()" 
+                            class="btn btn-primary w-full">
+                        <i class="fas fa-edit mr-2"></i>
+                        Ticket bearbeiten
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if session.get('is_admin') %}
+<!-- Update Modal -->
+<dialog id="updateModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Ticket bearbeiten</h3>
+        <form id="updateForm" method="POST" action="{{ url_for('tickets.update', id=ticket.id) }}">
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Status</span>
+                </label>
+                <select name="status" class="select select-bordered w-full" required>
+                    <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>
+                        Offen
+                    </option>
+                    <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>
+                        In Bearbeitung
+                    </option>
+                    <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>
+                        Gelöst
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Zugewiesen an</span>
+                </label>
+                <input type="text" name="assigned_to" class="input input-bordered" 
+                       placeholder="Name des zuständigen Mitarbeiters"
+                       value="{{ ticket.assigned_to or '' }}">
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Neue Notiz</span>
+                </label>
+                <textarea name="resolution_notes" class="textarea textarea-bordered h-24" 
+                          placeholder="Notiz zum Ticket hinzufügen"></textarea>
+            </div>
+
+            <div class="modal-action">
+                <button type="button" class="btn btn-ghost" 
+                        onclick="document.getElementById('updateModal').close()">
+                    Abbrechen
+                </button>
+                <button type="submit" id="submitBtn" class="btn btn-primary">
+                    <i class="fas fa-save mr-2"></i>
+                    Speichern
+                </button>
+            </div>
+        </form>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Toast-Funktion
+function showToast(type, message) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `alert ${type === 'error' ? 'alert-error' : 'alert-success'} mb-2`;
+    
+    toast.innerHTML = `
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    d="${type === 'error' 
+                        ? 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'
+                        : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'}" />
+            </svg>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => container.removeChild(toast), 300);
+    }, 3000);
+}
+
+document.getElementById('updateForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichern...';
+    
+    const formData = new FormData(this);
+    const data = {
+        status: formData.get('status'),
+        assigned_to: formData.get('assigned_to'),
+        resolution_notes: formData.get('resolution_notes')
+    };
+    
+    try {
+        const response = await fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', result.message);
+            document.getElementById('updateModal').close();
+            
+            // Verzögerte Neuladen der Seite mit Cache-Busting
+            setTimeout(() => {
+                const currentUrl = window.location.href;
+                const timestamp = new Date().getTime();
+                const separator = currentUrl.includes('?') ? '&' : '?';
+                window.location.href = `${currentUrl}${separator}t=${timestamp}`;
+            }, 1000);
+        } else {
+            throw new Error(result.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler:', error);
+        showToast('error', error.message || 'Ein Fehler ist aufgetreten');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Speichern';
+    }
+});
+</script>
+{% endblock %} 

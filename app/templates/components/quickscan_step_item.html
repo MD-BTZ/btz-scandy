@@ -1,0 +1,35 @@
+<div class="flex flex-col h-full">
+    <div class="text-lg font-medium mb-4">Werkzeug/Material scannen</div>
+    
+    <!-- Scanner Mode -->
+    <div id="scannerMode" class="flex-1">
+        <div class="bg-base-100 rounded-lg p-6">
+            <div class="scan-area relative">
+                <div class="scan-line"></div>
+                <input type="text" 
+                       id="itemScanInput"
+                       class="input input-bordered w-full bg-transparent" 
+                       placeholder="Barcode scannen..."
+                       autocomplete="off">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Webcam Mode -->
+    <div id="webcamMode" class="hidden flex-1">
+        <div class="bg-base-100 rounded-lg overflow-hidden">
+            <div class="relative aspect-video">
+                <video id="video" class="w-full h-full object-cover"></video>
+                <div class="scan-overlay"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scan Result -->
+    <div id="scannedItemInfo" class="mt-4 hidden">
+        <div class="alert alert-info shadow-lg">
+            <i class="fas fa-info-circle"></i>
+            <span id="itemDetails"></span>
+        </div>
+    </div>
+</div> 

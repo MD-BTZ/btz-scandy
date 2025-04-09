@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Werkzeug bearbeiten</h2>
+            
+            <form method="POST" action="{{ url_for('tools.update', id=tool.id) }}">
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Name</span>
+                    </label>
+                    <input type="text" name="name" value="{{ tool.name }}" class="input input-bordered" required>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Barcode</span>
+                    </label>
+                    <input type="text" name="barcode" value="{{ tool.barcode }}" class="input input-bordered" required>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Kategorie</span>
+                    </label>
+                    <input type="text" name="category" value="{{ tool.category }}" class="input input-bordered">
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Standort</span>
+                    </label>
+                    <input type="text" name="location" value="{{ tool.location }}" class="input input-bordered">
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Beschreibung</span>
+                    </label>
+                    <textarea name="description" class="textarea textarea-bordered" rows="3">{{ tool.description }}</textarea>
+                </div>
+                
+                <div class="flex justify-end gap-4">
+                    <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="btn">Abbrechen</a>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

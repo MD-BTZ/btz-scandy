@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Mitarbeiter hinzufügen{% endblock %}
+
+{% block content %}
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title mb-4">Neuen Mitarbeiter hinzufügen</h2>
+        
+        <form method="POST" action="{{ url_for('workers.add') }}" class="max-w-lg">
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Barcode</span>
+                </label>
+                <input type="text" name="barcode" class="input input-bordered" required>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Vorname</span>
+                </label>
+                <input type="text" name="firstname" class="input input-bordered" required>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Nachname</span>
+                </label>
+                <input type="text" name="lastname" class="input input-bordered" required>
+            </div>
+
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Abteilung</span>
+                </label>
+                <select name="department" class="select select-bordered w-full">
+                    {% for department in departments %}
+                        <option value="{{ department }}">{{ department }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">E-Mail</span>
+                </label>
+                <input type="email" name="email" class="input input-bordered">
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <a href="{{ url_for('workers.index') }}" class="btn btn-ghost">Abbrechen</a>
+                <button type="submit" class="btn btn-primary">Speichern</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

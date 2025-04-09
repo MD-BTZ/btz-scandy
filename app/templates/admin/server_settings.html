@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title">Server-Einstellungen</h2>
+        
+        <form method="POST">
+            <div class="form-control">
+                <label class="label cursor-pointer">
+                    <span class="label-text">Modus</span>
+                    <div class="flex gap-4">
+                        <label class="label cursor-pointer">
+                            <input type="radio" name="mode" value="client" 
+                                   class="radio" 
+                                   {% if not is_server %}checked{% endif %}>
+                            <span class="label-text ml-2">Client</span>
+                        </label>
+                        <label class="label cursor-pointer">
+                            <input type="radio" name="mode" value="server" 
+                                   class="radio"
+                                   {% if is_server %}checked{% endif %}>
+                            <span class="label-text ml-2">Server</span>
+                        </label>
+                    </div>
+                </label>
+            </div>
+
+            <div class="form-control" id="serverUrlGroup">
+                <label class="label">
+                    <span class="label-text">Server URL</span>
+                </label>
+                <input type="text" name="server_url" 
+                       class="input input-bordered"
+                       value="{{ server_url or '' }}"
+                       placeholder="http://server:5000">
+            </div>
+
+            <div class="card-actions justify-end mt-4">
+                <button type="submit" class="btn btn-primary">
+                    Speichern
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card bg-base-100 shadow-xl mt-4">
+    <div class="card-body">
+        <h2 class="card-title">Sync-Status</h2>
+        
+        <div class="stats shadow">
+            <div class="stat">
+                <div class="stat-title">Letzte Synchronisation</div>
+                <div class="stat-value">{{ last_sync|format_datetime }}</div>
+            </div>
+            
+            <div class="stat">
+                <div class="stat-title">Status</div>
+                <div class="stat-value">
+                    {% if sync_status == 'success' %}
+                    <span class="text-success">Erfolgreich</span>
+                    {% elif sync_status == 'error' %}
+                    <span class="text-error">Fehler</span>
+                    {% else %}
+                    <span class="text-warning">Ausstehend</span>
+                    {% endif %}
+                </div>
+                {% if sync_error %}
+                <div class="stat-desc text-error">{{ sync_error }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center mt-4">
+            <div class="form-control">
+                <label class="label cursor-pointer">
+                    <span class="label-text mr-4">Automatische Synchronisation</span>
+                    <input type="checkbox" class="toggle" 
+                           {% if auto_sync %}checked{% endif %}
+                           onchange="toggleAutoSync(this.checked)">
+                </label>
+            </div>
+            
+            <button onclick="syncNow()" class="btn btn-primary">
+                Jetzt synchronisieren
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Zeige/Verstecke Server-URL basierend auf Modus
+document.querySelectorAll('input[name="mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const serverUrlGroup = document.getElementById('serverUrlGroup');
+        serverUrlGroup.style.display = this.value === 'client' ? 'block' : 'none';
+    });
+});
+
+async function toggleAutoSync(enabled) {
+    try {
+        const response = await fetch('/api/sync/auto', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled})
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', `Automatische Synchronisation ${enabled ? 'aktiviert' : 'deaktiviert'}`);
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (e) {
+        showToast('error', 'Fehler beim Ändern der Sync-Einstellungen');
+    }
+}
+
+async function syncNow() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Synchronisiere...';
+    
+    try {
+        const response = await fetch('/api/sync/now', {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', 'Synchronisation erfolgreich');
+            location.reload();  // Aktualisiere die Seite für neue Statistiken
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (e) {
+        showToast('error', 'Synchronisation fehlgeschlagen');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Jetzt synchronisieren';
+    }
+}
+</script>
+{% endblock %} 

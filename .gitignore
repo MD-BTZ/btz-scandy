@@ -1,0 +1,34 @@
+# Environments
+venv/
+*.pyc
+__pycache__/
+instance/
+flask_session/
+
+# Logs
+*.log
+logs/
+
+# Backups
+backups/
+
+# Build artifacts / Temporary files
+*.spec
+build/
+dist/
+*.egg-info/
+/htmlcov/
+.pytest_cache/
+.coverage
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Unused files directory
+_potentially_unused/
+
+# IDE / Editor files
+.vscode/
+.idea/ 

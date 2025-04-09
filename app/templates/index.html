@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Startseite{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <!-- QuickScan Pfeil -->
+    <div class="fixed left-16 top-20 hidden md:block z-50">
+        <div class="relative">
+            <img src="{{ url_for('static', filename='images/arrow.png') }}" 
+                 alt="Pfeil" 
+                 class="w-24 h-24"
+                 style="transform: scaleX(-1) rotate(-7deg);">
+        </div>
+    </div>
+
+    <!-- Hero-Sektion -->
+    <div class="hero bg-base-100 rounded-box shadow-xl mb-8">
+        <div class="hero-content text-center">
+            <div class="max-w-2xl">
+                <h1 class="text-4xl font-bold mb-4">Willkommen bei Scandy</h1>
+                <p class="text-xl mb-6">Ihr digitales Werkzeug- und Inventarmanagement</p>
+                {% if not session.get('user_id') %}
+                <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Anmelden
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistik-Karten -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Werkzeug-Statistiken -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="card-title">
+                        <i class="fas fa-tools text-primary mr-2"></i>
+                        Werkzeuge
+                    </h2>
+                    <span class="badge badge-primary">{{ tool_stats.total }} Gesamt</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Verfügbar</span>
+                        <span class="badge badge-success gap-2">
+                            <i class="fas fa-check"></i>
+                            {{ tool_stats.available }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Ausgeliehen</span>
+                        <span class="badge badge-warning gap-2">
+                            <i class="fas fa-hand-holding"></i>
+                            {{ tool_stats.lent }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Defekt</span>
+                        <span class="badge badge-error gap-2">
+                            <i class="fas fa-times"></i>
+                            {{ tool_stats.defect }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Verbrauchsmaterial-Statistiken -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="card-title">
+                        <i class="fas fa-box-open text-secondary mr-2"></i>
+                        Verbrauchsmaterial
+                    </h2>
+                    <span class="badge badge-secondary">{{ consumable_stats.total }} Artikel</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Ausreichend</span>
+                        <span class="badge badge-success gap-2">
+                            <i class="fas fa-check"></i>
+                            {{ consumable_stats.sufficient }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Nachbestellen</span>
+                        <span class="badge badge-warning gap-2">
+                            <i class="fas fa-exclamation"></i>
+                            {{ consumable_stats.warning }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Kritisch</span>
+                        <span class="badge badge-error gap-2">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            {{ consumable_stats.critical }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mitarbeiter-Statistiken -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="card-title">
+                        <i class="fas fa-users text-accent mr-2"></i>
+                        Mitarbeiter
+                    </h2>
+                    <span class="badge badge-accent">{{ worker_stats.total }} Gesamt</span>
+                </div>
+                <div class="space-y-3">
+                    <!-- Abteilungsverteilung -->
+                    <div class="text-sm font-bold mb-2">Nach Abteilung:</div>
+                    {% for dept in worker_stats.by_department %}
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">{{ dept.name }}</span>
+                        <span class="badge badge-ghost">{{ dept.count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hilfe & Anleitungen -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Kurzanleitung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title mb-4">
+                    <i class="fas fa-book-open text-info mr-2"></i>
+                    Kurzanleitung
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex items-start gap-4">
+                        <div class="rounded-full bg-info/10 p-3">
+                            <i class="fas fa-1 text-info"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold">Werkzeug ausleihen</h3>
+                            <p>Öffnen Sie den QuickScan und scannen Sie nacheinander den Mitarbeiter- und Werkzeug-Barcode.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="rounded-full bg-info/10 p-3">
+                            <i class="fas fa-2 text-info"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold">Werkzeug zurückgeben</h3>
+                            <p>Scannen Sie einfach den Werkzeug-Barcode erneut, um die Rückgabe zu registrieren.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="rounded-full bg-info/10 p-3">
+                            <i class="fas fa-3 text-info"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold">Übersicht behalten</h3>
+                            <p>In der Werkzeugübersicht sehen Sie alle aktiven Ausleihen und den Status jedes Werkzeugs.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wichtige Hinweise -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title mb-4">
+                    <i class="fas fa-exclamation-circle text-warning mr-2"></i>
+                    Wichtige Hinweise
+                </h2>
+                <div class="space-y-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Bitte melden Sie beschädigte Werkzeuge umgehend beim Berufstrainer.</span>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-clock"></i>
+                        <span>Werkzeuge sollten am Ende des Arbeitstages zurückgegeben werden.</span>
+                    </div>
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Bei technischen Problemen wenden Sie sich bitte an a.klann.teiln@btz-koeln.net</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,548 @@
++ @tailwind base;
++ @tailwind components;
++ @tailwind utilities; 
+
+/* Lending Lists Styles */
+.lending-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.lending-list {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 1rem;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.lending-list h3 {
+    color: var(--color-gray-700);
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.lending-list-items {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.lending-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+    background: var(--color-gray-50);
+}
+
+.lending-list-item:hover {
+    background: var(--color-gray-100);
+}
+
+.lending-list-item span {
+    color: var(--color-gray-600);
+}
+
+.lending-list-item .status {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+}
+
+.lending-list-item .status-available {
+    background: var(--color-green-100);
+    color: var(--color-green-800);
+}
+
+.lending-list-item .status-lent {
+    background: var(--color-yellow-100);
+    color: var(--color-yellow-800);
+}
+
+.lending-list-item .status-defect {
+    background: var(--color-red-100);
+    color: var(--color-red-800);
+}
+
+/* Scrollbar Styles */
+.lending-list-items::-webkit-scrollbar {
+    width: 6px;
+}
+
+.lending-list-items::-webkit-scrollbar-track {
+    background: var(--color-gray-100);
+    border-radius: 3px;
+}
+
+.lending-list-items::-webkit-scrollbar-thumb {
+    background: var(--color-gray-300);
+    border-radius: 3px;
+}
+
+.lending-list-items::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-400);
+} 
+
+/* Globale Button-Styles */
+[data-theme="light"],
+[data-theme="dark"] {
+    --btn-primary-bg: hsl(var(--p));
+    --btn-primary-color: hsl(0, 0%, 100%);
+    --btn-hover-bg: hsl(var(--pf));
+    --btn-hover-color: hsl(0, 0%, 100%);
+}
+
+/* Primary Buttons */
+.btn.btn-primary {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+    border-color: var(--btn-primary-bg) !important;
+}
+
+.btn.btn-primary:hover {
+    background-color: var(--btn-hover-bg) !important;
+    color: var(--btn-hover-color) !important;
+}
+
+/* Active Navigation */
+.navbar .btn-ghost.btn-active {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+}
+
+/* QuickScan Button */
+.quickscan-button {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.2s ease-in-out !important;
+    outline: none !important;
+    transform: translateX(-50%) !important;
+    width: 18rem !important;
+    height: 18rem !important;
+    padding: 0 !important;
+}
+
+.quickscan-button:hover {
+    transform: translateX(-50%) scale(1.05) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.quickscan-button:active {
+    transform: translateX(-50%) scale(1) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* QuickScan Logo */
+.quickscan-logo {
+    width: 16rem !important;
+    height: 16rem !important;
+    padding: 0.1rem !important;
+    margin: 0 !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+}
+
+/* Ghost Buttons */
+.btn-ghost {
+    background-color: transparent !important;
+    color: hsl(var(--bc)) !important;
+    border-color: transparent !important;
+    outline: none !important;
+    transition: all 0.2s ease-in-out !important;
+    box-shadow: none !important;
+}
+
+.btn-ghost:hover {
+    background-color: hsl(var(--b2)) !important;
+    color: hsl(var(--bc)) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    transform: scale(1.02) !important;
+}
+
+/* Active Ghost Button Hover */
+.btn-ghost.btn-active:hover {
+    background-color: var(--btn-hover-bg) !important;
+    color: var(--btn-hover-color) !important;
+}
+
+/* Active Tabs */
+.tab.tab-active {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+    border-color: var(--btn-primary-bg) !important;
+} 
+
+/* Dashboard-spezifische Button-Styles */
+#main-tab .btn.btn-primary,
+#main-tab .btn.btn-primary:hover,
+#main-tab .quickscan-button {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+    border-color: var(--btn-primary-bg) !important;
+}
+
+/* Erhöhte Spezifität für DaisyUI-Überschreibungen */
+html[data-theme="light"] #main-tab .btn.btn-primary,
+html[data-theme="dark"] #main-tab .btn.btn-primary {
+    background-color: var(--btn-primary-bg) !important;
+    color: var(--btn-primary-color) !important;
+} 
+
+/* Navigation Buttons */
+.navbar .btn {
+    outline: none !important;
+}
+
+/* Allgemeine Button Focus Styles */
+.btn:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(var(--p), 0.2) !important;
+}
+
+/* Entferne Focus Ring für Mouse Users */
+.btn:focus:not(:focus-visible) {
+    box-shadow: none !important;
+} 
+
+/* Native App Styles */
+body {
+    -webkit-app-region: drag;  /* Ermöglicht das Verschieben des Fensters */
+}
+
+/* Nur die Navbar sollte als Drag-Region dienen */
+.navbar {
+    -webkit-app-region: drag;
+    cursor: move;
+}
+
+/* Interaktive Elemente in der Navbar sollten nicht draggable sein */
+.navbar button,
+.navbar a,
+.navbar input,
+.navbar .btn,
+.navbar .quickscan-button {
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+}
+
+/* Verbesserte Interaktivität */
+main {
+    -webkit-app-region: no-drag;
+}
+
+/* Grundlegende Interaktivität wiederherstellen */
+button, 
+a, 
+input, 
+select, 
+.btn,
+.card-action,
+.table td,
+.table th {
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+}
+
+/* Spezifische Cursor-Styles */
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+    cursor: text;
+}
+
+/* Links und Buttons */
+a:not(.btn),
+button:not(.btn) {
+    cursor: pointer;
+}
+
+/* Ermögliche Text-Selektion in wichtigen Bereichen */
+.table-wrapper,
+.list-wrapper,
+.card-body,
+.modal-box {
+    user-select: text;
+    -webkit-app-region: no-drag;
+}
+
+/* Verbesserte Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-gray-100);
+    border-radius: 3px;
+}
+
+.lending-list-items::-webkit-scrollbar-thumb {
+    background: var(--color-gray-300);
+    border-radius: 3px;
+}
+
+.lending-list-items::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-400);
+} 
+
+/* Navbar Layout Fixes */
+.navbar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 100 !important;
+    padding: 0 1rem !important;
+    height: 4rem !important;
+    min-height: 4rem !important;
+    max-height: 4rem !important;
+}
+
+/* Verbesserte Scroll-Container */
+.overflow-auto {
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent !important;
+}
+
+/* Tabellen-Container */
+.table-wrapper {
+    position: relative !important;
+    overflow: auto !important;
+    max-height: calc(100vh - 12rem) !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* Listen-Container */
+.list-wrapper {
+    position: relative !important;
+    overflow: auto !important;
+    max-height: calc(100vh - 12rem) !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2) !important;
+    border-radius: 4px !important;
+    border: 2px solid transparent !important;
+    background-clip: padding-box !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* QuickScan Button Anpassung */
+.quickscan-button {
+    position: fixed !important;
+    left: 50% !important;
+    top: 0 !important;
+    z-index: 101 !important;  /* Über der Navbar */
+}
+
+/* Navigation Container */
+.navbar .flex-1 {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 0 1rem !important;
+}
+
+/* Logo und Navigation Links */
+.navbar .flex-1 > a,
+.navbar .menu {
+    flex-shrink: 0 !important;
+}
+
+/* Rechte Navigations-Buttons */
+.navbar .flex-none {
+    flex-shrink: 0 !important;
+    margin-left: auto !important;
+} 
+
+/* Seitenmenü Styles */
+.navbar {
+    width: calc(100% - 4rem) !important;
+}
+
+main.container-fluid {
+    margin-left: 4rem !important;
+    width: calc(100% - 4rem) !important;
+}
+
+/* Verbesserte Klickbarkeit für Seitenmenü */
+.fixed.left-0.top-0 a {
+    cursor: pointer !important;
+    -webkit-app-region: no-drag !important;
+    position: relative !important;
+    z-index: 60 !important;
+}
+
+.fixed.left-0.top-0 a:hover {
+    transform: scale(1.1) !important;
+    transition: transform 0.2s ease-in-out !important;
+}
+
+.fixed.left-0.top-0 a:active {
+    transform: scale(0.95) !important;
+}
+
+/* Hover-Effekte für Menü-Icons */
+.hover\:rounded-xl:hover {
+    border-radius: 0.75rem !important;
+}
+
+/* Active-State für Menü-Icons */
+.bg-primary.text-primary-content {
+    @apply shadow-lg;
+    transform: scale(1.1) !important;
+} 
+
+/* Content Wrapper */
+.flex.flex-col.min-h-screen {
+    padding-top: 4rem !important;  /* Platz für die fixierte Navbar */
+    margin-left: 4rem !important;  /* Platz für das Seitenmenü */
+} 
+
+/* Verbesserte Scroll-Unterstützung */
+* {
+    -webkit-overflow-scrolling: touch !important; /* Ermöglicht geschmeidiges Scrollen auf macOS */
+}
+
+/* Container mit Scrollbars */
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto {
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* Tabellen-Container */
+.table-container {
+    overflow-y: auto !important;
+    max-height: 70vh !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* Verhindere Scrolling-Konflikte */
+.fixed {
+    position: fixed !important;
+    -webkit-transform: translateZ(0) !important; /* Hardware-Beschleunigung */
+} 
+
+/* Responsive Navigation */
+@media (max-width: 768px) {
+    .navbar ul.menu {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.5rem;
+    }
+    
+    .navbar ul.menu::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .navbar ul.menu li {
+        flex-shrink: 0;
+    }
+    
+    /* Scan-Button immer sichtbar */
+    .navbar ul.menu li:last-child {
+        position: sticky;
+        right: 0;
+        background: inherit;
+        padding-left: 0.5rem;
+    }
+} 
+
+/* Scan-Button Styling */
+.scan-button {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    border-radius: 9999px !important;
+    width: 4rem;
+    height: 4rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.scan-button:hover {
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Stelle sicher, dass der Button über dem Content aber unter Modals ist */
+.scan-button {
+    z-index: 40;
+}
+
+.modal {
+    z-index: 50;
+}
+
+/* Platz für den fixed Button am Ende der Seite */
+.content-wrapper {
+    padding-bottom: 6rem;
+} 
+
+/* Basis-Styles */
+.badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+/* Badge-Farben nicht überschreiben - DaisyUI-Styles haben Vorrang */
+.badge-success {
+    @apply bg-success text-success-content;
+}
+
+.badge-warning {
+    @apply bg-warning text-warning-content;
+}
+
+.badge-error {
+    @apply bg-error text-error-content;
+}
+
+.badge-info {
+    @apply bg-info text-info-content;
+}
+
+.badge-neutral {
+    @apply bg-neutral text-neutral-content;
+} 

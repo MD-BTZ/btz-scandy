@@ -1,0 +1,167 @@
+{% extends "shared/list_base.html" %}
+
+{% block actions %}
+{% if session.get('is_admin') %}
+<div class="flex gap-2">
+    <a href="{{ url_for('consumables.add') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Neues Verbrauchsmaterial
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block filters %}
+<select class="select select-bordered w-full max-w-xs" id="categoryFilter">
+    <option value="">Alle Kategorien</option>
+    {% for category in categories %}
+    <option value="{{ category }}">{{ category }}</option>
+    {% endfor %}
+</select>
+
+<select class="select select-bordered w-full max-w-xs" id="locationFilter">
+    <option value="">Alle Standorte</option>
+    {% for location in locations %}
+    <option value="{{ location }}">{{ location }}</option>
+    {% endfor %}
+</select>
+
+<select class="select select-bordered w-full max-w-xs" id="stockFilter">
+    <option value="">Alle Bestände</option>
+    <option value="low">Niedriger Bestand</option>
+    <option value="sufficient">Ausreichend</option>
+</select>
+{% endblock %}
+
+{% block table_headers %}
+<th>Name</th>
+<th>Barcode</th>
+<th>Standort</th>
+<th>Bestand</th>
+<th>Kategorie</th>
+{% if session.get('is_admin') %}
+<th class="text-right">Aktionen</th>
+{% endif %}
+{% endblock %}
+
+{% block table_rows %}
+{% for item in consumables %}
+<tr class="hover data-row" 
+    data-category="{{ item.category or '' }}"
+    data-location="{{ item.location or '' }}"
+    data-status="{{ item.stock_status }}">
+    <td>
+        {% if session.get('is_admin') %}
+        <a href="{{ url_for('consumables.detail', barcode=item.barcode) }}" class="link link-hover font-medium">
+            {{ item.name }}
+        </a>
+        {% else %}
+        <span class="font-medium">{{ item.name }}</span>
+        {% endif %}
+    </td>
+    <td><code>{{ item.barcode }}</code></td>
+    <td>
+        <span class="badge badge-ghost gap-1">
+            <i class="fas fa-map-marker-alt text-info"></i>
+            {{ item.location or '-' }}
+        </span>
+    </td>
+    <td>
+        {% if item.stock_status == 'critical' %}
+            <span class="badge badge-error gap-1">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ item.quantity }}/{{ item.min_quantity }}
+            </span>
+        {% elif item.stock_status == 'warning' %}
+            <span class="badge badge-warning gap-1">
+                <i class="fas fa-exclamation"></i>
+                {{ item.quantity }}/{{ item.min_quantity }}
+            </span>
+        {% else %}
+            <span class="badge badge-success gap-1">
+                <i class="fas fa-check"></i>
+                {{ item.quantity }}/{{ item.min_quantity }}
+            </span>
+        {% endif %}
+    </td>
+    <td>
+        <span class="badge badge-neutral gap-1">
+            <i class="fas fa-tag"></i>
+            {{ item.category or '-' }}
+        </span>
+    </td>
+    {% if session.get('is_admin') %}
+    <td class="text-right">
+        <div class="btn-group">
+            <a href="{{ url_for('consumables.detail', barcode=item.barcode) }}" class="btn btn-sm btn-ghost">
+                <i class="fas fa-edit"></i>
+            </a>
+            <button class="btn btn-sm btn-ghost btn-error" onclick="deleteConsumable('{{ item.barcode }}')">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </td>
+    {% endif %}
+</tr>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Filter-Funktionalität
+    function applyFilters() {
+        const category = document.getElementById('categoryFilter').value;
+        const location = document.getElementById('locationFilter').value;
+        const stock = document.getElementById('stockFilter').value;
+        
+        document.querySelectorAll('.data-row').forEach(row => {
+            const matchesCategory = !category || row.dataset.category === category;
+            const matchesLocation = !location || row.dataset.location === location;
+            const matchesStock = !stock || row.dataset.stock === stock;
+            
+            row.style.display = (matchesCategory && matchesLocation && matchesStock) ? '' : 'none';
+        });
+    }
+
+    // Filter-Event-Listener
+    ['categoryFilter', 'locationFilter', 'stockFilter'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', applyFilters);
+        }
+    });
+
+    // Event-Listener für Aktualisierungen
+    window.addEventListener('consumableUpdated', function() {
+        window.location.reload();
+    });
+});
+
+function deleteConsumable(barcode) {
+    if (!confirm('Möchten Sie dieses Verbrauchsmaterial wirklich in den Papierkorb verschieben?')) {
+        return;
+    }
+    
+    fetch(`/consumables/${barcode}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Löschen des Verbrauchsmaterials');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Fehler beim Löschen des Verbrauchsmaterials');
+    });
+}
+</script>
+{% endblock %} 

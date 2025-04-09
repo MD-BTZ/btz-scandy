@@ -1,0 +1,204 @@
+<!-- QuickScan Modal -->
+<dialog id="quickScanModal" class="modal">
+    <div class="modal-box w-[800px] h-[600px] flex flex-col p-4">
+        <h3 class="font-bold text-lg mb-2 text-center">QuickScan</h3>
+        
+        <!-- Progress Steps -->
+        <ul class="steps w-full mb-2">
+            <li class="step step-primary" data-content="1">Artikel scannen</li>
+            <li class="step" data-content="2">Mitarbeiter scannen</li>
+        </ul>
+        
+        <!-- Content Container -->
+        <div class="flex flex-col flex-1">
+            <!-- Permanent Info Card Container -->
+            <div id="permanentInfo" class="mb-2">
+                <div class="card bg-base-200">
+                    <div class="card-body p-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Artikel Info -->
+                            <div class="border-r pr-4">
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-box text-primary text-xl"></i>
+                                    <h2 class="card-title text-base">Artikel</h2>
+                                </div>
+                                <div class="divider my-1"></div>
+                                <div class="space-y-1">
+                                    <p id="itemName" class="font-bold text-base opacity-50">Noch kein Artikel gescannt</p>
+                                    <div class="flex items-center gap-2" id="itemStatusContainer" style="display: none;">
+                                        <span id="itemStatus" class="badge badge-lg"></span>
+                                        <!-- Ersetze Text durch Icons -->
+                                        <span id="itemActionIcon" class="text-xl">
+                                            <i class="fas fa-arrow-left text-success hidden" id="returnIcon" title="Wird zurückgegeben"></i>
+                                            <i class="fas fa-arrow-right text-warning hidden" id="lendIcon" title="Wird ausgeliehen"></i>
+                                        </span>
+                                    </div>
+                                    <p id="itemDetails" class="text-sm opacity-50">Details werden nach Scan angezeigt</p>
+                                    <!-- Mengeneingabe für Verbrauchsmaterial -->
+                                    <div id="quantityContainer" class="form-control w-full max-w-xs hidden mt-2">
+                                        <label class="label p-0">
+                                            <span class="label-text text-sm">Menge</span>
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <button type="button" class="btn btn-sm btn-square quantity-btn" data-action="decrease">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+                                            <span id="quantityDisplay" class="text-lg font-bold min-w-[2rem] text-center">1</span>
+                                            <button type="button" class="btn btn-sm btn-square quantity-btn" data-action="increase">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Mitarbeiter Info -->
+                            <div class="pl-4">
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-user text-primary text-xl"></i>
+                                    <h2 class="card-title text-base">Mitarbeiter</h2>
+                                </div>
+                                <div class="divider my-1"></div>
+                                <div class="space-y-1">
+                                    <p id="workerName" class="font-bold text-base opacity-50">Noch kein Mitarbeiter gescannt</p>
+                                    <p id="workerDepartment" class="text-sm opacity-50">Abteilung wird nach Scan angezeigt</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steps Container -->
+            <div class="flex-1 flex flex-col">
+                <!-- Step 1: Artikel Scan -->
+                <div id="step1" class="scan-step flex-1">
+                    <h4 class="font-bold text-base mb-2 text-center">Werkzeug oder Material scannen</h4>
+                    <div class="scan-area bg-base-200 rounded-lg p-4 h-[200px] flex items-center justify-center relative">
+                        <div class="scan-line"></div>
+                        <input type="text" 
+                               id="itemScanInput"
+                               class="input input-bordered w-full bg-transparent text-center opacity-0 absolute inset-0" 
+                               placeholder="Nur Barcode-Scanner Eingabe möglich"
+                               autocomplete="off"
+                               readonly>
+                        <div id="scanPrompt" class="text-center">
+                            <i class="fas fa-barcode text-4xl text-primary mb-2"></i>
+                            <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
+                        </div>
+                        <!-- Confirmation Barcode wird direkt im Scanner-Bereich angezeigt -->
+                        <div id="itemConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200">
+                            <h3 class="font-bold text-base mb-1">Aktion bestätigen</h3>
+                            <p class="text-sm mb-2">Scannen Sie diesen Barcode zur Bestätigung</p>
+                            <canvas id="itemConfirmBarcode" class="max-w-full"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Anzeige der verarbeiteten Eingabe -->
+                    <div class="mt-4">
+                        <div class="divider">oder</div>
+                        <div class="bg-base-200 p-4 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1">
+                                    <h4 class="font-semibold mb-1">Verarbeitete Eingabe</h4>
+                                    <p id="processedItemInput" class="text-lg font-mono text-center opacity-50">Keine Eingabe</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button id="undoItemBtn" class="btn btn-square btn-ghost" title="Letzte Eingabe rückgängig machen">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    <button id="confirmItemBtn" class="btn btn-primary hidden">
+                                        <i class="fas fa-check mr-2"></i>Bestätigen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Mitarbeiter Scan -->
+                <div id="step2" class="scan-step hidden flex-1">
+                    <h4 class="font-bold text-base mb-2 text-center">Mitarbeiter scannen</h4>
+                    <div class="scan-area bg-base-200 rounded-lg p-4 h-[200px] flex items-center justify-center relative">
+                        <div class="scan-line"></div>
+                        <input type="text" 
+                               id="workerScanInput"
+                               class="input input-bordered w-full bg-transparent text-center opacity-0 absolute inset-0" 
+                               placeholder="Nur Barcode-Scanner Eingabe möglich"
+                               autocomplete="off"
+                               readonly>
+                        <div id="workerScanPrompt" class="text-center">
+                            <i class="fas fa-barcode text-4xl text-primary mb-2"></i>
+                            <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
+                        </div>
+                        <!-- Final Confirmation wird direkt im Scanner-Bereich angezeigt -->
+                        <div id="finalConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200">
+                            <h3 class="font-bold text-base mb-1">Vorgang bestätigen</h3>
+                            <p class="text-sm mb-2">Scannen Sie diesen Barcode zur Bestätigung</p>
+                            <canvas id="finalConfirmBarcode" class="max-w-full"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Anzeige der verarbeiteten Mitarbeiter-Eingabe -->
+                    <div class="mt-4">
+                        <div class="divider">oder</div>
+                        <div class="bg-base-200 p-4 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1">
+                                    <h4 class="font-semibold mb-1">Verarbeitete Mitarbeiter-Eingabe</h4>
+                                    <p id="processedWorkerInput" class="text-lg font-mono text-center opacity-50">Keine Eingabe</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button id="undoWorkerButton" class="btn btn-square btn-ghost" onclick="QuickScan.undoLastInput('worker')" title="Letzte Eingabe rückgängig machen">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    <button id="confirmWorkerButton" class="btn btn-primary hidden" onclick="QuickScan.confirmWorker()">
+                                        <i class="fas fa-check mr-2"></i>Bestätigen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-action mt-2">
+            <form method="dialog">
+                <button class="btn" onclick="QuickScan.reset()">Schließen</button>
+            </form>
+        </div>
+    </div>
+</dialog>
+
+<!-- JsBarcode Library -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<script>
+// Nur keydown Events für Scanner Inputs
+document.getElementById('itemScanInput').addEventListener('keydown', function(e) {
+    QuickScan.handleKeyInput(e, this);
+});
+
+document.getElementById('workerScanInput').addEventListener('keydown', function(e) {
+    QuickScan.handleKeyInput(e, this);
+});
+
+// Entferne alle anderen input/keypress Event Listener
+
+// Button Event Listener bleiben unverändert
+document.getElementById('confirmItemBtn').addEventListener('click', function() {
+    QuickScan.confirmItem();
+});
+
+document.getElementById('confirmWorkerButton').addEventListener('click', function() {
+    QuickScan.confirmWorker();
+});
+
+document.getElementById('undoItemBtn').addEventListener('click', function() {
+    QuickScan.undoLastInput('item');
+});
+
+document.getElementById('undoWorkerButton').addEventListener('click', function() {
+    QuickScan.undoLastInput('worker');
+});
+</script> 

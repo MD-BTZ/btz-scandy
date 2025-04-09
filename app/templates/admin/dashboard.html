@@ -1,0 +1,723 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Lending Service -->
+<script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+<!-- Admin Dashboard Script -->
+<script src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Verwaltungskarten -->
+    <div class="grid grid-cols-3 gap-6 mb-8">
+        <!-- Abteilungsverwaltung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-building text-primary"></i>
+                        Abteilungen
+                    </h2>
+                </div>
+                <form id="addDepartmentForm" class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" name="department" placeholder="Neue Abteilung" 
+                               class="input input-bordered input-sm flex-grow" required>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </form>
+                <div class="overflow-x-auto">
+                    <table class="table table-compact w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="departmentsList">
+                            <!-- Wird per JavaScript gefüllt -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Standortverwaltung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-map-marker-alt text-primary"></i>
+                        Standorte
+                    </h2>
+                </div>
+                <form id="addLocationForm" class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" name="location" placeholder="Neuer Standort" 
+                               class="input input-bordered input-sm flex-grow" required>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </form>
+                <div class="overflow-x-auto">
+                    <table class="table table-compact w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationsList">
+                            <!-- Template für Standorte -->
+                            <template id="locationRowTemplate">
+                                <tr>
+                                    <td class="name"></td>
+                                    <td class="text-right">
+                                        <button class="btn btn-error btn-xs delete-btn">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal für Standort bearbeiten -->
+        <dialog id="editLocationModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">Standort bearbeiten</h3>
+                <form id="editLocationForm">
+                    <input type="hidden" name="originalName">
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text">Name</span>
+                        </label>
+                        <input type="text" name="location" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="cursor-pointer label">
+                            <span class="label-text">Für Werkzeuge verfügbar</span>
+                            <input type="checkbox" name="tools" class="checkbox checkbox-primary">
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="cursor-pointer label">
+                            <span class="label-text">Für Verbrauchsmaterial verfügbar</span>
+                            <input type="checkbox" name="consumables" class="checkbox checkbox-secondary">
+                        </label>
+                    </div>
+                    <div class="modal-action">
+                        <button type="submit" class="btn btn-primary">Speichern</button>
+                        <button type="button" class="btn" onclick="editLocationModal.close()">Abbrechen</button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+
+        <!-- Kategorieverwaltung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-tags text-primary"></i>
+                        Kategorien
+                    </h2>
+                </div>
+                <form id="addCategoryForm" class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" name="category" placeholder="Neue Kategorie" 
+                               class="input input-bordered input-sm flex-grow" required>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </form>
+                <div class="overflow-x-auto">
+                    <table class="table table-compact w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoriesList">
+                            <!-- Template für Kategorien -->
+                            <template id="categoryRowTemplate">
+                                <tr>
+                                    <td class="name"></td>
+                                    <td class="text-right">
+                                        <button class="btn btn-error btn-xs delete-btn">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal für Kategorie bearbeiten -->
+        <dialog id="editCategoryModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">Kategorie bearbeiten</h3>
+                <form id="editCategoryForm">
+                    <input type="hidden" name="originalName">
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text">Name</span>
+                        </label>
+                        <input type="text" name="category" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="cursor-pointer label">
+                            <span class="label-text">Für Werkzeuge verfügbar</span>
+                            <input type="checkbox" name="tools" class="checkbox checkbox-primary">
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="cursor-pointer label">
+                            <span class="label-text">Für Verbrauchsmaterial verfügbar</span>
+                            <input type="checkbox" name="consumables" class="checkbox checkbox-secondary">
+                        </label>
+                    </div>
+                    <div class="modal-action">
+                        <button type="submit" class="btn btn-primary">Speichern</button>
+                        <button type="button" class="btn" onclick="editCategoryModal.close()">Abbrechen</button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+    </div>
+
+    <!-- Wichtige Übersichten -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- Wartungsstatus -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Defekte Werkzeuge
+                </h2>
+                <div class="space-y-3 mt-4">
+                    {% for issue in stats.maintenance_issues %}
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">{{ issue.name }}</span>
+                        <span class="badge badge-{{ issue.severity }}">{{ issue.status }}</span>
+                    </div>
+                    {% endfor %}
+                    {% if not stats.maintenance_issues %}
+                    <div class="text-sm text-center text-success">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        Keine defekten Werkzeuge
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Bestandswarnungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-box-open text-error"></i>
+                    Kritischer Bestand
+                </h2>
+                <div class="space-y-3 mt-4">
+                    {% for warning in stats.inventory_warnings %}
+                    <div class="alert alert-{{ warning.type }} shadow-lg text-sm">
+                        <div>
+                            <i class="fas fa-{{ warning.icon }}"></i>
+                            <span>{{ warning.message }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not stats.inventory_warnings %}
+                    <div class="text-sm text-center text-success">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        Alle Bestände ausreichend
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bestandsprognose -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-chart-line text-primary"></i>
+                Bestandsprognose Verbrauchsgüter
+            </h2>
+            <p class="text-sm text-base-content/70">Basierend auf dem durchschnittlichen Verbrauch der letzten 30 Tage</p>
+            
+            <div class="grid grid-cols-2 gap-4 mt-4">
+                {% for item in consumables_forecast %}
+                <div class="card bg-base-200">
+                    <div class="card-body p-4">
+                        <h3 class="font-bold text-sm mb-2">{{ item.name }}</h3>
+                        <div class="radial-progress text-{{ 'error' if item.days_remaining < 30 else 'warning' if item.days_remaining < 60 else 'success' }}" 
+                             style="--value:{{ (item.days_remaining/90)*100 if item.days_remaining < 90 else 100 }}; --size: 8rem;">
+                            {{ item.days_remaining }} Tage
+                        </div>
+                        <div class="text-xs mt-2">
+                            <p>Aktueller Bestand: {{ item.current_amount }}</p>
+                            <p>Täglicher Verbrauch: {{ item.avg_daily_usage }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Aktuelle Ausleihen und Ausgaben -->
+    <div class="grid grid-cols-2 gap-8">
+        <!-- Verbrauchsmaterial Ausgaben -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-box-open text-secondary"></i>
+                    Letzte Materialausgaben
+                </h2>
+                <div class="overflow-x-auto h-96">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Material</th>
+                                <th>Menge</th>
+                                <th>Mitarbeiter</th>
+                                <th>Datum</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usage in consumable_usages %}
+                            <tr>
+                                <td>{{ usage.consumable_name }}</td>
+                                <td>{{ usage.quantity }} Stk</td>
+                                <td>{{ usage.worker_name }}</td>
+                                <td>{{ usage.used_at|format_datetime }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Werkzeug Ausleihen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-tools text-primary"></i>
+                    Aktuelle Werkzeugausleihen
+                </h2>
+                <div class="overflow-x-auto h-96">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Werkzeug</th>
+                                <th>Mitarbeiter</th>
+                                <th>Ausgeliehen seit</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lending in current_lendings %}
+                            <tr class="{% if lending.overdue %}text-red-600{% endif %}">
+                                <td>{{ lending.tool_name }}</td>
+                                <td>{{ lending.worker_name }}</td>
+                                <td>{{ lending.lent_at|format_datetime }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-error" 
+                                            data-barcode="{{ lending.tool_barcode }}"
+                                            title="Werkzeug zurückgeben">
+                                        <i class="fas fa-undo-alt"></i> Zurückgeben
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import/Export-Bereich -->
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-4">Daten Export/Import</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Werkzeuge -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title text-lg">Werkzeuge</h3>
+                    <div class="flex flex-col gap-2">
+                        <a href="{{ url_for('admin.export_table', table='tools') }}" 
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-download mr-2"></i>
+                            Exportieren
+                        </a>
+                        <button onclick="document.getElementById('toolsImport').click()" 
+                                class="btn btn-secondary btn-sm">
+                            <i class="fas fa-upload mr-2"></i>
+                            Importieren
+                        </button>
+                        <form action="{{ url_for('admin.import_table', table='tools') }}" 
+                              method="post" 
+                              enctype="multipart/form-data"
+                              class="hidden">
+                            <input type="file" 
+                                   id="toolsImport"
+                                   name="file" 
+                                   accept=".xlsx"
+                                   onchange="this.form.submit()" />
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mitarbeiter -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title text-lg">Mitarbeiter</h3>
+                    <div class="flex flex-col gap-2">
+                        <a href="{{ url_for('admin.export_table', table='workers') }}" 
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-download mr-2"></i>
+                            Exportieren
+                        </a>
+                        <button onclick="document.getElementById('workersImport').click()" 
+                                class="btn btn-secondary btn-sm">
+                            <i class="fas fa-upload mr-2"></i>
+                            Importieren
+                        </button>
+                        <form action="{{ url_for('admin.import_table', table='workers') }}" 
+                              method="post" 
+                              enctype="multipart/form-data"
+                              class="hidden">
+                            <input type="file" 
+                                   id="workersImport"
+                                   name="file" 
+                                   accept=".xlsx"
+                                   onchange="this.form.submit()" />
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verbrauchsmaterial -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title text-lg">Verbrauchsmaterial</h3>
+                    <div class="flex flex-col gap-2">
+                        <a href="{{ url_for('admin.export_table', table='consumables') }}" 
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-download mr-2"></i>
+                            Exportieren
+                        </a>
+                        <button onclick="document.getElementById('consumablesImport').click()" 
+                                class="btn btn-secondary btn-sm">
+                            <i class="fas fa-upload mr-2"></i>
+                            Importieren
+                        </button>
+                        <form action="{{ url_for('admin.import_table', table='consumables') }}" 
+                              method="post" 
+                              enctype="multipart/form-data"
+                              class="hidden">
+                            <input type="file" 
+                                   id="consumablesImport"
+                                   name="file" 
+                                   accept=".xlsx"
+                                   onchange="this.form.submit()" />
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verlauf -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title text-lg">Verlauf</h3>
+                    <div class="flex flex-col gap-2">
+                        <a href="{{ url_for('admin.export_table', table='history') }}" 
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-download mr-2"></i>
+                            Exportieren
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup-Bereich -->
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-4">
+            <i class="fas fa-database text-primary"></i>
+            Backup-Verwaltung
+        </h2>
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <form action="{{ url_for('admin.create_backup') }}" method="POST">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>
+                            Backup erstellen
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="table w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Größe</th>
+                                <th>Erstellt am</th>
+                                <th>Datenbankinhalt</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for backup in backups %}
+                            <tr>
+                                <td>{{ backup.name }}</td>
+                                <td>{{ (backup.size / 1024)|round(1) }} KB</td>
+                                <td>{{ backup.created|format_datetime }}</td>
+                                <td>
+                                    {% if backup.stats %}
+                                    <div class="text-sm">
+                                        <span class="badge badge-info" title="Aktive Werkzeuge">
+                                            <i class="fas fa-tools"></i> {{ backup.stats.tools }}
+                                        </span>
+                                        <span class="badge badge-success" title="Aktive Verbrauchsmaterialien">
+                                            <i class="fas fa-box"></i> {{ backup.stats.consumables }}
+                                        </span>
+                                        <span class="badge badge-warning" title="Aktive Mitarbeiter">
+                                            <i class="fas fa-users"></i> {{ backup.stats.workers }}
+                                        </span>
+                                        <span class="badge badge-primary" title="Aktive Ausleihen">
+                                            <i class="fas fa-hand-holding"></i> {{ backup.stats.active_lendings }}
+                                        </span>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-gray-400">Keine Statistiken verfügbar</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form action="{{ url_for('admin.restore_backup', filename=backup.name) }}" 
+                                          method="POST" class="inline"
+                                          onsubmit="return confirm('Sind Sie sicher? Dies überschreibt die aktuelle Datenbank mit dem Stand vom {{ backup.created|format_datetime }}.');">
+                                        <button type="submit" class="btn btn-warning btn-sm">
+                                            <i class="fas fa-undo-alt mr-1"></i>
+                                            Wiederherstellen
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider">Über Scandy</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a href="{{ url_for('tickets.index') }}" class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-ticket-alt text-xl"></i>
+                    Tickets
+                </h2>
+                <p>Ticket-Liste anzeigen und verwalten</p>
+            </div>
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart initialisieren wenn das Element existiert
+function initChart() {
+    const chartCanvas = document.getElementById('consumableTrendChart');
+    if (chartCanvas) {
+        const ctx = chartCanvas.getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ stats.consumable_trend.labels|tojson }},
+                datasets: {{ stats.consumable_trend.datasets|tojson }}
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Abteilungsverwaltung
+const DepartmentManager = {
+    init() {
+        const form = document.getElementById('addDepartmentForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddDepartment(e));
+            this.loadDepartments();
+        }
+    },
+
+    async loadDepartments() {
+        const tbody = document.getElementById('departmentsList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/departments');
+            const data = await response.json();
+            if (data.success) {
+                this.renderDepartments(data.departments);
+            } else {
+                showToast('error', 'Fehler beim Laden der Abteilungen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Abteilungen:', error);
+            showToast('error', 'Fehler beim Laden der Abteilungen');
+        }
+    },
+
+    renderDepartments(departments) {
+        const tbody = document.getElementById('departmentsList');
+        if (!tbody) return;
+
+        tbody.innerHTML = departments.map(dept => `
+            <tr>
+                <td>${dept}</td>
+                <td class="text-right">
+                    <button onclick="DepartmentManager.deleteDepartment('${dept}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddDepartment(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch('/admin/departments/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadDepartments();
+                showToast('success', 'Abteilung hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        }
+    },
+
+    async deleteDepartment(name) {
+        if (!confirm(`Möchten Sie die Abteilung "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/departments/${encodeURIComponent(name)}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadDepartments();
+                showToast('success', 'Abteilung gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
+
+// Toast-Nachricht anzeigen
+function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.style.cssText = 'position: fixed; top: 1rem; right: 1rem; z-index: 1000;';
+    toast.innerHTML = `
+        <div class="alert alert-${type}">
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+function returnTool(barcode) {
+    if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+        return;
+    }
+    
+    window.LendingService.returnItem(barcode)
+        .then(success => {
+            if (success) {
+                window.location.reload();
+            }
+        });
+}
+</script>
+{% endblock %} 

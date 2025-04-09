@@ -1,0 +1,221 @@
+{
+    "tools": {
+        "columns": {
+            "id": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": true
+            },
+            "barcode": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "name": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "description": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "status": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "created_at": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            },
+            "deleted": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": false
+            },
+            "category": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "location": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            }
+        }
+    },
+    "consumables": {
+        "columns": {
+            "id": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": true
+            },
+            "barcode": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "name": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "description": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "quantity": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": false
+            },
+            "min_quantity": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": false
+            },
+            "created_at": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            },
+            "deleted": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": false
+            },
+            "category": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "location": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            }
+        }
+    },
+    "workers": {
+        "columns": {
+            "id": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": true
+            },
+            "barcode": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "firstname": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "lastname": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            },
+            "department": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "email": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "created_at": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            },
+            "deleted": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": false
+            }
+        }
+    },
+    "lendings": {
+        "columns": {
+            "id": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": true
+            },
+            "tool_barcode": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "worker_barcode": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "lent_at": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            },
+            "returned_at": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            }
+        }
+    },
+    "system_logs": {
+        "columns": {
+            "id": {
+                "type": "INTEGER",
+                "nullable": true,
+                "primary_key": true
+            },
+            "timestamp": {
+                "type": "TIMESTAMP",
+                "nullable": true,
+                "primary_key": false
+            },
+            "level": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "message": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            },
+            "details": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": false
+            }
+        }
+    },
+    "settings": {
+        "columns": {
+            "key": {
+                "type": "TEXT",
+                "nullable": true,
+                "primary_key": true
+            },
+            "value": {
+                "type": "TEXT",
+                "nullable": false,
+                "primary_key": false
+            }
+        }
+    }
+}

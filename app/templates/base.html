@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Scandy{% endblock %}</title>
+    
+    <!-- Tailwind (Produktionsversion) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    
+    <!-- DaisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet" type="text/css" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    
+    <!-- Eigene Styles nach den Framework Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quickscan.css') }}">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {}
+            },
+            daisyui: {
+                themes: [{
+                    light: {
+                        primary: "#435C70",
+                        "primary-content": "#ffffff"
+                    }
+                }]
+            }
+        }
+    </script>
+
+    {% block head %}{% endblock %}
+</head>
+
+<body class="min-h-screen bg-base-200">
+    <div class="flex flex-col min-h-screen">
+        <!-- QuickScan-Trigger (außerhalb der Sidebar) -->
+        <div class="w-24 h-24 fixed left-0 top-0 -mt-3 ml-[-10px] z-[9999]" id="quickScanTrigger" onclick="document.getElementById('quickScanModal').showModal(); QuickScan.init();" title="Quick Scan öffnen">
+            <div class="w-full h-full rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer relative shadow-lg hover:shadow-2xl hover:scale-110">
+                <img src="/static/images/scandy-logo.svg" alt="Scandy Logo" class="w-20 h-20 object-contain transition-transform duration-300">
+                <!-- Scanner Animation -->
+                <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
+            </div>
+        </div>
+
+        <!-- Vertikales Seitenmenü -->
+        <div class="fixed left-0 top-0 h-full w-16 bg-base-300 flex flex-col items-center py-4 gap-2 shadow-lg z-[90]">
+            <!-- Platzhalter für den Abstand des QuickScan-Buttons -->
+            <div class="w-24 h-24 -mt-3"></div>
+            
+            <!-- Trennlinie -->
+            <div class="w-8 h-0.5 bg-base-content/20 rounded-full"></div>
+            
+            <!-- Navigation Items -->
+            <a href="{{ url_for('tools.index') }}" 
+               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
+                      {% if 'tools' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                <i class="fas fa-tools text-xl"></i>
+            </a>
+            
+            <a href="{{ url_for('consumables.index') }}" 
+               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
+                      {% if 'consumables' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                <i class="fas fa-box-open text-xl"></i>
+            </a>
+            
+            {% if session.get('is_admin') %}
+            <a href="{{ url_for('workers.index') }}" 
+               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
+                      {% if 'workers' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                <i class="fas fa-users text-xl"></i>
+            </a>
+            {% endif %}
+
+            <a href="{{ url_for('tickets.create') }}" 
+               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
+               {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                <i class="fas fa-ticket-alt text-xl"></i>
+            </a>
+        </div>
+
+        <!-- Horizontale Navbar -->
+        <div class="navbar bg-base-100 shadow-lg px-4 relative ml-16 z-[100]">
+            <!-- Linke Seite mit Titel -->
+            <div class="flex-none">
+                <h1 class="text-xl font-bold">
+                    {% if 'tools' in request.endpoint %}Werkzeuge
+                    {% elif 'workers' in request.endpoint %}Mitarbeiter
+                    {% elif 'consumables' in request.endpoint %}Verbrauchsmaterial
+                    {% elif 'tickets' in request.endpoint %}Tickets
+                    {% elif request.endpoint == 'main.about' %}Über Scandy
+                    {% else %}Dashboard{% endif %}
+                </h1>
+            </div>
+
+            <!-- BTZ Logo zentriert -->
+            <div class="flex-1 flex justify-center">
+                <a href="{{ url_for('main.index') }}" 
+                   class="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 hover:opacity-80 transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-base-200" 
+                   title="Zurück zur Startseite">
+                    <i class="fas fa-home text-xl text-primary"></i>
+                    <img src="{{ url_for('static', filename='images/BTZ_logo.jpg') }}" 
+                         alt="BTZ Logo" 
+                         class="h-10 object-contain">
+                    <i class="fas fa-home text-xl text-primary"></i>
+                </a>
+            </div>
+
+            <!-- Rechte Seite -->
+            <div class="flex-none">
+                <div class="flex items-center gap-2">
+                    <!-- Hilfe-Button entfernt -->
+                    {% if session.get('is_admin') %}
+                    <div class="dropdown dropdown-end">
+                        <label tabindex="0" class="btn btn-ghost btn-sm">
+                            <i class="fas fa-bars"></i>
+                        </label>
+                        <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+                            <li>
+                                <a href="{{ url_for('admin.manual_lending') }}" 
+                                   class="{% if request.endpoint == 'admin.manual_lending' %}active{% endif %}">
+                                    <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ url_for('admin.dashboard') }}" 
+                                   class="{% if 'admin.dashboard' in request.endpoint %}active{% endif %}">
+                                    <i class="fas fa-chart-line mr-2"></i>Administration
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ url_for('main.about') }}" 
+                                   class="{% if request.endpoint == 'main.about' %}active{% endif %}">
+                                    <i class="fas fa-info-circle mr-2"></i>Über Scandy
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <a href="{{ url_for('admin.trash') }}" 
+                       class="btn btn-ghost btn-circle btn-sm text-error relative">
+                        <i class="fas fa-trash-alt"></i>
+                        {% if trash_count is defined and trash_count > 0 %}
+                        <span class="absolute -top-2 -right-2 bg-error text-white rounded-full w-5 h-5 
+                                   flex items-center justify-center text-xs">
+                            {{ trash_count }}
+                        </span>
+                        {% endif %}
+                    </a>
+                    <label class="swap swap-rotate btn btn-ghost btn-circle btn-sm">
+                        <input type="checkbox" class="theme-controller" />
+                        <i class="fas fa-sun swap-on"></i>
+                        <i class="fas fa-moon swap-off"></i>
+                    </label>
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-circle btn-sm" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-sm">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Login
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="container-fluid max-w-[95%] mx-auto px-4 py-8 relative z-0">
+            {% block content %}
+            <div class="container mx-auto px-4 py-8">
+                <!-- Info-Karte (nur für QuickScan) -->
+                {% if request.endpoint == 'quick_scan.index' %}
+                <div class="card bg-base-100 shadow-xl mb-8">
+                    <div class="card-body">
+                        <h2 class="card-title">
+                            <i class="fas fa-info-circle text-primary"></i>
+                            QuickScan
+                        </h2>
+                        <p>Scannen Sie einen Barcode oder wählen Sie eine Aktion:</p>
+                        <div class="flex flex-wrap gap-4 mt-4">
+                            <button class="btn btn-primary" onclick="showManualLendingModal()">
+                                <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
+                            </button>
+                            <button class="btn btn-secondary" onclick="showReturnModal()">
+                                <i class="fas fa-undo-alt mr-2"></i>Rückgabe
+                            </button>
+                            <button class="btn btn-accent" onclick="showConsumableModal()">
+                                <i class="fas fa-box-open mr-2"></i>Verbrauchsmaterial
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Hauptinhalt -->
+                {% block page_content %}{% endblock %}
+            </div>
+            {% endblock %}
+        </main>
+    </div>
+
+    <!-- QuickScan Modal -->
+    {% include 'components/quickscan_modal.html' %}
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast toast-top toast-end"></div>
+
+    <!-- Toast Script -->
+    <script>
+    function showToast(type, message) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `alert ${type === 'error' ? 'alert-error' : 'alert-success'} mb-2`;
+        
+        toast.innerHTML = `
+            <div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                        d="${type === 'error' 
+                            ? 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'
+                            : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'}" />
+                </svg>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => container.removeChild(toast), 300);
+        }, 3000);
+    }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- HTML5-QR-Code-Scanner -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <!-- Eigene Scripts -->
+    <script src="{{ url_for('static', filename='js/quickscan.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+
+    <!-- Styles für die Scanner-Animation -->
+    <style>
+        @keyframes scanner {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(56px); }
+            100% { transform: translateY(0); }
+        }
+        .animate-scanner {
+            animation: scanner 2s linear infinite;
+        }
+
+        /* Verbessertes Scandy Logo Styling */
+        #quickScanTrigger {
+            @apply w-24 h-24 rounded-full hover:rounded-xl overflow-hidden;
+            @apply transition-all duration-300 flex items-center justify-center;
+            @apply bg-base-100 hover:bg-base-200 cursor-pointer relative;
+            @apply shadow-lg hover:shadow-2xl;
+            @apply -mt-6 hover:scale-110;
+            @apply z-[100];
+        }
+        #quickScanTrigger img {
+            @apply w-20 h-20 object-contain;
+            @apply transition-transform duration-300;
+        }
+        #quickScanTrigger:hover img {
+            @apply scale-110;
+        }
+        #quickScanTrigger .scanner-line {
+            @apply absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner;
+            @apply after:content-[''] after:absolute after:top-0 after:left-0;
+            @apply after:w-full after:h-full after:bg-primary/30;
+        }
+
+        /* Toast Container Styles */
+        #toastContainer {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 99999; /* Höher als das Modal */
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            pointer-events: none;
+        }
+
+        .toast {
+            pointer-events: auto;
+            z-index: 99999; /* Höher als das Modal */
+        }
+
+        /* Toast Animation */
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
+        .toast-enter {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        .toast-exit {
+            animation: slideOut 0.3s ease-out forwards;
+        }
+    </style>
+</body>
+</html>

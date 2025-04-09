@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tool.name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">{{ tool.name }}</h1>
+            <div class="flex gap-2">
+                <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Zurück
+                </a>
+                <button class="btn btn-primary" onclick="editTool()">
+                    <i class="fas fa-edit mr-2"></i>
+                    Bearbeiten
+                </button>
+            </div>
+        </div>
+
+        <!-- Details Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Basis-Informationen -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <div class="flex justify-between items-start">
+                        <h2 class="card-title">Details</h2>
+                        <button onclick="editTool()" class="btn btn-ghost btn-sm">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <label class="text-sm font-medium text-base-content/60">Barcode</label>
+                                <p class="font-mono">{{ tool.barcode }}</p>
+                            </div>
+                            <button onclick="showUpdateBarcodeModal()" class="btn btn-ghost btn-sm">
+                                <i class="fas fa-barcode"></i>
+                            </button>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-base-content/60">Name</label>
+                            <p>{{ tool.name }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-base-content/60">Kategorie</label>
+                            <p>{{ tool.category or '-' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-base-content/60">Lagerort</label>
+                            <p>{{ tool.location or '-' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-base-content/60">Status</label>
+                            <p>
+                                <span class="badge {% if tool.status == 'verfügbar' %}badge-success{% elif tool.status == 'ausgeliehen' %}badge-warning{% else %}badge-error{% endif %}">
+                                    {{ tool.status_text }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Beschreibung -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">Beschreibung</h2>
+                    <p class="whitespace-pre-wrap">{{ tool.description or 'Keine Beschreibung vorhanden' }}</p>
+                </div>
+            </div>
+
+            <!-- Ausleihhistorie -->
+            <div class="card bg-base-100 shadow-xl col-span-2">
+                <div class="card-body">
+                    <h2 class="card-title">Ausleihhistorie</h2>
+                    {% if lending_history %}
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra w-full">
+                            <thead>
+                                <tr>
+                                    <th>Datum</th>
+                                    <th>Mitarbeiter</th>
+                                    <th>Status</th>
+                                    <th>Rückgabe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lending in lending_history %}
+                                <tr>
+                                    <td>{{ lending.lent_at|format_datetime }}</td>
+                                    <td>
+                                        <a href="{{ url_for('workers.detail', barcode=lending.worker_barcode) }}" class="link link-primary">
+                                            {{ lending.worker_name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if lending.returned_at %}badge-success{% else %}badge-warning{% endif %}">
+                                            {{ lending.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ lending.returned_at|format_datetime if lending.returned_at else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-base-content/60">Keine Ausleihvorgänge vorhanden</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Barcode Update Modal -->
+<dialog id="updateBarcodeModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Barcode ändern</h3>
+        <form onsubmit="updateBarcode(event)">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Aktueller Barcode</span>
+                </label>
+                <input type="text" id="oldBarcode" class="input input-bordered" readonly>
+            </div>
+            <div class="form-control mt-4">
+                <label class="label">
+                    <span class="label-text">Neuer Barcode</span>
+                </label>
+                <input type="text" id="newBarcode" class="input input-bordered" required>
+            </div>
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">Speichern</button>
+                <button type="button" class="btn" onclick="updateBarcodeModal.close()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Edit Modal -->
+<dialog id="editModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
+        <form method="POST" id="editForm">
+            <div class="space-y-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Name</span>
+                    </label>
+                    <input type="text" name="name" class="input input-bordered" value="{{ tool.name }}" required>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Beschreibung</span>
+                    </label>
+                    <textarea name="description" class="textarea textarea-bordered h-24">{{ tool.description }}</textarea>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Kategorie</span>
+                    </label>
+                    <select name="category" class="select select-bordered">
+                        <option value="">Keine Kategorie</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if tool and tool.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Lagerort</span>
+                    </label>
+                    <input type="text" name="location" class="input input-bordered" value="{{ tool.location }}">
+                </div>
+            </div>
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">Speichern</button>
+                <button type="button" class="btn" onclick="closeEditModal()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- JavaScript -->
+<script>
+function showUpdateBarcodeModal() {
+    const modal = document.getElementById('updateBarcodeModal');
+    document.getElementById('oldBarcode').value = '{{ tool.barcode }}';
+    document.getElementById('newBarcode').value = '';
+    modal.showModal();
+}
+
+async function updateBarcode(event) {
+    event.preventDefault();
+    
+    const oldBarcode = document.getElementById('oldBarcode').value;
+    const newBarcode = document.getElementById('newBarcode').value;
+    
+    try {
+        const response = await fetch('/api/update_barcode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                old_barcode: oldBarcode,
+                new_barcode: newBarcode,
+                type: 'tool'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', result.message);
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast('error', result.message);
+        }
+        
+        document.getElementById('updateBarcodeModal').close();
+        
+    } catch (error) {
+        showToast('error', 'Fehler beim Aktualisieren des Barcodes');
+        console.error(error);
+    }
+}
+
+function editTool() {
+    document.getElementById('editModal').showModal();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+// Form-Handler
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    fetch(window.location.pathname, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('editModal').close();
+            window.location.reload();
+        } else {
+            showToast('error', data.message || 'Ein Fehler ist aufgetreten');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+});
+</script>
+{% endblock %} 

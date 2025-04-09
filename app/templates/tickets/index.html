@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Tickets{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Tickets</h1>
+        <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
+            <i class="fas fa-plus mr-2"></i>
+            Neues Ticket
+        </a>
+    </div>
+
+    <!-- Filter -->
+    <div class="card bg-base-100 shadow-xl mb-6">
+        <div class="card-body">
+            <form id="filterForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Status</span>
+                    </label>
+                    <select name="status" class="select select-bordered w-full">
+                        <option value="">Alle</option>
+                        <option value="offen">Offen</option>
+                        <option value="in_bearbeitung">In Bearbeitung</option>
+                        <option value="gelöst">Gelöst</option>
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Priorität</span>
+                    </label>
+                    <select name="priority" class="select select-bordered w-full">
+                        <option value="">Alle</option>
+                        <option value="niedrig">Niedrig</option>
+                        <option value="normal">Normal</option>
+                        <option value="hoch">Hoch</option>
+                        <option value="kritisch">Kritisch</option>
+                    </select>
+                </div>
+
+                {% if session.get('is_admin') %}
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Zugewiesen an</span>
+                    </label>
+                    <input type="text" name="assigned_to" class="input input-bordered w-full" 
+                           placeholder="Benutzername">
+                </div>
+                {% endif %}
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Erstellt von</span>
+                    </label>
+                    <input type="text" name="created_by" class="input input-bordered w-full" 
+                           placeholder="Benutzername">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tickets Liste -->
+    {% if tickets %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="overflow-x-auto">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Titel</th>
+                            <th>Status</th>
+                            <th>Priorität</th>
+                            <th>Erstellt von</th>
+                            <th>Zugewiesen an</th>
+                            <th>Erstellt am</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in tickets %}
+                        <tr>
+                            <td>{{ ticket.id }}</td>
+                            <td>{{ ticket.title }}</td>
+                            <td>
+                                <span class="badge badge-{{ 
+                                    'success' if ticket.status == 'gelöst' 
+                                    else 'warning' if ticket.status == 'in_bearbeitung' 
+                                    else 'error' 
+                                }}">
+                                    {{ ticket.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ 
+                                    'error' if ticket.priority == 'kritisch'
+                                    else 'warning' if ticket.priority == 'hoch'
+                                    else 'info' if ticket.priority == 'normal'
+                                    else 'ghost'
+                                }}">
+                                    {{ ticket.priority }}
+                                </span>
+                            </td>
+                            <td>{{ ticket.creator_name }}</td>
+                            <td>{{ ticket.assigned_to or '-' }}</td>
+                            <td>{{ ticket.created_at }}</td>
+                            <td>
+                                <a href="{{ url_for('tickets.detail', id=ticket.id) }}" 
+                                   class="btn btn-sm btn-ghost">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body text-center">
+            <p class="text-base-content/60">Keine Tickets gefunden.</p>
+            <div class="mt-4">
+                <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i>
+                    Erstes Ticket erstellen
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Filter-Formular
+    const form = document.getElementById('filterForm');
+    const inputs = form.querySelectorAll('select, input');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', function() {
+            const params = new URLSearchParams(window.location.search);
+            
+            inputs.forEach(inp => {
+                if (inp.value) {
+                    params.set(inp.name, inp.value);
+                } else {
+                    params.delete(inp.name);
+                }
+            });
+            
+            window.location.href = `${window.location.pathname}?${params.toString()}`;
+        });
+        
+        // Setze gespeicherte Werte
+        const params = new URLSearchParams(window.location.search);
+        const savedValue = params.get(input.name);
+        if (savedValue) {
+            input.value = savedValue;
+        }
+    });
+});
+</script>
+{% endblock %} 

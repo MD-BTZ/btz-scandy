@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ consumable.name }}{% endblock %}
+
+{% block page_content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Verbrauchsmaterial-Details -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="flex justify-between items-start">
+                <h2 class="card-title">{{ consumable.name }}</h2>
+                {% if consumable.category %}
+                <div class="badge badge-lg">{{ consumable.category }}</div>
+                {% endif %}
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Grundinformationen -->
+            <div class="space-y-2">
+                <p><strong>Barcode:</strong> {{ consumable.barcode }}</p>
+                <p><strong>Kategorie:</strong> {{ consumable.category or 'Keine Kategorie' }}</p>
+                <p><strong>Lagerort:</strong> {{ consumable.location or 'Kein Lagerort' }}</p>
+                
+                <!-- Bestandsinformationen -->
+                <div class="mt-4">
+                    <h3 class="font-semibold mb-2">Bestandsinformationen</h3>
+                    <div class="stats shadow">
+                        <div class="stat">
+                            <div class="stat-title">Aktueller Bestand</div>
+                            <div class="stat-value {% if consumable.quantity <= consumable.min_quantity %}text-error{% elif consumable.quantity <= consumable.min_quantity * 2 %}text-warning{% else %}text-success{% endif %}">
+                                {{ consumable.quantity }}
+                            </div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-title">Mindestbestand</div>
+                            <div class="stat-value">{{ consumable.min_quantity }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if consumable.description %}
+                <div class="mt-4">
+                    <h3 class="font-semibold mb-2">Beschreibung</h3>
+                    <p>{{ consumable.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Aktionen -->
+            <div class="card-actions justify-end mt-4">
+                <button class="btn btn-primary" onclick="showEditModal()">
+                    <i class="fas fa-edit mr-2"></i>Bearbeiten
+                </button>
+                {% if consumable.quantity == 0 %}
+                <button class="btn btn-error" onclick="deleteConsumable('{{ consumable.barcode }}')">
+                    <i class="fas fa-trash mr-2"></i>Löschen
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Verbrauchshistorie -->
+    <div class="card bg-base-100 shadow-xl lg:col-span-2">
+        <div class="card-body">
+            <h2 class="card-title">Verbrauchshistorie</h2>
+            {% if usage_history %}
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Mitarbeiter</th>
+                            <th>Menge</th>
+                            <th>Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usage in usage_history %}
+                        <tr>
+                            <td>{{ usage.used_at|format_datetime }}</td>
+                            <td>
+                                <a href="{{ url_for('workers.detail', barcode=usage.worker_barcode) }}" class="link link-primary">
+                                    {{ usage.worker_name }}
+                                </a>
+                            </td>
+                            <td>{{ usage.quantity }} {{ consumable.unit or 'Stück' }}</td>
+                            <td>
+                                <span class="badge {{ 'badge-success' if usage.action == 'add' else 'badge-warning' }}">
+                                    {{ 'Hinzugefügt' if usage.action == 'add' else 'Entnommen' }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-base-content/60">Keine Verbrauchshistorie vorhanden</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<dialog id="editModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Verbrauchsmaterial bearbeiten</h3>
+        <form id="editForm" class="space-y-6">
+            <!-- Barcode (nicht editierbar) -->
+            <div>
+                <label class="label">Barcode</label>
+                <input type="text" value="{{ consumable.barcode }}" readonly
+                       class="input input-bordered w-full bg-base-200">
+            </div>
+            
+            <!-- Name -->
+            <div>
+                <label class="label">Name</label>
+                <input type="text" name="name" value="{{ consumable.name }}" required
+                       class="input input-bordered w-full">
+            </div>
+            
+            <!-- Beschreibung -->
+            <div>
+                <label class="label">Beschreibung</label>
+                <textarea name="description" rows="3"
+                        class="textarea textarea-bordered w-full">{{ consumable.description or '' }}</textarea>
+            </div>
+            
+            <!-- Kategorie -->
+            <div>
+                <label class="label">Kategorie</label>
+                <select name="category" class="select select-bordered w-full">
+                    <option value="">Keine Kategorie</option>
+                    {% for category in categories %}
+                    <option value="{{ category }}" {% if category == consumable.category %}selected{% endif %}>
+                        {{ category }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Standort -->
+            <div>
+                <label class="label">Standort</label>
+                <select name="location" class="select select-bordered w-full">
+                    <option value="">Kein Standort</option>
+                    {% for location in locations %}
+                    <option value="{{ location }}" {% if location == consumable.location %}selected{% endif %}>
+                        {{ location }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Bestand -->
+            <div>
+                <label class="label">Bestand</label>
+                <input type="number" name="quantity" value="{{ consumable.quantity }}" required
+                       class="input input-bordered w-full">
+            </div>
+            
+            <!-- Mindestbestand -->
+            <div>
+                <label class="label">Mindestbestand</label>
+                <input type="number" name="min_quantity" value="{{ consumable.min_quantity }}" required
+                       class="input input-bordered w-full">
+            </div>
+            
+            <!-- Buttons -->
+            <div class="flex justify-end space-x-4">
+                <button type="button" onclick="window.history.back()" 
+                        class="btn btn-ghost">Abbrechen</button>
+                <button type="submit" class="btn btn-primary">Speichern</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+function showEditModal() {
+    document.getElementById('editModal').showModal();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+async function deleteConsumable(barcode) {
+    if (!confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/consumables/${barcode}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.href = '/consumables';
+        } else {
+            alert(result.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen:', error);
+        alert('Ein Fehler ist aufgetreten');
+    }
+}
+
+// Formular-Handling
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Verbrauchsmaterial erfolgreich aktualisiert', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.message || 'Fehler beim Aktualisieren', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('Fehler beim Aktualisieren', 'error');
+    });
+});
+</script>
+{% endblock %} 
