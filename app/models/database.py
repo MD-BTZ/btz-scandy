@@ -17,11 +17,19 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class Database:
-    """Datenbankklasse für SQLite"""
+    """Stellt Methoden für die Interaktion mit der SQLite-Datenbank bereit.
+
+    Verwendet rohes SQL für Abfragen und Operationen. Bietet Methoden zum
+    Abrufen von Verbindungen, Ausführen von Abfragen und zur Schema-Inspektion.
+    """
     
     @classmethod
     def print_database_contents(cls):
-        """Gibt den Inhalt aller Tabellen in der Datenbank aus"""
+        """Gibt den Inhalt aller Tabellen der Hauptdatenbank (inventory.db) zu Debugging-Zwecken aus.
+
+        Listet Tabellen, Spalten und die ersten paar Zeilen jeder Tabelle auf.
+        Passwörter werden aus Sicherheitsgründen zensiert.
+        """
         logger.info("\n=== DATENBANK INHALTE ===")
         try:
             conn = cls.get_db_connection()
@@ -76,7 +84,16 @@ class Database:
 
     @classmethod
     def ensure_db_exists(cls):
-        """Stellt sicher, dass die Datenbank existiert und initialisiert ist"""
+        """Stellt sicher, dass die Hauptdatenbankdatei (inventory.db) existiert.
+
+        Prüft den Pfad aus der Config, erstellt das Verzeichnis bei Bedarf.
+        Prüft, ob die DB lesbar ist und Tabellen enthält, wenn sie existiert.
+        Erstellt eine leere DB-Datei, falls sie nicht existiert.
+
+        Returns:
+            bool: True, wenn die Datenbank existiert oder erfolgreich erstellt wurde,
+                  False bei Fehlern.
+        """
         logging.info("=== CHECKING DATABASE AT STARTUP ===")
         
         # Verwende den korrekten Pfad aus der Config
@@ -131,7 +148,14 @@ class Database:
     
     @classmethod
     def get_db_connection(cls):
-        """Gibt eine neue Datenbankverbindung zurück"""
+        """Erstellt und gibt eine *neue*, unabhängige Verbindung zur Hauptdatenbank (inventory.db) zurück.
+
+        Verwendet den Pfad aus der aktuellen Flask-Konfiguration.
+        Setzt conn.row_factory = sqlite3.Row für Dictionary-ähnlichen Zugriff.
+
+        Returns:
+            sqlite3.Connection: Eine neue Datenbankverbindung.
+        """
         from app.config import config
         current_config = config['default']()
         conn = sqlite3.connect(current_config.DATABASE)
@@ -140,7 +164,16 @@ class Database:
     
     @classmethod
     def get_db(cls):
-        """Gibt eine Datenbankverbindung aus dem Anwendungskontext zurück"""
+        """Gibt eine Datenbankverbindung zur Hauptdatenbank (inventory.db) aus dem Flask-Anwendungskontext (g) zurück.
+
+        Erstellt die Verbindung beim ersten Aufruf pro Request und speichert sie in `g.db`.
+        Verwendet den Pfad aus `Config.DATABASE`.
+        Setzt conn.row_factory = sqlite3.Row.
+        Führt beim ersten Verbindungsaufbau Debug-Checks zur Tabellenanzahl durch.
+
+        Returns:
+            sqlite3.Connection: Die Datenbankverbindung für den aktuellen Request-Kontext.
+        """
         if 'db' not in g:
             g.db = sqlite3.connect(Config.DATABASE)
             g.db.row_factory = sqlite3.Row
@@ -159,7 +192,13 @@ class Database:
     
     @classmethod
     def show_db_structure(cls):
-        """Zeigt die Struktur der Datenbank an"""
+        """Gibt die Struktur der Hauptdatenbank (inventory.db) zurück.
+
+        Listet alle Tabellen und ihre Spaltennamen auf.
+
+        Returns:
+            dict: Ein Dictionary, bei dem Schlüssel Tabellennamen und Werte Listen von Spaltennamen sind.
+        """
         conn = cls.get_db_connection()
         cursor = conn.cursor()
         
@@ -180,7 +219,24 @@ class Database:
     
     @staticmethod
     def query(sql, params=None, one=False):
-        """Führt eine Datenbankabfrage aus"""
+        """Führt eine SQL-Abfrage auf der Hauptdatenbank (inventory.db) aus.
+
+        Verwendet die Verbindung aus dem Flask-Anwendungskontext (`get_db`).
+        Führt automatisches Commit für INSERT, UPDATE, DELETE aus.
+        Loggt die Abfrage, Parameter und Ergebnisse (Beispielrecord).
+
+        Args:
+            sql (str): Die auszuführende SQL-Anweisung.
+            params (list | tuple, optional): Parameter für die SQL-Anweisung.
+            one (bool, optional): Wenn True, wird nur der erste Datensatz zurückgegeben (fetchone),
+                                andernfalls alle (fetchall). Standard ist False.
+
+        Returns:
+            sqlite3.Row | list[sqlite3.Row] | None: Das Ergebnis der Abfrage.
+
+        Raises:
+            sqlite3.Error: Bei Datenbankfehlern.
+        """
         logging.info("\n=== DATABASE QUERY ===")
         logging.info(f"SQL: {sql}")
         logging.info(f"Parameters: {params}")

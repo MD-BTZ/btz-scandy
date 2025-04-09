@@ -26,7 +26,7 @@ def detail(barcode):
                         'message': 'Verbrauchsmaterial nicht gefunden'
                     }), 404
                 
-                # Update durchführen
+                # Update durchführen (OHNE modified_at)
                 conn.execute('''
                     UPDATE consumables 
                     SET name = ?,
@@ -34,8 +34,7 @@ def detail(barcode):
                         category = ?,
                         location = ?,
                         quantity = ?,
-                        min_quantity = ?,
-                        modified_at = CURRENT_TIMESTAMP
+                        min_quantity = ?
                     WHERE barcode = ?
                 ''', [
                     data.get('name'),
@@ -116,8 +115,7 @@ def update(id):
                 location = ?,
                 description = ?,
                 quantity = ?,
-                min_quantity = ?,
-                modified_at = CURRENT_TIMESTAMP
+                min_quantity = ?
             WHERE id = ?
         ''', [
             data.get('name'),
@@ -161,6 +159,7 @@ def index():
         SELECT c.*,
                ROUND(CAST(c.quantity AS FLOAT) / NULLIF(c.min_quantity, 0) * 100) as stock_percentage,
                CASE
+                   WHEN c.min_quantity IS NULL THEN 'sufficient' -- Wenn kein Mindestbestand, dann ausreichend
                    WHEN c.quantity >= c.min_quantity THEN 'sufficient'
                    WHEN c.quantity >= c.min_quantity * 0.5 THEN 'warning'
                    ELSE 'critical'
@@ -243,11 +242,10 @@ def adjust_stock(barcode):
             if not current:
                 return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
             
-            # Bestand aktualisieren
+            # Bestand aktualisieren (OHNE modified_at)
             conn.execute('''
                 UPDATE consumables 
-                SET quantity = ?,
-                    modified_at = CURRENT_TIMESTAMP
+                SET quantity = ?
                 WHERE barcode = ?
             ''', [quantity, barcode])
             

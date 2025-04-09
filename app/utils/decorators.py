@@ -2,27 +2,41 @@ from functools import wraps
 from flask import session, redirect, url_for, request, flash
 from datetime import datetime
 from app.utils.logger import loggers
-from app.utils.auth_utils import needs_setup
+# needs_setup wird nur in login_required verwendet
+# from app.utils.auth_utils import needs_setup
 
 def login_required(f):
+    """Decorator, der sicherstellt, dass ein Benutzer eingeloggt ist.
+
+    Prüft zuerst, ob das System-Setup benötigt wird (via needs_setup()).
+    Wenn ja, wird zur Login-Seite weitergeleitet mit einer Flash-Nachricht.
+    Wenn nein, wird geprüft, ob eine 'user_id' in der Session vorhanden ist.
+    Wenn nicht, wird zur Login-Seite weitergeleitet.
+    Andernfalls wird die ursprüngliche Funktion ausgeführt.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Setup-Route immer erlauben
-        if request.endpoint == 'auth.setup':
-            return f(*args, **kwargs)
-            
-        # Wenn Setup benötigt wird, dorthin weiterleiten
+        # Importiere needs_setup hier, um Zirkelimporte zu vermeiden
+        from app.utils.auth_utils import needs_setup
+
+        # Wenn Setup benötigt wird, zur Login-Seite weiterleiten
         if needs_setup():
-            return redirect(url_for('auth.setup'))
-            
+            flash('System-Setup erforderlich. Bitte als Administrator anmelden.', 'info')
+            return redirect(url_for('auth.login')) # Geändert von auth.setup
+
         # Wenn nicht eingeloggt, zum Login weiterleiten
         if 'user_id' not in session:
             return redirect(url_for('auth.login', next=request.url))
-            
+
         return f(*args, **kwargs)
     return decorated_function
 
 def admin_required(f):
+    """Decorator, der sicherstellt, dass der eingeloggte Benutzer Admin-Rechte hat.
+
+    Prüft, ob 'is_admin' in der Session True ist.
+    Wenn nicht, wird zum Login weitergeleitet mit einer Flash-Nachricht.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('is_admin'):

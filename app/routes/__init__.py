@@ -6,10 +6,11 @@ from app.routes.workers import bp as workers_bp
 from app.routes.consumables import bp as consumables_bp
 from app.routes.api import bp as api_bp
 from app.routes.admin import bp as admin_bp
-from app.routes.inventory import bp as inventory_bp
 from app.routes.quick_scan import bp as quick_scan_bp
 from app.routes.history import bp as history_bp
 from app.routes.main import bp as main_bp
+from app.routes.dashboard import bp as dashboard_bp
+from app.routes.lending import bp as lending_bp
 
 def init_app(app):
     """Registriert alle Blueprints mit ihren URL-Präfixen"""
@@ -22,8 +23,10 @@ def init_app(app):
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(quick_scan_bp, url_prefix='/quick-scan')
     app.register_blueprint(history_bp, url_prefix='/history')
+    app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
+    app.register_blueprint(lending_bp, url_prefix='/lending')
 
 __all__ = [
     'auth_bp', 'tools_bp', 'workers_bp', 'consumables_bp',
-    'api_bp', 'admin_bp', 'inventory_bp', 'quick_scan_bp', 'history_bp', 'main_bp'
+    'api_bp', 'admin_bp', 'quick_scan_bp', 'history_bp', 'main_bp', 'dashboard_bp', 'lending_bp'
 ]

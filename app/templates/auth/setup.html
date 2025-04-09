@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Setup{% endblock %}
+
+{% block content %}
+<div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-sm">
+        <h2 class="mt-10 text-center text-2xl font-bold leading-9 tracking-tight">
+            Ersteinrichtung
+        </h2>
+    </div>
+
+    <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+        <form class="space-y-6" action="{{ url_for('auth.setup') }}" method="POST">
+            <div>
+                <label for="password" class="block text-sm font-medium leading-6">
+                    Admin-Passwort
+                </label>
+                <div class="mt-2">
+                    <input id="password" name="password" type="password" required
+                           class="input input-bordered w-full">
+                </div>
+            </div>
+
+            <div>
+                <label for="confirm_password" class="block text-sm font-medium leading-6">
+                    Passwort bestätigen
+                </label>
+                <div class="mt-2">
+                    <input id="confirm_password" name="confirm_password" type="password" required
+                           class="input input-bordered w-full">
+                </div>
+            </div>
+
+            <div>
+                <button type="submit" class="btn btn-primary w-full">
+                    Setup abschließen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %} 

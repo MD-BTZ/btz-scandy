@@ -113,8 +113,7 @@ def details(barcode):
                     UPDATE workers 
                     SET firstname = ?,
                         lastname = ?,
-                        department = ?,
-                        modified_at = CURRENT_TIMESTAMP
+                        department = ?
                     WHERE barcode = ? AND deleted = 0
                 ''', [
                     data.get('firstname'),
@@ -241,8 +240,7 @@ def delete_by_barcode(barcode):
             conn.execute('''
                 UPDATE workers 
                 SET deleted = 1,
-                    deleted_at = datetime('now'),
-                    modified_at = datetime('now')
+                    deleted_at = datetime('now')
                 WHERE barcode = ?
             ''', [barcode])
             

@@ -28,7 +28,10 @@
                     <div class="stats shadow">
                         <div class="stat">
                             <div class="stat-title">Aktueller Bestand</div>
-                            <div class="stat-value {% if consumable.quantity <= consumable.min_quantity %}text-error{% elif consumable.quantity <= consumable.min_quantity * 2 %}text-warning{% else %}text-success{% endif %}">
+                            <div class="stat-value {% 
+                                if consumable.min_quantity is not none and consumable.quantity <= consumable.min_quantity %}text-error{% 
+                                elif consumable.min_quantity is not none and consumable.quantity <= consumable.min_quantity * 2 %}text-warning{% 
+                                else %}text-success{% endif %}">
                                 {{ consumable.quantity }}
                             </div>
                         </div>
