@@ -2,7 +2,7 @@ import os
 import sys
 
 # Füge den Projektpfad zum Python-Pfad hinzu
-project_home = '/home/aklann/Scandy'
+project_home = '/home/pi/scandy'
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 

@@ -1544,3 +1544,87 @@ def upload_backup():
             'status': 'error',
             'message': str(e)
         }), 500
+
+@bp.route('/notices')
+@admin_required
+def notices():
+    """Zeigt die Verwaltungsseite für Startseiten-Hinweise"""
+    with Database.get_db() as db:
+        notices = db.execute('''
+            SELECT * FROM homepage_notices 
+            ORDER BY priority ASC, created_at DESC
+        ''').fetchall()
+    
+    return render_template('admin/notices.html', notices=notices)
+
+@bp.route('/notices/create', methods=['GET', 'POST'])
+@admin_required
+def create_notice():
+    """Erstellt einen neuen Hinweis"""
+    if request.method == 'POST':
+        try:
+            title = request.form['title']
+            content = request.form['content']
+            priority = int(request.form.get('priority', 0))
+            is_active = 'is_active' in request.form
+            
+            with Database.get_db() as db:
+                db.execute('''
+                    INSERT INTO homepage_notices (title, content, priority, is_active)
+                    VALUES (?, ?, ?, ?)
+                ''', [title, content, priority, is_active])
+                db.commit()
+            
+            flash('Hinweis wurde erfolgreich erstellt', 'success')
+            return redirect(url_for('admin.notices'))
+        except Exception as e:
+            flash(f'Fehler beim Erstellen des Hinweises: {str(e)}', 'error')
+    
+    return render_template('admin/notice_form.html')
+
+@bp.route('/notices/<int:id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_notice(id):
+    """Bearbeitet einen bestehenden Hinweis"""
+    with Database.get_db() as db:
+        notice = db.execute('SELECT * FROM homepage_notices WHERE id = ?', [id]).fetchone()
+        
+        if not notice:
+            flash('Hinweis nicht gefunden', 'error')
+            return redirect(url_for('admin.notices'))
+        
+        if request.method == 'POST':
+            try:
+                title = request.form['title']
+                content = request.form['content']
+                priority = int(request.form.get('priority', 0))
+                is_active = 'is_active' in request.form
+                
+                db.execute('''
+                    UPDATE homepage_notices 
+                    SET title = ?, content = ?, priority = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', [title, content, priority, is_active, id])
+                db.commit()
+                
+                flash('Hinweis wurde erfolgreich aktualisiert', 'success')
+                return redirect(url_for('admin.notices'))
+            except Exception as e:
+                flash(f'Fehler beim Aktualisieren des Hinweises: {str(e)}', 'error')
+        
+        return render_template('admin/notice_form.html', notice=notice)
+
+@bp.route('/notices/<int:id>/delete', methods=['POST'])
+@admin_required
+def delete_notice(id):
+    """Löscht einen Hinweis"""
+    try:
+        with Database.get_db() as db:
+            db.execute('DELETE FROM homepage_notices WHERE id = ?', [id])
+            db.commit()
+        
+        flash('Hinweis wurde erfolgreich gelöscht', 'success')
+    except Exception as e:
+        flash(f'Fehler beim Löschen des Hinweises: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.notices'))

@@ -46,6 +46,9 @@ def init_app_logger(app):
         '%(asctime)s - %(levelname)s - %(message)s'
     )
     
+    # Entferne alle bestehenden Handler
+    app.logger.handlers = []
+    
     # Konsolen-Handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
@@ -62,6 +65,9 @@ def init_app_logger(app):
     
     # Log-Level setzen
     app.logger.setLevel(logging.INFO)
+    
+    # Propagate auf False setzen, um doppelte Meldungen zu vermeiden
+    app.logger.propagate = False
 
 # Spezifische Logger initialisieren
 loggers = {

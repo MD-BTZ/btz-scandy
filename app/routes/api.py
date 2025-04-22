@@ -1092,3 +1092,77 @@ def get_consumable_forecast(barcode):
             'success': False,
             'message': f'Fehler bei der Berechnung: {str(e)}'
         }), 500
+
+@bp.route('/notices', methods=['GET'])
+def get_notices():
+    """Hole alle aktiven Hinweise"""
+    notices = Database.query('''
+        SELECT * FROM homepage_notices 
+        WHERE is_active = 1 
+        ORDER BY priority DESC, created_at DESC
+    ''')
+    return jsonify(notices)
+
+@bp.route('/notices/<int:id>', methods=['GET'])
+@admin_required
+def get_notice(id):
+    """Hole einen bestimmten Hinweis"""
+    notice = Database.query('''
+        SELECT * FROM homepage_notices 
+        WHERE id = ?
+    ''', [id], one=True)
+    
+    if not notice:
+        return jsonify({'error': 'Hinweis nicht gefunden'}), 404
+    
+    return jsonify(notice)
+
+@bp.route('/notices', methods=['POST'])
+@admin_required
+def create_notice():
+    """Erstelle einen neuen Hinweis"""
+    data = request.get_json()
+    
+    try:
+        with Database.get_db() as db:
+            db.execute('''
+                INSERT INTO homepage_notices (title, content, priority, is_active)
+                VALUES (?, ?, ?, 1)
+            ''', [data.get('title', ''), data['content'], data.get('priority', 50)])
+            db.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/notices/<int:id>', methods=['PUT'])
+@admin_required
+def update_notice(id):
+    """Aktualisiere einen Hinweis"""
+    data = request.get_json()
+    
+    try:
+        with Database.get_db() as db:
+            db.execute('''
+                UPDATE homepage_notices 
+                SET content = ?, priority = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', [data['content'], data.get('priority', 50), id])
+            db.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/notices/<int:id>', methods=['DELETE'])
+@admin_required
+def delete_notice(id):
+    """Lösche einen Hinweis"""
+    try:
+        with Database.get_db() as db:
+            db.execute('DELETE FROM homepage_notices WHERE id = ?', [id])
+            db.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

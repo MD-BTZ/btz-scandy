@@ -1,34 +1,80 @@
-# Environments
-venv/
-*.pyc
+# Python
 __pycache__/
-instance/
-flask_session/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtuelle Umgebung
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # Logs
 *.log
 logs/
+
+# Datenbanken
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads
+app/uploads/*
+!app/uploads/.gitkeep
+
+# Flask Session
+app/flask_session/*
+!app/flask_session/.gitkeep
+instance/flask_session/*
+!instance/flask_session/.gitkeep
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.*.local
+
+# System
+.DS_Store
+Thumbs.db
+
+# Temporäre Dateien
+tmp/
+*.tmp
+*.bak
 
 # Backups
 backups/
 
 # Build artifacts / Temporary files
 *.spec
-build/
 dist/
 *.egg-info/
 /htmlcov/
 .pytest_cache/
 .coverage
-.env
-
-# OS generated files
-.DS_Store
-Thumbs.db
 
 # Unused files directory
-_potentially_unused/
-
-# IDE / Editor files
-.vscode/
-.idea/ 
+_potentially_unused/ 

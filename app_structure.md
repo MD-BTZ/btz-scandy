@@ -13,14 +13,35 @@ UPDATE tool_lendings
 SET returned_at = CURRENT_TIMESTAMP 
 WHERE tool_barcode = ? AND returned_at IS NULL
 
-# Verbrauchsmaterial nutzen
-INSERT INTO consumable_usages (consumable_barcode, worker_id, amount, usage_date, usage_reason)
-VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
-
-# Bestand aktualisieren
-UPDATE consumables 
-SET current_stock = current_stock - ? 
-WHERE barcode = ?
+# Verbrauchsmaterial nutzen (Quick Scan)
+def handle_consumable(barcode, quantity, worker_barcode):
+    # Bestand prüfen und aktualisieren
+    consumable = Database.query('''
+        SELECT * FROM consumables 
+        WHERE barcode = ? AND deleted = 0
+    ''', [barcode], one=True)
+    
+    if not consumable:
+        return False, "Verbrauchsmaterial nicht gefunden"
+        
+    if consumable['quantity'] < quantity:
+        return False, "Nicht genügend Bestand verfügbar"
+    
+    # Bestand reduzieren
+    Database.execute('''
+        UPDATE consumables 
+        SET quantity = quantity - ? 
+        WHERE barcode = ?
+    ''', [quantity, barcode])
+    
+    # Verbrauch protokollieren
+    Database.execute('''
+        INSERT INTO consumable_usage 
+        (consumable_barcode, worker_barcode, quantity) 
+        VALUES (?, ?, ?)
+    ''', [barcode, worker_barcode, quantity])
+    
+    return True, "Materialentnahme erfolgreich"
 ```
 
 ### Template Variables
@@ -38,7 +59,9 @@ def utility_processor():
         'format_date': format_date,
         'format_datetime': format_datetime,
         'get_status_badge': get_status_badge,
-        'get_stock_status': get_stock_status
+        'get_stock_status': get_stock_status,
+        'get_worker_name': get_worker_name,
+        'get_tool_status': get_tool_status
     }
 ```
 
@@ -49,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupToolHandlers();
     setupStatusChangeHandlers();
     setupSearchHandlers();
+    setupQuickScanHandlers();
 });
 
 // consumables.js
@@ -56,6 +80,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setupStockHandlers();
     setupUsageHandlers();
     setupSearchHandlers();
+    setupQuickScanHandlers();
+});
+
+// quickscan.js
+document.addEventListener('DOMContentLoaded', () => {
+    setupBarcodeScanner();
+    setupAutoSubmit();
+    setupErrorHandling();
 });
 ```
 
@@ -70,7 +102,9 @@ ERROR_CODES = {
     'WORKER_NOT_FOUND': ('W001', 'Mitarbeiter nicht gefunden'),
     'WORKER_INACTIVE': ('W002', 'Mitarbeiter nicht aktiv'),
     'DB_ERROR': ('D001', 'Datenbankfehler'),
-    'VALIDATION_ERROR': ('V001', 'Validierungsfehler')
+    'VALIDATION_ERROR': ('V001', 'Validierungsfehler'),
+    'SCAN_ERROR': ('S001', 'Barcode-Scan fehlgeschlagen'),
+    'MIGRATION_ERROR': ('M001', 'Datenbankmigration fehlgeschlagen')
 }
 ```
 
@@ -81,13 +115,17 @@ app.config['WTF_CSRF_SECRET_KEY'] = 'random-key-for-csrf'
 csrf = CSRFProtect(app)
 
 # XSS Protection
-# Jinja2 Auto-Escaping aktiviert
 app.jinja_env.autoescape = True
 
 # SQL Injection Prevention
-# Parametrisierte Queries in Database class
 def query_db(self, query, args=(), one=False):
-    cur = self.get_db().execute(query, args)  # args wird escaped
+    cur = self.get_db().execute(query, args)
+    return cur.fetchone() if one else cur.fetchall()
+
+# Session Security
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 ```
 
 ### Performance Optimizations
@@ -118,6 +156,12 @@ OPTIMIZED_QUERIES = {
         LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
         WHERE c.barcode = ?
         GROUP BY c.barcode
+    ''',
+    'quick_scan': '''
+        SELECT c.*, w.name as worker_name
+        FROM consumables c
+        LEFT JOIN workers w ON c.worker_barcode = w.barcode
+        WHERE c.barcode = ? AND c.deleted = 0
     '''
 }
 
@@ -126,8 +170,38 @@ CACHE_CONFIG = {
     'CACHE_TYPE': 'filesystem',
     'CACHE_DIR': 'flask_cache',
     'CACHE_DEFAULT_TIMEOUT': 300,
-    'CACHE_THRESHOLD': 1000
+    'CACHE_THRESHOLD': 1000,
+    'CACHE_OPTIONS': {
+        'mode': 0o600,
+        'ignore_errors': True
+    }
 }
+```
+
+### Database Migration
+```python
+def migrate_database():
+    """Führt sequenzielle Schema-Änderungen durch."""
+    conn = get_db_connection()
+    try:
+        # Migrationsschritte
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS consumable_lendings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                consumable_barcode TEXT NOT NULL,
+                worker_barcode TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                lending_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                return_time TIMESTAMP
+            )
+        ''')
+        # Weitere Migrationsschritte...
+    except sqlite3.Error as e:
+        print(f"Migration fehlgeschlagen: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
 ```
 
 ### Background Tasks
@@ -154,6 +228,13 @@ def schedule_tasks():
     def backup_database():
         backup_path = f'backups/scandy_{datetime.now():%Y%m%d}.db'
         shutil.copy2('instance/scandy.db', backup_path)
+    
+    # Tägliche Datenbankwartung
+    @scheduler.task('cron', id='db_maintenance', hour=2)
+    def perform_db_maintenance():
+        db = Database()
+        db.execute('VACUUM')
+        db.execute('ANALYZE')
 ```
 
 ### Deployment Checklist
@@ -164,27 +245,122 @@ DEPLOYMENT_CHECKS = {
         'correct permissions',
         'tables created',
         'indices created',
-        'triggers created'
+        'triggers created',
+        'migrations applied'
     ],
     'static_files': [
         'tailwind.css compiled',
         'js files minified',
-        'correct permissions'
+        'correct permissions',
+        'barcode scanner configured'
     ],
     'environment': [
         'all dependencies installed',
         'correct Python version',
         'environment variables set',
-        'logging configured'
+        'logging configured',
+        'backup system configured'
     ],
     'security': [
         'debug mode off',
         'secret key set',
         'csrf protection enabled',
-        'secure headers configured'
+        'secure headers configured',
+        'session security configured'
+    ],
+    'performance': [
+        'caching enabled',
+        'database indices created',
+        'query optimization applied',
+        'static file compression enabled'
     ]
 }
 ```
+
+## API Endpoints
+
+### Authentication
+- `GET, POST /auth/login` - Login-Formular und Verarbeitung
+- `GET /auth/logout` - Benutzer ausloggen
+- `GET /auth/test` - Test-Route
+
+### Admin Area
+- `GET /` - Dashboard
+- `GET /manual_lending` - Manuelle Ausleihe
+- `POST /update_design` - Design-Einstellungen aktualisieren
+- `POST /process_lending` - Ausleihe verarbeiten
+- `POST /process_return` - Rückgabe verarbeiten
+
+### API
+- `GET /api/workers` - Liste aller Mitarbeiter
+- `GET /api/tools/<barcode>` - Tool-Details
+- `POST /api/settings/colors` - Farbeinstellungen aktualisieren
+- `POST /api/lending/process` - Ausleihe-Prozess
+- `POST /api/lending/return` - Rückgabe-Prozess
+
+### Consumables
+- `GET /consumables/` - Übersicht
+- `GET, POST /consumables/add` - Hinzufügen
+- `GET /consumables/<barcode>` - Details
+- `GET, POST /consumables/<barcode>/edit` - Bearbeiten
+- `POST /consumables/<barcode>/delete` - Löschen
+
+### Inventory
+#### Consumables
+- `GET /inventory/consumables/<barcode>` - Details
+- `POST /inventory/consumables/update/<barcode>` - Aktualisieren
+
+#### Tools
+- `GET /inventory/tools/<barcode>` - Details
+- `GET /inventory/tools` - Übersicht
+- `POST /inventory/tools/<barcode>/update` - Aktualisieren
+
+#### Workers
+- `GET /inventory/workers/<barcode>` - Details
+- `GET /inventory/workers` - Übersicht
+- `POST /inventory/workers/update/<barcode>` - Aktualisieren
+
+### Quick Scan
+- `GET /quick_scan` - Quick-Scan-Interface
+- `POST /quick_scan/process` - Quick-Scan-Verarbeitung
+
+## Development Guidelines
+
+### Code Style
+- PEP 8 konform
+- Type Hints für alle Funktionen
+- Docstrings für alle Module und Funktionen
+- Kommentare für komplexe Logik
+
+### Testing
+- Unit Tests für alle Module
+- Integration Tests für API Endpoints
+- Test Coverage > 80%
+- Mocking für externe Abhängigkeiten
+
+### Documentation
+- API Dokumentation aktuell halten
+- Code Kommentare aktuell halten
+- README.md aktuell halten
+- Changelog führen
+
+### Security
+- Regelmäßige Security Audits
+- Dependency Updates
+- Penetration Testing
+- Security Headers prüfen
+
+### Performance
+- Query Optimierung
+- Caching Strategien
+- Lazy Loading
+- Asset Minification
+
+### Monitoring
+- Error Logging
+- Performance Monitoring
+- User Activity Tracking
+- System Health Checks
 
 ## Initialization Process Details
 

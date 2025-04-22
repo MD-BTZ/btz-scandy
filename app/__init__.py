@@ -17,14 +17,13 @@ from pathlib import Path
 import sys
 from flask_login import LoginManager
 from app.models.user import User
+from app.models.init_ticket_db import init_ticket_db
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
 from backup import DatabaseBackup
 
 # Logger einrichten
-logging.basicConfig(level=logging.INFO,
-                   format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 login_manager = LoginManager()
@@ -97,35 +96,45 @@ def cleanup_database():
     except Exception as e:
         logger.error(f"Fehler bei der automatischen Datenbankbereinigung: {str(e)}")
 
+def init_databases():
+    """Initialisiert alle Datenbanken und stellt sicher, dass sie die korrekte Struktur haben"""
+    try:
+        logger.info("Initialisiere Datenbanken...")
+        
+        # Hauptdatenbank initialisieren
+        logger.info("Initialisiere Hauptdatenbank...")
+        from app.models.init_db import init_db
+        init_db()
+        init_database_users()
+        
+        # Ticket-Datenbank initialisieren
+        logger.info("Initialisiere Ticket-Datenbank...")
+        init_ticket_db()
+        
+        logger.info("Datenbanken erfolgreich initialisiert")
+    except Exception as e:
+        logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
+        raise
+
 def create_app(test_config=None):
     """Erstellt und konfiguriert die Flask-Anwendung"""
-    app = Flask(__name__, 
-                static_folder='static',
-                static_url_path='/static')
-    
-    # Basis-Konfiguration
-    app.config.update(
-        SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-123'),
-        SESSION_TYPE='filesystem'
-    )
-    
-    # Session-Konfiguration
-    Session(app)
+    app = Flask(__name__)
     
     # Konfiguration laden
-    if test_config is None:
-        app.config.from_object(Config())
-    else:
-        app.config.update(test_config)
+    from app.config import config
+    config_name = 'default' if test_config is None else test_config
+    app.config.from_object(config[config_name])
     
     # Logger einrichten
     from app.utils.logger import init_app_logger
     init_app_logger(app)
     app.logger.info("\n=== ANWENDUNGSSTART ===")
     
-    # Verzeichnisse erstellen falls nicht vorhanden
-    os.makedirs(app.instance_path, exist_ok=True)
-    os.makedirs(os.path.join(app.instance_path, 'uploads'), exist_ok=True)
+    # Verzeichnisse erstellen
+    ensure_directories_exist()
+    
+    # Datenbanken initialisieren
+    init_databases()
     
     # Blueprints registrieren
     from app.routes import (
@@ -154,9 +163,6 @@ def create_app(test_config=None):
     
     # Komprimierung aktivieren
     Compress(app)
-    
-    # Stelle sicher, dass alle Verzeichnisse existieren
-    ensure_directories_exist()
     
     # Wenn auf Render, lade Demo-Daten
     if os.environ.get('RENDER') == 'true':
@@ -191,24 +197,6 @@ def create_app(test_config=None):
                     print(f"Backup {latest_backup} erfolgreich wiederhergestellt")
                 else:
                     print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
-    
-    # Datenbank initialisieren
-    with app.app_context():
-        # Stelle sicher, dass die Datenbank existiert
-        app.logger.info("\n=== DATENBANK-INITIALISIERUNG ===")
-        if not Database.ensure_db_exists():
-            app.logger.error("Datenbank konnte nicht initialisiert werden")
-            raise Exception("Datenbank-Initialisierung fehlgeschlagen")
-        
-        # Zeige Datenbankinhalt
-        app.logger.info("\n=== AKTUELLER DATENBANKINHALT ===")
-        Database.print_database_contents()
-        
-        # Benutzer initialisieren
-        init_database_users(app)
-        
-        # Automatische Datenbankbereinigung durchführen
-        cleanup_database()
     
     # Login-Manager initialisieren
     login_manager.init_app(app)
