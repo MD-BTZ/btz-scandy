@@ -19,6 +19,7 @@ import openpyxl
 from io import BytesIO
 from pathlib import Path
 from backup import DatabaseBackup
+import shutil
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -471,11 +472,11 @@ def manual_lending():
                                 'message': 'Dieses Werkzeug ist als defekt markiert'
                             }), 400
                         
-                        # Neue Ausleihe erstellen
+                        # Neue Ausleihe erstellen (OHNE modified_at und sync_status)
                         db.execute('''
                             INSERT INTO lendings 
-                            (tool_barcode, worker_barcode, lent_at, modified_at, sync_status)
-                            VALUES (?, ?, datetime('now'), datetime('now'), 'pending')
+                            (tool_barcode, worker_barcode, lent_at)
+                            VALUES (?, ?, datetime('now'))
                         ''', [item_barcode, worker_barcode])
                         
                         # Status des Werkzeugs aktualisieren
@@ -507,12 +508,10 @@ def manual_lending():
                                 'message': f'Dieses Werkzeug wurde von {tool["current_worker_name"]} ausgeliehen'
                             }), 403
                         
-                        # Rückgabe verarbeiten
+                        # Rückgabe verarbeiten (OHNE modified_at)
                         db.execute('''
                             UPDATE lendings 
-                            SET returned_at = datetime('now'),
-                                modified_at = datetime('now'),
-                                sync_status = 'pending'
+                            SET returned_at = datetime('now')
                             WHERE tool_barcode = ? 
                             AND returned_at IS NULL
                         ''', [item_barcode])
@@ -942,21 +941,25 @@ def import_table(table):
 @bp.route('/backup/create', methods=['POST'])
 @admin_required
 def create_backup():
-    """Manuelles Backup erstellen"""
+    """Erstelle ein manuelles Backup"""
     try:
-        logger.info("Starte manuelles Backup...")
         success = backup_manager.create_backup()
         if success:
-            flash('Backup wurde erfolgreich erstellt', 'success')
-            logger.info("Backup erfolgreich erstellt")
+            return jsonify({
+                'status': 'success',
+                'message': 'Backup wurde erfolgreich erstellt'
+            })
         else:
-            flash('Fehler beim Erstellen des Backups', 'error')
-            logger.error("Backup konnte nicht erstellt werden")
+            return jsonify({
+                'status': 'error',
+                'message': 'Fehler beim Erstellen des Backups'
+            }), 500
     except Exception as e:
-        error_msg = f'Fehler beim Erstellen des Backups: {str(e)}'
-        logger.error(error_msg)
-        flash(error_msg, 'error')
-    return redirect(url_for('admin.dashboard'))
+        logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @bp.route('/backup/restore/<filename>', methods=['POST'])
 @admin_required
@@ -1397,3 +1400,147 @@ def list_categories():
         ORDER BY value
     """)
     return jsonify({'success': True, 'categories': [dict(cat) for cat in categories]})
+
+@bp.route('/backup/list')
+@admin_required
+def list_backups():
+    """Liste alle verfügbaren Backups auf"""
+    try:
+        backups = []
+        backup_dir = backup_manager.backup_dir
+        
+        if backup_dir.exists():
+            for backup_file in sorted(backup_dir.glob('*.db'), reverse=True):
+                backups.append({
+                    'name': backup_file.name,
+                    'size': backup_file.stat().st_size,
+                    'created': backup_file.stat().st_mtime
+                })
+        
+        return jsonify({
+            'status': 'success',
+            'backups': backups
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Auflisten der Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/backup/download/backup/<filename>')
+@admin_required
+def download_backup(filename):
+    """Lade ein bestimmtes Backup herunter"""
+    try:
+        backup_path = backup_manager.backup_dir / filename
+        
+        if not backup_path.exists():
+            return jsonify({
+                'status': 'error',
+                'message': 'Backup nicht gefunden'
+            }), 404
+        
+        return send_file(
+            backup_path,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f"Fehler beim Herunterladen des Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/backup/download/db')
+@admin_required
+def download_current_database():
+    """Lade die aktuelle Datenbank herunter"""
+    try:
+        # Verwende den Datenbankpfad aus dem DatabaseBackup Manager
+        db_path = backup_manager.db_path
+        
+        if not os.path.exists(db_path):
+            return jsonify({
+                'status': 'error',
+                'message': 'Datenbank nicht gefunden'
+            }), 404
+        
+        # Erstelle einen temporären Dateinamen mit Zeitstempel
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'inventory_{timestamp}.db'
+        
+        return send_file(
+            db_path,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f"Fehler beim Herunterladen der Datenbank: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/backup/upload', methods=['POST'])
+@admin_required
+def upload_backup():
+    """Lade ein Backup hoch"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'message': 'Keine Datei ausgewählt'
+            }), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'message': 'Keine Datei ausgewählt'
+            }), 400
+        
+        if not file.filename.endswith('.db'):
+            return jsonify({
+                'status': 'error',
+                'message': 'Nur .db-Dateien sind erlaubt'
+            }), 400
+        
+        # Erstelle ein Backup der aktuellen Datenbank
+        try:
+            backup_manager.create_backup()
+            logger.info("Backup der aktuellen Datenbank wurde erstellt")
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Erstellen des Backups: {str(e)}'
+            }), 500
+        
+        # Speichere die neue Datenbank
+        filename = secure_filename(file.filename)
+        file_path = backup_manager.backup_dir / filename
+        file.save(str(file_path))
+        
+        # Aktiviere die neue Datenbank
+        try:
+            backup_manager.restore_backup(filename)
+            logger.info(f"Neue Datenbank {filename} wurde aktiviert")
+        except Exception as e:
+            logger.error(f"Fehler beim Aktivieren der neuen Datenbank: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Aktivieren der neuen Datenbank: {str(e)}'
+            }), 500
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Backup erfolgreich hochgeladen und aktiviert'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Hochladen des Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500

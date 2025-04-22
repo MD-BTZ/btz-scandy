@@ -8,6 +8,8 @@
 <script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
 <!-- Admin Dashboard Script -->
 <script src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
+<!-- Backup Script -->
+<script src="{{ url_for('static', filename='js/backup.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -463,78 +465,73 @@
         </div>
     </div>
 
-    <!-- Backup-Bereich -->
-    <div class="mt-8">
-        <h2 class="text-xl font-semibold mb-4">
-            <i class="fas fa-database text-primary"></i>
-            Backup-Verwaltung
-        </h2>
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <div class="flex justify-between items-center mb-4">
-                    <form action="{{ url_for('admin.create_backup') }}" method="POST">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save mr-2"></i>
-                            Backup erstellen
-                        </button>
-                    </form>
+    <!-- Backup-Verwaltung -->
+    <div class="card bg-base-100 shadow-xl mt-8">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-database text-primary"></i>
+                Backup-Verwaltung
+            </h2>
+            
+            <!-- Aktuelle Datenbank -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-2">Aktuelle Datenbank</h3>
+                <div class="flex gap-2">
+                    <button onclick="downloadCurrentDatabase()" class="btn btn-primary">
+                        <i class="fas fa-download mr-2"></i>
+                        Datenbank herunterladen
+                    </button>
+                    <button onclick="createBackup()" class="btn btn-success ml-2">
+                        <i class="fas fa-save"></i> Backup erstellen
+                    </button>
                 </div>
-                
+            </div>
+
+            <!-- Backup hochladen -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-2">Backup hochladen</h3>
+                <form id="uploadBackupForm" class="flex gap-2">
+                    <input type="file" name="file" accept=".db" class="file-input file-input-bordered w-full max-w-xs" required>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload mr-2"></i>
+                        Backup hochladen
+                    </button>
+                </form>
+            </div>
+
+            <!-- Backup-Liste -->
+            <div>
+                <h3 class="text-lg font-semibold mb-2">Verfügbare Backups</h3>
                 <div class="overflow-x-auto">
-                    <table class="table w-full">
+                    <table class="table table-compact w-full">
                         <thead>
                             <tr>
                                 <th>Name</th>
                                 <th>Größe</th>
                                 <th>Erstellt am</th>
-                                <th>Datenbankinhalt</th>
-                                <th>Aktionen</th>
+                                <th class="text-right">Aktionen</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for backup in backups %}
-                            <tr>
-                                <td>{{ backup.name }}</td>
-                                <td>{{ (backup.size / 1024)|round(1) }} KB</td>
-                                <td>{{ backup.created|format_datetime }}</td>
-                                <td>
-                                    {% if backup.stats %}
-                                    <div class="text-sm">
-                                        <span class="badge badge-info" title="Aktive Werkzeuge">
-                                            <i class="fas fa-tools"></i> {{ backup.stats.tools }}
-                                        </span>
-                                        <span class="badge badge-success" title="Aktive Verbrauchsmaterialien">
-                                            <i class="fas fa-box"></i> {{ backup.stats.consumables }}
-                                        </span>
-                                        <span class="badge badge-warning" title="Aktive Mitarbeiter">
-                                            <i class="fas fa-users"></i> {{ backup.stats.workers }}
-                                        </span>
-                                        <span class="badge badge-primary" title="Aktive Ausleihen">
-                                            <i class="fas fa-hand-holding"></i> {{ backup.stats.active_lendings }}
-                                        </span>
-                                    </div>
-                                    {% else %}
-                                    <span class="text-gray-400">Keine Statistiken verfügbar</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <form action="{{ url_for('admin.restore_backup', filename=backup.name) }}" 
-                                          method="POST" class="inline"
-                                          onsubmit="return confirm('Sind Sie sicher? Dies überschreibt die aktuelle Datenbank mit dem Stand vom {{ backup.created|format_datetime }}.');">
-                                        <button type="submit" class="btn btn-warning btn-sm">
-                                            <i class="fas fa-undo-alt mr-1"></i>
-                                            Wiederherstellen
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
+                        <tbody id="backupsList">
+                            <!-- Wird per JavaScript gefüllt -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Backup Modal -->
+    <dialog id="backupModal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">Backup aktivieren</h3>
+            <p class="mb-4">Möchten Sie dieses Backup aktivieren? Die aktuelle Datenbank wird automatisch gesichert.</p>
+            <div class="modal-action">
+                <button onclick="activateBackup()" class="btn btn-primary">Ja, aktivieren</button>
+                <button onclick="backupModal.close()" class="btn">Abbrechen</button>
+            </div>
+        </div>
+    </dialog>
 
     <div class="divider">Über Scandy</div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
