@@ -128,6 +128,15 @@
 
             <div class="form-control mb-4">
                 <label class="label">
+                    <span class="label-text">Ihr Name</span>
+                </label>
+                <input type="text" name="author_name" class="input input-bordered" 
+                       placeholder="Ihr Name für die Notiz"
+                       required>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
                     <span class="label-text">Zugewiesen an</span>
                 </label>
                 <input type="text" name="assigned_to" class="input input-bordered" 
@@ -198,7 +207,8 @@ document.getElementById('updateForm').addEventListener('submit', async function(
     const data = {
         status: formData.get('status'),
         assigned_to: formData.get('assigned_to'),
-        resolution_notes: formData.get('resolution_notes')
+        resolution_notes: formData.get('resolution_notes'),
+        author_name: formData.get('author_name')
     };
     
     try {
@@ -221,12 +231,9 @@ document.getElementById('updateForm').addEventListener('submit', async function(
             showToast('success', result.message);
             document.getElementById('updateModal').close();
             
-            // Verzögerte Neuladen der Seite mit Cache-Busting
+            // Zur Ticket-Übersichtsseite zurückkehren
             setTimeout(() => {
-                const currentUrl = window.location.href;
-                const timestamp = new Date().getTime();
-                const separator = currentUrl.includes('?') ? '&' : '?';
-                window.location.href = `${currentUrl}${separator}t=${timestamp}`;
+                window.location.href = "{{ url_for('tickets.index') }}";
             }, 1000);
         } else {
             throw new Error(result.message || 'Ein Fehler ist aufgetreten');

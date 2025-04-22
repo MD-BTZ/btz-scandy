@@ -1,11 +1,11 @@
-from flask import Blueprint, render_template, request, jsonify, session
-from app.models.database import Database
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
+from app.models.ticket_db import TicketDatabase
 from app.utils.decorators import login_required, admin_required
 import logging
 from datetime import datetime
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
-db = Database()
+ticket_db = TicketDatabase()
 
 @bp.route('/')
 @admin_required
@@ -19,34 +19,29 @@ def index():
     
     # Basis-Query
     query = """
-        SELECT 
-            t.*,
-            creator.username as creator_name,
-            assignee.username as assignee_name
-        FROM tickets t
-        LEFT JOIN users creator ON t.created_by = creator.username
-        LEFT JOIN users assignee ON t.assigned_to = assignee.username
+        SELECT *
+        FROM tickets
         WHERE 1=1
     """
     params = []
     
     # Filter anwenden
     if status and status != 'alle':
-        query += " AND t.status = ?"
+        query += " AND status = ?"
         params.append(status)
     if priority and priority != 'alle':
-        query += " AND t.priority = ?"
+        query += " AND priority = ?"
         params.append(priority)
     if assigned_to:
-        query += " AND t.assigned_to = ?"
+        query += " AND assigned_to = ?"
         params.append(assigned_to)
     if created_by:
-        query += " AND t.created_by = ?"
+        query += " AND created_by = ?"
         params.append(created_by)
     
-    query += " ORDER BY t.created_at DESC"
+    query += " ORDER BY created_at DESC"
     
-    tickets = db.query(query, params)
+    tickets = ticket_db.query(query, params)
     return render_template('tickets/index.html', tickets=tickets)
 
 @bp.route('/create', methods=['GET', 'POST'])
@@ -69,7 +64,7 @@ def create():
             # Benutzer aus Session oder 'Anonym'
             created_by = session.get('username', 'Anonym')
             
-            db.query(
+            ticket_db.query(
                 """
                 INSERT INTO tickets (title, description, priority, created_by, assigned_to)
                 VALUES (?, ?, ?, ?, ?)
@@ -95,13 +90,11 @@ def create():
 @admin_required
 def detail(id):
     """Zeigt die Details eines Tickets."""
-    ticket = db.query(
+    ticket = ticket_db.query(
         """
-        SELECT t.*,
-               creator.username as creator_name
-        FROM tickets t
-        LEFT JOIN users creator ON t.created_by = creator.username
-        WHERE t.id = ?
+        SELECT *
+        FROM tickets
+        WHERE id = ?
         """,
         [id],
         one=True
@@ -111,7 +104,7 @@ def detail(id):
         return render_template('404.html'), 404
         
     # Hole die Notizen für das Ticket
-    notes = db.query(
+    notes = ticket_db.query(
         """
         SELECT *
         FROM ticket_notes
@@ -149,14 +142,22 @@ def update(id):
         status = data.get('status')
         assigned_to = data.get('assigned_to')
         resolution_notes = data.get('resolution_notes')
+        author_name = data.get('author_name')
         
-        logging.info(f"Verarbeite Daten: status={status}, assigned_to={assigned_to}, has_notes={'ja' if resolution_notes else 'nein'}")
+        logging.info(f"Verarbeite Daten: status={status}, assigned_to={assigned_to}, has_notes={'ja' if resolution_notes else 'nein'}, author={author_name}")
 
         if not status:
             logging.error("Status fehlt in den Daten")
             return jsonify({
                 'success': False,
                 'message': 'Status ist erforderlich'
+            }), 400
+
+        if not author_name:
+            logging.error("Name fehlt in den Daten")
+            return jsonify({
+                'success': False,
+                'message': 'Name ist erforderlich'
             }), 400
 
         if status not in ['offen', 'in_bearbeitung', 'gelöst']:
@@ -168,7 +169,7 @@ def update(id):
 
         # Update ticket status and assigned_to
         logging.info("Führe Ticket-Update durch...")
-        db.query(
+        ticket_db.query(
             """
             UPDATE tickets 
             SET status = ?,
@@ -187,20 +188,17 @@ def update(id):
         # Add note if provided
         if resolution_notes and resolution_notes.strip():
             logging.info("Füge neue Notiz hinzu...")
-            db.query(
+            ticket_db.query(
                 """
                 INSERT INTO ticket_notes (ticket_id, note, created_by)
                 VALUES (?, ?, ?)
                 """,
-                [id, resolution_notes.strip(), session.get('username')]
+                [id, resolution_notes.strip(), author_name]
             )
             logging.info("Notiz erfolgreich hinzugefügt")
 
         logging.info("Update erfolgreich abgeschlossen")
-        return jsonify({
-            'success': True, 
-            'message': 'Ticket wurde erfolgreich aktualisiert'
-        })
+        return redirect(url_for('tickets.index'))
 
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren des Tickets #{id}: {str(e)}")
