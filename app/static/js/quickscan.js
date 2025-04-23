@@ -151,6 +151,13 @@ const QuickScan = {
             if (this.keyBuffer) {
                 this.handleScannerInput(this.keyBuffer, input);
                 this.keyBuffer = '';
+            } else if (this.confirmationBarcode) {
+                // Simuliere einen Scan des Bestätigungscodes bei Enter
+                this.handleScannerInput(this.confirmationBarcode, input);
+            } else if (input.value) {
+                // Normale Enter-Verarbeitung für manuelle Eingaben
+                const btnId = input.id === 'itemScanInput' ? 'confirmItemBtn' : 'confirmWorkerBtn';
+                document.getElementById(btnId)?.click();
             }
             return;
         }
