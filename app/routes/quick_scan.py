@@ -48,17 +48,16 @@ def process():
                         
                     # Werkzeug ausleihen
                     db.execute('''
-                        INSERT INTO lendings (tool_id, worker_id, lent_at)
+                        INSERT INTO lendings (tool_barcode, worker_barcode, lent_at)
                         VALUES (?, ?, datetime('now'))
-                    ''', (tool['id'], worker['id']))
+                    ''', (item_barcode, worker_barcode))
                     
                     # Status aktualisieren
                     db.execute('''
                         UPDATE tools 
-                        SET status = 'ausgeliehen',
-                            current_worker_id = ?
+                        SET status = 'ausgeliehen'
                         WHERE id = ?
-                    ''', (worker['id'], tool['id']))
+                    ''', (tool['id'],))
                     
                     db.commit()
                     return jsonify({
@@ -73,14 +72,13 @@ def process():
                     db.execute('''
                         UPDATE lendings
                         SET returned_at = datetime('now')
-                        WHERE tool_id = ? AND returned_at IS NULL
-                    ''', (tool['id'],))
+                        WHERE tool_barcode = ? AND returned_at IS NULL
+                    ''', (item_barcode,))
                     
                     # Status aktualisieren
                     db.execute('''
                         UPDATE tools 
-                        SET status = 'verfügbar',
-                            current_worker_id = NULL
+                        SET status = 'verfügbar'
                         WHERE id = ?
                     ''', (tool['id'],))
                     
@@ -111,9 +109,9 @@ def process():
                     
                 # Verbrauch eintragen
                 db.execute('''
-                    INSERT INTO consumable_usages (consumable_id, worker_id, quantity, used_at)
+                    INSERT INTO consumable_usages (consumable_barcode, worker_barcode, quantity, used_at)
                     VALUES (?, ?, 1, datetime('now'))
-                ''', (consumable['id'], worker['id']))
+                ''', (item_barcode, worker_barcode))
                 
                 # Bestand reduzieren
                 db.execute('''
