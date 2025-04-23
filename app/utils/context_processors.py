@@ -1,7 +1,13 @@
-from flask import current_app
+from flask import current_app, g
 from app.models.database import Database
-from app.utils.routes import Routes
+from app.constants import Routes
 import traceback
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Version der Anwendung
+VERSION = "1.0.0"
 
 def get_colors():
     """Holt die Farbeinstellungen aus der Datenbank"""
@@ -75,7 +81,14 @@ def inject_routes():
     """Fügt die Routen-Konstanten in den Template-Kontext ein"""
     return {'routes': Routes}
 
+def inject_version():
+    """Fügt die aktuelle Version zu allen Templates hinzu"""
+    return {
+        'version': VERSION
+    }
+
 def register_context_processors(app):
     """Registriert alle Context Processors"""
     app.context_processor(inject_colors)
     app.context_processor(inject_routes)
+    app.context_processor(inject_version)

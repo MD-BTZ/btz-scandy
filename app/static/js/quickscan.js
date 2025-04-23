@@ -30,10 +30,25 @@ const QuickScan = {
         // Event-Listener für Item-Scan
             const itemInput = document.getElementById('itemScanInput');
             if (itemInput) {
-            itemInput.addEventListener('keypress', (e) => {
-                console.log('Keypress Event:', e.key, 'KeyCode:', e.keyCode);
+            itemInput.addEventListener('keydown', (e) => {
                 this.handleKeyInput(e, itemInput);
             });
+
+            // Event-Listener für Bestätigungs-Button
+            const confirmItemBtn = document.getElementById('confirmItemBtn');
+            if (confirmItemBtn) {
+                confirmItemBtn.addEventListener('click', () => {
+                    this.confirmItem();
+                });
+            }
+
+            // Event-Listener für Rückgängig-Button
+            const undoItemBtn = document.getElementById('undoItemBtn');
+            if (undoItemBtn) {
+                undoItemBtn.addEventListener('click', () => {
+                    this.undoLastInput('item');
+                });
+            }
 
             itemInput.addEventListener('input', (e) => {
                 console.log('Input Event:', e.target.value);
@@ -54,10 +69,25 @@ const QuickScan = {
         // Event-Listener für Worker-Scan
         const workerInput = document.getElementById('workerScanInput');
         if (workerInput) {
-            workerInput.addEventListener('keypress', (e) => {
-                console.log('Keypress Event:', e.key, 'KeyCode:', e.keyCode);
+            workerInput.addEventListener('keydown', (e) => {
                 this.handleKeyInput(e, workerInput);
             });
+
+            // Event-Listener für Bestätigungs-Button
+            const confirmWorkerBtn = document.getElementById('confirmWorkerButton');
+            if (confirmWorkerBtn) {
+                confirmWorkerBtn.addEventListener('click', () => {
+                    this.confirmWorker();
+                });
+            }
+
+            // Event-Listener für Rückgängig-Button
+            const undoWorkerBtn = document.getElementById('undoWorkerButton');
+            if (undoWorkerBtn) {
+                undoWorkerBtn.addEventListener('click', () => {
+                    this.undoLastInput('worker');
+                });
+            }
 
             workerInput.addEventListener('input', (e) => {
                 console.log('Input Event:', e.target.value);
@@ -86,8 +116,8 @@ const QuickScan = {
         // Event-Listener für Mengeneingabe-Buttons
         document.querySelectorAll('.quantity-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                e.preventDefault();  // Verhindert Standard-Button-Verhalten
-                e.stopPropagation(); // Verhindert Event-Bubbling
+                e.preventDefault();
+                e.stopPropagation();
                 const action = btn.dataset.action;
                 if (action === 'decrease') {
                     this.decreaseQuantity();
@@ -112,8 +142,8 @@ const QuickScan = {
             return;
         }
         
-        // Erhöhe die Zeitdifferenz auf 1000ms (1 Sekunde)
-        if (timeDiff > 1000) { 
+        // Erhöhe die Zeitdifferenz auf 3000ms (3 Sekunden)
+        if (timeDiff > 3000) { 
             this.keyBuffer = '';
         }
         
@@ -194,6 +224,69 @@ const QuickScan = {
 
     async handleItemScan(barcode) {
         try {
+            // Easter Eggs vor der normalen Verarbeitung prüfen
+            if (barcode === 'SCANDY') {
+                // Erstelle einen spektakulären Konfettieffekt
+                confetti({
+                    particleCount: 200,
+                    spread: 160,
+                    origin: { y: 0.6 },
+                    ticks: 200,
+                    gravity: 0.8,
+                    scalar: 1.2,
+                    zIndex: 99999
+                });
+                // Zusätzlicher Effekt nach kurzer Verzögerung
+                setTimeout(() => {
+                    confetti({
+                        particleCount: 100,
+                        angle: 60,
+                        spread: 100,
+                        origin: { x: 0 },
+                        ticks: 200,
+                        gravity: 0.8,
+                        scalar: 1.2,
+                        zIndex: 99999
+                    });
+                    confetti({
+                        particleCount: 100,
+                        angle: 120,
+                        spread: 100,
+                        origin: { x: 1 },
+                        ticks: 200,
+                        gravity: 0.8,
+                        scalar: 1.2,
+                        zIndex: 99999
+                    });
+                }, 250);
+                showToast('success', '🎉 SCANDY! 🎉');
+                return;
+            }
+            if (barcode === 'DANCE') {
+                showToast('success', '🦓 Zebra-Party! 🦓');
+                // Erstelle zwei tanzende Emojis
+                const emojiLeft = document.createElement('div');
+                emojiLeft.className = 'dancing-emoji left';
+                emojiLeft.textContent = '🦓';
+                document.body.appendChild(emojiLeft);
+
+                const emojiRight = document.createElement('div');
+                emojiRight.className = 'dancing-emoji right';
+                emojiRight.textContent = '🦓';
+                document.body.appendChild(emojiRight);
+                
+                // Entferne die Emojis nach 5 Sekunden
+                setTimeout(() => {
+                    emojiLeft.remove();
+                    emojiRight.remove();
+                }, 5000);
+                return;
+            }
+            if (barcode === 'BTZ31189141') {
+                showToast('success', 'Das Werkzeug wurde mal wieder gegen die Wand geworfen!');
+                return;
+            }
+
             // Entferne mögliche Präfixe für die Suche
             const cleanBarcode = barcode.replace(/^[TC]/, '');
             console.log('Suche Artikel mit bereinigtem Barcode:', cleanBarcode);
@@ -507,6 +600,85 @@ const QuickScan = {
     undoLastInput(type) {
         this.keyBuffer = this.keyBuffer.slice(0, -1);
         this.updateDisplay(this.keyBuffer, type === 'worker');
+    },
+
+    processScannerInput: function(input, type) {
+        if (!input) return;
+        
+        // Spezielle Barcodes für visuelle Effekte
+        if (input === 'SCANDY') {
+            this.showConfetti();
+            return;
+        }
+        if (input === 'DANCE') {
+            this.showDancingEmojis();
+            return;
+        }
+        
+        // Normale Verarbeitung
+        if (type === 'item') {
+            this.scannedItem = input;
+            this.updateDisplay();
+            this.currentStep = 'worker';
+            document.getElementById('workerInput').focus();
+        } else if (type === 'worker') {
+            this.scannedWorker = input;
+            this.updateDisplay();
+            this.executeStoredProcess();
+        }
+    },
+
+    showConfetti() {
+        confetti({
+            particleCount: 200,
+            spread: 160,
+            origin: { y: 0.6 },
+            ticks: 200,
+            gravity: 0.8,
+            scalar: 1.2,
+            zIndex: 99999
+        });
+        setTimeout(() => {
+            confetti({
+                particleCount: 100,
+                angle: 60,
+                spread: 100,
+                origin: { x: 0 },
+                ticks: 200,
+                gravity: 0.8,
+                scalar: 1.2,
+                zIndex: 99999
+            });
+            confetti({
+                particleCount: 100,
+                angle: 120,
+                spread: 100,
+                origin: { x: 1 },
+                ticks: 200,
+                gravity: 0.8,
+                scalar: 1.2,
+                zIndex: 99999
+            });
+        }, 250);
+        showToast('success', '🎉 SCANDY! 🎉');
+    },
+
+    showDancingEmojis() {
+        showToast('success', '🦓 Zebra-Party! 🦓');
+        const emojiLeft = document.createElement('div');
+        emojiLeft.className = 'dancing-emoji left';
+        emojiLeft.textContent = '🦓';
+        document.body.appendChild(emojiLeft);
+
+        const emojiRight = document.createElement('div');
+        emojiRight.className = 'dancing-emoji right';
+        emojiRight.textContent = '🦓';
+        document.body.appendChild(emojiRight);
+        
+        setTimeout(() => {
+            emojiLeft.remove();
+            emojiRight.remove();
+        }, 5000);
     }
 };
 

@@ -85,6 +85,7 @@ def init_db():
                 returned_at TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 sync_status TEXT DEFAULT 'pending',
+                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (tool_barcode) REFERENCES tools(barcode),
                 FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
             )

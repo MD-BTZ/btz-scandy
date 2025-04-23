@@ -18,6 +18,7 @@ import sys
 from flask_login import LoginManager
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
+from app.utils.context_processors import register_context_processors
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -135,6 +136,9 @@ def create_app(test_config=None):
     
     # Datenbanken initialisieren
     init_databases()
+    
+    # Context Processors registrieren
+    register_context_processors(app)
     
     # Blueprints registrieren
     from app.routes import (

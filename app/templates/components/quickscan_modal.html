@@ -148,10 +148,10 @@
                                     <p id="processedWorkerInput" class="text-lg font-mono text-center opacity-50">Keine Eingabe</p>
                                 </div>
                                 <div class="flex gap-2">
-                                    <button id="undoWorkerButton" class="btn btn-square btn-ghost" onclick="QuickScan.undoLastInput('worker')" title="Letzte Eingabe rückgängig machen">
+                                    <button id="undoWorkerButton" class="btn btn-square btn-ghost" title="Letzte Eingabe rückgängig machen">
                                         <i class="fas fa-undo"></i>
                                     </button>
-                                    <button id="confirmWorkerButton" class="btn btn-primary hidden" onclick="QuickScan.confirmWorker()">
+                                    <button id="confirmWorkerButton" class="btn btn-primary hidden">
                                         <i class="fas fa-check mr-2"></i>Bestätigen
                                     </button>
                                 </div>
@@ -173,32 +173,69 @@
 <!-- JsBarcode Library -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
+<!-- Item Input -->
+<div class="mb-4">
+    <label class="block text-sm font-medium text-gray-700 mb-2">Artikel scannen</label>
+    <div class="flex gap-2">
+        <input type="text" 
+               id="itemInput" 
+               class="input input-bordered flex-1" 
+               placeholder="Barcode scannen...">
+        <button class="btn btn-primary" id="confirmItemBtn">
+            <i class="fas fa-check"></i> Bestätigen
+        </button>
+    </div>
+</div>
+
+<!-- Worker Input -->
+<div class="mb-4">
+    <label class="block text-sm font-medium text-gray-700 mb-2">Mitarbeiter scannen</label>
+    <div class="flex gap-2">
+        <input type="text" 
+               id="workerInput" 
+               class="input input-bordered flex-1" 
+               placeholder="Barcode scannen...">
+        <button class="btn btn-primary" id="confirmWorkerBtn">
+            <i class="fas fa-check"></i> Bestätigen
+        </button>
+    </div>
+</div>
+
 <script>
-// Nur keydown Events für Scanner Inputs
-document.getElementById('itemScanInput').addEventListener('keydown', function(e) {
-    QuickScan.handleKeyInput(e, this);
-});
+document.addEventListener('DOMContentLoaded', function() {
+    const itemInput = document.getElementById('itemInput');
+    const workerInput = document.getElementById('workerInput');
+    const confirmItemBtn = document.getElementById('confirmItemBtn');
+    const confirmWorkerBtn = document.getElementById('confirmWorkerBtn');
 
-document.getElementById('workerScanInput').addEventListener('keydown', function(e) {
-    QuickScan.handleKeyInput(e, this);
-});
+    // Event-Listener für Bestätigungsbuttons
+    confirmItemBtn.addEventListener('click', function() {
+        if (itemInput.value) {
+            QuickScan.processScannerInput(itemInput.value, 'item');
+            itemInput.value = '';
+        }
+    });
 
-// Entferne alle anderen input/keypress Event Listener
+    confirmWorkerBtn.addEventListener('click', function() {
+        if (workerInput.value) {
+            QuickScan.processScannerInput(workerInput.value, 'worker');
+            workerInput.value = '';
+        }
+    });
 
-// Button Event Listener bleiben unverändert
-document.getElementById('confirmItemBtn').addEventListener('click', function() {
-    QuickScan.confirmItem();
-});
+    // Event-Listener für Enter-Taste
+    itemInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmItemBtn.click();
+        }
+    });
 
-document.getElementById('confirmWorkerButton').addEventListener('click', function() {
-    QuickScan.confirmWorker();
-});
-
-document.getElementById('undoItemBtn').addEventListener('click', function() {
-    QuickScan.undoLastInput('item');
-});
-
-document.getElementById('undoWorkerButton').addEventListener('click', function() {
-    QuickScan.undoLastInput('worker');
+    workerInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmWorkerBtn.click();
+        }
+    });
 });
 </script> 
