@@ -270,23 +270,7 @@ const QuickScan = {
                 return;
             }
             if (barcode === 'DANCE') {
-                showToast('success', '🦓 Zebra-Party! 🦓');
-                // Erstelle zwei tanzende Emojis
-                const emojiLeft = document.createElement('div');
-                emojiLeft.className = 'dancing-emoji left';
-                emojiLeft.textContent = '🦓';
-                document.body.appendChild(emojiLeft);
-
-                const emojiRight = document.createElement('div');
-                emojiRight.className = 'dancing-emoji right';
-                emojiRight.textContent = '🦓';
-                document.body.appendChild(emojiRight);
-                
-                // Entferne die Emojis nach 5 Sekunden
-                setTimeout(() => {
-                    emojiLeft.remove();
-                    emojiRight.remove();
-                }, 5000);
+                this.showDancingEmojis();
                 return;
             }
             if (barcode === 'BTZ31189141') {
@@ -672,19 +656,28 @@ const QuickScan = {
 
     showDancingEmojis() {
         showToast('success', '🦓 Zebra-Party! 🦓');
-        const emojiLeft = document.createElement('div');
-        emojiLeft.className = 'dancing-emoji left';
-        emojiLeft.textContent = '🦓';
-        document.body.appendChild(emojiLeft);
+        
+        // Erstelle den abgedunkelten Hintergrund
+        const overlay = document.createElement('div');
+        overlay.className = 'zebra-overlay';
+        document.body.appendChild(overlay);
+        
+        const zebraLeft = document.createElement('img');
+        zebraLeft.className = 'dancing-zebra left';
+        zebraLeft.src = '/static/images/dancing_zebra.gif';
+        zebraLeft.alt = 'Tanzendes Zebra';
+        document.body.appendChild(zebraLeft);
 
-        const emojiRight = document.createElement('div');
-        emojiRight.className = 'dancing-emoji right';
-        emojiRight.textContent = '🦓';
-        document.body.appendChild(emojiRight);
+        const zebraRight = document.createElement('img');
+        zebraRight.className = 'dancing-zebra right';
+        zebraRight.src = '/static/images/dancing_zebra.gif';
+        zebraRight.alt = 'Tanzendes Zebra';
+        document.body.appendChild(zebraRight);
         
         setTimeout(() => {
-            emojiLeft.remove();
-            emojiRight.remove();
+            zebraLeft.remove();
+            zebraRight.remove();
+            overlay.remove();
         }, 5000);
     }
 };
