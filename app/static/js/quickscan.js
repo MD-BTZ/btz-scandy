@@ -673,12 +673,21 @@ const QuickScan = {
         zebraRight.src = '/static/images/dancing_zebra.gif';
         zebraRight.alt = 'Tanzendes Zebra';
         document.body.appendChild(zebraRight);
+
+        // Füge Musik hinzu
+        const audio = new Audio('/static/audio/zebra_party.mp3');
+        audio.volume = 0.5; // Lautstärke auf 50% setzen
+        audio.play().catch(error => {
+            console.log('Audio konnte nicht abgespielt werden:', error);
+        });
         
         setTimeout(() => {
             zebraLeft.remove();
             zebraRight.remove();
             overlay.remove();
-        }, 5000);
+            audio.pause();
+            audio.currentTime = 0;
+        }, 17000); // 17 Sekunden = 17000 Millisekunden
     }
 };
 
