@@ -194,9 +194,6 @@ def after_request(response):
     print('============================\n')
     return response
 
-# Falls es hier eine alte Version der Route gibt, 
-# kommentieren Sie diese aus oder löschen Sie sie
-
 @bp.route('/lending/return', methods=['POST'])
 @admin_required
 def return_tool():
@@ -238,7 +235,6 @@ def return_tool():
             conn.execute("""
                 UPDATE lendings 
                 SET returned_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-                    modified_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
                     sync_status = 'pending'
                 WHERE tool_barcode = ? 
                 AND returned_at IS NULL
@@ -248,21 +244,20 @@ def return_tool():
             conn.execute("""
                 UPDATE tools 
                 SET status = 'verfügbar',
-                    modified_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
                     sync_status = 'pending'
                 WHERE barcode = ?
             """, [tool_barcode])
             
             conn.commit()
+            
             return jsonify({
                 'success': True,
                 'message': 'Werkzeug erfolgreich zurückgegeben'
             })
-
+            
     except Exception as e:
-        print(f"Fehler bei der Werkzeug-Rückgabe: {str(e)}")
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': f'Fehler bei der Rückgabe: {str(e)}'
         }), 500
 

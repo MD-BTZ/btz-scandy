@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 login_manager = LoginManager()
 
+__version__ = '1.0.1'
+
 class Config:
     @staticmethod
     def init_server():

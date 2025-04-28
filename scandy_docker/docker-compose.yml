@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  scandy:
+    build: .
+    container_name: scandy
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./database:/app/database
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    environment:
+      - FLASK_APP=app.wsgi:application
+      - FLASK_ENV=production
+      - DATABASE_URL=sqlite:////app/database/inventory.db
+      - SECRET_KEY=${SECRET_KEY}
+    networks:
+      - scandy_network
+
+networks:
+  scandy_network:
+    driver: bridge 

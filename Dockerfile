@@ -1,28 +1,34 @@
+# Verwende Python 3.9 als Basis-Image
 FROM python:3.9-slim
 
-# Arbeitsverzeichnis im Container
+# Setze Arbeitsverzeichnis
 WORKDIR /app
 
-# System-Abhängigkeiten installieren
+# Installiere Systemabhängigkeiten
 RUN apt-get update && apt-get install -y \
-    git \
+    build-essential \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# App von GitHub klonen
-RUN git clone -b electron https://github.com/woschj/scandy.git .
+# Kopiere Requirements-Datei
+COPY requirements.txt .
 
-# Python-Abhängigkeiten aus requirements.txt im Repository installieren
+# Installiere Python-Abhängigkeiten
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Port 5000 freigeben
+# Kopiere Anwendungsdateien
+COPY . .
+
+# Erstelle notwendige Verzeichnisse
+RUN mkdir -p /app/backups /app/venv
+
+# Setze Umgebungsvariablen
+ENV FLASK_APP=app.wsgi:application
+ENV FLASK_ENV=production
+ENV DATABASE_URL=sqlite:////app/database/inventory.db
+
+# Exponiere Port 5000
 EXPOSE 5000
 
-# Umgebungsvariablen setzen
-ENV FLASK_APP=app
-ENV FLASK_ENV=development
-
-# Stelle sicher, dass das Datenbankverzeichnis existiert
-RUN mkdir -p app/database
-
-# Anwendung starten
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"] 
+# Starte die Anwendung mit Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app.wsgi:application"] 

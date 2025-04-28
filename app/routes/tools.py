@@ -240,74 +240,14 @@ def add():
 def change_status(barcode):
     """Ändert den Status eines Werkzeugs"""
     try:
-        status = request.form.get('status')
-        reason = request.form.get('reason', '')  # Optional, leerer String wenn nicht angegeben
-        
-        if not status:
-            return jsonify({
-                'success': False,
-                'message': 'Status muss angegeben werden'
-            }), 400
+        new_status = request.form.get('status')
+        if not new_status:
+            flash('Kein Status angegeben', 'error')
+            return redirect(url_for('tools.detail', barcode=barcode))
             
-        # Prüfe ob das Werkzeug existiert und hole aktuellen Status
-        tool = Database.query('''
-            SELECT * FROM tools 
-            WHERE barcode = ? AND deleted = 0
-        ''', [barcode], one=True)
-        
-        if not tool:
-            return jsonify({
-                'success': False,
-                'message': 'Werkzeug nicht gefunden'
-            }), 404
-            
-        # Prüfe ob das Werkzeug ausgeliehen ist
-        if status == 'defekt':
-            lending = Database.query('''
-                SELECT * FROM lendings
-                WHERE tool_barcode = ? AND returned_at IS NULL
-            ''', [barcode], one=True)
-            
-            if lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Werkzeug muss zuerst zurückgegeben werden'
-                }), 400
-        
-        # Statusänderung protokollieren
-        Database.query('''
-            INSERT INTO tool_status_changes 
-            (tool_barcode, old_status, new_status, reason)
-            VALUES (?, ?, ?, ?)
-        ''', [barcode, tool['status'], status, reason])
-
-        # Status des Werkzeugs aktualisieren
-        Database.query('''
-            UPDATE tools 
-            SET status = ?,
-                modified_at = CURRENT_TIMESTAMP
-            WHERE barcode = ?
-        ''', [status, barcode])
-
-        return jsonify({
-            'success': True,
-            'message': 'Status erfolgreich aktualisiert'
-        })
-
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Fehler bei der Statusänderung: {str(e)}'
-        }), 500
-
-@bp.route('/<barcode>/edit', methods=['GET', 'POST'])
-@admin_required
-def edit(barcode):
-    """Bearbeitet ein bestehendes Werkzeug"""
-    try:
-        with Database.get_db() as db:
-            # Lade das Werkzeug
-            tool = db.execute('''
+        with Database.get_db() as conn:
+            # Prüfe ob das Werkzeug existiert
+            tool = conn.execute('''
                 SELECT * FROM tools 
                 WHERE barcode = ? AND deleted = 0
             ''', [barcode]).fetchone()
@@ -315,101 +255,145 @@ def edit(barcode):
             if not tool:
                 flash('Werkzeug nicht gefunden', 'error')
                 return redirect(url_for('tools.index'))
+                
+            # Aktualisiere den Status
+            conn.execute('''
+                UPDATE tools 
+                SET status = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [new_status, barcode])
+            
+            # Protokolliere die Änderung
+            conn.execute('''
+                INSERT INTO tool_status_changes 
+                (tool_barcode, old_status, new_status, changed_by, changed_at)
+                VALUES (?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+            ''', [barcode, tool['status'], new_status, session.get('username', 'unknown')])
+            
+            conn.commit()
+            
+            flash('Status erfolgreich aktualisiert', 'success')
+            return redirect(url_for('tools.detail', barcode=barcode))
+            
+    except Exception as e:
+        print(f"Fehler beim Status-Update: {str(e)}")
+        flash('Fehler beim Aktualisieren des Status', 'error')
+        return redirect(url_for('tools.detail', barcode=barcode))
 
-            if request.method == 'POST':
-                name = request.form.get('name')
-                description = request.form.get('description')
-                category = request.form.get('category')
-                location = request.form.get('location')
+@bp.route('/<barcode>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit(barcode):
+    """Bearbeitet ein Werkzeug"""
+    try:
+        if request.method == 'POST':
+            name = request.form.get('name')
+            description = request.form.get('description')
+            category = request.form.get('category')
+            location = request.form.get('location')
+            
+            if not name:
+                flash('Name ist erforderlich', 'error')
+                return redirect(url_for('tools.edit', barcode=barcode))
                 
-                if not all([name, category, location]):
-                    flash('Bitte alle Pflichtfelder ausfüllen', 'error')
-                    return redirect(url_for('tools.edit', barcode=barcode))
-                
+            with Database.get_db() as conn:
                 # Aktualisiere das Werkzeug
-                db.execute('''
+                conn.execute('''
                     UPDATE tools 
-                    SET name = ?, description = ?, category = ?, location = ?
+                    SET name = ?,
+                        description = ?,
+                        category = ?,
+                        location = ?,
+                        sync_status = 'pending'
                     WHERE barcode = ?
                 ''', [name, description, category, location, barcode])
-                db.commit()
+                
+                conn.commit()
                 
                 flash('Werkzeug erfolgreich aktualisiert', 'success')
                 return redirect(url_for('tools.detail', barcode=barcode))
+                
+        else:
+            # GET: Zeige Bearbeitungsformular
+            tool = Database.query('''
+                SELECT * FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode], one=True)
             
-            # Lade Kategorien und Standorte aus der settings-Tabelle
-            cursor = db.execute(
-                "SELECT value FROM settings WHERE key LIKE 'category_%' AND value IS NOT NULL AND value != '' ORDER BY value"
-            )
-            categories = [row['value'] for row in cursor.fetchall()]
+            if not tool:
+                flash('Werkzeug nicht gefunden', 'error')
+                return redirect(url_for('tools.index'))
+                
+            # Hole vordefinierte Kategorien und Standorte
+            categories = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'category_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
             
-            cursor = db.execute(
-                "SELECT value FROM settings WHERE key LIKE 'location_%' AND value IS NOT NULL AND value != '' ORDER BY value"
-            )
-            locations = [row['value'] for row in cursor.fetchall()]
+            locations = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'location_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
             
-            return render_template('tools/edit.html', 
-                                tool=tool,
-                                categories=categories,
-                                locations=locations)
-            
+            return render_template('tools/edit.html',
+                               tool=tool,
+                               categories=[c['value'] for c in categories],
+                               locations=[l['value'] for l in locations])
+                               
     except Exception as e:
         print(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}")
         flash('Fehler beim Bearbeiten des Werkzeugs', 'error')
-        return redirect(url_for('tools.index'))
+        return redirect(url_for('tools.detail', barcode=barcode))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
 @admin_required
 def delete_by_barcode(barcode):
-    """Löscht ein Werkzeug anhand des Barcodes (Soft Delete)"""
+    """Löscht ein Werkzeug (Soft Delete)"""
     try:
         with Database.get_db() as conn:
             # Prüfe ob das Werkzeug existiert
-            tool = conn.execute(
-                'SELECT * FROM tools WHERE barcode = ? AND deleted = 0',
-                [barcode]
-            ).fetchone()
+            tool = conn.execute('''
+                SELECT * FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
             
             if not tool:
-                return jsonify({
-                    'success': False, 
-                    'message': 'Werkzeug nicht gefunden'
-                }), 404
-            
+                flash('Werkzeug nicht gefunden', 'error')
+                return redirect(url_for('tools.index'))
+                
             # Prüfe ob das Werkzeug ausgeliehen ist
             lending = conn.execute('''
-                SELECT * FROM lendings 
-                WHERE tool_barcode = ? 
-                AND returned_at IS NULL
+                SELECT * FROM lendings
+                WHERE tool_barcode = ? AND returned_at IS NULL
             ''', [barcode]).fetchone()
             
             if lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Ausgeliehene Werkzeuge können nicht gelöscht werden'
-                }), 400
-            
-            # In den Papierkorb verschieben (soft delete)
+                flash('Werkzeug muss zuerst zurückgegeben werden', 'error')
+                return redirect(url_for('tools.detail', barcode=barcode))
+                
+            # Führe Soft Delete durch
             conn.execute('''
                 UPDATE tools 
                 SET deleted = 1,
-                    deleted_at = datetime('now'),
-                    modified_at = datetime('now')
+                    deleted_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
+                    sync_status = 'pending'
                 WHERE barcode = ?
             ''', [barcode])
             
             conn.commit()
             
-            return jsonify({
-                'success': True, 
-                'message': 'Werkzeug wurde in den Papierkorb verschoben'
-            })
+            flash('Werkzeug erfolgreich gelöscht', 'success')
+            return redirect(url_for('tools.index'))
             
     except Exception as e:
         print(f"Fehler beim Löschen des Werkzeugs: {str(e)}")
-        return jsonify({
-            'success': False, 
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
+        flash('Fehler beim Löschen des Werkzeugs', 'error')
+        return redirect(url_for('tools.detail', barcode=barcode))
 
 # Weitere Tool-Routen...

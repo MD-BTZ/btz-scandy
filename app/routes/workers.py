@@ -184,79 +184,90 @@ def details(barcode):
 @bp.route('/<barcode>/edit', methods=['POST'])
 @admin_required
 def edit(barcode):
+    """Bearbeitet einen Mitarbeiter"""
     try:
-        Database.query('''
-            UPDATE workers 
-            SET firstname = ?,
-                lastname = ?,
-                email = ?,
-                department = ?
-            WHERE barcode = ?
-        ''', [
-            request.form['firstname'],
-            request.form['lastname'],
-            request.form.get('email', ''),
-            request.form.get('department', ''),
-            barcode
-        ])
-        flash('Mitarbeiter erfolgreich aktualisiert', 'success')
+        with Database.get_db() as conn:
+            # Prüfe ob der Mitarbeiter existiert
+            worker = conn.execute('''
+                SELECT * FROM workers 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
+            
+            if not worker:
+                flash('Mitarbeiter nicht gefunden', 'error')
+                return redirect(url_for('workers.index'))
+                
+            # Aktualisiere die Daten
+            conn.execute('''
+                UPDATE workers 
+                SET firstname = ?,
+                    lastname = ?,
+                    department = ?,
+                    email = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [
+                request.form['firstname'],
+                request.form['lastname'],
+                request.form.get('department', ''),
+                request.form.get('email', ''),
+                barcode
+            ])
+            
+            conn.commit()
+            
+            flash('Mitarbeiter erfolgreich aktualisiert', 'success')
+            return redirect(url_for('workers.details', barcode=barcode))
+            
     except Exception as e:
-        flash(f'Fehler beim Aktualisieren: {str(e)}', 'error')
-    
-    return redirect(url_for('workers.details', barcode=barcode))
+        print(f"Fehler beim Aktualisieren des Mitarbeiters: {str(e)}")
+        flash('Fehler beim Aktualisieren des Mitarbeiters', 'error')
+        return redirect(url_for('workers.details', barcode=barcode))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
 @admin_required
 def delete_by_barcode(barcode):
-    """Löscht einen Mitarbeiter anhand des Barcodes (Soft Delete)"""
+    """Löscht einen Mitarbeiter (Soft Delete)"""
     try:
         with Database.get_db() as conn:
             # Prüfe ob der Mitarbeiter existiert
-            worker = conn.execute(
-                'SELECT * FROM workers WHERE barcode = ? AND deleted = 0',
-                [barcode]
-            ).fetchone()
+            worker = conn.execute('''
+                SELECT * FROM workers 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
             
             if not worker:
-                return jsonify({
-                    'success': False, 
-                    'message': 'Mitarbeiter nicht gefunden'
-                }), 404
-            
-            # Prüfe ob der Mitarbeiter aktive Ausleihen hat
+                flash('Mitarbeiter nicht gefunden', 'error')
+                return redirect(url_for('workers.index'))
+                
+            # Prüfe ob der Mitarbeiter noch Werkzeuge ausgeliehen hat
             lending = conn.execute('''
-                SELECT * FROM lendings 
-                WHERE worker_barcode = ? 
-                AND returned_at IS NULL
+                SELECT * FROM lendings
+                WHERE worker_barcode = ? AND returned_at IS NULL
             ''', [barcode]).fetchone()
             
             if lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Mitarbeiter hat noch aktive Ausleihen'
-                }), 400
-            
-            # In den Papierkorb verschieben (soft delete)
+                flash('Mitarbeiter muss zuerst alle Werkzeuge zurückgeben', 'error')
+                return redirect(url_for('workers.details', barcode=barcode))
+                
+            # Führe Soft Delete durch
             conn.execute('''
                 UPDATE workers 
                 SET deleted = 1,
-                    deleted_at = datetime('now')
+                    deleted_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
+                    sync_status = 'pending'
                 WHERE barcode = ?
             ''', [barcode])
             
             conn.commit()
             
-            return jsonify({
-                'success': True, 
-                'message': 'Mitarbeiter wurde in den Papierkorb verschoben'
-            })
+            flash('Mitarbeiter erfolgreich gelöscht', 'success')
+            return redirect(url_for('workers.index'))
             
     except Exception as e:
         print(f"Fehler beim Löschen des Mitarbeiters: {str(e)}")
-        return jsonify({
-            'success': False, 
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
+        flash('Fehler beim Löschen des Mitarbeiters', 'error')
+        return redirect(url_for('workers.details', barcode=barcode))
 
 @bp.route('/workers/search')
 def search():
