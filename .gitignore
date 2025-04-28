@@ -75,4 +75,9 @@ dist/
 .coverage
 
 # Unused files directory
-_potentially_unused/ 
+_potentially_unused/
+
+# Archivdateien
+*.tar.gz
+scandy.tar.gz
+scandy_docker.tar.gz 
