@@ -19,13 +19,16 @@ async function loadBackups() {
                 row.innerHTML = `
                     <td>${backup.name}</td>
                     <td>${formatFileSize(backup.size)}</td>
-                    <td>${new Date(backup.created).toLocaleString()}</td>
+                    <td>${new Date(backup.created * 1000).toLocaleString('de-DE')}</td>
                     <td class="text-right">
                         <button onclick="downloadBackup('${backup.name}')" class="btn btn-primary btn-xs mr-2">
                             <i class="fas fa-download"></i>
                         </button>
-                        <button onclick="restoreBackup('${backup.name}')" class="btn btn-warning btn-xs">
+                        <button onclick="restoreBackup('${backup.name}')" class="btn btn-warning btn-xs mr-2">
                             <i class="fas fa-undo-alt"></i>
+                        </button>
+                        <button onclick="deleteBackup('${backup.name}')" class="btn btn-danger btn-xs">
+                            <i class="fas fa-trash"></i>
                         </button>
                     </td>
                 `;
@@ -129,6 +132,33 @@ async function restoreBackup(filename) {
         }
     } catch (error) {
         showError('Fehler beim Wiederherstellen des Backups');
+        console.error(error);
+    }
+}
+
+// Backup löschen
+async function deleteBackup(filename) {
+    if (!confirm('Möchten Sie dieses Backup wirklich löschen?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/backup/delete/${filename}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            showSuccess('Backup wurde erfolgreich gelöscht');
+            loadBackups(); // Liste aktualisieren
+        } else {
+            const data = await response.json();
+            showError(data.message || 'Fehler beim Löschen des Backups');
+        }
+    } catch (error) {
+        showError('Fehler beim Löschen des Backups');
         console.error(error);
     }
 }

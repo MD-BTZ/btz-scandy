@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash
 from flask_session import Session  # Session-Management
 from .constants import Routes
+from app.config.version import VERSION
 import os
 from datetime import datetime, timedelta
 from app.utils.filters import register_filters
@@ -28,8 +29,6 @@ from backup import DatabaseBackup
 logger = logging.getLogger(__name__)
 
 login_manager = LoginManager()
-
-__version__ = '1.0.1'
 
 class Config:
     @staticmethod

@@ -1,13 +1,11 @@
 from flask import current_app, g
 from app.models.database import Database
 from app.constants import Routes
+from app.config.version import VERSION
 import traceback
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Version der Anwendung
-VERSION = "1.0.0"
 
 def get_colors():
     """Holt die Farbeinstellungen aus der Datenbank"""

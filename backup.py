@@ -78,13 +78,17 @@ class DatabaseBackup:
 
             # Aktuelles Datum und Uhrzeit für den Backup-Namen
             now = datetime.now()
-            backup_name = f"inventory_{now.strftime('%Y%m%d_%H%M%S')}.db"
+            backup_name = f"scandy_backup_{now.strftime('%Y-%m-%d_%H-%M-%S')}.db"
             backup_path = self.backup_dir / backup_name
 
             logger.info(f"Erstelle Backup von {self.db_path} nach {backup_path}")
 
-            # Backup erstellen
+            # Backup erstellen und Zeitstempel setzen
             shutil.copy2(self.db_path, backup_path)
+            
+            # Setze den korrekten Zeitstempel für Erstellung und Modifikation
+            timestamp = now.timestamp()
+            os.utime(backup_path, (timestamp, timestamp))
 
             # Statistiken sammeln und speichern
             logger.info("Sammle Statistiken für das Backup...")
@@ -117,11 +121,11 @@ class DatabaseBackup:
         try:
             cutoff_date = datetime.now() - timedelta(days=self.max_days)
             
-            for backup_file in self.backup_dir.glob('inventory_*.db'):
+            for backup_file in self.backup_dir.glob('scandy_backup_*.db'):
                 try:
                     # Datum aus dem Dateinamen extrahieren
-                    date_str = backup_file.stem.split('_')[1]
-                    file_date = datetime.strptime(date_str, '%Y%m%d')
+                    date_str = backup_file.stem.split('_')[2]  # Format: YYYY-MM-DD
+                    file_date = datetime.strptime(date_str, '%Y-%m-%d')
                     
                     # Backup und zugehörige Metadaten löschen, wenn es älter als max_days ist
                     if file_date < cutoff_date:
@@ -142,11 +146,20 @@ class DatabaseBackup:
         try:
             backups = []
             logger.info(f"Suche Backups in: {self.backup_dir}")
-            for backup_file in sorted(self.backup_dir.glob('inventory_*.db')):
+            for backup_file in sorted(self.backup_dir.glob('scandy_backup_*.db'), reverse=True):
+                try:
+                    # Datum aus dem Dateinamen extrahieren
+                    date_str = backup_file.stem.split('_')[2]  # Format: YYYY-MM-DD
+                    time_str = backup_file.stem.split('_')[3]  # Format: HH-MM-SS
+                    created = datetime.strptime(f"{date_str}_{time_str}", '%Y-%m-%d_%H-%M-%S')
+                except:
+                    # Fallback auf Dateisystem-Zeitstempel
+                    created = datetime.fromtimestamp(backup_file.stat().st_mtime)
+                
                 backup_info = {
                     'name': backup_file.name,
                     'size': backup_file.stat().st_size,
-                    'created': datetime.fromtimestamp(backup_file.stat().st_mtime)
+                    'created': created
                 }
                 
                 # Metadaten laden, falls vorhanden
@@ -216,6 +229,31 @@ class DatabaseBackup:
 
         except Exception as e:
             logger.error(f"Fehler bei der Wiederherstellung des Backups: {str(e)}")
+            return False
+
+    def delete_backup(self, backup_name):
+        """Löscht ein bestimmtes Backup"""
+        try:
+            backup_path = self.backup_dir / backup_name
+            if not backup_path.exists():
+                logger.error(f"Backup nicht gefunden: {backup_name}")
+                return False
+
+            logger.info(f"Lösche Backup: {backup_name}")
+            
+            # Lösche die Backup-Datei
+            backup_path.unlink()
+            
+            # Lösche die zugehörigen Metadaten, falls vorhanden
+            metadata_path = backup_path.with_suffix('.json')
+            if metadata_path.exists():
+                metadata_path.unlink()
+            
+            logger.info(f"Backup erfolgreich gelöscht: {backup_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen des Backups: {str(e)}")
             return False
 
 if __name__ == '__main__':

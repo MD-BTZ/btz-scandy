@@ -1,17 +1,24 @@
 import sqlite3
 from werkzeug.security import generate_password_hash
 import os
-from app.config import Config
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
 
 def init_db():
     """Initialisiert die Hauptdatenbank (inventory.db)"""
-    db_path = os.path.join(Config.DATABASE_DIR, 'inventory.db')
+    # Hole die Konfiguration
+    from app.config import config
+    current_config = config['default']()
+    
+    # Verwende den korrekten Pfad aus der Config
+    db_path = current_config.DATABASE
     
     # Stelle sicher, dass das Verzeichnis existiert
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    
+    logger.info(f"Initialisiere Datenbank in: {db_path}")
     
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -187,18 +194,27 @@ def init_db():
                     ('Hinweis', 'Bitte melden Sie sich an, um das System zu nutzen.', 2)
             ''')
         
+        logger.info("Datenbank-Tabellen wurden erfolgreich erstellt")
+        
         conn.commit()
-        logger.info("Hauptdatenbank erfolgreich initialisiert")
 
 def init_users(app=None):
     """Initialisiert die Benutzerdatenbank und erstellt die Benutzer-Accounts"""
-    db_path = os.path.join(Config.DATABASE_DIR, 'users.db')
+    # Hole die Konfiguration
+    from app.config import config
+    current_config = config['default']()
+    
+    # Verwende den korrekten Pfad aus der Config
+    db_dir = os.path.dirname(current_config.DATABASE)
+    db_path = os.path.join(db_dir, 'users.db')
     
     # Stelle sicher, dass das Verzeichnis existiert
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
+    logger.info(f"Initialisiere Benutzerdatenbank in: {db_path}")
+    
     with sqlite3.connect(db_path) as conn:
-        # Erstelle users Tabelle (vereinfacht)
+        # Erstelle users Tabelle
         conn.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -221,6 +237,8 @@ def init_users(app=None):
                 'INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)',
                 ('TechnikTN', generate_password_hash('BTZ-TN'))
             )
+            
+            logger.info("Standard-Benutzerkonten wurden erstellt")
             
         conn.commit()
 

@@ -1,7 +1,7 @@
 import sqlite3
 import logging
 from pathlib import Path
-from app.config import Config
+from app.config.config import Config
 
 logger = logging.getLogger(__name__)
 

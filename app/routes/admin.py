@@ -990,6 +990,27 @@ def restore_backup(filename):
         flash(error_msg, 'error')
     return redirect(url_for('admin.dashboard'))
 
+@bp.route('/backup/delete/<filename>', methods=['POST'])
+@admin_required
+def delete_backup(filename):
+    """Löscht ein bestimmtes Backup"""
+    try:
+        logger.info(f"Versuche Backup zu löschen: {filename}")
+        success = backup_manager.delete_backup(filename)
+        if success:
+            success_msg = 'Backup wurde erfolgreich gelöscht'
+            logger.info(success_msg)
+            flash(success_msg, 'success')
+        else:
+            error_msg = 'Fehler beim Löschen des Backups'
+            logger.error(error_msg)
+            flash(error_msg, 'error')
+    except Exception as e:
+        error_msg = f'Fehler beim Löschen des Backups: {str(e)}'
+        logger.error(error_msg)
+        flash(error_msg, 'error')
+    return redirect(url_for('admin.dashboard'))
+
 @bp.route('/departments', methods=['GET'])
 @admin_required
 def get_departments():
