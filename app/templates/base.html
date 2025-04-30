@@ -9,6 +9,11 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
     
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Tailwind (Produktionsversion) -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     
@@ -31,7 +36,11 @@
     <script>
         tailwind.config = {
             theme: {
-                extend: {}
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
             },
             daisyui: {
                 themes: [{
@@ -47,6 +56,17 @@
     {% block head %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .nav-text {
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+    </style>
 </head>
 
 <body class="min-h-screen bg-base-200">
@@ -61,39 +81,59 @@
         </div>
 
         <!-- Vertikales Seitenmenü -->
-        <div class="fixed left-0 top-0 h-full w-16 bg-base-300 flex flex-col items-center py-4 gap-2 shadow-lg z-[90]">
+        <div class="fixed left-0 top-0 h-full w-16 bg-base-300 flex flex-col py-4 gap-2 shadow-lg z-[90] hover:w-[226px] transition-all duration-300 group">
             <!-- Platzhalter für den Abstand des QuickScan-Buttons -->
             <div class="w-24 h-24 -mt-3"></div>
             
             <!-- Trennlinie -->
-            <div class="w-8 h-0.5 bg-base-content/20 rounded-full"></div>
+            <div class="w-8 h-0.5 bg-base-content/20 rounded-full ml-4"></div>
             
             <!-- Navigation Items -->
-            <a href="{{ url_for('tools.index') }}" 
-               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
-                      {% if 'tools' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                <i class="fas fa-tools text-xl"></i>
-            </a>
+            <div class="w-full pl-2">
+                <div class="relative">
+                    <a href="{{ url_for('tools.index') }}" 
+                       class="absolute w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
+                              {% if 'tools' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                        <i class="fas fa-tools text-xl"></i>
+                    </a>
+                    <span class="nav-text absolute left-16 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Werkzeuge</span>
+                </div>
+            </div>
             
-            <a href="{{ url_for('consumables.index') }}" 
-               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
-                      {% if 'consumables' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                <i class="fas fa-box-open text-xl"></i>
-            </a>
+            <div class="w-full pl-2">
+                <div class="relative">
+                    <a href="{{ url_for('consumables.index') }}" 
+                       class="absolute w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300 
+                              {% if 'consumables' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                        <i class="fas fa-box-open text-xl"></i>
+                    </a>
+                    <span class="nav-text absolute left-16 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Verbrauchsmaterial</span>
+                </div>
+            </div>
             
             {% if session.get('is_admin') %}
-            <a href="{{ url_for('workers.index') }}" 
-               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
-                      {% if 'workers' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                <i class="fas fa-users text-xl"></i>
-            </a>
+            <div class="w-full pl-2">
+                <div class="relative">
+                    <a href="{{ url_for('workers.index') }}" 
+                       class="absolute w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
+                              {% if 'workers' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                        <i class="fas fa-users text-xl"></i>
+                    </a>
+                    <span class="nav-text absolute left-16 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Mitarbeiter</span>
+                </div>
+            </div>
             {% endif %}
 
-            <a href="{{ url_for('tickets.create') }}" 
-               class="w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
-               {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                <i class="fas fa-ticket-alt text-xl"></i>
-            </a>
+            <div class="w-full pl-2">
+                <div class="relative">
+                    <a href="{{ url_for('tickets.create') }}" 
+                       class="absolute w-12 h-12 rounded-3xl hover:rounded-xl flex items-center justify-center transition-all duration-300
+                              {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                        <i class="fas fa-ticket-alt text-xl"></i>
+                    </a>
+                    <span class="nav-text absolute left-16 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Ticket</span>
+                </div>
+            </div>
 
             <!-- Versionsnummer am unteren Rand -->
             <div class="mt-auto text-xs text-base-content/50 flex flex-col items-center">
