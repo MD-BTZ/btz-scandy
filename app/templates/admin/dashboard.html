@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Admin Dashboard - Scandy{% endblock %}
 
 {% block head %}
 {{ super() }}
@@ -8,309 +8,115 @@
 <script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
 <!-- Admin Dashboard Script -->
 <script src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
-<!-- Backup Script -->
-<script src="{{ url_for('static', filename='js/backup.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <!-- Verwaltungskarten -->
-    <div class="grid grid-cols-3 gap-6 mb-8">
-        <!-- Abteilungsverwaltung -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="card-title text-lg">
-                        <i class="fas fa-building text-primary"></i>
-                        Abteilungen
-                    </h2>
-                </div>
-                <form id="addDepartmentForm" class="mb-4">
-                    <div class="flex gap-2">
-                        <input type="text" name="department" placeholder="Neue Abteilung" 
-                               class="input input-bordered input-sm flex-grow" required>
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    </div>
-                </form>
-                <div class="overflow-x-auto">
-                    <table class="table table-compact w-full">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="departmentsList">
-                            <!-- Wird per JavaScript gefüllt -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Standortverwaltung -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="card-title text-lg">
-                        <i class="fas fa-map-marker-alt text-primary"></i>
-                        Standorte
-                    </h2>
-                </div>
-                <form id="addLocationForm" class="mb-4">
-                    <div class="flex gap-2">
-                        <input type="text" name="location" placeholder="Neuer Standort" 
-                               class="input input-bordered input-sm flex-grow" required>
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    </div>
-                </form>
-                <div class="overflow-x-auto">
-                    <table class="table table-compact w-full">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="locationsList">
-                            <!-- Template für Standorte -->
-                            <template id="locationRowTemplate">
-                                <tr>
-                                    <td class="name"></td>
-                                    <td class="text-right">
-                                        <button class="btn btn-error btn-xs delete-btn">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal für Standort bearbeiten -->
-        <dialog id="editLocationModal" class="modal">
-            <div class="modal-box">
-                <h3 class="font-bold text-lg mb-4">Standort bearbeiten</h3>
-                <form id="editLocationForm">
-                    <input type="hidden" name="originalName">
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span class="label-text">Name</span>
-                        </label>
-                        <input type="text" name="location" class="input input-bordered w-full" required>
-                    </div>
-                    <div class="form-control">
-                        <label class="cursor-pointer label">
-                            <span class="label-text">Für Werkzeuge verfügbar</span>
-                            <input type="checkbox" name="tools" class="checkbox checkbox-primary">
-                        </label>
-                    </div>
-                    <div class="form-control">
-                        <label class="cursor-pointer label">
-                            <span class="label-text">Für Verbrauchsmaterial verfügbar</span>
-                            <input type="checkbox" name="consumables" class="checkbox checkbox-secondary">
-                        </label>
-                    </div>
-                    <div class="modal-action">
-                        <button type="submit" class="btn btn-primary">Speichern</button>
-                        <button type="button" class="btn" onclick="editLocationModal.close()">Abbrechen</button>
-                    </div>
-                </form>
-            </div>
-        </dialog>
-
-        <!-- Kategorieverwaltung -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="card-title text-lg">
-                        <i class="fas fa-tags text-primary"></i>
-                        Kategorien
-                    </h2>
-                </div>
-                <form id="addCategoryForm" class="mb-4">
-                    <div class="flex gap-2">
-                        <input type="text" name="category" placeholder="Neue Kategorie" 
-                               class="input input-bordered input-sm flex-grow" required>
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    </div>
-                </form>
-                <div class="overflow-x-auto">
-                    <table class="table table-compact w-full">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="categoriesList">
-                            <!-- Template für Kategorien -->
-                            <template id="categoryRowTemplate">
-                                <tr>
-                                    <td class="name"></td>
-                                    <td class="text-right">
-                                        <button class="btn btn-error btn-xs delete-btn">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal für Kategorie bearbeiten -->
-        <dialog id="editCategoryModal" class="modal">
-            <div class="modal-box">
-                <h3 class="font-bold text-lg mb-4">Kategorie bearbeiten</h3>
-                <form id="editCategoryForm">
-                    <input type="hidden" name="originalName">
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span class="label-text">Name</span>
-                        </label>
-                        <input type="text" name="category" class="input input-bordered w-full" required>
-                    </div>
-                    <div class="form-control">
-                        <label class="cursor-pointer label">
-                            <span class="label-text">Für Werkzeuge verfügbar</span>
-                            <input type="checkbox" name="tools" class="checkbox checkbox-primary">
-                        </label>
-                    </div>
-                    <div class="form-control">
-                        <label class="cursor-pointer label">
-                            <span class="label-text">Für Verbrauchsmaterial verfügbar</span>
-                            <input type="checkbox" name="consumables" class="checkbox checkbox-secondary">
-                        </label>
-                    </div>
-                    <div class="modal-action">
-                        <button type="submit" class="btn btn-primary">Speichern</button>
-                        <button type="button" class="btn" onclick="editCategoryModal.close()">Abbrechen</button>
-                    </div>
-                </form>
-            </div>
-        </dialog>
-    </div>
-
-    <!-- Wichtige Übersichten -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <!-- Wartungsstatus -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Defekte Werkzeuge
+    <!-- Statistik-Karten: immer eigene Zeile -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
+        <!-- Werkzeug-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-tools text-primary"></i>
+                    Werkzeuge
                 </h2>
-                <div class="space-y-3 mt-4">
-                    {% for issue in stats.maintenance_issues %}
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm">{{ issue.name }}</span>
-                        <span class="badge badge-{{ issue.severity }}">{{ issue.status }}</span>
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ tool_stats.total }}</div>
                     </div>
-                    {% endfor %}
-                    {% if not stats.maintenance_issues %}
-                    <div class="text-sm text-center text-success">
-                        <i class="fas fa-check-circle mr-2"></i>
-                        Keine defekten Werkzeuge
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Verfügbar</div>
+                        <div class="stat-value text-success text-lg">{{ tool_stats.available }}</div>
                     </div>
-                    {% endif %}
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Ausgeliehen</div>
+                        <div class="stat-value text-warning text-lg">{{ tool_stats.lent }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Defekt</div>
+                        <div class="stat-value text-error text-lg">{{ tool_stats.defect }}</div>
+                    </div>
                 </div>
             </div>
         </div>
-
-        <!-- Bestandswarnungen -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-box-open text-error"></i>
-                    Kritischer Bestand
+        <!-- Verbrauchsmaterial-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-box-open text-primary"></i>
+                    Verbrauchsmaterial
                 </h2>
-                <div class="space-y-3 mt-4">
-                    {% for warning in stats.inventory_warnings %}
-                    <div class="alert alert-{{ warning.type }} shadow-lg text-sm">
-                        <div>
-                            <i class="fas fa-{{ warning.icon }}"></i>
-                            <span>{{ warning.message }}</span>
-                        </div>
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ consumable_stats.total }}</div>
                     </div>
-                    {% endfor %}
-                    {% if not stats.inventory_warnings %}
-                    <div class="text-sm text-center text-success">
-                        <i class="fas fa-check-circle mr-2"></i>
-                        Alle Bestände ausreichend
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Ausreichend</div>
+                        <div class="stat-value text-success text-lg">{{ consumable_stats.sufficient }}</div>
                     </div>
-                    {% endif %}
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Warnung</div>
+                        <div class="stat-value text-warning text-lg">{{ consumable_stats.warning }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Kritisch</div>
+                        <div class="stat-value text-error text-lg">{{ consumable_stats.critical }}</div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Bestandsprognose -->
-    <div class="card bg-base-100 shadow-xl mb-8">
-        <div class="card-body">
-            <h2 class="card-title">
-                <i class="fas fa-chart-line text-primary"></i>
-                Bestandsprognose Verbrauchsgüter
-            </h2>
-            <p class="text-sm text-base-content/70">Basierend auf dem durchschnittlichen Verbrauch der letzten 30 Tage</p>
-            
-            <div class="grid grid-cols-2 gap-4 mt-4">
-                {% for item in consumables_forecast %}
-                <div class="card bg-base-200">
-                    <div class="card-body p-4">
-                        <h3 class="font-bold text-sm mb-2">{{ item.name }}</h3>
-                        <div class="radial-progress text-{{ 'error' if item.days_remaining < 30 else 'warning' if item.days_remaining < 60 else 'success' }}" 
-                             style="--value:{{ (item.days_remaining/90)*100 if item.days_remaining < 90 else 100 }}; --size: 8rem;">
-                            {{ item.days_remaining }} Tage
-                        </div>
-                        <div class="text-xs mt-2">
-                            <p>Aktueller Bestand: {{ item.current_amount }}</p>
-                            <p>Täglicher Verbrauch: {{ item.avg_daily_usage }}</p>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-
-    <!-- Aktuelle Ausleihen und Ausgaben -->
-    <div class="grid grid-cols-2 gap-8">
-        <!-- Verbrauchsmaterial Ausgaben -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-box-open text-secondary"></i>
-                    Letzte Materialausgaben
+        <!-- Mitarbeiter-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-users text-primary"></i>
+                    Mitarbeiter
                 </h2>
-                <div class="overflow-x-auto h-96">
-                    <table class="table table-zebra w-full">
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ worker_stats.total }}</div>
+                    </div>
+                    <div class="overflow-y-auto max-h-28 text-xs">
+                        {% for dept in worker_stats.by_department %}
+                        <div class="stat py-1">
+                            <div class="stat-title text-xs">{{ dept.name or 'Ohne Abteilung' }}</div>
+                            <div class="stat-value text-lg">{{ dept.count }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Aktuelle Ausleihen -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-clock text-primary"></i>
+                    Aktuelle Ausleihen
+                </h2>
+                <div class="overflow-x-auto flex-1">
+                    <table class="table table-zebra w-full text-xs">
                         <thead>
                             <tr>
-                                <th>Material</th>
-                                <th>Menge</th>
+                                <th>Werkzeug</th>
                                 <th>Mitarbeiter</th>
                                 <th>Datum</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for usage in consumable_usages %}
+                            {% for lending in current_lendings %}
                             <tr>
-                                <td>{{ usage.consumable_name }}</td>
-                                <td>{{ usage.quantity }} Stk</td>
-                                <td>{{ usage.worker_name }}</td>
-                                <td>{{ usage.used_at|format_datetime }}</td>
+                                <td>{{ lending.tool_name }}</td>
+                                <td>{{ lending.worker_name }}</td>
+                                <td>{{ lending.lent_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center">Keine aktiven Ausleihen</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -318,37 +124,74 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Werkzeug Ausleihen -->
+    <!-- Warnungen und Hinweise: eigene Zeile -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <!-- Werkzeug-Warnungen -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
-                    <i class="fas fa-tools text-primary"></i>
-                    Aktuelle Werkzeugausleihen
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Werkzeug-Warnungen
                 </h2>
-                <div class="overflow-x-auto h-96">
+                <div class="overflow-x-auto">
                     <table class="table table-zebra w-full">
                         <thead>
                             <tr>
-                                <th>Werkzeug</th>
-                                <th>Mitarbeiter</th>
-                                <th>Ausgeliehen seit</th>
-                                <th>Aktionen</th>
+                                <th>Name</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for lending in current_lendings %}
-                            <tr class="{% if lending.overdue %}text-red-600{% endif %}">
-                                <td>{{ lending.tool_name }}</td>
-                                <td>{{ lending.worker_name }}</td>
-                                <td>{{ lending.lent_at|format_datetime }}</td>
+                            {% for tool in tool_warnings %}
+                            <tr>
+                                <td>{{ tool.name }}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-error" 
-                                            data-barcode="{{ lending.tool_barcode }}"
-                                            title="Werkzeug zurückgeben">
-                                        <i class="fas fa-undo-alt"></i> Zurückgeben
-                                    </button>
+                                    <span class="badge badge-{{ tool.severity }}">
+                                        {{ tool.status }}
+                                    </span>
                                 </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">Keine Warnungen</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Verbrauchsmaterial-Warnungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Verbrauchsmaterial-Warnungen
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for consumable in consumable_warnings %}
+                            <tr>
+                                <td>{{ consumable.message }}</td>
+                                <td>
+                                    <span class="badge badge-{{ consumable.type }}">
+                                        <i class="fas fa-{{ consumable.icon }}"></i>
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">Keine Warnungen</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -358,192 +201,68 @@
         </div>
     </div>
 
-    <!-- Import/Export-Bereich -->
-    <div class="mt-8">
-        <h2 class="text-xl font-semibold mb-4">Daten Export/Import</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Werkzeuge -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Werkzeuge</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='tools') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('toolsImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='tools') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="toolsImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Mitarbeiter -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Mitarbeiter</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='workers') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('workersImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='workers') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="workersImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Verbrauchsmaterial -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Verbrauchsmaterial</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='consumables') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('consumablesImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='consumables') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="consumablesImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Verlauf -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Verlauf</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='history') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Backup-Verwaltung -->
-    <div class="card bg-base-100 shadow-xl mt-8">
-        <div class="card-body">
-            <h2 class="card-title">
-                <i class="fas fa-database text-primary"></i>
-                Backup-Verwaltung
-            </h2>
-            
-            <!-- Aktuelle Datenbank -->
-            <div class="mb-6">
-                <h3 class="text-lg font-semibold mb-2">Aktuelle Datenbank</h3>
-                <div class="flex gap-2">
-                    <button onclick="downloadCurrentDatabase()" class="btn btn-primary">
-                        <i class="fas fa-download mr-2"></i>
-                        Datenbank herunterladen
-                    </button>
-                    <button onclick="createBackup()" class="btn btn-success ml-2">
-                        <i class="fas fa-save"></i> Backup erstellen
-                    </button>
-                </div>
-            </div>
-
-            <!-- Backup hochladen -->
-            <div class="mb-6">
-                <h3 class="text-lg font-semibold mb-2">Backup hochladen</h3>
-                <form id="uploadBackupForm" class="flex gap-2">
-                    <input type="file" name="file" accept=".db" class="file-input file-input-bordered w-full max-w-xs" required>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload mr-2"></i>
-                        Backup hochladen
-                    </button>
+    <!-- Verwaltungslisten: eigene Zeile -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <!-- Abteilungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-building text-primary"></i>
+                    Abteilungen
+                </h2>
+                <form id="addDepartmentForm" class="mb-2 flex gap-2">
+                    <input name="department" class="input input-bordered input-sm flex-1" placeholder="Neue Abteilung" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
                 </form>
-            </div>
-
-            <!-- Backup-Liste -->
-            <div>
-                <h3 class="text-lg font-semibold mb-2">Verfügbare Backups</h3>
-                <div class="overflow-x-auto">
-                    <table class="table table-compact w-full">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Größe</th>
-                                <th>Erstellt am</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="backupsList">
-                            <!-- Wird per JavaScript gefüllt -->
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <tbody id="departmentsList">
+                            <!-- Dynamisch per JS -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Backup Modal -->
-    <dialog id="backupModal" class="modal">
-        <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Backup aktivieren</h3>
-            <p class="mb-4">Möchten Sie dieses Backup aktivieren? Die aktuelle Datenbank wird automatisch gesichert.</p>
-            <div class="modal-action">
-                <button onclick="activateBackup()" class="btn btn-primary">Ja, aktivieren</button>
-                <button onclick="backupModal.close()" class="btn">Abbrechen</button>
-            </div>
-        </div>
-    </dialog>
-
-    <div class="divider">Über Scandy</div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <a href="{{ url_for('tickets.index') }}" class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all">
+        <!-- Standorte -->
+        <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
-                    <i class="fas fa-ticket-alt text-xl"></i>
-                    Tickets
+                    <i class="fas fa-map-marker-alt text-primary"></i>
+                    Standorte
                 </h2>
-                <p>Ticket-Liste anzeigen und verwalten</p>
+                <form id="addLocationForm" class="mb-2 flex gap-2">
+                    <input name="location" class="input input-bordered input-sm flex-1" placeholder="Neuer Standort" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <tbody id="locationsList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </a>
+        </div>
+        <!-- Kategorien -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-tags text-primary"></i>
+                    Kategorien
+                </h2>
+                <form id="addCategoryForm" class="mb-2 flex gap-2">
+                    <input name="category" class="input input-bordered input-sm flex-1" placeholder="Neue Kategorie" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <tbody id="categoriesList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -552,16 +271,25 @@
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Chart initialisieren wenn das Element existiert
+// Chart initialisieren wenn das Element existiert und Daten vorhanden sind
 function initChart() {
     const chartCanvas = document.getElementById('consumableTrendChart');
-    if (chartCanvas) {
+    const trendData = '{{ stats.consumable_trend|tojson|escapejs if stats is defined and stats.consumable_trend is defined else '' }}';
+    let trend = null;
+    try {
+        if (trendData) {
+            trend = JSON.parse(trendData);
+        }
+    } catch (e) {
+        trend = null;
+    }
+    if (chartCanvas && trend && trend.labels && trend.datasets) {
         const ctx = chartCanvas.getContext('2d');
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: {{ stats.consumable_trend.labels|tojson }},
-                datasets: {{ stats.consumable_trend.datasets|tojson }}
+                labels: trend.labels,
+                datasets: trend.datasets
             },
             options: {
                 responsive: true,

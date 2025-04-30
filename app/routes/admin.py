@@ -184,7 +184,55 @@ def create_excel(data, columns):
 @bp.route('/')
 @admin_required
 def dashboard():
-    """Admin Dashboard anzeigen"""
+    # Werkzeug-Statistiken
+    tool_stats = Database.query('''
+        WITH valid_tools AS (
+            SELECT barcode 
+            FROM tools 
+            WHERE deleted = 0
+        )
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE 
+                WHEN NOT EXISTS (
+                    SELECT 1 FROM lendings l 
+                    WHERE l.tool_barcode = t.barcode 
+                    AND l.returned_at IS NULL
+                ) AND status = 'verfügbar' THEN 1 
+                ELSE 0 
+            END) as available,
+            (
+                SELECT COUNT(DISTINCT l.tool_barcode) 
+                FROM lendings l
+                JOIN valid_tools vt ON l.tool_barcode = vt.barcode
+                WHERE l.returned_at IS NULL
+            ) as lent,
+            SUM(CASE WHEN status = 'defekt' THEN 1 ELSE 0 END) as defect
+        FROM tools t
+        WHERE t.deleted = 0
+    ''', one=True)
+
+    # Verbrauchsmaterial-Statistiken
+    consumable_stats = {
+        'total': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0', one=True)['count'],
+        'sufficient': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity >= min_quantity', one=True)['count'],
+        'warning': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity AND quantity >= min_quantity * 0.5', one=True)['count'],
+        'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity * 0.5', one=True)['count']
+    }
+
+    # Mitarbeiter-Statistiken
+    worker_stats = {
+        'total': Database.query('SELECT COUNT(*) as count FROM workers WHERE deleted = 0', one=True)['count'],
+        'by_department': Database.query('''
+            SELECT department as name, COUNT(*) as count 
+            FROM workers 
+            WHERE deleted = 0 AND department IS NOT NULL 
+            GROUP BY department 
+            ORDER BY department
+        ''')
+    }
+
+    # Die restlichen Variablen wie bisher:
     stats = {
         'maintenance_issues': Database.query("""
             SELECT name, status, 
@@ -214,8 +262,6 @@ def dashboard():
         """),
         'consumable_trend': get_consumable_trend()
     }
-    
-    # Aktuelle Ausleihen laden
     current_lendings = Database.query("""
         SELECT l.*, t.name as tool_name, w.firstname || ' ' || w.lastname as worker_name
         FROM lendings l
@@ -224,8 +270,6 @@ def dashboard():
         WHERE l.returned_at IS NULL
         ORDER BY l.lent_at DESC
     """)
-    
-    # Materialausgaben laden
     consumable_usages = Database.query("""
         SELECT 
             c.name as consumable_name,
@@ -238,20 +282,21 @@ def dashboard():
         ORDER BY cu.used_at DESC
         LIMIT 10
     """)
-    
-    # Bestandsprognose laden
     consumables_forecast = get_consumables_forecast()
-    
-    # Backup-Informationen laden
     backups = get_backup_info()
-    
-    return render_template('admin/dashboard.html',
-                         stats=stats,
-                         current_lendings=current_lendings,
-                         consumable_usages=consumable_usages,
-                         consumables_forecast=consumables_forecast,
-                         backups=backups,
-                         Config=Config)
+
+    return render_template(
+        'admin/dashboard.html',
+        tool_stats=tool_stats,
+        consumable_stats=consumable_stats,
+        worker_stats=worker_stats,
+        stats=stats,
+        current_lendings=current_lendings,
+        consumable_usages=consumable_usages,
+        consumables_forecast=consumables_forecast,
+        backups=backups,
+        Config=Config
+    )
 
 def get_consumable_trend():
     """Hole die Top 5 Materialverbrauch der letzten 7 Tage"""
@@ -1649,3 +1694,17 @@ def delete_notice(id):
         flash(f'Fehler beim Löschen des Hinweises: {str(e)}', 'error')
     
     return redirect(url_for('admin.notices'))
+
+@bp.route('/tickets')
+@admin_required
+def tickets():
+    from app.models.ticket_db import TicketDatabase
+    ticket_db = TicketDatabase()
+    tickets = ticket_db.query("SELECT * FROM tickets ORDER BY created_at DESC")
+    return render_template('admin/tickets_admin.html', tickets=tickets)
+
+@bp.route('/system')
+@admin_required
+def system():
+    # ...
+    return render_template('admin/system.html')

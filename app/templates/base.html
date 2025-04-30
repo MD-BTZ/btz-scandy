@@ -179,20 +179,27 @@
                         </label>
                         <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
                             <li>
-                                <a href="{{ url_for('admin.manual_lending') }}" 
-                                   class="{% if request.endpoint == 'admin.manual_lending' %}active{% endif %}">
+                                <a href="{{ url_for('admin.dashboard') }}" class="{% if 'admin.dashboard' in request.endpoint %}active{% endif %}">
+                                    <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ url_for('admin.system') }}" class="{% if 'admin.system' in request.endpoint %}active{% endif %}">
+                                    <i class="fas fa-cogs mr-2"></i>Systemverwaltung
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ url_for('admin.tickets') }}" class="{% if 'admin.tickets' in request.endpoint %}active{% endif %}">
+                                    <i class="fas fa-ticket-alt mr-2"></i>Ticketverwaltung
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ url_for('admin.manual_lending') }}" class="{% if request.endpoint == 'admin.manual_lending' %}active{% endif %}">
                                     <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
                                 </a>
                             </li>
                             <li>
-                                <a href="{{ url_for('admin.dashboard') }}" 
-                                   class="{% if 'admin.dashboard' in request.endpoint %}active{% endif %}">
-                                    <i class="fas fa-chart-line mr-2"></i>Administration
-                                </a>
-                            </li>
-                            <li>
-                                <a href="{{ url_for('main.about') }}" 
-                                   class="{% if request.endpoint == 'main.about' %}active{% endif %}">
+                                <a href="{{ url_for('main.about') }}" class="{% if request.endpoint == 'main.about' %}active{% endif %}">
                                     <i class="fas fa-info-circle mr-2"></i>Über Scandy
                                 </a>
                             </li>
