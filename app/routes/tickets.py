@@ -49,7 +49,19 @@ def create():
     """Erstellt ein neues Ticket."""
     if request.method == 'POST':
         try:
-            data = request.get_json()
+            # Logging für Debugging
+            logging.info(f"Content-Type: {request.content_type}")
+            logging.info(f"Request Data: {request.get_data()}")
+            
+            # Versuche zuerst JSON zu parsen
+            if request.is_json:
+                data = request.get_json()
+            else:
+                # Fallback auf Form-Daten
+                data = request.form.to_dict()
+            
+            logging.info(f"Verarbeitete Daten: {data}")
+            
             title = data.get('title')
             description = data.get('description')
             priority = data.get('priority', 'normal')
@@ -72,17 +84,27 @@ def create():
                 [title, description, priority, created_by, assigned_to]
             )
             
-            return jsonify({
-                'success': True,
-                'message': 'Ticket wurde erstellt'
-            })
+            # Wenn es eine AJAX-Anfrage ist, JSON zurückgeben
+            if request.is_json:
+                return jsonify({
+                    'success': True,
+                    'message': 'Ticket wurde erstellt'
+                })
+            
+            # Weiterleitung basierend auf Benutzerstatus
+            if session.get('is_admin'):
+                return redirect(url_for('tickets.index'))
+            else:
+                return redirect(url_for('main.index'))
             
         except Exception as e:
             logging.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': 'Fehler beim Erstellen des Tickets'
-            }), 500
+            if request.is_json:
+                return jsonify({
+                    'success': False,
+                    'message': f'Fehler beim Erstellen des Tickets: {str(e)}'
+                }), 500
+            return redirect(url_for('tickets.create'))
             
     return render_template('tickets/create.html')
 
@@ -206,4 +228,44 @@ def update(id):
         return jsonify({
             'success': False,
             'message': f'Ein Fehler ist aufgetreten: {str(e)}'
+        }), 500 
+
+@bp.route('/<int:id>/delete', methods=['POST'])
+@admin_required
+def delete(id):
+    """Löscht ein Ticket."""
+    try:
+        # Prüfe ob Ticket existiert
+        ticket = ticket_db.query(
+            """
+            SELECT * FROM tickets WHERE id = ?
+            """,
+            [id],
+            one=True
+        )
+        
+        if not ticket:
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
+            
+        # Lösche das Ticket
+        ticket_db.query(
+            """
+            DELETE FROM tickets WHERE id = ?
+            """,
+            [id]
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket wurde gelöscht'
+        })
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Löschen des Tickets #{id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Löschen des Tickets'
         }), 500 
