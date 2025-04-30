@@ -16,6 +16,12 @@
         }} ml-4">
             {{ ticket.status }}
         </span>
+        <div class="ml-auto">
+            <button onclick="deleteTicket({{ ticket.id }})" class="btn btn-error btn-sm">
+                <i class="fas fa-trash mr-2"></i>
+                Ticket löschen
+            </button>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -246,5 +252,33 @@ document.getElementById('updateForm').addEventListener('submit', async function(
         submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Speichern';
     }
 });
+
+function deleteTicket(ticketId) {
+    if (!confirm('Möchten Sie dieses Ticket wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+        return;
+    }
+    
+    fetch(`/tickets/${ticketId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Ticket erfolgreich gelöscht');
+            setTimeout(() => {
+                window.location.href = "{{ url_for('tickets.index') }}";
+            }, 1000);
+        } else {
+            showToast('error', data.message || 'Fehler beim Löschen des Tickets');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+}
 </script>
 {% endblock %} 

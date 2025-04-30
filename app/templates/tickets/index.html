@@ -4,6 +4,9 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50"></div>
+    
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold">Tickets</h1>
         <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
@@ -74,7 +77,7 @@
                             <th>Titel</th>
                             <th>Status</th>
                             <th>Priorität</th>
-                            <th>Zugewiesen an</th>
+                            <th>Erstellt von</th>
                             <th>Erstellt am</th>
                             <th>Aktionen</th>
                         </tr>
@@ -83,7 +86,11 @@
                         {% for ticket in tickets %}
                         <tr>
                             <td>{{ ticket.id }}</td>
-                            <td>{{ ticket.title }}</td>
+                            <td>
+                                <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="link link-primary">
+                                    {{ ticket.title }}
+                                </a>
+                            </td>
                             <td>
                                 <span class="badge badge-{{ 
                                     'success' if ticket.status == 'gelöst' 
@@ -102,13 +109,17 @@
                                     {{ ticket.priority }}
                                 </span>
                             </td>
-                            <td>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</td>
+                            <td>{{ ticket.created_by }}</td>
                             <td>{{ ticket.created_at }}</td>
                             <td>
-                                <a href="{{ url_for('tickets.detail', id=ticket.id) }}" 
-                                   class="btn btn-ghost btn-sm">
-                                    <i class="fas fa-eye"></i>
-                                </a>
+                                <div class="flex gap-2">
+                                    <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-ghost btn-sm">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button onclick="(function(id) { if (!confirm('Möchten Sie dieses Ticket wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return; fetch(`/tickets/${id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(response => response.json()).then(data => { if (data.success) { window.location.reload(); } else { alert(data.message || 'Fehler beim Löschen des Tickets'); } }).catch(error => { console.error('Fehler:', error); alert('Ein Fehler ist aufgetreten'); }); })({{ ticket.id }})" class="btn btn-error btn-sm">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -135,34 +146,5 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Filter-Formular
-    const form = document.getElementById('filterForm');
-    const inputs = form.querySelectorAll('select, input');
-    
-    inputs.forEach(input => {
-        input.addEventListener('change', function() {
-            const params = new URLSearchParams(window.location.search);
-            
-            inputs.forEach(inp => {
-                if (inp.value) {
-                    params.set(inp.name, inp.value);
-                } else {
-                    params.delete(inp.name);
-                }
-            });
-            
-            window.location.href = `${window.location.pathname}?${params.toString()}`;
-        });
-        
-        // Setze gespeicherte Werte
-        const params = new URLSearchParams(window.location.search);
-        const savedValue = params.get(input.name);
-        if (savedValue) {
-            input.value = savedValue;
-        }
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
 {% endblock %} 
