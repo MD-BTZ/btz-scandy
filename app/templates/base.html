@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Scandy{% endblock %}</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
+    
     <!-- Tailwind (Produktionsversion) -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     
