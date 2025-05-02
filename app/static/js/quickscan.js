@@ -663,24 +663,15 @@ const QuickScan = {
     },
 
     showQuantityModal() {
-        const modal = document.getElementById('quantityModal');
-        if (modal) {
-            modal.showModal();
-        }
+        document.getElementById('quantityModal').showModal();
     },
 
     closeQuantityModal() {
-        const modal = document.getElementById('quantityModal');
-        if (modal) {
-            modal.close();
-        }
+        document.getElementById('quantityModal').close();
     },
 
     confirmQuantity() {
-        const quantityInput = document.getElementById('quantityInput');
-        if (!quantityInput) return;
-
-        const quantity = parseInt(quantityInput.value);
+        const quantity = parseInt(document.getElementById('quantityInput').value);
         if (quantity > 0) {
             this.currentProcess.quantity = quantity;
             this.closeQuantityModal();

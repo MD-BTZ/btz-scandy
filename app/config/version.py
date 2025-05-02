@@ -8,6 +8,13 @@ Versionsverwaltung für Scandy
 # PATCH: Fehlerbehebungen, abwärtskompatibel
 VERSION = "1.0.2"
 
+# Autor
+AUTHOR = "Andreas Klann"
+
 def get_version():
     """Gibt die aktuelle Version zurück"""
-    return VERSION 
+    return VERSION
+
+def get_author():
+    """Gibt den Autor zurück"""
+    return AUTHOR 

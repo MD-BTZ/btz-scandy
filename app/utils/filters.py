@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.config.version import get_version, get_author
 
 def format_datetime(value):
     """Formatiert ein Datum in deutsches Format"""
@@ -43,6 +44,16 @@ def format_duration(duration):
     return ' '.join(parts) if parts else 'Weniger als 1 Minute'
 
 def register_filters(app):
+    """Registriert Template-Filter für die Flask-Anwendung"""
+    
+    @app.template_filter('version')
+    def version_filter(s):
+        return get_version()
+    
+    @app.template_filter('author')
+    def author_filter(s):
+        return get_author()
+
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_datetime'] = to_datetime
     app.jinja_env.filters['format_duration'] = format_duration 
