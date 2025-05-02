@@ -266,44 +266,51 @@ def adjust_stock(barcode):
 
 @bp.route('/<barcode>')
 @login_required
-def details(barcode):
-    """Zeigt die Details eines Verbrauchsmaterials"""
-    consumable = Database.query('''
-        SELECT * FROM consumables 
-        WHERE barcode = ? AND deleted = 0
-    ''', [barcode], one=True)
-    
-    if not consumable:
-        abort(404)
+def view_consumable(barcode):
+    try:
+        consumable = Database.query('''
+            SELECT * FROM consumables 
+            WHERE barcode = ? AND deleted = 0
+        ''', [barcode], one=True)
         
-    # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-    categories = Database.get_categories('consumables')
-    locations = Database.get_locations('consumables')
-    
-    # Entnahme-Historie
-    history = Database.query('''
-        SELECT 
-            'Bestandsänderung' as action_type,
-            strftime('%d.%m.%Y %H:%M', cu.used_at) as action_date,
-            CASE 
-                WHEN cu.worker_barcode = 'admin' THEN 'Admin'
-                ELSE w.firstname || ' ' || w.lastname 
-            END as worker_name,
-            CASE
-                WHEN cu.worker_barcode = 'admin' THEN cu.quantity
-                ELSE -ABS(cu.quantity)  -- Für Mitarbeiter immer negativ machen
-            END as quantity
-        FROM consumable_usages cu
-        LEFT JOIN workers w ON cu.worker_barcode = w.barcode
-        WHERE cu.consumable_barcode = ?
-        ORDER BY cu.used_at DESC
-    ''', [barcode])
-    
-    return render_template('consumables/details.html',
-                         consumable=consumable,
-                         categories=[c['name'] for c in categories],
-                         locations=[l['name'] for l in locations],
-                         history=history)
+        if not consumable:
+            flash('Verbrauchsmaterial nicht gefunden', 'error')
+            return redirect(url_for('consumables.index'))
+        
+        # Hole Verbrauchshistorie
+        history = Database.query('''
+            SELECT
+                'Bestandsänderung' as action_type,
+                strftime('%d.%m.%Y %H:%M', cu.used_at) as action_date,
+                CASE
+                    WHEN cu.worker_barcode = 'admin' THEN 'Admin'
+                    ELSE w.firstname || ' ' || w.lastname
+                END as worker_name,
+                CASE
+                    WHEN cu.worker_barcode = 'admin' THEN cu.quantity
+                    ELSE -cu.quantity  -- Für Mitarbeiter immer negativ machen
+                END as quantity
+            FROM consumable_usages cu
+            LEFT JOIN workers w ON cu.worker_barcode = w.barcode
+            WHERE cu.consumable_barcode = ?
+            ORDER BY cu.used_at DESC
+        ''', [barcode])
+        
+        # Berechne Gesamtverbrauch
+        total_usage = sum(entry['quantity'] for entry in history)
+        
+        # Berechne aktuellen Bestand
+        current_stock = consumable['quantity']
+        
+        return render_template('consumables/view.html',
+                            consumable=consumable,
+                            history=history,
+                            total_usage=total_usage,
+                            current_stock=current_stock)
+        
+    except Exception as e:
+        flash(f'Fehler beim Laden des Verbrauchsmaterials: {str(e)}', 'error')
+        return redirect(url_for('consumables.index'))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
 @admin_required

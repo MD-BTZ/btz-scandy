@@ -68,7 +68,7 @@
     <div class="card bg-base-100 shadow-xl lg:col-span-2">
         <div class="card-body">
             <h2 class="card-title">Verbrauchshistorie</h2>
-            {% if usage_history %}
+            {% if history %}
             <div class="overflow-x-auto">
                 <table class="table table-zebra w-full">
                     <thead>
@@ -80,18 +80,18 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for usage in usage_history %}
+                        {% for entry in history %}
                         <tr>
-                            <td>{{ usage.used_at|format_datetime }}</td>
+                            <td>{{ entry.action_date }}</td>
                             <td>
-                                <a href="{{ url_for('workers.detail', barcode=usage.worker_barcode) }}" class="link link-primary">
-                                    {{ usage.worker_name }}
+                                <a href="{{ url_for('workers.details', barcode=entry.worker_barcode) }}" class="link link-primary">
+                                    {{ entry.worker_name }}
                                 </a>
                             </td>
-                            <td>{{ usage.quantity }} {{ consumable.unit or 'Stück' }}</td>
+                            <td>{{ entry.quantity }} {{ consumable.unit or 'Stück' }}</td>
                             <td>
-                                <span class="badge {{ 'badge-success' if usage.action == 'add' else 'badge-warning' }}">
-                                    {{ 'Hinzugefügt' if usage.action == 'add' else 'Entnommen' }}
+                                <span class="badge {{ 'badge-success' if entry.quantity > 0 else 'badge-warning' }}">
+                                    {{ 'Hinzugefügt' if entry.quantity > 0 else 'Entnommen' }}
                                 </span>
                             </td>
                         </tr>
@@ -182,6 +182,25 @@
     </div>
 </dialog>
 
+<!-- Quantity Modal -->
+<dialog id="quantityModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Menge eingeben</h3>
+        <div class="space-y-4">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Menge</span>
+                </label>
+                <input type="number" id="quantityInput" class="input input-bordered w-full" min="1" value="1">
+            </div>
+            <div class="flex justify-end space-x-4">
+                <button type="button" onclick="QuickScan.closeQuantityModal()" class="btn btn-ghost">Abbrechen</button>
+                <button type="button" onclick="QuickScan.confirmQuantity()" class="btn btn-primary">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</dialog>
+
 <script>
 function showEditModal() {
     document.getElementById('editModal').showModal();
@@ -241,5 +260,29 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
         showToast('Fehler beim Aktualisieren', 'error');
     });
 });
+
+function showQuantityModal() {
+    document.getElementById('quantityModal').showModal();
+}
+
+function closeQuantityModal() {
+    document.getElementById('quantityModal').close();
+}
+
+function confirmQuantity() {
+    const quantity = parseInt(document.getElementById('quantityInput').value);
+    if (quantity > 0) {
+        QuickScan.currentProcess.quantity = quantity;
+        closeQuantityModal();
+        // Weiter zum Mitarbeiter-Scan
+        document.getElementById('itemConfirm').classList.add('hidden');
+        document.getElementById('step1').classList.add('hidden');
+        document.getElementById('step2').classList.remove('hidden');
+        QuickScan.currentStep = 2;
+        QuickScan.focusCurrentInput();
+    } else {
+        showToast('Bitte eine gültige Menge eingeben', 'error');
+    }
+}
 </script>
 {% endblock %} 

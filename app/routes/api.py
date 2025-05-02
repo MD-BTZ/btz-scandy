@@ -40,6 +40,29 @@ def get_tool(barcode):
     try:
         print(f"Suche Werkzeug mit Barcode: {barcode}")
         
+        # Prüfe zuerst ob es ein Verbrauchsmaterial ist
+        consumable = Database.query('''
+            SELECT * FROM consumables 
+            WHERE barcode = ? AND deleted = 0
+        ''', [barcode], one=True)
+        
+        if consumable:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'type': 'consumable',
+                    'id': consumable['id'],
+                    'barcode': consumable['barcode'],
+                    'name': consumable['name'],
+                    'description': consumable['description'],
+                    'category': consumable['category'],
+                    'location': consumable['location'],
+                    'quantity': consumable['quantity'],
+                    'min_quantity': consumable['min_quantity']
+                }
+            })
+        
+        # Wenn kein Verbrauchsmaterial, dann prüfe ob es ein Werkzeug ist
         tool = Database.query('''
             SELECT t.*,
                    CASE 
@@ -67,7 +90,7 @@ def get_tool(barcode):
         if not tool:
             return jsonify({
                 'success': False,
-                'message': 'Werkzeug nicht gefunden'
+                'message': 'Artikel nicht gefunden'
             }), 404
             
         tool_dict = dict(tool)
@@ -676,162 +699,155 @@ def scan():
         }), 500
 
 @bp.route('/quickscan/process_lending', methods=['POST'])
-@login_required
 def quickscan_process_lending():
+    """Verarbeitet Ausleihen und Rückgaben von Werkzeugen und Verbrauchsmaterialien"""
     try:
-        data = request.json
-        item_barcode = data.get('item_barcode')
-        worker_barcode = data.get('worker_barcode')
-        action = data.get('action')
-        item_type = data.get('item_type')
+        data = request.get_json()
         
-        if not all([item_barcode, worker_barcode, action, item_type]):
-            return jsonify({
-                'success': False,
-                'message': 'Fehlende Parameter'
-            }), 400
+        # Überprüfe erforderliche Parameter
+        required_params = ['item_barcode', 'worker_barcode', 'action', 'item_type']
+        for param in required_params:
+            if param not in data:
+                return jsonify({'success': False, 'message': f'Fehlende Parameter: {param}'}), 400
+        
+        item_barcode = data['item_barcode']
+        worker_barcode = data['worker_barcode']
+        action = data['action']
+        item_type = data['item_type']
+        quantity = data.get('quantity', 1)
+        
+        # Überprüfe, ob es sich um ein Verbrauchsmaterial handelt
+        if item_type == 'consumable':
+            # Hole Verbrauchsmaterial-Details
+            consumable = Database.query('''
+                SELECT * FROM consumables 
+                WHERE barcode = ? AND deleted = 0
+            ''', [item_barcode], one=True)
             
-        with Database.get_db() as conn:
-            if item_type == 'tool':
-                if action == 'lend':
-                    # Prüfe ob Werkzeug verfügbar ist
-                    tool = conn.execute('''
-                        SELECT id, name, status FROM tools 
-                        WHERE barcode = ? AND deleted = 0
-                    ''', [item_barcode]).fetchone()
-                    
-                    if not tool:
-                        return jsonify({
-                            'success': False,
-                            'message': 'Werkzeug nicht gefunden'
-                        }), 404
-                        
-                    if tool['status'] != 'verfügbar':
-                        return jsonify({
-                            'success': False,
-                            'message': 'Werkzeug ist nicht verfügbar'
-                        }), 400
-                        
-                    # Werkzeug ausleihen
-                    conn.execute('''
-                        INSERT INTO lendings (tool_barcode, worker_barcode, lent_at)
-                        VALUES (?, ?, datetime('now'))
-                    ''', [item_barcode, worker_barcode])
-                    
-                    # Status aktualisieren
-                    conn.execute('''
-                        UPDATE tools 
-                        SET status = 'ausgeliehen'
-                        WHERE id = ?
-                    ''', [tool['id']])
-                    
-                    conn.commit()
-                    return jsonify({
-                        'success': True,
-                        'message': f'Werkzeug {tool["name"]} wurde ausgeliehen'
-                    })
-                    
-                elif action == 'return':
-                    # Prüfe ob Werkzeug ausgeliehen ist
-                    tool = conn.execute('''
-                        SELECT id, name, status FROM tools 
-                        WHERE barcode = ? AND deleted = 0
-                    ''', [item_barcode]).fetchone()
-                    
-                    if not tool:
-                        return jsonify({
-                            'success': False,
-                            'message': 'Werkzeug nicht gefunden'
-                        }), 404
-                        
-                    if tool['status'] != 'ausgeliehen':
-                        return jsonify({
-                            'success': False,
-                            'message': 'Werkzeug ist nicht ausgeliehen'
-                        }), 400
-                        
-                    # Ausleihe beenden
-                    conn.execute('''
-                        UPDATE lendings 
-                        SET returned_at = datetime('now')
-                        WHERE tool_barcode = ? AND returned_at IS NULL
-                    ''', [item_barcode])
-                    
-                    # Status aktualisieren
-                    conn.execute('''
-                        UPDATE tools 
-                        SET status = 'verfügbar'
-                        WHERE id = ?
-                    ''', [tool['id']])
-                    
-                    conn.commit()
-                    return jsonify({
-                        'success': True,
-                        'message': f'Werkzeug {tool["name"]} wurde zurückgegeben'
-                    })
-                    
-                else:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Ungültige Aktion'
-                    }), 400
-                    
-            elif item_type == 'consumable':
-                if action != 'consume':
-                    return jsonify({
-                        'success': False,
-                        'message': 'Ungültige Aktion für Verbrauchsmaterial'
-                    }), 400
-                    
-                # Prüfe ob Verbrauchsmaterial verfügbar ist
-                consumable = conn.execute('''
-                    SELECT id, name, quantity FROM consumables 
-                    WHERE barcode = ? AND deleted = 0
-                ''', [item_barcode]).fetchone()
+            if not consumable:
+                return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
+            
+            # Verarbeite nur Verbrauchsmaterial-Aktionen
+            if action != 'consume':
+                return jsonify({'success': False, 'message': 'Ungültige Aktion für Verbrauchsmaterial'}), 400
+            
+            # Überprüfe Bestand
+            if consumable['quantity'] < quantity:
+                return jsonify({'success': False, 'message': 'Nicht genügend Bestand verfügbar'}), 400
+            
+            # Führe Verbrauch durch
+            with Database.get_db() as db:
+                # Füge Verbrauchseintrag hinzu
+                db.execute('''
+                    INSERT INTO consumable_usages (
+                        consumable_barcode, worker_barcode, quantity, used_at, updated_at, sync_status
+                    ) VALUES (?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), 'pending')
+                ''', [item_barcode, worker_barcode, -quantity])
                 
-                if not consumable:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Verbrauchsmaterial nicht gefunden'
-                    }), 404
-                    
-                if consumable['quantity'] <= 0:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Verbrauchsmaterial nicht verfügbar'
-                    }), 400
-                    
-                # Verbrauch eintragen
-                conn.execute('''
-                    INSERT INTO consumable_usages (consumable_barcode, worker_barcode, quantity, used_at)
-                    VALUES (?, ?, 1, datetime('now'))
+                # Aktualisiere Bestand
+                db.execute('''
+                    UPDATE consumables 
+                    SET quantity = quantity - ?, 
+                        updated_at = datetime('now', 'localtime'),
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [quantity, item_barcode])
+                
+                db.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Verbrauchsmaterial erfolgreich verarbeitet (Menge: {quantity})'
+            })
+        
+        # Verarbeite Werkzeug-Aktionen
+        tool = Database.query('''
+            SELECT t.*,
+                   CASE 
+                       WHEN EXISTS (
+                           SELECT 1 FROM lendings l 
+                           WHERE l.tool_barcode = t.barcode 
+                           AND l.returned_at IS NULL
+                       ) THEN 'ausgeliehen'
+                       WHEN t.status = 'defekt' THEN 'defekt'
+                       ELSE 'verfügbar'
+                   END as current_status
+            FROM tools t
+            WHERE t.barcode = ? AND t.deleted = 0
+        ''', [item_barcode], one=True)
+        
+        if not tool:
+            return jsonify({'success': False, 'message': 'Werkzeug nicht gefunden'}), 404
+        
+        # Bestimme die Aktion basierend auf dem aktuellen Status
+        current_status = tool['current_status']
+        if current_status == 'verfügbar' and action == 'lend':
+            # Ausleihe verarbeiten
+            with Database.get_db() as db:
+                db.execute('''
+                    INSERT INTO lendings (
+                        tool_barcode, worker_barcode, lent_at, updated_at, sync_status
+                    ) VALUES (?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), 'pending')
                 ''', [item_barcode, worker_barcode])
                 
-                # Bestand reduzieren
-                conn.execute('''
-                    UPDATE consumables 
-                    SET quantity = quantity - 1
-                    WHERE id = ?
-                ''', [consumable['id']])
+                db.execute('''
+                    UPDATE tools 
+                    SET status = 'ausgeliehen',
+                        updated_at = datetime('now', 'localtime'),
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [item_barcode])
                 
-                conn.commit()
-                return jsonify({
-                    'success': True,
-                    'message': f'Verbrauchsmaterial {consumable["name"]} wurde entnommen'
-                })
+                db.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Werkzeug erfolgreich ausgeliehen'
+            })
+        
+        elif current_status == 'ausgeliehen' and action == 'return':
+            # Rückgabe verarbeiten
+            with Database.get_db() as db:
+                # Finde die aktive Ausleihe
+                lending = db.execute('''
+                    SELECT * FROM lendings 
+                    WHERE tool_barcode = ? AND returned_at IS NULL
+                    ORDER BY lent_at DESC LIMIT 1
+                ''', [item_barcode]).fetchone()
                 
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Ungültiger Artikeltyp'
-                }), 400
+                if lending:
+                    db.execute('''
+                        UPDATE lendings 
+                        SET returned_at = datetime('now', 'localtime'),
+                            updated_at = datetime('now', 'localtime'),
+                            sync_status = 'pending'
+                        WHERE id = ?
+                    ''', [lending['id']])
                 
+                db.execute('''
+                    UPDATE tools 
+                    SET status = 'verfügbar',
+                        updated_at = datetime('now', 'localtime'),
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [item_barcode])
+                
+                db.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Werkzeug erfolgreich zurückgegeben'
+            })
+        
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Werkzeug ist nicht verfügbar (Status: {current_status})'
+            }), 400
+            
     except Exception as e:
-        print(f"Fehler bei der Ausleihe/Rückgabe: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Fehler: {str(e)}'
-        }), 500
+        logger.error(f"Fehler bei der Verarbeitung: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/inventory/consumables/<barcode>', methods=['GET'])
 def get_consumable(barcode):

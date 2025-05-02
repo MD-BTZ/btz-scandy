@@ -221,305 +221,271 @@ const QuickScan = {
 
         // Wenn kein Bestätigungscode, verarbeite als normalen Scan
         if (barcode.length >= 4) {
-            if (input.id === 'itemScanInput') {
+            if (input.id === 'itemScanInput' && this.currentStep === 1) {
                 this.handleItemScan(barcode);
-            } else {
+            } else if (input.id === 'workerScanInput' && this.currentStep === 2) {
                 this.handleWorkerScan(barcode);
             }
         }
     },
 
     async handleItemScan(barcode) {
+        console.log("Scanner erkannt:", barcode);
+        
         try {
-            // Easter Eggs vor der normalen Verarbeitung prüfen
-            if (barcode === 'SCANDY') {
-                // Erstelle einen spektakulären Konfettieffekt
-                confetti({
-                    particleCount: 200,
-                    spread: 160,
-                    origin: { y: 0.6 },
-                    ticks: 200,
-                    gravity: 0.8,
-                    scalar: 1.2,
-                    zIndex: 99999
-                });
-                // Zusätzlicher Effekt nach kurzer Verzögerung
-                setTimeout(() => {
-                    confetti({
-                        particleCount: 100,
-                        angle: 60,
-                        spread: 100,
-                        origin: { x: 0 },
-                        ticks: 200,
-                        gravity: 0.8,
-                        scalar: 1.2,
-                        zIndex: 99999
-                    });
-                    confetti({
-                        particleCount: 100,
-                        angle: 120,
-                        spread: 100,
-                        origin: { x: 1 },
-                        ticks: 200,
-                        gravity: 0.8,
-                        scalar: 1.2,
-                        zIndex: 99999
-                    });
-                }, 250);
-                showToast('success', '🎉 SCANDY! 🎉');
+            const response = await fetch(`/api/inventory/tools/${barcode}`);
+            const data = await response.json();
+            
+            if (!data.success) {
+                this.showError("Artikel nicht gefunden");
                 return;
             }
-            if (barcode === 'DANCE') {
-                this.showDancingEmojis();
-                return;
-            }
-            if (barcode === 'BTZ31189141') {
-                showToast('success', 'Das Werkzeug wurde mal wieder gegen die Wand geworfen!');
-                return;
-            }
-
-            // Entferne mögliche Präfixe für die Suche
-            const cleanBarcode = barcode.replace(/^[TC]/, '');
-            console.log('Suche Artikel mit bereinigtem Barcode:', cleanBarcode);
             
-            // Versuche zuerst als Werkzeug
-            const toolResponse = await fetch(`/api/inventory/tools/${cleanBarcode}`);
-            let data;
+            const item = data.data;
+            console.log("Gefundener Artikel:", item);
             
-            if (toolResponse.ok) {
-                const response = await toolResponse.json();
-                if (response.success) {
-                    data = response.data;
-                    data.type = 'tool';
-                    data.barcode = cleanBarcode;
-                    // Speichere im Prozess
-                    this.currentProcess.item = data;
-                    this.currentProcess.action = data.current_status === 'verfügbar' ? 'lend' : 'return';
-                } else {
-                    showToast('error', response.message || 'Fehler beim Laden des Werkzeugs');
-                    return;
-                }
-            } else {
-                // Wenn kein Werkzeug gefunden, versuche als Verbrauchsmaterial
-                console.log('Versuche Verbrauchsmaterial:', cleanBarcode);
-                const consumableResponse = await fetch(`/api/inventory/consumables/${cleanBarcode}`);
-                if (consumableResponse.ok) {
-                    const response = await consumableResponse.json();
-                    if (response.success) {
-                        data = response.data;
-                        data.type = 'consumable';
-                        data.barcode = cleanBarcode;
-                        // Speichere im Prozess
-                        this.currentProcess.item = data;
-                        this.currentProcess.action = 'consume';
-                        // Setze Standardmenge auf 1
-                        this.currentProcess.quantity = 1;
-                    } else {
-                        showToast('error', response.message || 'Fehler beim Laden des Verbrauchsmaterials');
-                        return;
-                    }
-                } else {
-                    showToast('error', 'Artikel nicht gefunden');
-                    return;
-                }
-            }
+            // Setze den Artikel im Prozess
+            this.scannedItem = item;
             
-            // Bestimme Aktion und Farbe basierend auf Artikeltyp und Status
-            let action, actionText, statusClass, details;
-            
-            if (data.type === 'tool') {
-                if (data.current_status === 'verfügbar') {
-                    action = 'lend';
-                    actionText = 'Wird ausgeliehen';
-                    statusClass = 'badge-success';
-                } else if (data.current_status === 'ausgeliehen') {
-                    action = 'return';
-                    actionText = 'Wird zurückgegeben';
-                    statusClass = 'badge-warning';
-                } else if (data.current_status === 'defekt') {
-                    action = null;
-                    actionText = 'Defekt - keine Aktion möglich';
-                    statusClass = 'badge-error';
-                }
-                details = `${data.category} | ${data.location}`;
-            } else {
-                action = 'consume';
-                actionText = 'Wird ausgegeben';
-                statusClass = data.quantity <= data.min_quantity ? 'badge-warning' : 'badge-success';
-                details = `Bestand: ${data.quantity} | Mindestbestand: ${data.min_quantity}`;
-            }
-            
-            // Aktualisiere die Info-Karte
+            // Aktualisiere die UI-Elemente
             const itemName = document.getElementById('itemName');
-            const itemStatusContainer = document.getElementById('itemStatusContainer');
-            const itemStatus = document.getElementById('itemStatus');
-            const returnIcon = document.getElementById('returnIcon');
-            const lendIcon = document.getElementById('lendIcon');
             const itemDetails = document.getElementById('itemDetails');
-            const quantityContainer = document.getElementById('quantityContainer');
-
-            itemName.textContent = data.name;
-            itemName.classList.remove('opacity-50');
+            const itemStatus = document.getElementById('itemStatus');
             
-            itemStatus.className = `badge badge-lg ${statusClass}`;
-            itemStatus.textContent = data.status_text;
-            
-            // Icons statt Text anzeigen
-            returnIcon.classList.add('hidden');
-            lendIcon.classList.add('hidden');
-            
-            if (action === 'return') {
-                returnIcon.classList.remove('hidden');
-            } else if (action === 'lend' || action === 'consume') {
-                lendIcon.classList.remove('hidden');
+            if (itemName) {
+                itemName.textContent = item.name || 'Unbekannter Artikel';
+                itemName.classList.remove('opacity-50');
             }
             
-            itemStatusContainer.style.display = 'flex';
+            if (itemDetails) {
+                itemDetails.textContent = `${item.location || 'Kein Standort'} - ${item.category || 'Keine Kategorie'}`;
+                itemDetails.classList.remove('opacity-50');
+            }
             
-            itemDetails.textContent = details;
-            itemDetails.classList.remove('opacity-50');
+            if (itemStatus) {
+                itemStatus.textContent = item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug';
+                itemStatus.className = 'badge badge-lg ' + (item.type === 'consumable' ? 'badge-primary' : 'badge-secondary');
+            }
             
-            // Zeige Mengenauswahl für Verbrauchsmaterial
-            if (data.type === 'consumable') {
-                quantityContainer.classList.remove('hidden');
-                const quantityDisplay = document.getElementById('quantityDisplay');
-                if (quantityDisplay) {
-                    quantityDisplay.textContent = '1';
-                    quantityDisplay.dataset.max = data.quantity;
-                    this.currentProcess.quantity = 1;
-                }
+            // Bestimme die Aktion basierend auf dem Artikeltyp und Status
+            let action;
+            if (item.type === 'consumable') {
+                action = 'consume';
             } else {
-                quantityContainer.classList.add('hidden');
+                action = item.current_status === 'verfügbar' ? 'lend' : 'return';
             }
             
-            if (action) {
-                showToast('success', 'Artikel erkannt: ' + data.name);
-                
-                // Generiere Bestätigungsbarcode
-                this.confirmationBarcode = Math.random().toString(36).substring(2, 8).toUpperCase();
-                const canvas = document.getElementById('itemConfirmBarcode');
-                JsBarcode(canvas, this.confirmationBarcode, {
-                    format: "CODE128",
-                    width: 2,
-                    height: 50,
-                    displayValue: true
-                });
-                document.getElementById('itemConfirm').classList.remove('hidden');
-            } else {
-                showToast('error', 'Keine Aktion für diesen Artikel möglich');
-            }
+            // Setze den Prozess
+            this.currentProcess = {
+                item_barcode: item.barcode,
+                item_type: item.type,
+                action: action,
+                quantity: item.type === 'consumable' ? 1 : undefined
+            };
             
-            } catch (error) {
-            showToast('error', 'Fehler beim Scannen des Artikels');
-            console.error(error);
-        }
-    },
-
-        async handleWorkerScan(barcode) {
-            try {
-                console.log('Verarbeite Worker-Scan:', barcode);
-            const response = await fetch(`/api/inventory/workers/${barcode}`);
-            const result = await response.json();
-                
-                if (!response.ok) {
-                throw new Error('Mitarbeiter nicht gefunden');
-            }
+            // Zeige die Bestätigungskarte
+            document.getElementById('itemConfirm').classList.remove('hidden');
             
-            // Speichere im Prozess und füge Barcode hinzu
-            result.barcode = barcode;  // Explizit den Barcode hinzufügen
-            this.currentProcess.worker = result;
-            console.log('Gespeicherter Worker:', this.currentProcess.worker);
-            
-            // Aktualisiere Worker-Bereich in der Info-Karte
-            const workerName = document.getElementById('workerName');
-            const workerDepartment = document.getElementById('workerDepartment');
-            
-            workerName.textContent = `${result.firstname} ${result.lastname}`;
-            workerName.classList.remove('opacity-50');
-            
-            workerDepartment.textContent = result.department || 'Keine Abteilung';
-            workerDepartment.classList.remove('opacity-50');
-            
-            showToast('success', 'Mitarbeiter erkannt: ' + result.firstname + ' ' + result.lastname);
-            
-            // Generiere Bestätigungsbarcode
+            // Generiere Bestätigungscode
             this.confirmationBarcode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const canvas = document.getElementById('finalConfirmBarcode');
+            const canvas = document.getElementById('itemConfirmBarcode');
             JsBarcode(canvas, this.confirmationBarcode, {
                 format: "CODE128",
                 width: 2,
                 height: 50,
                 displayValue: true
             });
-            document.getElementById('finalConfirm').classList.remove('hidden');
+
+            // Zeige Toast-Meldung für erfolgreichen Scan
+            showToast('success', `Artikel erkannt: ${item.name || 'Unbekannter Artikel'} (${item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug'})`);
+            
+            // Wenn es ein Verbrauchsmaterial ist, zeige das Mengen-Modal
+            if (item.type === 'consumable') {
+                this.showQuantityModal();
+            }
             
         } catch (error) {
-            console.error('Worker-Scan Fehler:', error);
-            showToast('error', 'Fehler: ' + error.message);
+            console.error("Fehler beim Abrufen des Artikels:", error);
+            this.showError("Fehler beim Abrufen des Artikels");
         }
     },
 
-    async executeStoredProcess() {
-        try {
-            if (!this.currentProcess.item || !this.currentProcess.worker || !this.currentProcess.confirmed) {
-                showToast('error', 'Prozess unvollständig');
-                return;
+        async handleWorkerScan(barcode) {
+            try {
+                console.log('Verarbeite Worker-Scan:', barcode);
+                const response = await fetch(`/api/inventory/workers/${barcode}`);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error('Mitarbeiter nicht gefunden');
+                }
+                
+                // Speichere den Mitarbeiter
+                this.scannedWorker = result;
+                this.scannedWorker.barcode = barcode;  // Explizit den Barcode hinzufügen
+                console.log('Gespeicherter Worker:', this.scannedWorker);
+                
+                // Aktualisiere Worker-Bereich in der Info-Karte
+                const workerName = document.getElementById('workerName');
+                const workerDepartment = document.getElementById('workerDepartment');
+                
+                if (workerName) {
+                    workerName.textContent = `${result.firstname} ${result.lastname}`;
+                    workerName.classList.remove('opacity-50');
+                }
+                
+                if (workerDepartment) {
+                    workerDepartment.textContent = result.department || 'Keine Abteilung';
+                    workerDepartment.classList.remove('opacity-50');
+                }
+                
+                showToast('success', 'Mitarbeiter erkannt: ' + result.firstname + ' ' + result.lastname);
+                
+                // Generiere Bestätigungsbarcode
+                this.confirmationBarcode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                const canvas = document.getElementById('finalConfirmBarcode');
+                JsBarcode(canvas, this.confirmationBarcode, {
+                    format: "CODE128",
+                    width: 2,
+                    height: 50,
+                    displayValue: true
+                });
+                
+                // Zeige die finale Bestätigungskarte
+                document.getElementById('finalConfirm').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Worker-Scan Fehler:', error);
+                this.showError('Fehler: ' + error.message);
             }
+        },
 
-            const requestData = {
-                item_barcode: this.currentProcess.item.barcode,
-                worker_barcode: this.currentProcess.worker.barcode,
-                action: this.currentProcess.action,
-                item_type: this.currentProcess.item.type,
-                quantity: this.currentProcess.item.type === 'consumable' ? this.currentProcess.quantity : undefined
-            };
+    async executeStoredProcess() {
+        console.log("Aktueller Prozess:", this.currentProcess);
+        console.log("Gescanntes Item:", this.scannedItem);
+        console.log("Gescannte Worker:", this.scannedWorker);
 
-            console.log('Führe gespeicherten Prozess aus:', requestData);
-            console.log('Worker Data:', this.currentProcess.worker);
-
-                const response = await fetch('/api/quickscan/process_lending', {
-                    method: 'POST',
-                    headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(requestData)
+        if (!this.currentProcess || !this.scannedItem || !this.scannedWorker) {
+            console.error("Prozess nicht vollständig:", {
+                process: this.currentProcess,
+                item: this.scannedItem,
+                worker: this.scannedWorker
             });
-            
-            const result = await response.json();
-            console.log('Server Antwort:', result);
-            
-            if (result.success) {
-                const actionText = this.currentProcess.action === 'return' ? 'zurückgegeben' : 
-                                 this.currentProcess.action === 'lend' ? 'ausgeliehen' : 
-                                 'ausgegeben';
-                showToast('success', `${this.currentProcess.item.name} erfolgreich ${actionText}`);
-                setTimeout(() => {
-                    const modal = document.getElementById('quickScanModal');
-                    if (modal) {
-                        modal.close();
-                    }
-                    this.reset();
-                }, 2000);
+            this.showError("Prozess nicht vollständig");
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/quickscan/process_lending', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    item_barcode: this.scannedItem.barcode,
+                    worker_barcode: this.scannedWorker.barcode,
+                    action: this.currentProcess.action,
+                    item_type: this.currentProcess.item_type,
+                    quantity: this.currentProcess.quantity || 1
+                })
+            });
+
+            const data = await response.json();
+            console.log("Server-Antwort:", data);
+
+            if (data.success) {
+                showToast('success', data.message);
+                
+                // Schließe das Modal
+                const modal = document.getElementById('quickScanModal');
+                if (modal) {
+                    modal.close();
+                }
+                
+                // Aktualisiere die Verbrauchshistorie, wenn es sich um ein Verbrauchsmaterial handelt
+                if (this.currentProcess.item_type === 'consumable') {
+                    // Lade die Seite neu, um die aktualisierte Historie anzuzeigen
+                    window.location.reload();
+                }
+                
+                this.reset();
             } else {
-                throw new Error(result.message || 'Unbekannter Fehler');
+                this.showError(data.message || 'Fehler bei der Verarbeitung');
             }
         } catch (error) {
-            console.error('Fehler beim Ausführen des Prozesses:', error);
-            showToast('error', error.message || 'Fehler beim Verarbeiten der Aktion');
+            console.error("Fehler bei der Verarbeitung:", error);
+            this.showError("Fehler bei der Verarbeitung");
         }
     },
 
     reset() {
+        // Reset interne Variablen
         this.keyBuffer = '';
         this.lastKeyTime = Date.now();
         this.currentStep = 1;
         this.scannedItem = null;
         this.scannedWorker = null;
         this.quantity = 1;
-        this.showStep(1);
-        this.resetUI();
-        this.updateDisplay('', false); // Reset buffer display
+        this.currentProcess = {
+            item: null,
+            worker: null,
+            action: null,
+            confirmed: false
+        };
+        this.confirmationBarcode = null;
+
+        // Reset UI-Elemente
+        const itemInput = document.getElementById('itemScanInput');
+        const workerInput = document.getElementById('workerScanInput');
+        if (itemInput) itemInput.value = '';
+        if (workerInput) workerInput.value = '';
+
+        // Verstecke alle Bestätigungskarten
+        const itemConfirm = document.getElementById('itemConfirm');
+        const finalConfirm = document.getElementById('finalConfirm');
+        if (itemConfirm) itemConfirm.classList.add('hidden');
+        if (finalConfirm) finalConfirm.classList.add('hidden');
+
+        // Reset Mengenanzeige
+        const quantityDisplay = document.getElementById('quantityDisplay');
+        if (quantityDisplay) {
+            quantityDisplay.textContent = '1';
+            quantityDisplay.dataset.max = '';
+        }
+
+        // Reset Info-Karten
+        const itemName = document.getElementById('itemName');
+        const itemStatus = document.getElementById('itemStatus');
+        const itemDetails = document.getElementById('itemDetails');
+        const workerName = document.getElementById('workerName');
+        const workerDepartment = document.getElementById('workerDepartment');
+        
+        if (itemName) {
+            itemName.textContent = 'Kein Artikel';
+            itemName.classList.add('opacity-50');
+        }
+        if (itemStatus) {
+            itemStatus.textContent = '';
+            itemStatus.className = 'badge badge-lg';
+        }
+        if (itemDetails) {
+            itemDetails.textContent = '';
+            itemDetails.classList.add('opacity-50');
+        }
+        if (workerName) {
+            workerName.textContent = 'Kein Mitarbeiter';
+            workerName.classList.add('opacity-50');
+        }
+        if (workerDepartment) {
+            workerDepartment.textContent = '';
+            workerDepartment.classList.add('opacity-50');
+        }
+
+        // Setze Schritt zurück
+        this.goToStep(1);
+        
+        // Fokus auf das aktuelle Eingabefeld
+        this.focusCurrentInput();
     },
 
     goToStep(step) {
@@ -688,6 +654,45 @@ const QuickScan = {
             audio.pause();
             audio.currentTime = 0;
         }, 17000); // 17 Sekunden = 17000 Millisekunden
+    },
+
+    showError(message) {
+        console.error("Fehler:", message);
+        showToast('error', message);
+        this.reset();
+    },
+
+    showQuantityModal() {
+        const modal = document.getElementById('quantityModal');
+        if (modal) {
+            modal.showModal();
+        }
+    },
+
+    closeQuantityModal() {
+        const modal = document.getElementById('quantityModal');
+        if (modal) {
+            modal.close();
+        }
+    },
+
+    confirmQuantity() {
+        const quantityInput = document.getElementById('quantityInput');
+        if (!quantityInput) return;
+
+        const quantity = parseInt(quantityInput.value);
+        if (quantity > 0) {
+            this.currentProcess.quantity = quantity;
+            this.closeQuantityModal();
+            // Weiter zum Mitarbeiter-Scan
+            document.getElementById('itemConfirm').classList.add('hidden');
+            document.getElementById('step1').classList.add('hidden');
+            document.getElementById('step2').classList.remove('hidden');
+            this.currentStep = 2;
+            this.focusCurrentInput();
+        } else {
+            showToast('Bitte eine gültige Menge eingeben', 'error');
+        }
     }
 };
 
