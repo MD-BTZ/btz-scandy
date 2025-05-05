@@ -9,16 +9,32 @@
     
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold">Tickets</h1>
-        <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
-            <i class="fas fa-plus mr-2"></i>
-            Neues Ticket
-        </a>
+        <div class="flex gap-2">
+            <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
+                <i class="fas fa-plus mr-2"></i>
+                Neues Ticket
+            </a>
+        </div>
     </div>
 
-    <!-- Filter -->
+    <!-- Filter und Suche -->
     <div class="card bg-base-100 shadow-xl mb-6">
         <div class="card-body">
-            <form id="filterForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <!-- Suchleiste -->
+            <div class="form-control mb-4">
+                <div class="input-group">
+                    <input type="text" 
+                           id="searchInput" 
+                           placeholder="Tickets durchsuchen..." 
+                           class="input input-bordered w-full">
+                    <button class="btn btn-square">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filter -->
+            <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Status</span>
@@ -43,90 +59,77 @@
                         <option value="kritisch">Kritisch</option>
                     </select>
                 </div>
-
-                {% if session.get('is_admin') %}
-                <div class="form-control">
-                    <label class="label">
-                        <span class="label-text">Zugewiesen an</span>
-                    </label>
-                    <input type="text" name="assigned_to" class="input input-bordered w-full" 
-                           placeholder="Benutzername">
-                </div>
-                {% endif %}
-
-                <div class="form-control">
-                    <label class="label">
-                        <span class="label-text">Erstellt von</span>
-                    </label>
-                    <input type="text" name="created_by" class="input input-bordered w-full" 
-                           placeholder="Benutzername">
-                </div>
             </form>
         </div>
     </div>
 
-    <!-- Tickets Liste -->
+    <!-- Tickets Kachelansicht -->
     {% if tickets %}
-    <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <div class="overflow-x-auto">
-                <table class="table w-full">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Titel</th>
-                            <th>Status</th>
-                            <th>Priorität</th>
-                            <th>Erstellt von</th>
-                            <th>Erstellt am</th>
-                            <th>Aktionen</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ticket in tickets %}
-                        <tr>
-                            <td>{{ ticket.id }}</td>
-                            <td>
-                                <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="link link-primary">
-                                    {{ ticket.title }}
-                                </a>
-                            </td>
-                            <td>
-                                <span class="badge badge-{{ 
-                                    'success' if ticket.status == 'gelöst' 
-                                    else 'warning' if ticket.status == 'in_bearbeitung' 
-                                    else 'error' 
-                                }}">
-                                    {{ ticket.status }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge badge-{{ 
-                                    'error' if ticket.priority == 'hoch' 
-                                    else 'warning' if ticket.priority == 'mittel' 
-                                    else 'success' 
-                                }}">
-                                    {{ ticket.priority }}
-                                </span>
-                            </td>
-                            <td>{{ ticket.created_by }}</td>
-                            <td>{{ ticket.created_at }}</td>
-                            <td>
-                                <div class="flex gap-2">
-                                    <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-ghost btn-sm">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <button onclick="(function(id) { if (!confirm('Möchten Sie dieses Ticket wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return; fetch(`/tickets/${id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(response => response.json()).then(data => { if (data.success) { window.location.reload(); } else { alert(data.message || 'Fehler beim Löschen des Tickets'); } }).catch(error => { console.error('Fehler:', error); alert('Ein Fehler ist aufgetreten'); }); })({{ ticket.id }})" class="btn btn-error btn-sm">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <div id="ticketsView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for ticket in tickets %}
+        <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow ticket-card" 
+             data-status="{{ ticket.status }}"
+             data-priority="{{ ticket.priority }}"
+             data-created-by="{{ ticket.created_by }}"
+             data-assigned-to="{{ ticket.assigned_to or '' }}">
+            <div class="card-body">
+                <!-- Ticket Header -->
+                <div class="flex justify-between items-start">
+                    <h2 class="card-title text-lg">
+                        <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="hover:text-primary">
+                            #{{ ticket.id }} - {{ ticket.title }}
+                        </a>
+                    </h2>
+                    <span class="badge badge-{{ 
+                        'success' if ticket.status == 'gelöst' 
+                        else 'warning' if ticket.status == 'in_bearbeitung' 
+                        else 'error' 
+                    }}">
+                        {{ ticket.status }}
+                    </span>
+                </div>
+                
+                <!-- Ticket Beschreibung -->
+                <p class="text-base-content/70 line-clamp-2 mt-2">{{ ticket.description }}</p>
+                
+                <!-- Ticket Meta-Informationen -->
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <div class="badge badge-outline">
+                        <i class="fas fa-user mr-1"></i>
+                        {{ ticket.created_by }}
+                    </div>
+                    <div class="badge badge-outline">
+                        <i class="fas fa-calendar mr-1"></i>
+                        {{ ticket.created_at }}
+                    </div>
+                    <div class="badge badge-{{ 
+                        'error' if ticket.priority == 'hoch' 
+                        else 'warning' if ticket.priority == 'normal' 
+                        else 'success' 
+                    }}">
+                        <i class="fas fa-flag mr-1"></i>
+                        {{ ticket.priority }}
+                    </div>
+                    {% if ticket.assigned_to %}
+                    <div class="badge badge-outline">
+                        <i class="fas fa-user-tag mr-1"></i>
+                        {{ ticket.assigned_to }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Ticket Aktionen -->
+                <div class="card-actions justify-end mt-4">
+                    <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-ghost btn-sm">
+                        <i class="fas fa-eye mr-1"></i>Details
+                    </a>
+                    <button onclick="deleteTicket('{{ ticket.id }}')" class="btn btn-ghost btn-sm text-error">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
         </div>
+        {% endfor %}
     </div>
     {% else %}
     <div class="card bg-base-100 shadow-xl">
@@ -146,5 +149,32 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+<script>
+// Suchfunktion
+document.getElementById('searchInput').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.ticket-card');
+    
+    cards.forEach(card => {
+        const title = card.querySelector('.card-title').textContent.toLowerCase();
+        const description = card.querySelector('p').textContent.toLowerCase();
+        const matches = title.includes(searchTerm) || description.includes(searchTerm);
+        card.style.display = matches ? '' : 'none';
+    });
+});
+
+// Filter-Funktionalität
+document.getElementById('filterForm').addEventListener('change', function() {
+    const status = this.querySelector('[name="status"]').value;
+    const priority = this.querySelector('[name="priority"]').value;
+    
+    const cards = document.querySelectorAll('.ticket-card');
+    cards.forEach(card => {
+        const matchesStatus = !status || card.dataset.status === status;
+        const matchesPriority = !priority || card.dataset.priority === priority;
+        
+        card.style.display = (matchesStatus && matchesPriority) ? '' : 'none';
+    });
+});
+</script>
 {% endblock %} 

@@ -18,14 +18,14 @@ from app.config import Config
 import openpyxl
 from io import BytesIO
 from pathlib import Path
-from backup import DatabaseBackup
 import shutil
+from flask_login import login_required, current_user
+from app import backup_manager
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
-backup_manager = DatabaseBackup(app_path=Path(__file__).parent.parent.parent)
 
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
@@ -263,7 +263,11 @@ def dashboard():
         'consumable_trend': get_consumable_trend()
     }
     current_lendings = Database.query("""
-        SELECT l.*, t.name as tool_name, w.firstname || ' ' || w.lastname as worker_name
+        SELECT 
+            l.*, 
+            t.name as tool_name, 
+            w.firstname || ' ' || w.lastname as worker_name,
+            datetime(l.lent_at) as lent_at
         FROM lendings l
         JOIN tools t ON l.tool_barcode = t.barcode
         JOIN workers w ON l.worker_barcode = w.barcode
@@ -995,15 +999,16 @@ def create_backup():
                 'message': 'Backup wurde erfolgreich erstellt'
             })
         else:
+            logger.error(f"backup_manager.create_backup() returned False in route")
             return jsonify({
                 'status': 'error',
-                'message': 'Fehler beim Erstellen des Backups'
+                'message': 'Fehler beim Erstellen des Backups. Prüfen Sie die Logs.'
             }), 500
     except Exception as e:
-        logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+        logger.error(f"Fehler beim Erstellen des Backups in Route: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': f'Interner Serverfehler: {str(e)}'
         }), 500
 
 @bp.route('/backup/restore/<filename>', methods=['POST'])
@@ -1700,8 +1705,42 @@ def delete_notice(id):
 def tickets():
     from app.models.ticket_db import TicketDatabase
     ticket_db = TicketDatabase()
-    tickets = ticket_db.query("SELECT * FROM tickets ORDER BY created_at DESC")
-    return render_template('admin/tickets_admin.html', tickets=tickets)
+    
+    # Filter aus Query-Parametern
+    status = request.args.get('status')
+    priority = request.args.get('priority')
+    assigned_to = request.args.get('assigned_to')
+    created_by = request.args.get('created_by')
+    
+    # Basis-Query
+    query = """
+        SELECT 
+            t.*,
+            datetime(t.created_at) as created_at,
+            datetime(t.updated_at) as updated_at
+        FROM tickets t
+        WHERE 1=1
+    """
+    params = []
+    
+    # Filter anwenden
+    if status and status != 'alle':
+        query += " AND status = ?"
+        params.append(status)
+    if priority and priority != 'alle':
+        query += " AND priority = ?"
+        params.append(priority)
+    if assigned_to:
+        query += " AND assigned_to = ?"
+        params.append(assigned_to)
+    if created_by:
+        query += " AND created_by = ?"
+        params.append(created_by)
+    
+    query += " ORDER BY t.created_at DESC"
+    
+    tickets = ticket_db.query(query, params)
+    return render_template('tickets/index.html', tickets=tickets)
 
 @bp.route('/system')
 @admin_required

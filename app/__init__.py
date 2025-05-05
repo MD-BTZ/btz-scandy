@@ -28,6 +28,13 @@ from backup import DatabaseBackup
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
+# Backup-Manager initialisieren
+backup_manager = DatabaseBackup(str(Path(__file__).parent.parent))
+
+# Backup-Verzeichnisse erstellen
+backup_dir = Path(__file__).parent.parent / 'backups'
+backup_dir.mkdir(exist_ok=True)
+
 login_manager = LoginManager()
 
 class Config:

@@ -260,10 +260,30 @@ class Database:
             else:
                 result = cursor.fetchall()
             
+            # Konvertiere Datetime-Felder
+            if result:
+                if one:
+                    result = dict(result)
+                    for key, value in result.items():
+                        if isinstance(value, str) and key.endswith('_at'):
+                            try:
+                                result[key] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                pass
+                else:
+                    result = [dict(row) for row in result]
+                    for row in result:
+                        for key, value in row.items():
+                            if isinstance(value, str) and key.endswith('_at'):
+                                try:
+                                    row[key] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    pass
+            
             # Debug-Ausgaben
             if result:
                 logging.info(f"Number of results: {len([result] if one else result)}")
-                logging.info(f"Example record: {dict(result if one else result[0])}")
+                logging.info(f"Example record: {result if one else result[0]}")
             else:
                 logging.info("No results returned")
                 
