@@ -30,41 +30,35 @@ ENV/
 *.swp
 *.swo
 
-# Database
+# Datenbanken
 *.db
+*.sqlite
 *.sqlite3
+app/database/
+backups/
 
 # Logs
 *.log
+logs/
 
-# Environment variables
-.env
-.env.local
+# Uploads
+app/uploads/
 
-# OS specific
+# OS
 .DS_Store
 Thumbs.db
 
-# Project specific
-app/database/inventory.db
-
-# Uploads
-app/uploads/*
-!app/uploads/.gitkeep
+# Temporäre Dateien
+*.tmp
+*.bak
+*.swp
+*~
 
 # Flask Session
 app/flask_session/*
 !app/flask_session/.gitkeep
 instance/flask_session/*
 !instance/flask_session/.gitkeep
-
-# Temporäre Dateien
-tmp/
-*.tmp
-*.bak
-
-# Backups
-backups/
 
 # Build artifacts / Temporary files
 *.spec
