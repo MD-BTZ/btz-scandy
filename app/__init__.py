@@ -9,7 +9,6 @@ import logging
 from app.models.database import Database
 from app.utils.error_handler import handle_errors
 from app.utils.db_schema import SchemaManager
-from app.utils.color_settings import get_color_settings
 from flask_compress import Compress
 from app.models.settings import Settings
 from app.utils.auth_utils import needs_setup

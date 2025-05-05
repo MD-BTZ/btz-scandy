@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify
-from app.utils.auth import login_required
+from flask_login import login_required
 from app.models.database import Database
 
 bp = Blueprint('quick_scan', __name__, url_prefix='/quick_scan')

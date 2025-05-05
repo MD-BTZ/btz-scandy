@@ -13,7 +13,6 @@ from app.models.models import Tool, Consumable, Worker
 from app.models.user import User
 import sqlite3
 from app.utils.error_handler import handle_errors, safe_db_query
-from app.utils.color_settings import save_color_setting
 from flask_login import login_required, current_user
 from app import backup_manager
 from backup import DatabaseBackup
