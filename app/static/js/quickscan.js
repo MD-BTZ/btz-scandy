@@ -704,6 +704,16 @@ const QuickScan = {
         } else {
             showToast('Bitte eine gültige Menge eingeben', 'error');
         }
+    },
+
+    openModal() {
+        const modal = document.getElementById('quickScanModal');
+        if (modal) {
+            modal.showModal();
+            this.init();
+        } else {
+            console.error("Cannot open QuickScan modal - modal not found!");
+        }
     }
 };
 
@@ -739,6 +749,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     } else {
         console.error("QuickScan trigger button not found!");
+    }
+
+    // Event listener to open the modal when the trigger is clicked
+    const quickScanTrigger = document.getElementById('quickScanTrigger');
+    if (quickScanTrigger) {
+        quickScanTrigger.addEventListener('click', () => {
+            QuickScan.openModal();
+        });
     }
 });
 

@@ -1,7 +1,8 @@
 from functools import wraps
-from flask import session, redirect, url_for, request, flash
+from flask import session, redirect, url_for, request, flash, abort
 from datetime import datetime
 from app.utils.logger import loggers
+from flask_login import current_user
 # needs_setup wird nur in login_required verwendet
 # from app.utils.auth_utils import needs_setup
 
@@ -31,17 +32,44 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def admin_required(f):
-    """Decorator, der sicherstellt, dass der eingeloggte Benutzer Admin-Rechte hat.
+def role_required(role_name):
+    """Decorator, der sicherstellt, dass der Benutzer eine bestimmte Rolle hat."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash("Bitte melden Sie sich an, um auf diese Seite zuzugreifen.", "info")
+                return redirect(url_for('auth.login', next=request.url))
 
-    Prüft, ob 'is_admin' in der Session True ist.
-    Wenn nicht, wird zum Login weitergeleitet mit einer Flash-Nachricht.
-    """
+            # Prüfe die Rolle
+            if current_user.role != role_name:
+                abort(403) # Gibt eine "Zugriff verweigert"-Seite zurück
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def admin_required(f):
+    """Decorator für Routen, die nur Admins zugänglich sind."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('is_admin'):
-            flash('Bitte melden Sie sich als Administrator an.', 'warning')
-            return redirect(url_for('auth.login', next=request.url))
+        if not current_user.is_authenticated:
+             flash("Bitte melden Sie sich an.", "info")
+             return redirect(url_for('auth.login', next=request.url))
+        if not getattr(current_user, 'is_admin', False): # Sicherer Zugriff auf is_admin
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def mitarbeiter_required(f):
+    """Decorator für Routen, die Admins oder Mitarbeitern zugänglich sind."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+             flash("Bitte melden Sie sich an.", "info")
+             return redirect(url_for('auth.login', next=request.url))
+        # Prüft, ob der User die Eigenschaft 'is_mitarbeiter' hat und sie True ist
+        if not getattr(current_user, 'is_mitarbeiter', False): 
+            abort(403)
         return f(*args, **kwargs)
     return decorated_function
 

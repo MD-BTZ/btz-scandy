@@ -36,6 +36,10 @@ backup_dir = Path(__file__).parent.parent / 'backups'
 backup_dir.mkdir(exist_ok=True)
 
 login_manager = LoginManager()
+login_manager.session_protection = "strong"
+login_manager.login_view = 'auth.login'
+login_manager.login_message = "Bitte melden Sie sich an, um auf diese Seite zuzugreifen."
+login_manager.login_message_category = "info"
 
 class Config:
     @staticmethod
@@ -212,10 +216,26 @@ def create_app(test_config=None):
     
     # Login-Manager initialisieren
     login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
-    
+
     @login_manager.user_loader
     def load_user(user_id):
-        return User.get_by_id(user_id)
-    
+        """Lädt einen Benutzer anhand seiner ID für Flask-Login."""
+        # Stelle sicher, dass User Klasse importiert ist und die Methode existiert
+        try:
+             from app.models.user import User # Import hier, um Zirkelbezüge zu vermeiden
+             user = User.get_by_id(int(user_id)) # User-Model muss get_by_id implementieren
+             if user:
+                 # Optional: Debug-Log
+                 # app.logger.debug(f"User loaded: {user.username} (ID: {user_id})")
+                 return user
+             else:
+                 # app.logger.warning(f"User with ID {user_id} not found.")
+                 return None
+        except ImportError:
+            app.logger.error("User model cannot be imported in user_loader.")
+            return None
+        except Exception as e:
+            app.logger.error(f"Error loading user {user_id}: {e}", exc_info=True)
+            return None
+
     return app

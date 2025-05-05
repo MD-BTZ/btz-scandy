@@ -45,6 +45,7 @@ def index():
     return render_template('tickets/index.html', tickets=tickets)
 
 @bp.route('/create', methods=['GET', 'POST'])
+@login_required
 def create():
     """Erstellt ein neues Ticket."""
     if request.method == 'POST':

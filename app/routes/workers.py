@@ -1,12 +1,13 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from app.models.database import Database
 from app.models.worker import Worker
-from app.utils.decorators import login_required, admin_required
+from app.utils.decorators import login_required, admin_required, mitarbeiter_required
 from datetime import datetime
 
 bp = Blueprint('workers', __name__, url_prefix='/workers')
 
 @bp.route('/')
+@mitarbeiter_required
 def index():
     """Mitarbeiter-Übersicht"""
     try:
@@ -55,7 +56,7 @@ def index():
         return redirect(url_for('index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def add():
     # Lade Abteilungen aus Settings
     departments = Database.query('''
@@ -90,7 +91,7 @@ def add():
     return render_template('workers/add.html', departments=departments)
 
 @bp.route('/<barcode>', methods=['GET', 'POST'])
-@login_required
+@mitarbeiter_required
 def details(barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
@@ -182,7 +183,7 @@ def details(barcode):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<barcode>/edit', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def edit(barcode):
     """Bearbeitet einen Mitarbeiter"""
     try:
@@ -225,7 +226,7 @@ def edit(barcode):
         return redirect(url_for('workers.details', barcode=barcode))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete_by_barcode(barcode):
     """Löscht einen Mitarbeiter (Soft Delete)"""
     try:
@@ -270,7 +271,9 @@ def delete_by_barcode(barcode):
         return redirect(url_for('workers.details', barcode=barcode))
 
 @bp.route('/workers/search')
+@mitarbeiter_required
 def search():
+    """Sucht nach Mitarbeitern"""
     query = request.args.get('q', '')
     try:
         workers = Database.query('''

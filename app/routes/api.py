@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 from ..models.worker import Worker
 from ..models.tool import Tool
 from ..models.database import Database
-from ..utils.decorators import login_required, admin_required
+from ..utils.decorators import login_required, admin_required, mitarbeiter_required
 import traceback
 from app.config import Config
 import barcode
@@ -25,6 +25,7 @@ def log_request_info():
     print('===========================\n')
 
 @bp.route('/workers', methods=['GET'])
+@mitarbeiter_required
 def get_workers():
     workers = Worker.get_all_with_lendings()
     return jsonify([{
@@ -35,6 +36,7 @@ def get_workers():
     } for w in workers])
 
 @bp.route('/inventory/tools/<barcode>', methods=['GET'])
+@login_required
 def get_tool(barcode):
     """Sucht ein Werkzeug anhand des Barcodes"""
     try:
@@ -110,6 +112,7 @@ def get_tool(barcode):
         }), 500
 
 @bp.route('/inventory/workers/<barcode>', methods=['GET'])
+@mitarbeiter_required
 def get_worker_by_barcode(barcode):
     try:
         # Debug-Logging
@@ -218,7 +221,7 @@ def after_request(response):
     return response
 
 @bp.route('/lending/return', methods=['POST'])
-@admin_required
+@login_required
 def return_tool():
     try:
         data = request.json
@@ -390,6 +393,7 @@ def get_sync_status():
         }), 500
 
 @bp.route('/barcode/<code>')
+@login_required
 def generate_barcode(code):
     """Generiert einen Barcode als Bild"""
     try:
@@ -905,9 +909,10 @@ def get_consumable(barcode):
         }), 500
 
 @bp.route('/update_barcode', methods=['POST'])
+@mitarbeiter_required
 def update_barcode():
-    """Aktualisiert den Barcode eines Werkzeugs, Verbrauchsmaterials oder Mitarbeiters"""
-    data = request.get_json()
+    """Aktualisiert den Barcode eines bestehenden Artikels (Werkzeug oder Verbrauchsmaterial)."""
+    data = request.json
     old_barcode = data.get('old_barcode')
     new_barcode = data.get('new_barcode')
     item_type = data.get('type')  # 'tool', 'consumable' oder 'worker'
@@ -1011,6 +1016,7 @@ def update_barcode():
         })
 
 @bp.route('/consumables/<barcode>/forecast', methods=['GET'])
+@login_required
 def get_consumable_forecast(barcode):
     """Berechnet eine Bestandsprognose für ein Verbrauchsmaterial"""
     try:

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from app.models.database import Database
-from app.utils.decorators import admin_required, login_required
+from app.utils.decorators import admin_required, login_required, mitarbeiter_required
 from datetime import datetime
 import logging
 
@@ -8,6 +8,7 @@ import logging
 bp = Blueprint('tools', __name__, url_prefix='/tools')
 
 @bp.route('/')
+@login_required
 def index():
     """Zeigt alle aktiven Werkzeuge"""
     try:
@@ -76,7 +77,7 @@ def index():
         return redirect(url_for('main.index'))
 
 @bp.route('/<barcode>')
-@admin_required
+@login_required
 def detail(barcode):
     """Zeigt die Details eines Werkzeugs"""
     tool = Database.query('''
@@ -134,7 +135,7 @@ def detail(barcode):
                          history=history)
 
 @bp.route('/<int:id>/update', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def update(id):
     """Aktualisiert ein Werkzeug"""
     try:
@@ -181,7 +182,7 @@ def update(id):
         return redirect(url_for('tools.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
-@admin_required
+@login_required
 def add():
     """Fügt ein neues Werkzeug hinzu"""
     if request.method == 'POST':
@@ -282,7 +283,7 @@ def change_status(barcode):
         return redirect(url_for('tools.detail', barcode=barcode))
 
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def edit(barcode):
     """Bearbeitet ein Werkzeug"""
     try:
@@ -352,7 +353,7 @@ def edit(barcode):
         return redirect(url_for('tools.detail', barcode=barcode))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete_by_barcode(barcode):
     """Löscht ein Werkzeug (Soft Delete)"""
     try:

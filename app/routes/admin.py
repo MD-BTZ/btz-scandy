@@ -1,27 +1,23 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file
 from app.models.database import Database
-from app.utils.decorators import admin_required
+from app.utils.decorators import admin_required, mitarbeiter_required
 from werkzeug.utils import secure_filename
 import os
+from pathlib import Path
 from flask import current_app
 from app.utils.db_schema import SchemaManager
 import colorsys
 import logging
 from datetime import datetime, timedelta
 from app.models.models import Tool, Consumable, Worker
+from app.models.user import User
 import sqlite3
 from app.utils.error_handler import handle_errors, safe_db_query
 from app.utils.color_settings import save_color_setting
-from werkzeug.security import generate_password_hash
-from app.models.settings import Settings
-from app.config import Config
-import openpyxl
-from io import BytesIO
-from pathlib import Path
-import shutil
 from flask_login import login_required, current_user
 from app import backup_manager
 from backup import DatabaseBackup
+from app.config import Config
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -241,7 +237,7 @@ def create_multi_sheet_excel(data_dict):
     return excel_file
 
 @bp.route('/')
-@admin_required
+@mitarbeiter_required
 def dashboard():
     # Werkzeug-Statistiken
     tool_stats = Database.query('''
@@ -439,7 +435,7 @@ def get_consumable_trend():
 
 # Manuelle Ausleihe
 @bp.route('/manual-lending', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def manual_lending():
     """Manuelle Ausleihe/Rückgabe"""
     if request.method == 'POST':
@@ -752,7 +748,7 @@ def manual_lending():
                           current_lendings=current_lendings)
 
 @bp.route('/trash')
-@admin_required
+@mitarbeiter_required
 def trash():
     """Papierkorb mit gelöschten Einträgen"""
     tools = Database.query('''
@@ -771,7 +767,7 @@ def trash():
                          workers=workers)
 
 @bp.route('/tools/<barcode>/delete', methods=['DELETE'])
-@admin_required
+@mitarbeiter_required
 def delete_tool(barcode):
     """Werkzeug in den Papierkorb verschieben"""
     try:
@@ -788,7 +784,7 @@ def delete_tool(barcode):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp.route('/consumables/<barcode>/delete', methods=['DELETE'])
-@admin_required
+@mitarbeiter_required
 def delete_consumable(barcode):
     """Verbrauchsmaterial in den Papierkorb verschieben"""
     try:
@@ -805,7 +801,7 @@ def delete_consumable(barcode):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp.route('/workers/<barcode>/delete', methods=['DELETE'])
-@admin_required
+@mitarbeiter_required
 def delete_worker(barcode):
     """Mitarbeiter in den Papierkorb verschieben"""
     try:
@@ -822,7 +818,7 @@ def delete_worker(barcode):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp.route('/trash/restore/<type>/<barcode>', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def restore_item(type, barcode):
     """Element aus dem Papierkorb wiederherstellen"""
     try:
@@ -904,7 +900,7 @@ def server_settings():
         return redirect(url_for('admin.dashboard'))
 
 @bp.route('/export/all')
-@admin_required
+@mitarbeiter_required
 def export_all_data():
     """Exportiert alle relevanten Tabellen in eine Excel-Datei mit mehreren Sheets"""
     try:
@@ -971,7 +967,7 @@ def export_all_data():
         return redirect(url_for('admin.system')) 
 
 @bp.route('/import/all', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def import_all_data():
     """Importiert Daten aus einer Excel-Datei mit mehreren Sheets."""
     if 'file' not in request.files:
@@ -1111,6 +1107,7 @@ def import_all_data():
     return redirect(url_for('admin.system'))
 
 @bp.route('/backup/create', methods=['POST'])
+@login_required
 @admin_required
 def create_backup():
     """Erstelle ein manuelles Backup"""
@@ -1185,7 +1182,7 @@ def delete_backup(filename):
     return redirect(url_for('admin.dashboard'))
 
 @bp.route('/departments', methods=['GET'])
-@admin_required
+@mitarbeiter_required
 def get_departments():
     """Hole alle Abteilungen"""
     try:
@@ -1209,7 +1206,7 @@ def get_departments():
         }), 500
 
 @bp.route('/departments/add', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def add_department():
     """Füge eine neue Abteilung hinzu"""
     data = request.get_json()
@@ -1238,7 +1235,7 @@ def add_department():
         return jsonify({'success': False, 'message': str(e)})
 
 @bp.route('/departments/<name>', methods=['DELETE'])
-@admin_required
+@mitarbeiter_required
 def delete_department(name):
     """Lösche eine Abteilung"""
     try:
@@ -1252,7 +1249,7 @@ def delete_department(name):
 
 # Standortverwaltung
 @bp.route('/locations', methods=['GET'])
-@admin_required
+@mitarbeiter_required
 def get_locations():
     """Hole alle Standorte"""
     try:
@@ -1305,7 +1302,7 @@ def add_location():
         return jsonify({'success': False, 'message': str(e)})
 
 @bp.route('/locations/<name>', methods=['DELETE'])
-@admin_required
+@mitarbeiter_required
 def delete_location(name):
     """Lösche einen Standort"""
     try:
@@ -1319,7 +1316,7 @@ def delete_location(name):
 
 # Kategorieverwaltung
 @bp.route('/categories', methods=['GET'])
-@admin_required
+@mitarbeiter_required
 def get_categories():
     """Hole alle Kategorien"""
     try:
@@ -1343,7 +1340,7 @@ def get_categories():
         }), 500
 
 @bp.route('/categories/add', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def add_category():
     """Füge eine neue Kategorie hinzu"""
     data = request.get_json()
@@ -1371,82 +1368,8 @@ def add_category():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
-@bp.route('/categories/<name>', methods=['DELETE'])
-@admin_required
-def delete_category(name):
-    """Lösche eine Kategorie"""
-    try:
-        Database.execute(
-            "DELETE FROM settings WHERE key LIKE 'category_%' AND value = ?",
-            [name]
-        )
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-@bp.route('/locations/<name>', methods=['PUT'])
-@admin_required
-def update_location(name):
-    """Aktualisiere einen Standort"""
-    location = request.form.get('location')
-    tools = request.form.get('tools') == 'true'
-    consumables = request.form.get('consumables') == 'true'
-    
-    if not location:
-        return jsonify({
-            'success': False,
-            'message': 'Standortname fehlt'
-        }), 400
-
-    try:
-        # Finde den Basis-Schlüssel für den Standort
-        location_key = Database.query('''
-            SELECT key FROM settings 
-            WHERE key LIKE 'location_%'
-            AND key NOT LIKE '%_tools'
-            AND key NOT LIKE '%_consumables'
-            AND value = ?
-        ''', [name], one=True)
-        
-        if not location_key:
-            return jsonify({
-                'success': False,
-                'message': 'Standort nicht gefunden'
-            }), 404
-            
-        base_key = location_key['key']
-        
-        # Aktualisiere den Standort und seine Eigenschaften
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', [location, base_key])
-        
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', ['1' if tools else '0', f'{base_key}_tools'])
-        
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', ['1' if consumables else '0', f'{base_key}_consumables'])
-
-        return jsonify({
-            'success': True,
-            'message': 'Standort erfolgreich aktualisiert'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        }), 500
-
 @bp.route('/categories/<name>', methods=['PUT'])
-@admin_required
+@mitarbeiter_required
 def update_category(name):
     """Aktualisiere eine Kategorie"""
     category = request.form.get('category')
@@ -1554,7 +1477,7 @@ def cleanup_database():
         }), 500
 
 @bp.route('/departments/list')
-@admin_required
+@mitarbeiter_required
 def list_departments():
     """Liste alle Abteilungen auf"""
     departments = Database.query("""
@@ -1568,7 +1491,7 @@ def list_departments():
     return jsonify({'success': True, 'departments': [dict(dept) for dept in departments]})
 
 @bp.route('/locations/list')
-@admin_required
+@mitarbeiter_required
 def list_locations():
     """Liste alle Standorte auf"""
     locations = Database.query("""
@@ -1623,6 +1546,7 @@ def list_backups():
         }), 500
 
 @bp.route('/backup/download/backup/<filename>')
+@login_required
 @admin_required
 def download_backup(filename):
     """Lade ein bestimmtes Backup herunter"""
@@ -1752,6 +1676,7 @@ def notices():
     return render_template('admin/notices.html', notices=notices)
 
 @bp.route('/notices/create', methods=['GET', 'POST'])
+@login_required
 @admin_required
 def create_notice():
     """Erstellt einen neuen Hinweis"""
@@ -1824,6 +1749,7 @@ def delete_notice(id):
     return redirect(url_for('admin.notices'))
 
 @bp.route('/tickets')
+@login_required
 @admin_required
 def tickets():
     from app.models.ticket_db import TicketDatabase
@@ -1866,7 +1792,230 @@ def tickets():
     return render_template('tickets/index.html', tickets=tickets)
 
 @bp.route('/system')
+@login_required
 @admin_required
 def system():
     # ...
     return render_template('admin/system.html')
+
+@bp.route('/users')
+@admin_required
+def manage_users():
+    """Zeigt die Benutzerverwaltungsseite."""
+    try:
+        # Hole alle Benutzer aus der Datenbank
+        users = Database.query("SELECT id, username, email, role, is_active FROM users ORDER BY username")
+        return render_template('admin/users.html', users=users)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Benutzerliste: {e}", exc_info=True)
+        flash("Fehler beim Laden der Benutzerliste.", "error")
+        return redirect(url_for('admin.dashboard'))
+
+@bp.route('/users/add', methods=['GET', 'POST'])
+@admin_required
+def add_user():
+    """Zeigt das Formular zum Hinzufügen eines Benutzers oder verarbeitet es."""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        password_confirm = request.form.get('password_confirm')
+        role = request.form.get('role')
+
+        # Validierung
+        if not all([username, password, password_confirm, role]):
+            flash("Bitte alle erforderlichen Felder ausfüllen.", "error")
+            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender']) # Form erneut anzeigen
+
+        if password != password_confirm:
+            flash("Passwörter stimmen nicht überein.", "error")
+            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender']) # Form erneut anzeigen
+            
+        if role not in ['admin', 'mitarbeiter', 'anwender']:
+             flash("Ungültige Rolle ausgewählt.", "error")
+             return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+
+        try:
+            # User.create prüft bereits auf existierenden Usernamen/Email
+            new_user = User.create(username=username, password=password, role=role, email=email or None)
+            if new_user:
+                flash(f"Benutzer '{username}' erfolgreich erstellt.", 'success')
+                return redirect(url_for('admin.manage_users'))
+            else:
+                 # Sollte durch Prüfungen in User.create abgedeckt sein, aber sicherheitshalber
+                 flash("Benutzer konnte nicht erstellt werden (unbekannter Fehler).", 'error')
+        except ValueError as e:
+            # Fehler von User.create (z.B. Benutzer existiert)
+            flash(str(e), 'error')
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen von Benutzer {username}: {e}", exc_info=True)
+            flash("Ein unerwarteter Fehler ist aufgetreten.", 'error')
+        
+        # Bei Fehler: Formular erneut anzeigen mit eingegebenen Daten (außer Passwort)
+        return render_template('admin/user_form.html', 
+                               roles=['admin', 'mitarbeiter', 'anwender'],
+                               username=username, email=email, selected_role=role)
+
+    # GET Request: Formular anzeigen
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+
+@bp.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_user(user_id):
+    """Zeigt das Formular zum Bearbeiten eines Benutzers oder verarbeitet es."""
+    user = User.get_by_id(user_id)
+    if not user:
+        flash('Benutzer nicht gefunden.', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        password_confirm = request.form.get('password_confirm')
+        role = request.form.get('role')
+
+        # Validierung
+        if not all([username, role]):
+            flash("Bitte Benutzername und Rolle ausfüllen.", "error")
+            # Bei Fehler: Formular erneut anzeigen mit aktuellen Daten (außer Passwort)
+            return render_template('admin/user_form.html', 
+                                   user=user,
+                                   roles=['admin', 'mitarbeiter', 'anwender'],
+                                   username=username, email=email, selected_role=role)
+
+        if password and password != password_confirm:
+            flash("Passwörter stimmen nicht überein.", "error")
+            return render_template('admin/user_form.html', 
+                                   user=user,
+                                   roles=['admin', 'mitarbeiter', 'anwender'],
+                                   username=username, email=email, selected_role=role)
+            
+        if role not in ['admin', 'mitarbeiter', 'anwender']:
+             flash("Ungültige Rolle ausgewählt.", "error")
+             return render_template('admin/user_form.html', 
+                                   user=user,
+                                   roles=['admin', 'mitarbeiter', 'anwender'],
+                                   username=username, email=email, selected_role=role)
+
+        try:
+            # Prüfen, ob der Benutzername bereits von einem *anderen* Benutzer verwendet wird
+            existing_user_by_name = User.get_by_username(username)
+            if existing_user_by_name and existing_user_by_name.id != user_id:
+                 flash(f"Benutzername '{username}' wird bereits verwendet.", 'error')
+                 return render_template('admin/user_form.html', 
+                                       user=user,
+                                       roles=['admin', 'mitarbeiter', 'anwender'],
+                                       username=username, email=email, selected_role=role)
+                 
+            # Prüfen, ob die E-Mail bereits von einem *anderen* Benutzer verwendet wird
+            if email:
+                existing_user_by_email = User.get_by_email(email)
+                if existing_user_by_email and existing_user_by_email.id != user_id:
+                    flash(f"E-Mail '{email}' wird bereits verwendet.", 'error')
+                    return render_template('admin/user_form.html', 
+                                           user=user,
+                                           roles=['admin', 'mitarbeiter', 'anwender'],
+                                           username=username, email=email, selected_role=role)
+
+
+            # Update der Benutzerdaten
+            update_data = {
+                'username': username,
+                'email': email or None, # Speichere NULL, wenn leer
+                'role': role
+            }
+            
+            # Passwort nur aktualisieren, wenn es eingegeben wurde
+            if password:
+                user.set_password(password) # Aktualisiert das Passwort-Attribut direkt im Objekt
+                # Wir müssen das gehashte Passwort auch in update_data aufnehmen
+                update_data['password_hash'] = user.password_hash 
+
+            # Aktualisiere die Datenbank
+            Database.query('''
+                UPDATE users 
+                SET username = :username, email = :email, role = :role 
+                WHERE id = :id
+            ''', {'username': update_data['username'], 'email': update_data['email'], 'role': update_data['role'], 'id': user_id})
+            
+            # Wenn das Passwort geändert wurde, aktualisiere auch den Hash
+            if 'password_hash' in update_data:
+                 Database.query('''
+                    UPDATE users 
+                    SET password_hash = :password_hash
+                    WHERE id = :id
+                 ''', {'password_hash': update_data['password_hash'], 'id': user_id})
+
+            flash(f"Benutzer '{username}' erfolgreich aktualisiert.", 'success')
+            return redirect(url_for('admin.manage_users'))
+
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren von Benutzer {user_id}: {e}", exc_info=True)
+            flash("Ein unerwarteter Fehler ist aufgetreten.", 'error')
+            # Bei Fehler: Formular erneut anzeigen mit ursprünglichen Daten
+            return render_template('admin/user_form.html', 
+                                   user=user, 
+                                   roles=['admin', 'mitarbeiter', 'anwender'])
+
+    # GET Request: Formular anzeigen
+    return render_template('admin/user_form.html', user=user, roles=['admin', 'mitarbeiter', 'anwender'])
+
+@bp.route('/users/toggle_active/<int:user_id>', methods=['POST'])
+@admin_required
+def toggle_user_active(user_id):
+    """Aktiviert oder deaktiviert einen Benutzer."""
+    user_to_toggle = User.get_by_id(user_id)
+
+    if not user_to_toggle:
+        flash("Benutzer nicht gefunden.", "error")
+        return redirect(url_for('admin.manage_users'))
+
+    # Verhindern, dass der aktuell eingeloggte Admin sich selbst deaktiviert
+    if current_user.id == user_to_toggle.id and user_to_toggle.is_active:
+        flash("Sie können sich nicht selbst deaktivieren.", "error")
+        return redirect(url_for('admin.manage_users'))
+
+    try:
+        new_status = not user_to_toggle.is_active
+        Database.query('''
+            UPDATE users
+            SET is_active = ?
+            WHERE id = ?
+        ''', [new_status, user_id])
+        
+        action = "aktiviert" if new_status else "deaktiviert"
+        flash(f"Benutzer '{user_to_toggle.username}' wurde {action}.", 'success')
+    except Exception as e:
+        logger.error(f"Fehler beim Ändern des Aktivierungsstatus für Benutzer {user_id}: {e}", exc_info=True)
+        flash("Ein Fehler ist beim Ändern des Benutzerstatus aufgetreten.", 'error')
+
+    return redirect(url_for('admin.manage_users'))
+
+@bp.route('/users/delete/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    """Löscht einen Benutzer."""
+    user_to_delete = User.get_by_id(user_id)
+
+    if not user_to_delete:
+        flash("Benutzer nicht gefunden.", "error")
+        return redirect(url_for('admin.manage_users'))
+
+    # Verhindern, dass der aktuell eingeloggte Admin sich selbst löscht
+    if current_user.id == user_to_delete.id:
+        flash("Sie können sich nicht selbst löschen.", "error")
+        return redirect(url_for('admin.manage_users'))
+
+    try:
+        Database.query('''
+            DELETE FROM users
+            WHERE id = ?
+        ''', [user_id])
+        
+        flash(f"Benutzer '{user_to_delete.username}' wurde erfolgreich gelöscht.", 'success')
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen von Benutzer {user_id}: {e}", exc_info=True)
+        flash("Ein Fehler ist beim Löschen des Benutzers aufgetreten.", 'error')
+
+    return redirect(url_for('admin.manage_users'))

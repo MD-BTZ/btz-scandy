@@ -204,9 +204,8 @@ def init_users(app=None):
     from app.config import config
     current_config = config['default']()
     
-    # Verwende den korrekten Pfad aus der Config
-    db_dir = os.path.dirname(current_config.DATABASE)
-    db_path = os.path.join(db_dir, 'users.db')
+    # Verwende den korrekten Pfad aus der Config für die Hauptdatenbank
+    db_path = current_config.DATABASE
     
     # Stelle sicher, dass das Verzeichnis existiert
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -214,28 +213,30 @@ def init_users(app=None):
     logger.info(f"Initialisiere Benutzerdatenbank in: {db_path}")
     
     with sqlite3.connect(db_path) as conn:
-        # Erstelle users Tabelle
+        # Erstelle users Tabelle mit korrektem Schema
         conn.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 1
+            email TEXT UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')),
+            is_active INTEGER DEFAULT 1
         )''')
         
         # Prüfe ob bereits Benutzer existieren
         if not conn.execute('SELECT 1 FROM users').fetchone():
-            # Erstelle die Benutzer-Accounts (alle als Admin)
+            # Erstelle die Standard-Benutzeraccounts
             conn.execute(
-                'INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)',
-                ('Admin', generate_password_hash('BTZ-Scandy25'))
+                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
+                ('Admin', generate_password_hash('BTZ-Scandy25'), 'admin')
             )
             conn.execute(
-                'INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)', 
-                ('TechnikMA', generate_password_hash('BTZ-Admin25'))
+                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)', 
+                ('Mitarbeiter', generate_password_hash('BTZ-BT11'), 'mitarbeiter')
             )
             conn.execute(
-                'INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)',
-                ('TechnikTN', generate_password_hash('BTZ-TN'))
+                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
+                ('Test', generate_password_hash('test'), 'anwender')
             )
             
             logger.info("Standard-Benutzerkonten wurden erstellt")

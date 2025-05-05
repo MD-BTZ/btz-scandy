@@ -1,12 +1,12 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort
 from ..models.database import Database
-from ..utils.decorators import login_required, admin_required
+from ..utils.decorators import login_required, admin_required, mitarbeiter_required
 from datetime import datetime
 
 bp = Blueprint('consumables', __name__, url_prefix='/consumables')
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
-@login_required
+@mitarbeiter_required
 def detail(barcode):
     """Zeigt die Details eines Verbrauchsmaterials und verarbeitet Updates"""
     if request.method == 'POST':
@@ -101,7 +101,7 @@ def detail(barcode):
                          history=history)
 
 @bp.route('/<int:id>/update', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def update(id):
     """Aktualisiert ein Verbrauchsmaterial"""
     try:
@@ -135,7 +135,7 @@ def update(id):
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<int:id>/delete', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete(id):
     """Löscht ein Verbrauchsmaterial (Soft Delete)"""
     try:
@@ -153,6 +153,7 @@ def delete(id):
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/')
+@login_required
 def index():
     """Zeigt alle aktiven Verbrauchsmaterialien"""
     consumables = Database.query('''
@@ -189,7 +190,7 @@ def index():
                          locations=[l['location'] for l in locations])
 
 @bp.route('/add', methods=['GET', 'POST'])
-@admin_required
+@login_required
 def add():
     """Neues Verbrauchsmaterial hinzufügen"""
     if request.method == 'POST':
@@ -313,7 +314,7 @@ def view_consumable(barcode):
         return redirect(url_for('consumables.index'))
 
 @bp.route('/<barcode>/delete', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete_by_barcode(barcode):
     """Löscht ein Verbrauchsmaterial anhand des Barcodes (Soft Delete)"""
     try:

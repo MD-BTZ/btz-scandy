@@ -569,180 +569,64 @@ class BaseModel:
         )
 
 def init_db():
-    """Initialisiert die Datenbank"""
-    # Hole die Konfiguration
-    from app.config import config
-    current_config = config['default']()
-    
-    # Verbindung herstellen
-    conn = sqlite3.connect(current_config.DATABASE)
-    conn.row_factory = sqlite3.Row
+    """Initialisiert die Hauptdatenbank, falls sie leer ist oder Tabellen fehlen.
+    Erstellt die notwendigen Tabellen.
+    """
+    logger.info("Initialisiere Datenbank...")
+    conn = Database.get_db_connection() # Nutze get_db_connection für eine neue Verbindung
+    cursor = conn.cursor()
     
     try:
-        cursor = conn.cursor()
-        
-        # Werkzeuge
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tools (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                barcode TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                description TEXT,
-                status TEXT,
-                category TEXT,
-                location TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                deleted INTEGER DEFAULT 0,
-                deleted_at TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending'
-            )
-        ''')
+        # Lese das Schema aus der schema.sql Datei
+        schema_path = Path(current_app.root_path) / 'schema.sql'
+        if schema_path.exists():
+            with open(schema_path, 'r', encoding='utf-8') as f:
+                schema = f.read()
+                cursor.executescript(schema)
+            logger.info("Datenbankschema aus schema.sql erfolgreich angewendet.")
+        else:
+            logger.warning("schema.sql nicht gefunden, Tabellen werden nicht automatisch erstellt.")
 
-        # Mitarbeiter
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS workers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                barcode TEXT NOT NULL UNIQUE,
-                firstname TEXT NOT NULL,
-                lastname TEXT NOT NULL,
-                department TEXT,
-                email TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                deleted INTEGER DEFAULT 0,
-                deleted_at TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending'
-            )
-        ''')
-
-        # Verbrauchsmaterial
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS consumables (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                barcode TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                description TEXT,
-                quantity INTEGER DEFAULT 0,
-                min_quantity INTEGER DEFAULT 0,
-                category TEXT,
-                location TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                deleted INTEGER DEFAULT 0,
-                deleted_at TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending'
-            )
-        ''')
-
-        # Ausleihen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS lendings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tool_barcode TEXT NOT NULL,
-                worker_barcode TEXT NOT NULL,
-                lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                returned_at TIMESTAMP,
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                FOREIGN KEY (tool_barcode) REFERENCES tools(barcode),
-                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
-            )
-        ''')
-
-        # Verbrauchsmaterial-Nutzung
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS consumable_usages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                consumable_barcode TEXT NOT NULL,
-                worker_barcode TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
-                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
-            )
-        ''')
-
-        # Benutzer
-        cursor.execute('''
+        # Stelle sicher, dass die users Tabelle existiert (wird hier hinzugefügt)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                role TEXT NOT NULL
-            )
-        ''')
-
-        # Sync-Status
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sync_status (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                last_sync TIMESTAMP,
-                last_attempt TIMESTAMP,
-                status TEXT,
-                error TEXT
-            )
-        ''')
-
-        # Einstellungen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                description TEXT
-            )
-        ''')
-
-        # Sync-Logs
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sync_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_name TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                changes_count INTEGER NOT NULL,
-                details TEXT
-            )
-        ''')
-
-        # Tickets
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tickets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT DEFAULT 'offen',
-                priority TEXT DEFAULT 'normal',
-                created_by TEXT NOT NULL,
-                assigned_to TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                resolved_at TIMESTAMP,
-                resolution_notes TEXT,
-                FOREIGN KEY (created_by) REFERENCES users (username),
-                FOREIGN KEY (assigned_to) REFERENCES users (username)
-            )
-        ''')
-
-        # Ticket-Notizen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ticket_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id INTEGER NOT NULL,
-                note TEXT NOT NULL,
-                created_by TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE
-            )
-        ''')
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE, -- Optional aber empfohlen
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')), -- Definiert erlaubte Rollen
+                is_active INTEGER DEFAULT 1, -- 1 für aktiv, 0 für inaktiv
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        logger.info("Tabelle 'users' erfolgreich erstellt oder bereits vorhanden.")
+        
+        # Füge hier ggf. weitere Tabellen-Checks oder Default-Daten hinzu
+        
+        # Beispiel: Ersten Admin-Benutzer erstellen, wenn noch keiner existiert
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = cursor.fetchone()[0]
+        if admin_count == 0:
+            logger.warning("Kein Admin-Benutzer gefunden. Erstelle Standard-Admin...")
+            try:
+                from werkzeug.security import generate_password_hash
+                # Standard-Admin: admin / password (BITTE SOFORT ÄNDERN!)
+                default_admin_username = 'admin'
+                default_admin_password = 'password' # SEHR UNSICHER!
+                hashed_password = generate_password_hash(default_admin_password)
+                cursor.execute("""
+                    INSERT INTO users (username, password_hash, role, is_active)
+                    VALUES (?, ?, ?, ?) 
+                """, (default_admin_username, hashed_password, 'admin', 1))
+                logger.info(f"Standard-Admin '{default_admin_username}' mit Passwort '{default_admin_password}' erstellt. BITTE SOFORT ÄNDERN!")
+            except Exception as e:
+                logger.error(f"Fehler beim Erstellen des Standard-Admins: {e}")
 
         conn.commit()
-        logging.info("Datenbankschema erfolgreich initialisiert!")
+        logger.info("Datenbank erfolgreich initialisiert.")
         
     except Exception as e:
-        logging.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
-        conn.rollback()
-        raise
+        logger.error(f"Fehler bei der Datenbankinitialisierung: {e}")
+        conn.rollback() # Änderungen rückgängig machen bei Fehler
     finally:
         conn.close()
