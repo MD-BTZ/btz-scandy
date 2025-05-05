@@ -197,6 +197,16 @@ const QuickScan = {
     handleScannerInput(barcode, input) {
         console.log('Scanner Input erkannt:', barcode);
 
+        // Easter Egg Check
+        if (barcode.toUpperCase() === 'DANCE') { 
+            console.log("Easter Egg: DANCE detected!");
+            this.showDancingEmojis(); // Rufe die Funktion auf
+            showToast('success', '🦓 Zebra-Party! 🦓');
+            this.keyBuffer = ''; // Buffer leeren
+            this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput'); // Anzeige zurücksetzen
+            return; // Verarbeitung hier beenden
+        }
+
         // Prüfe ZUERST auf Bestätigungscode
         if (this.confirmationBarcode && barcode.includes(this.confirmationBarcode)) {
             console.log('Bestätigungscode erkannt');
@@ -434,6 +444,18 @@ const QuickScan = {
         };
         this.confirmationBarcode = null;
 
+        // Explizit das Zebra-Overlay entfernen, falls vorhanden
+        const zebraOverlay = document.querySelector('.zebra-overlay');
+        if (zebraOverlay) {
+            console.log("Removing existing zebra overlay in reset.");
+            zebraOverlay.remove();
+        }
+        // Auch die Zebras selbst entfernen, falls der Timeout noch nicht lief
+        document.querySelectorAll('.dancing-zebra').forEach(el => el.remove());
+        // TODO: Auch die Musik stoppen? (Falls sie noch läuft)
+        // Aktuell wird die Musik im Timeout von showDancingEmojis gestoppt.
+        // Wenn das Modal vorher geschlossen wird, läuft sie evtl. weiter.
+
         // Reset UI-Elemente
         const itemInput = document.getElementById('itemScanInput');
         const workerInput = document.getElementById('workerScanInput');
@@ -484,8 +506,8 @@ const QuickScan = {
         // Setze Schritt zurück
         this.goToStep(1);
         
-        // Fokus auf das aktuelle Eingabefeld
-        this.focusCurrentInput();
+        // Fokus auf das aktuelle Eingabefeld (ENTFERNT BEIM RESET)
+        // this.focusCurrentInput(); 
     },
 
     goToStep(step) {
@@ -501,7 +523,7 @@ const QuickScan = {
         });
         
         this.currentStep = step;
-        this.focusCurrentInput();
+        // this.focusCurrentInput(); // Auch hier auskommentieren
     },
     
     focusCurrentInput() {
@@ -621,39 +643,37 @@ const QuickScan = {
     },
 
     showDancingEmojis() {
-        showToast('success', '🦓 Zebra-Party! 🦓');
+        console.log("Showing dancing emojis");
+        // Vorhandene Zebras entfernen, falls welche da sind
+        document.querySelectorAll('.dancing-zebra').forEach(el => el.remove());
         
-        // Erstelle den abgedunkelten Hintergrund
         const overlay = document.createElement('div');
         overlay.className = 'zebra-overlay';
         document.body.appendChild(overlay);
         
         const zebraLeft = document.createElement('img');
+        zebraLeft.src = '/static/images/dancing_zebra.gif'; // Pfad zum animierten GIF
         zebraLeft.className = 'dancing-zebra left';
-        zebraLeft.src = '/static/images/dancing_zebra.gif';
-        zebraLeft.alt = 'Tanzendes Zebra';
-        document.body.appendChild(zebraLeft);
-
-        const zebraRight = document.createElement('img');
-        zebraRight.className = 'dancing-zebra right';
-        zebraRight.src = '/static/images/dancing_zebra.gif';
-        zebraRight.alt = 'Tanzendes Zebra';
-        document.body.appendChild(zebraRight);
-
-        // Füge Musik hinzu
-        const audio = new Audio('/static/audio/zebra_party.mp3');
-        audio.volume = 0.5; // Lautstärke auf 50% setzen
-        audio.play().catch(error => {
-            console.log('Audio konnte nicht abgespielt werden:', error);
-        });
         
+        const zebraRight = document.createElement('img');
+        zebraRight.src = '/static/images/dancing_zebra.gif';
+        zebraRight.className = 'dancing-zebra right';
+        
+        document.body.appendChild(zebraLeft);
+        document.body.appendChild(zebraRight);
+        
+        // Optional: Musik abspielen
+        const audio = new Audio('/static/audio/zebra_party.mp3'); // Pfad zur Musikdatei
+        audio.play().catch(error => console.warn("Autoplay wurde verhindert:", error));
+        
+        // Nach einiger Zeit wieder entfernen
         setTimeout(() => {
             zebraLeft.remove();
             zebraRight.remove();
             overlay.remove();
             audio.pause();
             audio.currentTime = 0;
-        }, 17000); // 17 Sekunden = 17000 Millisekunden
+        }, 10000); // 10 Sekunden
     },
 
     showError(message) {
@@ -689,11 +709,36 @@ const QuickScan = {
 
 // QuickScan initialisieren wenn Modal geöffnet wird
 document.addEventListener('DOMContentLoaded', () => {
+    // console.log("QuickScan DOMContentLoaded"); 
     const modal = document.getElementById('quickScanModal');
+    const trigger = document.getElementById('quickScanTrigger'); 
+
     if (modal) {
-        modal.addEventListener('show', () => {
-            QuickScan.init();
+        // Listener für das 'close'-Event des Modals
+        modal.addEventListener('close', () => {
+            // console.log("QuickScan modal closed, resetting and reloading."); 
+            QuickScan.reset();
+            // WORKAROUND: Seite neu laden...
+            // TODO: Ursache finden...
+            window.location.reload(); 
         });
+    } else {
+        console.error("QuickScan Modal not found!");
+    }
+
+    // Event Listener für den Trigger Button hinzufügen
+    if (trigger) {
+        trigger.addEventListener('click', () => {
+            // console.log("QuickScan trigger clicked"); 
+            if (modal) {
+                modal.showModal(); 
+                QuickScan.init(); 
+            } else {
+                console.error("Cannot open QuickScan modal - modal not found!");
+            }
+        });
+    } else {
+        console.error("QuickScan trigger button not found!");
     }
 });
 

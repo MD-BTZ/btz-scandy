@@ -7,109 +7,34 @@
     <h1 class="text-2xl font-bold mb-6">Systemverwaltung</h1>
 
     <!-- Import/Export-Bereich -->
-    <div class="mb-8">
-        <h2 class="text-xl font-semibold mb-4">Daten Export/Import</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Werkzeuge -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Werkzeuge</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='tools') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('toolsImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='tools') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="toolsImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="text-xl font-bold mb-4">Daten Export</h2>
+            <!-- Nur Export Section -->
+            <div>
+                <h3 class="text-lg font-semibold mb-3">Gesamtdaten Exportieren</h3>
+                <a href="{{ url_for('admin.export_all_data') }}" 
+                    class="btn btn-primary w-full md:w-auto">
+                    <i class="fas fa-file-excel mr-2"></i>Gesamtdaten exportieren (Excel)
+                </a>
+                <p class="text-xs mt-2 text-base-content/70">Exportiert Werkzeuge, Mitarbeiter, Verbrauchsmaterial und Verlauf in eine Excel-Datei mit mehreren Arbeitsblättern.</p>
             </div>
+        </div>
+    </div>
 
-            <!-- Mitarbeiter -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Mitarbeiter</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='workers') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('workersImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='workers') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="workersImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Verbrauchsmaterial -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Verbrauchsmaterial</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='consumables') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                        <button onclick="document.getElementById('consumablesImport').click()" 
-                                class="btn btn-secondary btn-sm">
-                            <i class="fas fa-upload mr-2"></i>
-                            Importieren
-                        </button>
-                        <form action="{{ url_for('admin.import_table', table='consumables') }}" 
-                              method="post" 
-                              enctype="multipart/form-data"
-                              class="hidden">
-                            <input type="file" 
-                                   id="consumablesImport"
-                                   name="file" 
-                                   accept=".xlsx"
-                                   onchange="this.form.submit()" />
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Verlauf -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title text-lg">Verlauf</h3>
-                    <div class="flex flex-col gap-2">
-                        <a href="{{ url_for('admin.export_table', table='history') }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-download mr-2"></i>
-                            Exportieren
-                        </a>
-                    </div>
-                </div>
-            </div>
+    <!-- Gesamt-Import (NotBackup) -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="text-xl font-bold mb-4 text-warning"><i class="fas fa-exclamation-triangle mr-2"></i>Daten Import (NotBackup)</h2>
+            <p class="mb-4 text-sm">Diese Funktion dient zum Importieren von Daten aus einer zuvor exportierten Gesamt-Excel-Datei. 
+                <strong>Achtung:</strong> Bestehende Einträge (Werkzeuge, Mitarbeiter, Verbrauchsmaterial) mit demselben Barcode werden überschrieben! 
+                Der Verlauf wird nicht importiert. Nutzen Sie die reguläre Backup-Funktion für eine vollständige Daten-Sicherung und -Wiederherstellung.</p>
+            <form action="{{ url_for('admin.import_all_data') }}" method="post" enctype="multipart/form-data" class="flex flex-col md:flex-row gap-2 items-start md:items-end">
+                <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered file-input-warning w-full max-w-xs" required>
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-upload mr-2"></i>Gesamt-Datei importieren
+                </button>
+            </form>
         </div>
     </div>
 
@@ -117,30 +42,34 @@
     <div class="card bg-base-100 shadow-xl mt-8">
         <div class="card-body">
             <h2 class="text-xl font-bold mb-4">Backup-Verwaltung</h2>
-            <!-- Aktuelle Datenbank -->
-            <div class="mb-6">
-                <h3 class="text-lg font-semibold mb-2">Aktuelle Datenbank</h3>
-                <div class="flex flex-col md:flex-row gap-2">
-                    <button id="downloadCurrentBtn" class="btn btn-primary flex-1">
-                        <i class="fas fa-download mr-2"></i>
-                        Datenbank herunterladen
+            <!-- Aktuelle Datenbank & Backup Erstellen Buttons -->
+            <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold mb-2">Aktuelle Datenbank</h3>
+                    <button id="downloadCurrentBtn" class="btn btn-primary w-full">
+                        <i class="fas fa-download mr-2"></i> Aktuelle DB herunterladen
                     </button>
-                    <button id="createBackupBtn" class="btn btn-success flex-1">
-                        <i class="fas fa-save mr-2"></i> Backup erstellen
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-2">Backup Erstellen</h3>
+                    <button id="createBackupBtn" class="btn btn-secondary w-full"> <!-- Klasse geändert zu btn-secondary -->
+                        <i class="fas fa-save mr-2"></i> Neues Backup erstellen
                     </button>
                 </div>
             </div>
-            <!-- Backup hochladen -->
+            
+            <!-- Backup Hochladen -->
             <div class="mb-6">
-                <h3 class="text-lg font-semibold mb-2">Backup hochladen</h3>
+                <h3 class="text-lg font-semibold mb-2">Backup hochladen & Wiederherstellen</h3>
                 <form id="uploadBackupForm" class="flex flex-col md:flex-row gap-2 items-start md:items-end">
                     <input type="file" name="file" accept=".db" class="file-input file-input-bordered w-full max-w-xs" required>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload mr-2"></i>
-                        Backup hochladen
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-upload mr-2"></i> Hochladen & Aktivieren
                     </button>
                 </form>
+                <p class="text-xs mt-2 text-base-content/70">Achtung: Die aktuelle Datenbank wird überschrieben! Es wird automatisch ein Backup der aktuellen DB erstellt.</p>
             </div>
+
             <!-- Backup-Liste -->
             <div>
                 <h3 class="text-lg font-semibold mb-2">Verfügbare Backups</h3>
@@ -163,25 +92,26 @@
         </div>
     </div>
 
-    <!-- Backup Modal -->
-    <dialog id="backupModal" class="modal">
+    <!-- Backup Modal für Wiederherstellung (wird von backup.js getriggert) -->
+    <dialog id="restoreBackupModal" class="modal">
         <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Backup aktivieren</h3>
-            <p class="mb-4">Möchten Sie dieses Backup aktivieren? Die aktuelle Datenbank wird automatisch gesichert.</p>
+            <h3 class="font-bold text-lg mb-4 text-warning"><i class="fas fa-exclamation-triangle mr-2"></i>Backup wiederherstellen?</h3>
+            <p class="mb-4">Möchten Sie das Backup <strong id="restoreBackupName"></strong> wirklich aktivieren? 
+                Die aktuelle Datenbank wird dabei überschrieben. Es wird automatisch ein Backup der aktuellen Datenbank erstellt.</p>
             <div class="modal-action">
-                <button onclick="activateBackup()" class="btn btn-primary">Ja, aktivieren</button>
-                <button onclick="backupModal.close()" class="btn">Abbrechen</button>
+                <button id="confirmRestoreBtn" class="btn btn-warning">Ja, wiederherstellen</button>
+                <button onclick="document.getElementById('restoreBackupModal').close()" class="btn">Abbrechen</button>
             </div>
         </div>
     </dialog>
+
 </div>
 
-<!-- TEST: Script direkt im Content-Block einfügen -->
+<!-- Script Tag wieder hierher verschoben -->
 <script src="{{ url_for('static', filename='js/backup.js') }}"></script>
 
 {% endblock %}
 
 {% block scripts %}
-<!-- TEST: Wird dieser Kommentar im HTML-Quelltext angezeigt? -->
-{# <script src="{{ url_for('static', filename='js/backup.js') }}"></script> #} {# Auskommentiert für den Test #}
+{# Block bleibt leer, da das Script oben im Content ist #}
 {% endblock %} 

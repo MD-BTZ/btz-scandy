@@ -21,6 +21,7 @@ from pathlib import Path
 import shutil
 from flask_login import login_required, current_user
 from app import backup_manager
+from backup import DatabaseBackup
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -179,6 +180,64 @@ def create_excel(data, columns):
     wb.save(excel_file)
     excel_file.seek(0)
     
+    return excel_file
+
+# Angepasste Excel-Funktion für mehrere Sheets
+def create_multi_sheet_excel(data_dict):
+    """Erstellt eine Excel-Datei mit mehreren Sheets aus einem Dictionary von Daten.
+    Args:
+        data_dict (dict): Ein Dictionary, bei dem Keys die Sheet-Namen sind
+                          und Values Listen von Dictionaries (die Zeilen) sind.
+                          z.B. {'Werkzeuge': [{'name': 'Hammer', ...}, ...],
+                                'Mitarbeiter': [{'firstname': 'Max', ...}, ...]}
+    """
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active) # Standard-Sheet entfernen
+
+    for sheet_name, data in data_dict.items():
+        ws = wb.create_sheet(title=sheet_name)
+        
+        if not data:
+            ws.cell(row=1, column=1, value="Keine Daten verfügbar")
+            continue
+        
+        headers = list(data[0].keys())
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        for row_idx, item in enumerate(data, 2):
+            for col_idx, key in enumerate(headers, 1):
+                value = item.get(key, '') 
+                # Konvertiere datetime-Objekte in Strings, da Excel sonst Probleme haben kann
+                if isinstance(value, datetime):
+                    # Format anpassen nach Bedarf (z.B. mit Uhrzeit)
+                    value = value.strftime('%Y-%m-%d %H:%M:%S') 
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+        # Spaltenbreiten automatisch anpassen
+        for col_idx, column_cells in enumerate(ws.columns, 1):
+            max_length = 0
+            # Buchstaben für die Spalte ermitteln (A, B, C, ...)
+            column_letter = openpyxl.utils.get_column_letter(col_idx) 
+            
+            for cell in column_cells:
+                try:
+                    if cell.value: # Nur wenn Zelle einen Wert hat
+                        # Berücksichtige die Länge des Zellinhalts als String
+                        cell_length = len(str(cell.value))
+                        if cell_length > max_length:
+                            max_length = cell_length
+                except: # Fehler ignorieren (z.B. bei ungültigen Zelltypen)
+                    pass
+            
+            # Setze die Spaltenbreite (Basisbreite + Puffer)
+            # Der Faktor 1.2 gibt etwas Puffer
+            adjusted_width = (max_length + 2) * 1.1 
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
     return excel_file
 
 @bp.route('/')
@@ -844,148 +903,212 @@ def server_settings():
         flash(f'Fehler beim Laden der Einstellungen: {str(e)}', 'error')
         return redirect(url_for('admin.dashboard'))
 
-@bp.route('/export/<table>')
+@bp.route('/export/all')
 @admin_required
-def export_table(table):
-    """Exportiert eine Tabelle als Excel"""
+def export_all_data():
+    """Exportiert alle relevanten Tabellen in eine Excel-Datei mit mehreren Sheets"""
     try:
         with Database.get_db() as conn:
-            if table == 'tools':
-                query = """
-                    SELECT 
-                        t.name, t.barcode, t.category, t.location,
-                        CASE WHEN l.id IS NULL THEN 'Nein' ELSE 'Ja' END as is_lent
-                    FROM tools t
-                    LEFT JOIN lendings l ON t.barcode = l.tool_barcode AND l.returned_at IS NULL
-                    WHERE t.deleted = 0
-                """
-                rows = [dict(row) for row in conn.execute(query).fetchall()]
-                excel_file = create_excel(rows, ['name', 'barcode', 'category', 'location', 'is_lent'])
-                filename = f'werkzeuge_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-                
-            elif table == 'workers':
-                query = """
-                    SELECT 
-                        w.firstname, w.lastname, w.department, w.barcode,
-                        COUNT(DISTINCT l.id) as active_lendings
-                    FROM workers w
-                    LEFT JOIN lendings l ON w.barcode = l.worker_barcode AND l.returned_at IS NULL
-                    WHERE w.deleted = 0
-                    GROUP BY w.id
-                """
-                rows = [dict(row) for row in conn.execute(query).fetchall()]
-                excel_file = create_excel(rows, ['firstname', 'lastname', 'department', 'barcode', 'active_lendings'])
-                filename = f'mitarbeiter_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-                
-            elif table == 'consumables':
-                query = """
-                    SELECT name, barcode, category, location, quantity, min_quantity
-                    FROM consumables 
-                    WHERE deleted = 0
-                """
-                rows = [dict(row) for row in conn.execute(query).fetchall()]
-                excel_file = create_excel(rows, ['name', 'barcode', 'category', 'location', 'quantity', 'min_quantity'])
-                filename = f'verbrauchsmaterial_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-                
-            elif table == 'history':
-                query = """
-                    SELECT 
-                        l.lent_at, l.returned_at, t.name as item_name, 
-                        w.firstname || ' ' || w.lastname as worker_name,
-                        'Werkzeug' as type
-                    FROM lendings l
-                    JOIN tools t ON l.tool_barcode = t.barcode
-                    JOIN workers w ON l.worker_barcode = w.barcode
-                    UNION ALL
-                    SELECT 
-                        cu.used_at as lent_at, 
-                        NULL as returned_at, 
-                        c.name as item_name,
-                        w.firstname || ' ' || w.lastname as worker_name,
-                        'Verbrauchsmaterial' as type
-                    FROM consumable_usages cu
-                    JOIN consumables c ON cu.consumable_barcode = c.barcode
-                    JOIN workers w ON cu.worker_barcode = w.barcode
-                    ORDER BY lent_at DESC
-                """
-                rows = [dict(row) for row in conn.execute(query).fetchall()]
-                excel_file = create_excel(rows, ['lent_at', 'returned_at', 'item_name', 'worker_name', 'type'])
-                filename = f'verlauf_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            # Daten abrufen (ähnlich wie in der alten export_table Funktion)
+            tools_data = [dict(row) for row in conn.execute("""
+                SELECT barcode, name, category, location, status, description 
+                FROM tools WHERE deleted = 0 ORDER BY name
+            """).fetchall()]
             
-            else:
-                return jsonify({'success': False, 'message': 'Ungültige Tabelle'}), 400
+            workers_data = [dict(row) for row in conn.execute("""
+                SELECT barcode, firstname, lastname, department, email 
+                FROM workers WHERE deleted = 0 ORDER BY lastname, firstname
+            """).fetchall()]
             
+            consumables_data = [dict(row) for row in conn.execute("""
+                SELECT barcode, name, category, location, quantity, min_quantity, 
+                       description 
+                FROM consumables WHERE deleted = 0 ORDER BY name
+            """).fetchall()]
+            
+            history_data = [dict(row) for row in conn.execute("""
+                SELECT 
+                    l.lent_at, l.returned_at, t.name as tool_name, t.barcode as tool_barcode,
+                    w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
+                    'Werkzeug Ausleihe' as type, NULL as quantity
+                FROM lendings l
+                JOIN tools t ON l.tool_barcode = t.barcode
+                JOIN workers w ON l.worker_barcode = w.barcode
+                UNION ALL
+                SELECT 
+                    cu.used_at as lent_at, NULL as returned_at, c.name as consumable_name, c.barcode as consumable_barcode, 
+                    w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
+                    'Material Verbrauch' as type, cu.quantity
+                FROM consumable_usages cu
+                JOIN consumables c ON cu.consumable_barcode = c.barcode
+                JOIN workers w ON cu.worker_barcode = w.barcode
+                ORDER BY lent_at DESC
+            """).fetchall()]
+
+            # Daten für die Excel-Funktion vorbereiten
+            export_data = {
+                "Werkzeuge": tools_data,
+                "Mitarbeiter": workers_data,
+                "Verbrauchsmaterial": consumables_data,
+                "Verlauf": history_data
+            }
+
+            excel_file = create_multi_sheet_excel(export_data)
+            filename = f'scandy_gesamtexport_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+
             return send_file(
                 excel_file,
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 as_attachment=True,
                 download_name=filename
             )
-            
-    except Exception as e:
-        print(f"Export-Fehler: {str(e)}")
-        return redirect(url_for('admin.dashboard'))
 
-@bp.route('/import/<table>', methods=['POST'])
+    except Exception as e:
+        logger.error(f"Fehler beim Gesamtexport: {str(e)}", exc_info=True)
+        flash(f'Fehler beim Erstellen des Gesamtexports: {str(e)}', 'error')
+        # Leitet zur Systemseite zurück, falls ein Fehler auftritt
+        # Alternativ könnte man zum Dashboard oder einer Fehlerseite leiten
+        return redirect(url_for('admin.system')) 
+
+@bp.route('/import/all', methods=['POST'])
 @admin_required
-def import_table(table):
-    """Importiert eine Excel-Tabelle"""
+def import_all_data():
+    """Importiert Daten aus einer Excel-Datei mit mehreren Sheets."""
     if 'file' not in request.files:
         flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.dashboard'))
-        
+        return redirect(url_for('admin.system'))
+
     file = request.files['file']
     if file.filename == '':
         flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.dashboard'))
+        return redirect(url_for('admin.system'))
+
+    if not file.filename.endswith('.xlsx'):
+        flash('Ungültiger Dateityp. Bitte eine .xlsx-Datei hochladen.', 'error')
+        return redirect(url_for('admin.system'))
 
     try:
-        # Excel-Datei in BytesIO laden
+        # Excel-Datei in BytesIO laden, um sie mit openpyxl zu öffnen
         file_content = BytesIO(file.read())
-        wb = openpyxl.load_workbook(file_content)
-        ws = wb.active
-        
-        # Headers aus erster Zeile lesen
-        headers = [cell.value for cell in ws[1]]
-        
-        if table == 'tools':
-            for row in ws.iter_rows(min_row=2):
-                row_data = {headers[i]: cell.value for i, cell in enumerate(row)}
-                Database.query('''
-                    INSERT OR REPLACE INTO tools 
-                    (barcode, name, description, category, location)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', [row_data.get('barcode'), row_data.get('name'), 
-                     row_data.get('description'), row_data.get('category'), 
-                     row_data.get('location')])
-                
-        elif table == 'workers':
-            for row in ws.iter_rows(min_row=2):
-                row_data = {headers[i]: cell.value for i, cell in enumerate(row)}
-                Database.query('''
-                    INSERT OR REPLACE INTO workers 
-                    (barcode, firstname, lastname, department, email)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', [row_data.get('barcode'), row_data.get('firstname'), row_data.get('lastname'),
-                     row_data.get('department'), row_data.get('email')])
-                
-        elif table == 'consumables':
-            for row in ws.iter_rows(min_row=2):
-                row_data = {headers[i]: cell.value for i, cell in enumerate(row)}
-                Database.query('''
-                    INSERT OR REPLACE INTO consumables 
-                    (barcode, name, description, quantity, min_quantity, category, location)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', [row_data.get('barcode'), row_data.get('name'), row_data.get('description'),
-                     row_data.get('quantity'), row_data.get('min_quantity'),
-                     row_data.get('category'), row_data.get('location')])
-                
-        flash(f'Import erfolgreich', 'success')
-        
+        wb = openpyxl.load_workbook(file_content, data_only=True) # data_only=True vermeidet Formeln
+
+        imported_counts = {"Werkzeuge": 0, "Mitarbeiter": 0, "Verbrauchsmaterial": 0}
+        errors = []
+
+        # --- Werkzeuge importieren ---
+        if "Werkzeuge" in wb.sheetnames:
+            ws_tools = wb["Werkzeuge"]
+            headers_tools = [cell.value for cell in ws_tools[1]]
+            # Erwartete Spalten prüfen (Mindestanforderung)
+            required_tools_cols = ['barcode', 'name']
+            if not all(col in headers_tools for col in required_tools_cols):
+                errors.append("Arbeitsblatt 'Werkzeuge' hat ungültige Spaltenüberschriften.")
+            else:
+                for row_idx, row in enumerate(ws_tools.iter_rows(min_row=2), start=2):
+                    row_data = {headers_tools[i]: cell.value for i, cell in enumerate(row)}
+                    try:
+                        # Nur importieren, wenn Barcode und Name vorhanden sind
+                        if row_data.get('barcode') and row_data.get('name'):
+                             # Default-Werte für optionale Felder setzen, falls sie fehlen
+                            desc = row_data.get('description', '')
+                            cat = row_data.get('category')
+                            loc = row_data.get('location')
+                            status = row_data.get('status', 'verfügbar') # Default-Status
+
+                            Database.query('''
+                                INSERT OR REPLACE INTO tools
+                                (barcode, name, description, category, location, status, deleted)
+                                VALUES (?, ?, ?, ?, ?, ?, 0)
+                            ''', [row_data['barcode'], row_data['name'], desc, cat, loc, status])
+                            imported_counts["Werkzeuge"] += 1
+                    except Exception as e:
+                        errors.append(f"Fehler in Werkzeuge Zeile {row_idx}: {e}")
+        else:
+            errors.append("Arbeitsblatt 'Werkzeuge' nicht gefunden.")
+
+        # --- Mitarbeiter importieren ---
+        if "Mitarbeiter" in wb.sheetnames:
+            ws_workers = wb["Mitarbeiter"]
+            headers_workers = [cell.value for cell in ws_workers[1]]
+            required_workers_cols = ['barcode', 'firstname', 'lastname']
+            if not all(col in headers_workers for col in required_workers_cols):
+                errors.append("Arbeitsblatt 'Mitarbeiter' hat ungültige Spaltenüberschriften.")
+            else:
+                 for row_idx, row in enumerate(ws_workers.iter_rows(min_row=2), start=2):
+                    row_data = {headers_workers[i]: cell.value for i, cell in enumerate(row)}
+                    try:
+                        if row_data.get('barcode') and row_data.get('firstname') and row_data.get('lastname'):
+                            dept = row_data.get('department')
+                            email = row_data.get('email')
+
+                            Database.query('''
+                                INSERT OR REPLACE INTO workers
+                                (barcode, firstname, lastname, department, email, deleted)
+                                VALUES (?, ?, ?, ?, ?, 0)
+                            ''', [row_data['barcode'], row_data['firstname'], row_data['lastname'], dept, email])
+                            imported_counts["Mitarbeiter"] += 1
+                    except Exception as e:
+                        errors.append(f"Fehler in Mitarbeiter Zeile {row_idx}: {e}")
+        else:
+            errors.append("Arbeitsblatt 'Mitarbeiter' nicht gefunden.")
+
+        # --- Verbrauchsmaterial importieren ---
+        if "Verbrauchsmaterial" in wb.sheetnames:
+            ws_consumables = wb["Verbrauchsmaterial"]
+            headers_consumables = [cell.value for cell in ws_consumables[1]]
+            required_consumables_cols = ['barcode', 'name', 'quantity', 'min_quantity']
+            if not all(col in headers_consumables for col in required_consumables_cols):
+                 errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften.")
+            else:
+                for row_idx, row in enumerate(ws_consumables.iter_rows(min_row=2), start=2):
+                    row_data = {headers_consumables[i]: cell.value for i, cell in enumerate(row)}
+                    try:
+                        # Prüfe, ob notwendige Spalten vorhanden sind und konvertiere Typen
+                        barcode = row_data.get('barcode')
+                        name = row_data.get('name')
+                        quantity_val = row_data.get('quantity')
+                        min_quantity_val = row_data.get('min_quantity')
+
+                        if barcode and name and quantity_val is not None and min_quantity_val is not None:
+                            quantity = int(quantity_val)
+                            min_quantity = int(min_quantity_val)
+                            desc = row_data.get('description', '')
+                            cat = row_data.get('category')
+                            loc = row_data.get('location')
+
+                            Database.query('''
+                                INSERT OR REPLACE INTO consumables
+                                (barcode, name, description, quantity, min_quantity, category, location, deleted)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                            ''', [barcode, name, desc, quantity, min_quantity, cat, loc])
+                            imported_counts["Verbrauchsmaterial"] += 1
+                    except ValueError:
+                        errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: Menge oder Mindestmenge ist keine Zahl.")
+                    except Exception as e:
+                        errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: {e}")
+        else:
+            errors.append("Arbeitsblatt 'Verbrauchsmaterial' nicht gefunden.")
+
+        # Feedback geben
+        if not errors:
+            flash(f'Gesamtimport erfolgreich! '
+                  f'{imported_counts["Werkzeuge"]} Werkzeuge, '
+                  f'{imported_counts["Mitarbeiter"]} Mitarbeiter, '
+                  f'{imported_counts["Verbrauchsmaterial"]} Verbrauchsmaterialien importiert/aktualisiert.', 'success')
+        else:
+            # Zeige nur eine allgemeine Fehlermeldung und spezifische Fehler im Log
+            flash(f'Import teilweise fehlgeschlagen. {len(errors)} Fehler aufgetreten (siehe Logs für Details). '
+                   f'{imported_counts["Werkzeuge"]} Werkzeuge, '
+                   f'{imported_counts["Mitarbeiter"]} Mitarbeiter, '
+                   f'{imported_counts["Verbrauchsmaterial"]} Verbrauchsmaterialien importiert/aktualisiert.', 'warning')
+            for error in errors:
+                logger.error(f"Gesamtimport Fehler: {error}")
+
     except Exception as e:
-        flash(f'Fehler beim Import: {str(e)}', 'error')
-        
-    return redirect(url_for('admin.dashboard'))
+        logger.error(f"Schwerwiegender Fehler beim Gesamtimport: {str(e)}", exc_info=True)
+        flash(f'Schwerwiegender Fehler beim Import: {str(e)}', 'error')
+
+    return redirect(url_for('admin.system'))
 
 @bp.route('/backup/create', methods=['POST'])
 @admin_required
