@@ -1,7 +1,7 @@
 {% extends "shared/list_base.html" %}
 
 {% block actions %}
-{% if session.get('is_admin') %}
+{% if is_admin %}
 <div class="flex gap-2">
     <a href="{{ url_for('tools.add') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Neues Werkzeug
@@ -75,7 +75,7 @@
         {% elif tool.current_status == 'ausgeliehen' %}
             <span class="badge badge-warning gap-1 text-warning-content">
                 <i class="fas fa-hand-holding"></i>
-                {% if session.get('is_admin') %}
+                {% if is_admin %}
                 Ausgeliehen an {{ tool.lent_to }}
                 {% else %}
                 Ausgeliehen

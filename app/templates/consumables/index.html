@@ -1,7 +1,7 @@
 {% extends "shared/list_base.html" %}
 
 {% block actions %}
-{% if session.get('is_admin') %}
+{% if is_admin %}
 <div class="flex gap-2">
     <a href="{{ url_for('consumables.add') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Neues Verbrauchsmaterial
@@ -38,7 +38,7 @@
 <th>Standort</th>
 <th>Bestand</th>
 <th>Kategorie</th>
-{% if session.get('is_admin') %}
+{% if is_admin %}
 <th class="text-right">Aktionen</th>
 {% endif %}
 {% endblock %}
@@ -50,7 +50,7 @@
     data-location="{{ item.location or '' }}"
     data-status="{{ item.stock_status }}">
     <td>
-        {% if session.get('is_admin') %}
+        {% if is_admin %}
         <a href="{{ url_for('consumables.detail', barcode=item.barcode) }}" class="link link-hover font-medium">
             {{ item.name }}
         </a>
@@ -89,7 +89,7 @@
             {{ item.category or '-' }}
         </span>
     </td>
-    {% if session.get('is_admin') %}
+    {% if is_admin %}
     <td class="text-right">
         <div class="btn-group">
             <a href="{{ url_for('consumables.detail', barcode=item.barcode) }}" class="btn btn-sm btn-ghost">

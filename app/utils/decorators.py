@@ -3,8 +3,11 @@ from flask import session, redirect, url_for, request, flash, abort
 from datetime import datetime
 from app.utils.logger import loggers
 from flask_login import current_user
+import logging # Import logging
 # needs_setup wird nur in login_required verwendet
 # from app.utils.auth_utils import needs_setup
+
+logger = logging.getLogger(__name__) # Logger für dieses Modul
 
 def login_required(f):
     """Decorator, der sicherstellt, dass ein Benutzer eingeloggt ist.
@@ -64,12 +67,20 @@ def mitarbeiter_required(f):
     """Decorator für Routen, die Admins oder Mitarbeitern zugänglich sind."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        logger.debug(f"[DECORATOR] mitarbeiter_required: Checking user {getattr(current_user, 'id', 'Guest')}")
         if not current_user.is_authenticated:
+             logger.warning(f"[DECORATOR] mitarbeiter_required: User not authenticated. Redirecting to login.")
              flash("Bitte melden Sie sich an.", "info")
              return redirect(url_for('auth.login', next=request.url))
-        # Prüft, ob der User die Eigenschaft 'is_mitarbeiter' hat und sie True ist
-        if not getattr(current_user, 'is_mitarbeiter', False): 
+        
+        is_mitarbeiter = getattr(current_user, 'is_mitarbeiter', False)
+        logger.debug(f"[DECORATOR] mitarbeiter_required: User role is '{getattr(current_user, 'role', 'N/A')}', is_mitarbeiter evaluated to {is_mitarbeiter}")
+        
+        if not is_mitarbeiter: 
+            logger.warning(f"[DECORATOR] mitarbeiter_required: User {current_user.id} lacks permission. Aborting with 403.")
             abort(403)
+        
+        logger.debug(f"[DECORATOR] mitarbeiter_required: Access granted for user {current_user.id}. Proceeding to route function.")
         return f(*args, **kwargs)
     return decorated_function
 

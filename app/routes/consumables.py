@@ -1,9 +1,12 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort
+from flask_login import current_user
 from ..models.database import Database
 from ..utils.decorators import login_required, admin_required, mitarbeiter_required
 from datetime import datetime
+import logging # Import logging
 
 bp = Blueprint('consumables', __name__, url_prefix='/consumables')
+logger = logging.getLogger(__name__) # Logger für dieses Modul
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -59,7 +62,7 @@ def detail(barcode):
             return jsonify({'success': True})
             
         except Exception as e:
-            print(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}")
+            logger.error(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}", exc_info=True)
             return jsonify({'success': False, 'message': str(e)}), 500
     
     # GET-Methode: Details anzeigen
@@ -131,7 +134,7 @@ def update(id):
         return jsonify({'success': True})
         
     except Exception as e:
-        print(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}")
+        logger.error(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<int:id>/delete', methods=['POST'])
@@ -149,50 +152,60 @@ def delete(id):
         return jsonify({'success': True})
         
     except Exception as e:
-        print(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}")
+        logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/')
-@login_required
+@mitarbeiter_required
 def index():
     """Zeigt alle aktiven Verbrauchsmaterialien"""
-    consumables = Database.query('''
-        SELECT c.*,
-               ROUND(CAST(c.quantity AS FLOAT) / NULLIF(c.min_quantity, 0) * 100) as stock_percentage,
-               CASE
-                   WHEN c.min_quantity IS NULL THEN 'sufficient' -- Wenn kein Mindestbestand, dann ausreichend
-                   WHEN c.quantity >= c.min_quantity THEN 'sufficient'
-                   WHEN c.quantity >= c.min_quantity * 0.5 THEN 'warning'
-                   ELSE 'critical'
-               END as stock_status
-        FROM consumables c
-        WHERE c.deleted = 0
-        ORDER BY c.name
-    ''')
-    
-    # Kategorien für Filter
-    categories = Database.query('''
-        SELECT DISTINCT category FROM consumables
-        WHERE deleted = 0 AND category IS NOT NULL
-        ORDER BY category
-    ''')
-    
-    # Standorte für Filter
-    locations = Database.query('''
-        SELECT DISTINCT location FROM consumables
-        WHERE deleted = 0 AND location IS NOT NULL
-        ORDER BY location
-    ''')
-    
-    return render_template('consumables/index.html',
-                         consumables=consumables,
-                         categories=[c['category'] for c in categories],
-                         locations=[l['location'] for l in locations])
+    logger.debug(f"[ROUTE] consumables.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
+    try:
+        with Database.get_db() as conn:
+            consumables = conn.execute('''
+                SELECT c.*,
+                       CASE 
+                           WHEN c.quantity <= 0 THEN 'ausverkauft'
+                           WHEN c.quantity <= c.min_quantity THEN 'niedrig'
+                           ELSE 'verfügbar'
+                       END as current_status
+                FROM consumables c
+                WHERE c.deleted = 0
+                ORDER BY c.name
+            ''').fetchall()
+            
+            categories = conn.execute('''
+                SELECT DISTINCT category FROM consumables
+                WHERE deleted = 0 AND category IS NOT NULL
+                ORDER BY category
+            ''').fetchall()
+            
+            locations = conn.execute('''
+                SELECT DISTINCT location FROM consumables
+                WHERE deleted = 0 AND location IS NOT NULL
+                ORDER BY location
+            ''').fetchall()
+            
+            logger.debug(f"[ROUTE] consumables.index: Preparing template. User is Admin: {current_user.is_admin}")
+            
+            return render_template('consumables/index.html',
+                               consumables=consumables,
+                               categories=[c['category'] for c in categories],
+                               locations=[l['location'] for l in locations],
+                               is_admin=current_user.is_admin)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}", exc_info=True)
+        return render_template('consumables/index.html',
+                           consumables=[],
+                           categories=[],
+                           locations=[],
+                           is_admin=current_user.is_admin)
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add():
-    """Neues Verbrauchsmaterial hinzufügen"""
+    """Neues Verbrauchsmaterial hinzufügen (jeder eingeloggte Nutzer)"""
+    logger.debug(f"[ROUTE] consumables.add: Entered route (Method: {request.method}). User: {current_user.id}")
     if request.method == 'POST':
         name = request.form.get('name')
         barcode = request.form.get('barcode')
@@ -215,13 +228,25 @@ def add():
         except Exception as e:
             flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
     
-    # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-    categories = Database.get_categories('consumables')
-    locations = Database.get_locations('consumables')
-    
-    return render_template('consumables/add.html',
-                         categories=[c['name'] for c in categories],
-                         locations=[l['name'] for l in locations])
+    # --- GET Request Logic --- 
+    logger.debug("[ROUTE] consumables.add: Handling GET request.")   
+    try:
+        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
+        logger.debug("[ROUTE] consumables.add: Fetching categories and locations using helpers.")
+        categories = Database.get_categories('consumables')
+        locations = Database.get_locations('consumables')
+        logger.debug(f"[ROUTE] consumables.add: Found categories: {categories}")
+        logger.debug(f"[ROUTE] consumables.add: Found locations: {locations}")
+        
+        logger.debug("[ROUTE] consumables.add: Rendering add.html template.")
+        return render_template('consumables/add.html',
+                             categories=[c['name'] for c in categories],
+                             locations=[l['name'] for l in locations])
+    except Exception as e:
+        logger.error(f"[ROUTE] consumables.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
+        # Hier gab es keinen expliziten Redirect, fügen wir einen hinzu
+        return redirect(url_for('consumables.index')) 
 
 @bp.route('/<barcode>/adjust-stock', methods=['POST'])
 @login_required
@@ -262,7 +287,7 @@ def adjust_stock(barcode):
         return jsonify({'success': True})
         
     except Exception as e:
-        print(f"Fehler bei der Bestandsanpassung: {str(e)}")
+        logger.error(f"Fehler bei der Bestandsanpassung: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<barcode>')
@@ -348,7 +373,7 @@ def delete_by_barcode(barcode):
             })
             
     except Exception as e:
-        print(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}")
+        logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
         return jsonify({
             'success': False, 
             'message': f'Fehler beim Löschen: {str(e)}'
@@ -430,7 +455,7 @@ def forecast(barcode):
             })
             
     except Exception as e:
-        print(f"Fehler bei der Bestandsprognose: {str(e)}")
+        logger.error(f"Fehler bei der Bestandsprognose: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Fehler bei der Bestandsprognose: {str(e)}'

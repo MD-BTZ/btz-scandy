@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
+from flask_login import current_user
 from app.models.database import Database
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required
 from datetime import datetime
@@ -6,11 +7,13 @@ import logging
 
 # Explizit URL-Präfix setzen
 bp = Blueprint('tools', __name__, url_prefix='/tools')
+logger = logging.getLogger(__name__) # Logger für dieses Modul
 
 @bp.route('/')
-@login_required
+@mitarbeiter_required
 def index():
     """Zeigt alle aktiven Werkzeuge"""
+    logger.debug(f"[ROUTE] tools.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
     try:
         with Database.get_db() as conn:
             # Debug: Prüfe aktive Ausleihen
@@ -19,7 +22,7 @@ def index():
                 FROM lendings 
                 WHERE returned_at IS NULL
             ''').fetchall()
-            print("Aktive Ausleihen:", [dict(l) for l in active_lendings])
+            logger.debug(f"[ROUTE] tools.index: Active lendings: {active_lendings}")
 
             tools = conn.execute('''
                 SELECT t.*,
@@ -44,12 +47,8 @@ def index():
                 ORDER BY t.name
             ''').fetchall()
             
-            # Debug-Ausgabe
-            if tools:
-                print("Beispiel-Tool:", dict(tools[0]))
-                for tool in tools:
-                    tool_dict = dict(tool)
-                    print(f"Tool {tool_dict['barcode']}: Status = {tool_dict['current_status']}, Ausgeliehen an = {tool_dict.get('lent_to', 'niemanden')}")
+            # Debug-Ausgabe (jetzt mit Logger)
+            logger.debug(f"[ROUTE] tools.index: Preparing template. User is Admin: {current_user.is_admin}")
             
             categories = conn.execute('''
                 SELECT DISTINCT category FROM tools
@@ -63,16 +62,18 @@ def index():
                 ORDER BY location
             ''').fetchall()
             
+            logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
+            
+            print(f"[DEBUG] User Info in tools.index: ID={current_user.id}, Role={current_user.role}, IsAdmin={current_user.is_admin}, IsAuthenticated={current_user.is_authenticated}")
+            
             return render_template('tools/index.html',
                                tools=tools,
                                categories=[c['category'] for c in categories],
                                locations=[l['location'] for l in locations],
-                               is_admin=session.get('is_admin', False))
+                               is_admin=current_user.is_admin)
                                
     except Exception as e:
-        print(f"Fehler beim Laden der Werkzeuge: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True) # exc_info für Traceback
         flash('Fehler beim Laden der Werkzeuge', 'error')
         return redirect(url_for('main.index'))
 
@@ -184,7 +185,8 @@ def update(id):
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add():
-    """Fügt ein neues Werkzeug hinzu"""
+    """Fügt ein neues Werkzeug hinzu (jeder eingeloggte Nutzer)"""
+    logger.debug(f"[ROUTE] tools.add: Entered route (Method: {request.method}). User: {current_user.id}")
     if request.method == 'POST':
         barcode = request.form.get('barcode')
         name = request.form.get('name')
@@ -216,25 +218,32 @@ def add():
             flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
             return redirect(url_for('tools.add'))
     
+    # --- GET Request Logic ---    
+    logger.debug("[ROUTE] tools.add: Handling GET request.")
     try:
         # Lade Kategorien und Standorte aus der settings-Tabelle
+        logger.debug("[ROUTE] tools.add: Fetching categories and locations from settings.")
         with Database.get_db() as db:
             cursor = db.execute(
                 "SELECT value FROM settings WHERE key LIKE 'category_%' AND value IS NOT NULL AND value != '' ORDER BY value"
             )
             categories = [row['value'] for row in cursor.fetchall()]
+            logger.debug(f"[ROUTE] tools.add: Found categories: {categories}")
             
             cursor = db.execute(
                 "SELECT value FROM settings WHERE key LIKE 'location_%' AND value IS NOT NULL AND value != '' ORDER BY value"
             )
             locations = [row['value'] for row in cursor.fetchall()]
-            
+            logger.debug(f"[ROUTE] tools.add: Found locations: {locations}")
+        
+        logger.debug("[ROUTE] tools.add: Rendering add.html template.")
         return render_template('tools/add.html', categories=categories, locations=locations)
         
     except Exception as e:
-        print(f"Fehler beim Laden der Auswahloptionen: {str(e)}")
-        flash('Fehler beim Laden der Auswahloptionen', 'error')
-        return redirect(url_for('tools.index'))
+        logger.error(f"[ROUTE] tools.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
+        # Wichtig: Wohin wird hier weitergeleitet? Bleibt bei tools.index
+        return redirect(url_for('tools.index')) 
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required

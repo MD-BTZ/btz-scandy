@@ -3,6 +3,7 @@ from app.models.database import Database
 from app.models.worker import Worker
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required
 from datetime import datetime
+from flask_login import current_user
 
 bp = Blueprint('workers', __name__, url_prefix='/workers')
 
@@ -46,7 +47,7 @@ def index():
         return render_template('workers/index.html',
                              workers=workers,
                              departments=[d['name'] for d in departments],
-                             is_admin=session.get('is_admin', False))
+                             is_admin=current_user.is_admin)
                              
     except Exception as e:
         print(f"Fehler beim Laden der Mitarbeiter: {str(e)}")

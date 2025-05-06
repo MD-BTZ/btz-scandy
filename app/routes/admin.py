@@ -1236,15 +1236,30 @@ def add_department():
 @bp.route('/departments/<name>', methods=['DELETE'])
 @mitarbeiter_required
 def delete_department(name):
-    """Lösche eine Abteilung"""
+    """Lösche eine Abteilung, prüft vorher auf Nutzung."""
+    logger.info(f"Attempting to delete department: {name}")
     try:
-        Database.execute(
+        # Prüfen, ob die Abteilung noch verwendet wird
+        usage_count = Database.query(
+            "SELECT COUNT(*) as count FROM workers WHERE department = ? AND deleted = 0",
+            [name],
+            one=True
+        )['count']
+        
+        if usage_count > 0:
+            logger.warning(f"Cannot delete department '{name}': Still used by {usage_count} workers.")
+            return jsonify({'success': False, 'message': f'Abteilung wird noch von {usage_count} Mitarbeitern verwendet.'}), 409 # 409 Conflict
+            
+        # Abteilung löschen
+        Database.query(
             "DELETE FROM settings WHERE key LIKE 'department_%' AND value = ?",
             [name]
         )
+        logger.info(f"Department '{name}' deleted successfully.")
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        logger.error(f"Error deleting department '{name}': {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
 
 # Standortverwaltung
 @bp.route('/locations', methods=['GET'])
@@ -1303,15 +1318,28 @@ def add_location():
 @bp.route('/locations/<name>', methods=['DELETE'])
 @mitarbeiter_required
 def delete_location(name):
-    """Lösche einen Standort"""
+    """Lösche einen Standort, prüft vorher auf Nutzung."""
+    logger.info(f"Attempting to delete location: {name}")
     try:
-        Database.execute(
+        # Prüfen, ob der Standort noch verwendet wird (tools oder consumables)
+        tool_usage = Database.query("SELECT COUNT(*) as count FROM tools WHERE location = ? AND deleted = 0", [name], one=True)['count']
+        consumable_usage = Database.query("SELECT COUNT(*) as count FROM consumables WHERE location = ? AND deleted = 0", [name], one=True)['count']
+        total_usage = tool_usage + consumable_usage
+        
+        if total_usage > 0:
+            logger.warning(f"Cannot delete location '{name}': Still used by {total_usage} items ({tool_usage} tools, {consumable_usage} consumables).")
+            return jsonify({'success': False, 'message': f'Standort wird noch von {total_usage} Inventar-Items verwendet.'}), 409 # 409 Conflict
+
+        # Standort löschen
+        Database.query(
             "DELETE FROM settings WHERE key LIKE 'location_%' AND value = ?",
             [name]
         )
+        logger.info(f"Location '{name}' deleted successfully.")
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        logger.error(f"Error deleting location '{name}': {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
 
 # Kategorieverwaltung
 @bp.route('/categories', methods=['GET'])
@@ -1427,6 +1455,49 @@ def update_category(name):
             'success': False,
             'message': str(e)
         }), 500
+
+@bp.route('/categories/<name>', methods=['DELETE'])
+@mitarbeiter_required
+def delete_category(name):
+    """Löscht eine Kategorie, prüft vorher auf Nutzung."""
+    logger.info(f"Attempting to delete category: {name}")
+    try:
+        # Prüfen, ob die Kategorie noch verwendet wird (tools oder consumables)
+        tool_usage = Database.query("SELECT COUNT(*) as count FROM tools WHERE category = ? AND deleted = 0", [name], one=True)['count']
+        consumable_usage = Database.query("SELECT COUNT(*) as count FROM consumables WHERE category = ? AND deleted = 0", [name], one=True)['count']
+        total_usage = tool_usage + consumable_usage
+        
+        if total_usage > 0:
+            logger.warning(f"Cannot delete category '{name}': Still used by {total_usage} items ({tool_usage} tools, {consumable_usage} consumables).")
+            return jsonify({'success': False, 'message': f'Kategorie wird noch von {total_usage} Inventar-Items verwendet.'}), 409 # 409 Conflict
+
+        # Kategorie-Key finden (z.B. category_5)
+        category_key_row = Database.query(
+            "SELECT key FROM settings WHERE key LIKE 'category_%' AND value = ? AND key NOT LIKE '%_tools' AND key NOT LIKE '%_consumables'", 
+            [name], 
+            one=True
+        )
+        
+        if not category_key_row:
+            logger.warning(f"Category '{name}' not found in settings for deletion.")
+            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden.'}), 404
+        
+        base_key = category_key_row['key']
+        
+        # Alle zugehörigen Einträge löschen (Haupt-Eintrag, _tools, _consumables)
+        # Es ist sicherer, die spezifischen Keys zu löschen, falls das LIKE-Muster zu breit ist.
+        keys_to_delete = [base_key, f"{base_key}_tools", f"{base_key}_consumables"]
+        placeholders = ',' . join('?' * len(keys_to_delete))
+        sql = f"DELETE FROM settings WHERE key IN ({placeholders})"
+        
+        Database.query(sql, keys_to_delete)
+        
+        logger.info(f"Category '{name}' (keys: {keys_to_delete}) deleted successfully.")
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error deleting category '{name}': {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
 
 @bp.route('/cleanup-database', methods=['POST'])
 @admin_required
