@@ -30,5 +30,5 @@ ENV DATABASE_URL=sqlite:////app/database/inventory.db
 # Exponiere Port 5000
 EXPOSE 5000
 
-# Starte die Anwendung mit Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app.wsgi:application"] 
+# Starte die Anwendung mit Gunicorn und aktiviere Reload bei Trigger-Datei
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reload", "--reload-extra-file", "tmp/needs_restart", "app.wsgi:application"] 

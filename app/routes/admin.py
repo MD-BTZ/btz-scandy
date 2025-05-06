@@ -17,6 +17,8 @@ from flask_login import login_required, current_user
 from app import backup_manager
 from backup import DatabaseBackup
 from app.config import Config
+import openpyxl # Import für Excel-Erstellung
+from io import BytesIO # Import für Excel-Erstellung im Speicher
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -1133,52 +1135,43 @@ def create_backup():
 @bp.route('/backup/restore/<filename>', methods=['POST'])
 @admin_required
 def restore_backup(filename):
-    """Backup wiederherstellen"""
+    """Backup wiederherstellen und Neustart-Trigger setzen."""
     try:
         logger.info(f"Versuche Backup wiederherzustellen: {filename}")
         backup_path = backup_manager.backup_dir / filename
         if not backup_path.exists():
             error_msg = 'Backup-Datei nicht gefunden'
             logger.error(f"{error_msg}: {backup_path}")
-            flash(error_msg, 'error')
-            return redirect(url_for('admin.dashboard'))
-        
+            return jsonify({'status': 'error', 'message': error_msg}), 404
+
         # Datenbank wiederherstellen
         success = backup_manager.restore_backup(filename)
         if success:
-            success_msg = 'Backup wurde erfolgreich wiederhergestellt'
+            success_msg = 'Backup wurde erfolgreich wiederhergestellt.'
             logger.info(success_msg)
-            flash(success_msg, 'success')
+
+            # Neustart-Trigger setzen
+            try:
+                project_root = Path(current_app.root_path).parent
+                restart_trigger_file = project_root / 'tmp' / 'needs_restart'
+                restart_trigger_file.touch()
+                logger.info(f"Neustart-Trigger-Datei berührt: {restart_trigger_file}")
+                success_msg += " Neustart wurde ausgelöst (erfordert Prozessüberwachung)."
+            except Exception as touch_err:
+                logger.error(f"Konnte Neustart-Trigger-Datei nicht berühren: {touch_err}")
+                success_msg += " Automatischer Neustart konnte nicht ausgelöst werden (Trigger-Datei-Fehler)."
+
+            return jsonify({'status': 'success', 'message': success_msg})
         else:
             error_msg = 'Fehler bei der Wiederherstellung des Backups'
             logger.error(error_msg)
-            flash(error_msg, 'error')
-    except Exception as e:
-        error_msg = f'Fehler beim Wiederherstellen des Backups: {str(e)}'
-        logger.error(error_msg)
-        flash(error_msg, 'error')
-    return redirect(url_for('admin.dashboard'))
-
-@bp.route('/backup/delete/<filename>', methods=['POST'])
-@admin_required
-def delete_backup(filename):
-    """Löscht ein bestimmtes Backup"""
-    try:
-        logger.info(f"Versuche Backup zu löschen: {filename}")
-        success = backup_manager.delete_backup(filename)
-        if success:
-            success_msg = 'Backup wurde erfolgreich gelöscht'
-            logger.info(success_msg)
-            flash(success_msg, 'success')
-        else:
-            error_msg = 'Fehler beim Löschen des Backups'
-            logger.error(error_msg)
-            flash(error_msg, 'error')
+            return jsonify({'status': 'error', 'message': error_msg}), 500
     except Exception as e:
         error_msg = f'Fehler beim Löschen des Backups: {str(e)}'
-        logger.error(error_msg)
-        flash(error_msg, 'error')
-    return redirect(url_for('admin.dashboard'))
+        logger.error(error_msg, exc_info=True) # exc_info=True hinzugefügt
+        # flash(error_msg, 'error') # Entfernt
+        # return redirect(url_for('admin.dashboard')) # Entfernt
+        return jsonify({'status': 'error', 'message': error_msg}), 500
 
 @bp.route('/departments', methods=['GET'])
 @mitarbeiter_required

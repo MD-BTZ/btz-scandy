@@ -12,5 +12,6 @@ fi
 # Aktiviere die virtuelle Umgebung
 source venv/bin/activate
 
-# Starte Gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app.wsgi:application 
+# Starte Gunicorn mit Reload-Funktion
+echo "Starte Gunicorn mit Reload-Überwachung für tmp/needs_restart..."
+gunicorn -w 4 -b 0.0.0.0:5000 --reload --reload-extra-file tmp/needs_restart app.wsgi:application 

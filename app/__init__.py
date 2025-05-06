@@ -12,13 +12,14 @@ from app.utils.db_schema import SchemaManager
 from flask_compress import Compress
 from app.models.settings import Settings
 from app.utils.auth_utils import needs_setup
-from app.models.init_db import init_users as init_database_users
+from app.models.init_db import init_db
 from pathlib import Path
 import sys
 from flask_login import LoginManager
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
+from app.models.migrations import run_migrations
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -58,21 +59,24 @@ def ensure_directories_exist():
     """Stellt sicher, dass alle benötigten Verzeichnisse existieren"""
     from app.config import config
     current_config = config['default']()
-    
+    project_root = Path(current_config.DATABASE).parent.parent # Annahme: DB ist in app/database/
+
     # Liste der zu erstellenden Verzeichnisse
     directories = [
         os.path.dirname(current_config.DATABASE),
         current_config.BACKUP_DIR,
-        current_config.UPLOAD_FOLDER
+        current_config.UPLOAD_FOLDER,
+        project_root / 'tmp' # Hinzugefügt
     ]
     
     # Verzeichnisse erstellen
     for directory in directories:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-            logging.info(f"Verzeichnis erstellt: {directory}")
+        dir_path = Path(directory) # Sicherstellen, dass es ein Path-Objekt ist
+        if not dir_path.exists():
+            dir_path.mkdir(parents=True, exist_ok=True) # parents=True hinzugefügt
+            logging.info(f"Verzeichnis erstellt: {dir_path}")
         else:
-            logging.info(f"Verzeichnis existiert bereits: {directory}")
+            logging.info(f"Verzeichnis existiert bereits: {dir_path}")
 
 def cleanup_database():
     """Bereinigt die Datenbank von ungültigen Einträgen"""
@@ -108,24 +112,28 @@ def cleanup_database():
     except Exception as e:
         logger.error(f"Fehler bei der automatischen Datenbankbereinigung: {str(e)}")
 
-def init_databases():
-    """Initialisiert alle Datenbanken und stellt sicher, dass sie die korrekte Struktur haben"""
+def initialize_and_migrate_databases():
+    """Initialisiert und migriert alle Datenbanken."""
     try:
-        logger.info("Initialisiere Datenbanken...")
-        
-        # Hauptdatenbank initialisieren
-        logger.info("Initialisiere Hauptdatenbank...")
-        from app.models.init_db import init_db
+        logger.info("Initialisiere und migriere Datenbanken...")
+        from app.config import config
+        current_config = config['default']()
+        db_path = current_config.DATABASE
+
+        # 1. Migrationen ausführen (stellt sicher, dass das Schema aktuell ist)
+        run_migrations(db_path)
+
+        # 2. Basis-DB-Initialisierung (stellt sicher, dass alle Tabellen existieren, falls DB komplett neu)
+        logger.info("Führe Basis-DB-Initialisierung durch (CREATE TABLE IF NOT EXISTS)...")
         init_db()
-        init_database_users()
-        
-        # Ticket-Datenbank initialisieren
+
+        # 3. Ticket-Datenbank initialisieren
         logger.info("Initialisiere Ticket-Datenbank...")
         init_ticket_db()
-        
-        logger.info("Datenbanken erfolgreich initialisiert")
+
+        logger.info("Datenbanken erfolgreich initialisiert/migriert")
     except Exception as e:
-        logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
+        logger.error(f"Fehler bei der Datenbankinitialisierung/-migration: {str(e)}", exc_info=True)
         raise
 
 def create_app(test_config=None):
@@ -145,8 +153,8 @@ def create_app(test_config=None):
     # Verzeichnisse erstellen
     ensure_directories_exist()
     
-    # Datenbanken initialisieren
-    init_databases()
+    # Datenbanken initialisieren und migrieren
+    initialize_and_migrate_databases()
     
     # Context Processors registrieren
     register_context_processors(app)

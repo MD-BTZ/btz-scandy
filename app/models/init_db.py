@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def init_db():
-    """Initialisiert die Hauptdatenbank (inventory.db)"""
+    """Initialisiert die Hauptdatenbank (inventory.db) - Basis-Tabellen."""
     # Hole die Konfiguration
     from app.config import config
     current_config = config['default']()
@@ -18,7 +18,7 @@ def init_db():
     # Stelle sicher, dass das Verzeichnis existiert
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
-    logger.info(f"Initialisiere Datenbank in: {db_path}")
+    logger.info(f"Initialisiere Datenbank-Basistabellen (IF NOT EXISTS) in: {db_path}")
     
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -171,78 +171,28 @@ def init_db():
             )
         ''')
         
-        # Homepage Notices Tabelle
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS homepage_notices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                priority INTEGER DEFAULT 0,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        # Homepage Notices Tabelle wird durch Migration v1->v2 erstellt
+        # cursor.execute('''
+        #     CREATE TABLE IF NOT EXISTS homepage_notices (
+        #         ...
+        #     )
+        # ''')
         
-        # Initiale Hinweise einfügen, falls die Tabelle leer ist
-        cursor.execute('SELECT COUNT(*) FROM homepage_notices')
-        if cursor.fetchone()[0] == 0:
-            cursor.execute('''
-                INSERT INTO homepage_notices (title, content, priority)
-                VALUES 
-                    ('Willkommen', 'Willkommen im Scandy-System. Hier können Sie Werkzeuge und Verbrauchsmaterialien verwalten.', 1),
-                    ('Hinweis', 'Bitte melden Sie sich an, um das System zu nutzen.', 2)
-            ''')
+        # Initiale Hinweise werden durch Migration v1->v2 eingefügt
+        # cursor.execute('SELECT COUNT(*) FROM homepage_notices')
+        # if cursor.fetchone()[0] == 0:
+        #     cursor.execute('''
+        #         INSERT INTO homepage_notices ...
+        #     ''')
         
-        logger.info("Datenbank-Tabellen wurden erfolgreich erstellt")
+        logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")
         
         conn.commit()
 
-def init_users(app=None):
-    """Initialisiert die Benutzerdatenbank und erstellt die Benutzer-Accounts"""
-    # Hole die Konfiguration
-    from app.config import config
-    current_config = config['default']()
-    
-    # Verwende den korrekten Pfad aus der Config für die Hauptdatenbank
-    db_path = current_config.DATABASE
-    
-    # Stelle sicher, dass das Verzeichnis existiert
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    logger.info(f"Initialisiere Benutzerdatenbank in: {db_path}")
-    
-    with sqlite3.connect(db_path) as conn:
-        # Erstelle users Tabelle mit korrektem Schema
-        conn.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')),
-            is_active INTEGER DEFAULT 1
-        )''')
-        
-        # Prüfe ob bereits Benutzer existieren
-        if not conn.execute('SELECT 1 FROM users').fetchone():
-            # Erstelle die Standard-Benutzeraccounts
-            conn.execute(
-                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                ('Admin', generate_password_hash('BTZ-Scandy25'), 'admin')
-            )
-            conn.execute(
-                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)', 
-                ('Mitarbeiter', generate_password_hash('BTZ-BT11'), 'mitarbeiter')
-            )
-            conn.execute(
-                'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                ('Test', generate_password_hash('test'), 'anwender')
-            )
-            
-            logger.info("Standard-Benutzerkonten wurden erstellt")
-            
-        conn.commit()
+# init_users Funktion ist entfernt, Logik ist in migrations._migrate_v1_to_v2
 
 if __name__ == '__main__':
+    # Dieser Teil wird normalerweise nicht direkt ausgeführt, wenn die App läuft
+    logger.warning("init_db.py direkt ausgeführt - Initialisiere nur Basis-DB.")
     init_db()
-    init_users() 
+    logger.warning("Manuelle Ausführung beendet. Für Migrationen bitte die App starten.") 
