@@ -1,50 +1,68 @@
 @echo off
-echo Starte Installation...
+setlocal
 
-REM Prüfe ob Python installiert ist
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo Python ist nicht installiert. Bitte installieren Sie Python 3.x
-    exit /b 1
+echo Installiere Scandy...
+
+REM --- Python & Pip --- 
+echo [1/4] Ueberpruefe Python und Pip...
+where python >nul 2>nul
+if %errorlevel% neq 0 (
+    echo FEHLER: Python ist nicht im PATH gefunden. Bitte installieren Sie Python 3 und fuegen Sie es zum PATH hinzu.
+    goto :eof
+)
+where pip >nul 2>nul
+if %errorlevel% neq 0 (
+    echo FEHLER: pip ist nicht im PATH gefunden. Bitte stellen Sie sicher, dass pip mit Python installiert wurde.
+    goto :eof
 )
 
-REM Erstelle virtuelle Umgebung, falls sie nicht existiert
-if not exist venv (
-    python -m venv venv
-)
+REM --- Virtuelle Umgebung --- 
+echo [2/4] Erstelle virtuelle Umgebung (venv)...
+python -m venv venv
 
-REM Aktiviere virtuelle Umgebung
+REM --- Python-Abhaengigkeiten --- 
+echo [3/4] Installiere Python-Abhaengigkeiten aus requirements.txt...
 call venv\Scripts\activate.bat
-
-REM Aktualisiere pip
-python -m pip install --upgrade pip
-
-REM Installiere Abhängigkeiten
 pip install -r requirements.txt
 
-REM Installiere wichtige Abhängigkeiten explizit
-pip install flask
-pip install waitress
-pip install flask-login
-pip install flask-sqlalchemy
-pip install flask-wtf
-pip install werkzeug
-pip install sqlalchemy
-pip install wtforms
-pip install python-dotenv
-pip install bcrypt
-pip install pillow
-pip install python-barcode
-pip install requests
-pip install flask-compress
-pip install flask-session
-pip install openpyxl
-pip install apscheduler
+REM --- Node.js, npm & Tailwind CSS --- 
+echo [4/4] Richte Tailwind CSS ein...
+where node >nul 2>nul
+if %errorlevel% neq 0 (
+    echo WARNUNG: Node.js nicht gefunden.
+    echo Tailwind CSS benoetigt Node.js und npm zum Kompilieren der Stylesheets.
+    echo Bitte installieren Sie Node.js von der offiziellen Webseite (https://nodejs.org/) und stellen Sie sicher, dass es im PATH ist.
+    echo Nach der Installation fuehren Sie bitte manuell folgende Befehle in der Eingabeaufforderung im Projektverzeichnis aus:
+    echo 1. npm install
+    echo 2. npm run build:css
+    echo Installation wird fortgesetzt, aber CSS wird möglicherweise nicht korrekt generiert.
+    goto :skip_npm
+)
+where npm >nul 2>nul
+if %errorlevel% neq 0 (
+    echo WARNUNG: npm nicht gefunden.
+    echo Bitte stellen Sie sicher, dass npm korrekt mit Node.js installiert wurde.
+    echo Führen Sie nach der Behebung manuell folgende Befehle in der Eingabeaufforderung im Projektverzeichnis aus:
+    echo 1. npm install
+    echo 2. npm run build:css
+    echo Installation wird fortgesetzt, aber CSS wird möglicherweise nicht korrekt generiert.
+    goto :skip_npm
+)
 
-REM Erstelle notwendige Verzeichnisse
-if not exist app\database mkdir app\database
-if not exist app\logs mkdir app\logs
-if not exist app\uploads mkdir app\uploads
-if not exist app\flask_session mkdir app\flask_session
+echo Installiere npm-Abhaengigkeiten (tailwindcss, daisyui)...
+npm install
+echo Generiere CSS-Datei mit Tailwind...
+npm run build:css
 
-echo Installation abgeschlossen. Starten Sie die Anwendung mit 'start.bat' 
+:skip_npm
+call venv\Scripts\deactivate.bat
+
+echo ------------------------------------
+echo Scandy Installation abgeschlossen!
+echo.
+echo So starten Sie die Anwendung:
+echo 1. Aktivieren Sie die virtuelle Umgebung: venv\Scripts\activate.bat
+echo 2. Starten Sie den Server: start.bat
+echo ------------------------------------
+
+endlocal 

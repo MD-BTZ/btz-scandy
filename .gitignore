@@ -74,4 +74,11 @@ _potentially_unused/
 # Archivdateien
 *.tar.gz
 scandy.tar.gz
-scandy_docker.tar.gz 
+scandy_docker.tar.gz
+
+# Node.js / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json 

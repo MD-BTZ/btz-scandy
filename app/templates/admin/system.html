@@ -105,10 +105,208 @@
         </div>
     </dialog>
 
+    <!-- Begriffe & Icons Verwaltung -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="text-xl font-bold mb-4">Begriffe & Icons</h2>
+            <form method="POST" action="{{ url_for('admin.system') }}">
+                <div class="form-control mb-2">
+                    <label class="label">
+                        <span class="label-text">Name für Verleihgegenstände</span>
+                    </label>
+                    <input type="text" name="label_tools_name" class="input input-bordered" value="{{ app_labels['tools']['name'] }}" placeholder="z.B. Werkzeuge, Geräte, Maschinen">
+                </div>
+                <div class="form-control mb-2 relative">
+                    <label class="label flex items-center gap-2">
+                        <span class="label-text">Icon für Verleihgegenstände</span>
+                    </label>
+                    <input type="hidden" name="label_tools_icon" id="tools-icon-input" value="{{ app_labels['tools']['icon'] }}">
+                    <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-200 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tools')">
+                        <span><i id="tools-icon-preview" class="{{ app_labels['tools']['icon'] }} text-xl"></i></span>
+                        <span class="ml-2">Icon wählen</span>
+                        <i class="fas fa-chevron-down ml-auto"></i>
+                    </button>
+                    <div id="tools-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
+                        <input type="text" id="tools-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('tools')">
+                        <div id="tools-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+                <div class="form-control mb-2">
+                    <label class="label">
+                        <span class="label-text">Bezeichnung für Verbrauchsmaterial</span>
+                    </label>
+                    <input type="text" name="label_consumables_name" class="input input-bordered" value="{{ app_labels['consumables']['name'] }}" placeholder="z.B. Verbrauchsmaterial, Material, Artikel">
+                </div>
+                <div class="form-control mb-4 relative">
+                    <label class="label flex items-center gap-2">
+                        <span class="label-text">Icon für Verbrauchsmaterial</span>
+                    </label>
+                    <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ app_labels['consumables']['icon'] }}">
+                    <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-200 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('consumables')">
+                        <span><i id="consumables-icon-preview" class="{{ app_labels['consumables']['icon'] }} text-xl"></i></span>
+                        <span class="ml-2">Icon wählen</span>
+                        <i class="fas fa-chevron-down ml-auto"></i>
+                    </button>
+                    <div id="consumables-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
+                        <input type="text" id="consumables-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('consumables')">
+                        <div id="consumables-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+                <div class="card-actions justify-end">
+                    <button type="submit" class="btn btn-primary">
+                        Begriffe speichern
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </div>
 
 <!-- Script Tag wieder hierher verschoben -->
 <script src="{{ url_for('static', filename='js/backup.js') }}"></script>
+
+<script>
+// Komplette Liste der FontAwesome-Free-Solid-Icons (gekürzt für Demo, bitte ggf. erweitern)
+const allIcons = [
+    // Büro & Kaufmännisches
+    'fas fa-briefcase', 'fas fa-file-invoice', 'fas fa-file-invoice-dollar', 'fas fa-calculator', 'fas fa-chart-line', 
+    'fas fa-chart-bar', 'fas fa-chart-pie', 'fas fa-file-alt', 'fas fa-file-contract', 'fas fa-file-signature',
+    'fas fa-file-export', 'fas fa-file-import', 'fas fa-file-download', 'fas fa-file-upload', 'fas fa-folder',
+    'fas fa-folder-open', 'fas fa-folder-plus', 'fas fa-folder-minus', 'fas fa-folder-tree', 'fas fa-print',
+    'fas fa-fax', 'fas fa-copy', 'fas fa-paste', 'fas fa-cut', 'fas fa-stamp',
+    'fas fa-signature', 'fas fa-pen', 'fas fa-pen-fancy', 'fas fa-pen-nib', 'fas fa-pencil-alt',
+    'fas fa-pencil-ruler', 'fas fa-highlighter', 'fas fa-marker', 'fas fa-paint-brush', 'fas fa-drafting-compass',
+    'fas fa-ruler', 'fas fa-ruler-combined', 'fas fa-ruler-horizontal', 'fas fa-ruler-vertical', 'fas fa-tasks',
+    'fas fa-clipboard', 'fas fa-clipboard-list', 'fas fa-clipboard-check', 'fas fa-clipboard-user', 'fas fa-calendar',
+    'fas fa-calendar-alt', 'fas fa-calendar-check', 'fas fa-calendar-plus', 'fas fa-calendar-minus', 'fas fa-calendar-times',
+    'fas fa-clock', 'fas fa-stopwatch', 'fas fa-hourglass', 'fas fa-hourglass-half', 'fas fa-hourglass-end',
+
+    // Technik & Werkstatt
+    'fas fa-tools', 'fas fa-wrench', 'fas fa-screwdriver', 'fas fa-hammer', 'fas fa-cogs',
+    'fas fa-cog', 'fas fa-microchip', 'fas fa-microscope', 'fas fa-flask', 'fas fa-vial',
+    'fas fa-prescription-bottle', 'fas fa-prescription', 'fas fa-pills', 'fas fa-capsules', 'fas fa-syringe',
+    'fas fa-thermometer', 'fas fa-thermometer-half', 'fas fa-thermometer-quarter', 'fas fa-thermometer-empty', 'fas fa-thermometer-full',
+    'fas fa-tachometer-alt', 'fas fa-bolt', 'fas fa-plug', 'fas fa-power-off', 'fas fa-battery-full',
+    'fas fa-battery-three-quarters', 'fas fa-battery-half', 'fas fa-battery-quarter', 'fas fa-battery-empty',
+
+    // Service & Bewirtung
+    'fas fa-utensils', 'fas fa-glass-martini', 'fas fa-wine-glass', 'fas fa-wine-bottle', 'fas fa-beer',
+    'fas fa-coffee', 'fas fa-mug-hot', 'fas fa-mug-saucer', 'fas fa-glass-water', 'fas fa-glass-water-droplet',
+    'fas fa-glass-whiskey', 'fas fa-glass-whiskey-rocks', 'fas fa-glass-cheers', 'fas fa-glass-citrus',
+    'fas fa-utensil-spoon', 'fas fa-utensil-fork', 'fas fa-utensil-knife',
+
+    // Medien & Digitales
+    'fas fa-camera', 'fas fa-camera-retro', 'fas fa-camera-rotate', 'fas fa-camera-viewfinder', 'fas fa-camera-slash',
+    'fas fa-video', 'fas fa-video-slash', 'fas fa-film', 'fas fa-photo-film', 'fas fa-photo-video',
+    'fas fa-photo-film-music', 'fas fa-photo-film-audio', 'fas fa-photo-film-image', 'fas fa-photo-film-text',
+
+    // Allgemein nützliche Icons
+    'fas fa-box', 'fas fa-box-open', 'fas fa-box-archive', 'fas fa-box-heart', 'fas fa-box-check',
+    'fas fa-box-tissue', 'fas fa-boxes', 'fas fa-boxes-stacked', 'fas fa-boxes-packing', 'fas fa-boxes-alt',
+    'fas fa-pallet', 'fas fa-pallet-box', 'fas fa-pallet-boxes', 'fas fa-pallet-boxes-stacked', 'fas fa-pallet-boxes-packing',
+    'fas fa-truck', 'fas fa-truck-loading', 'fas fa-truck-moving', 'fas fa-truck-pickup', 'fas fa-truck-ramp-box',
+    'fas fa-truck-ramp-couch', 'fas fa-truck-ramp-container'
+];
+
+// Funktion zum Hochladen eigener Icons
+function uploadCustomIcon(type) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/svg+xml,image/png,image/jpeg';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const formData = new FormData();
+            formData.append('icon', file);
+            formData.append('type', type);
+
+            try {
+                const response = await fetch('/admin/upload-icon', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        // Icon erfolgreich hochgeladen, aktualisiere die Vorschau
+                        document.getElementById(type + '-icon-input').value = data.icon_path;
+                        document.getElementById(type + '-icon-preview').className = data.icon_path + ' text-xl';
+                        // Schließe das Dropdown
+                        document.getElementById(type + '-icon-dropdown').classList.add('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Fehler beim Hochladen des Icons:', error);
+                alert('Fehler beim Hochladen des Icons. Bitte versuchen Sie es erneut.');
+            }
+        }
+    };
+    input.click();
+}
+
+// Modifiziere die bestehende renderIconGrid Funktion
+function renderIconGrid(type, icons) {
+    const grid = document.getElementById(type + '-icon-grid');
+    grid.innerHTML = '';
+    
+    // Füge "Eigenes Icon hochladen" Button hinzu
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.className = 'btn btn-ghost btn-xs flex justify-center items-center col-span-5';
+    uploadBtn.onclick = () => uploadCustomIcon(type);
+    uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Eigenes Icon hochladen';
+    grid.appendChild(uploadBtn);
+
+    // Füge Trennlinie hinzu
+    const divider = document.createElement('div');
+    divider.className = 'col-span-5 border-t my-2';
+    grid.appendChild(divider);
+
+    // Rendere die FontAwesome Icons
+    icons.forEach(icon => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-ghost btn-xs flex justify-center items-center';
+        btn.title = icon;
+        btn.onclick = function() { selectIcon(type, icon); return false; };
+        btn.innerHTML = `<i class="${icon} text-xl"></i>`;
+        grid.appendChild(btn);
+    });
+}
+
+function filterIcons(type) {
+    const search = document.getElementById(type + '-icon-search').value.toLowerCase();
+    const filtered = allIcons.filter(icon => icon.toLowerCase().includes(search));
+    renderIconGrid(type, filtered);
+}
+
+function toggleIconDropdown(type) {
+    const dropdown = document.getElementById(type + '-icon-dropdown');
+    dropdown.classList.toggle('hidden');
+    // Schließe das andere Dropdown, falls offen
+    if (type === 'tools') {
+        document.getElementById('consumables-icon-dropdown').classList.add('hidden');
+    } else {
+        document.getElementById('tools-icon-dropdown').classList.add('hidden');
+    }
+    // Initiales Grid rendern
+    filterIcons(type);
+}
+function selectIcon(type, icon) {
+    document.getElementById(type + '-icon-input').value = icon;
+    document.getElementById(type + '-icon-preview').className = icon + ' text-xl';
+    document.getElementById(type + '-icon-dropdown').classList.add('hidden');
+}
+// Schließe Dropdown, wenn außerhalb geklickt wird
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.form-control')) {
+        document.getElementById('tools-icon-dropdown').classList.add('hidden');
+        document.getElementById('consumables-icon-dropdown').classList.add('hidden');
+    }
+});
+</script>
 
 {% endblock %}
 

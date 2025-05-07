@@ -19,6 +19,9 @@ from backup import DatabaseBackup
 from app.config import Config
 import openpyxl # Import für Excel-Erstellung
 from io import BytesIO # Import für Excel-Erstellung im Speicher
+import time
+from PIL import Image
+import io
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -844,37 +847,62 @@ def restore_item(type, barcode):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def get_label_setting(key, default):
+    value = Database.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
+    return value['value'] if value and value['value'] else default
+
+def get_app_labels():
+    return {
+        'tools': {
+            'name': get_label_setting('label_tools_name', 'Werkzeuge'),
+            'icon': get_label_setting('label_tools_icon', 'fas fa-tools')
+        },
+        'consumables': {
+            'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
+            'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
+        }
+    }
+
 @bp.route('/server-settings', methods=['GET', 'POST'])
 @admin_required
 def server_settings():
     if request.method == 'POST':
         mode = request.form.get('mode')
         server_url = request.form.get('server_url')
-        
+        # Neue Felder für Labels/Icons
+        label_tools_name = request.form.get('label_tools_name')
+        label_tools_icon = request.form.get('label_tools_icon')
+        label_consumables_name = request.form.get('label_consumables_name')
+        label_consumables_icon = request.form.get('label_consumables_icon')
         try:
             # Speichere Einstellungen in der Datenbank
             Database.query('''
                 INSERT OR REPLACE INTO settings (key, value)
                 VALUES (?, ?)
             ''', ['server_mode', '1' if mode == 'server' else '0'])
-            
             if mode == 'client' and server_url:
                 Database.query('''
                     INSERT OR REPLACE INTO settings (key, value)
                     VALUES (?, ?)
                 ''', ['server_url', server_url])
-            
+            # Speichere die neuen Label/Icons
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name or 'Werkzeuge'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
             if mode == 'server':
                 Config.init_server()
                 flash('Server-Modus aktiviert', 'success')
             else:
                 Config.init_client(server_url)
                 flash('Client-Modus aktiviert', 'success')
-                
         except Exception as e:
             flash(f'Fehler beim Speichern der Einstellungen: {str(e)}', 'error')
             return redirect(url_for('admin.server_settings'))
-            
     try:
         # Hole aktuelle Einstellungen
         status = Database.query('''
@@ -882,20 +910,20 @@ def server_settings():
             FROM sync_status 
             ORDER BY id DESC LIMIT 1
         ''', one=True)
-        
         auto_sync = Database.query('''
             SELECT value FROM settings
             WHERE key = 'auto_sync'
         ''', one=True)
-                
+        # Labels/Icons aus Settings holen
+        app_labels = get_app_labels()
         return render_template('admin/server_settings.html',
                              is_server=Config.SERVER_MODE,
                              server_url=Config.SERVER_URL,
                              last_sync=status['last_sync'] if status else None,
                              sync_status=status['status'] if status else 'never',
                              sync_error=status['error'] if status else None,
-                             auto_sync=bool(int(auto_sync['value'])) if auto_sync else False)
-                             
+                             auto_sync=bool(int(auto_sync['value'])) if auto_sync else False,
+                             app_labels=app_labels)
     except Exception as e:
         flash(f'Fehler beim Laden der Einstellungen: {str(e)}', 'error')
         return redirect(url_for('admin.dashboard'))
@@ -1854,11 +1882,28 @@ def tickets():
     tickets = ticket_db.query(query, params)
     return render_template('tickets/index.html', tickets=tickets)
 
-@bp.route('/system')
+@bp.route('/system', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def system():
-    # ...
+    if request.method == 'POST':
+        label_tools_name = request.form.get('label_tools_name')
+        label_tools_icon = request.form.get('label_tools_icon')
+        label_consumables_name = request.form.get('label_consumables_name')
+        label_consumables_icon = request.form.get('label_consumables_icon')
+        try:
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name or 'Werkzeuge'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
+            Database.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+            flash('Begriffe & Icons wurden gespeichert.', 'success')
+        except Exception as e:
+            flash(f'Fehler beim Speichern der Begriffe: {str(e)}', 'error')
+        return redirect(url_for('admin.system'))
     return render_template('admin/system.html')
 
 @bp.route('/users')
@@ -2082,3 +2127,63 @@ def delete_user(user_id):
         flash("Ein Fehler ist beim Löschen des Benutzers aufgetreten.", 'error')
 
     return redirect(url_for('admin.manage_users'))
+
+@bp.app_context_processor
+def inject_app_labels():
+    return dict(app_labels=get_app_labels())
+
+@bp.route('/upload-icon', methods=['POST'])
+@login_required
+@admin_required
+def upload_icon():
+    if 'icon' not in request.files:
+        return jsonify({'success': False, 'error': 'Keine Datei hochgeladen'}), 400
+    
+    file = request.files['icon']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'}), 400
+    
+    if file:
+        try:
+            # Lese das Bild
+            img = Image.open(file.stream)
+            
+            # Konvertiere zu RGB falls nötig (für PNG mit Transparenz)
+            if img.mode in ('RGBA', 'LA'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            
+            # Berechne die neue Größe (maximal 64x64 Pixel)
+            max_size = (64, 64)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
+            # Erstelle einen eindeutigen Dateinamen
+            filename = secure_filename(file.filename)
+            base, ext = os.path.splitext(filename)
+            unique_filename = f"{base}_{int(time.time())}.png"  # Immer als PNG speichern
+            
+            # Stelle sicher, dass das Verzeichnis existiert
+            upload_dir = os.path.join(current_app.static_folder, 'uploads', 'icons')
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Speichere die Datei
+            file_path = os.path.join(upload_dir, unique_filename)
+            img.save(file_path, 'PNG', quality=95, optimize=True)
+            
+            # Generiere den relativen Pfad für die Verwendung im Template
+            relative_path = f"/static/uploads/icons/{unique_filename}"
+            
+            return jsonify({
+                'success': True,
+                'icon_path': relative_path
+            })
+            
+        except Exception as e:
+            logger.error(f"Fehler bei der Bildverarbeitung: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'Fehler bei der Bildverarbeitung: {str(e)}'
+            }), 500
+    
+    return jsonify({'success': False, 'error': 'Ungültige Datei'}), 400
