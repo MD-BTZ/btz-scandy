@@ -156,6 +156,13 @@ def create_app(test_config=None):
     # Datenbanken initialisieren und migrieren
     initialize_and_migrate_databases()
     
+    # Flask-Login initialisieren
+    login_manager.init_app(app)
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.get_by_id(user_id)
+    
     # Context Processors registrieren
     register_context_processors(app)
     
@@ -221,28 +228,4 @@ def create_app(test_config=None):
                 else:
                     print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
     
-    # Login-Manager initialisieren
-    login_manager.init_app(app)
-
-    @login_manager.user_loader
-    def load_user(user_id):
-        """Lädt einen Benutzer anhand seiner ID für Flask-Login."""
-        # Stelle sicher, dass User Klasse importiert ist und die Methode existiert
-        try:
-             from app.models.user import User # Import hier, um Zirkelbezüge zu vermeiden
-             user = User.get_by_id(int(user_id)) # User-Model muss get_by_id implementieren
-             if user:
-                 # Optional: Debug-Log
-                 # app.logger.debug(f"User loaded: {user.username} (ID: {user_id})")
-                 return user
-             else:
-                 # app.logger.warning(f"User with ID {user_id} not found.")
-                 return None
-        except ImportError:
-            app.logger.error("User model cannot be imported in user_loader.")
-            return None
-        except Exception as e:
-            app.logger.error(f"Error loading user {user_id}: {e}", exc_info=True)
-            return None
-
     return app

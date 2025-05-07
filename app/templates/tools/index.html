@@ -1,7 +1,9 @@
 {% extends "shared/list_base.html" %}
 
+{% block title %}Werkzeuge{% endblock %}
+
 {% block actions %}
-{% if is_admin %}
+{% if current_user.is_authenticated %}
 <div class="flex gap-2">
     <a href="{{ url_for('tools.add') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Neues Werkzeug
@@ -27,80 +29,59 @@
 
 <select class="select select-bordered w-full max-w-xs" id="statusFilter">
     <option value="">Alle Status</option>
-    <option value="verfügbar">Verfügbar</option>
-    <option value="ausgeliehen">Ausgeliehen</option>
-    <option value="defekt">Defekt</option>
+    <option value="available">Verfügbar</option>
+    <option value="lent">Ausgeliehen</option>
+    <option value="maintenance">In Wartung</option>
 </select>
 {% endblock %}
 
 {% block table_headers %}
-<th>Name</th>
 <th>Barcode</th>
+<th>Name</th>
+<th>Kategorie</th>
 <th>Standort</th>
 <th>Status</th>
-<th>Kategorie</th>
-{% if is_admin %}
 <th class="text-right">Aktionen</th>
-{% endif %}
 {% endblock %}
 
 {% block table_rows %}
 {% for tool in tools %}
 <tr class="hover data-row" 
-    data-category="{{ tool.category or '' }}"
-    data-location="{{ tool.location or '' }}"
-    data-status="{{ tool.current_status }}">
+    data-category="{{ tool.category }}" 
+    data-location="{{ tool.location }}"
+    data-status="{{ tool.status }}">
     <td>
-        {% if is_admin %}
+        <div class="badge badge-outline">{{ tool.barcode }}</div>
+    </td>
+    <td>
         <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="link link-hover font-medium">
             {{ tool.name }}
         </a>
-        {% else %}
-        <span class="font-medium">{{ tool.name }}</span>
-        {% endif %}
-    </td>
-    <td><code>{{ tool.barcode }}</code></td>
-    <td>
-        <span class="badge badge-ghost gap-1">
-            <i class="fas fa-map-marker-alt text-info"></i>
-            {{ tool.location or '-' }}
-        </span>
     </td>
     <td>
-        {% if tool.current_status == 'defekt' %}
-            <span class="badge badge-error gap-1 text-error-content">
-                <i class="fas fa-exclamation-triangle"></i>
-                Defekt
-            </span>
-        {% elif tool.current_status == 'ausgeliehen' %}
-            <span class="badge badge-warning gap-1 text-warning-content">
-                <i class="fas fa-hand-holding"></i>
-                {% if is_admin %}
-                Ausgeliehen an {{ tool.lent_to }}
-                {% else %}
-                Ausgeliehen
-                {% endif %}
-            </span>
-        {% else %}
-            <span class="badge badge-success gap-1 text-success-content">
+        <div class="badge badge-primary badge-outline">{{ tool.category }}</div>
+    </td>
+    <td>
+        <div class="badge badge-secondary badge-outline">{{ tool.location }}</div>
+    </td>
+    <td>
+        {% if tool.status == 'available' %}
+            <div class="badge badge-success gap-1">
                 <i class="fas fa-check"></i>
                 Verfügbar
-            </span>
+            </div>
+        {% elif tool.status == 'lent' %}
+            <div class="badge badge-warning gap-1">
+                <i class="fas fa-tools"></i>
+                Ausgeliehen
+            </div>
+        {% elif tool.status == 'maintenance' %}
+            <div class="badge badge-error gap-1">
+                <i class="fas fa-wrench"></i>
+                In Wartung
+            </div>
         {% endif %}
     </td>
-    <td>
-        {% set category_colors = {
-            'Handwerkzeug': 'badge-primary',
-            'Elektrowerkzeug': 'badge-secondary',
-            'Messwerkzeug': 'badge-accent',
-            'Maschine': 'badge-info'
-        } %}
-        <span class="badge {{ category_colors.get(tool.category, 'badge-neutral') }} gap-1">
-            <i class="fas fa-tag"></i>
-            {{ tool.category or '-' }}
-        </span>
-    </td>
-    {% if is_admin %}
     <td class="text-right">
         <div class="btn-group">
             <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="btn btn-sm btn-ghost">
@@ -111,7 +92,6 @@
             </button>
         </div>
     </td>
-    {% endif %}
 </tr>
 {% endfor %}
 {% endblock %}
@@ -119,86 +99,56 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Filter-Funktionalität
 document.addEventListener('DOMContentLoaded', function() {
-    // Suchfunktion
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            document.querySelectorAll('.data-row').forEach(row => {
-                const searchableContent = row.textContent.toLowerCase();
-                row.style.display = searchableContent.includes(searchTerm) ? '' : 'none';
-            });
-        });
-    }
+    const categoryFilter = document.getElementById('categoryFilter');
+    const locationFilter = document.getElementById('locationFilter');
+    const statusFilter = document.getElementById('statusFilter');
 
-    // Filter-Funktionalität
     function applyFilters() {
-        const category = document.getElementById('categoryFilter').value;
-        const location = document.getElementById('locationFilter').value;
-        const status = document.getElementById('statusFilter').value;
-        
+        const category = categoryFilter.value;
+        const location = locationFilter.value;
+        const status = statusFilter.value;
+
         document.querySelectorAll('.data-row').forEach(row => {
             const matchesCategory = !category || row.dataset.category === category;
             const matchesLocation = !location || row.dataset.location === location;
             const matchesStatus = !status || row.dataset.status === status;
-            
-            row.style.display = (matchesCategory && matchesLocation && matchesStatus) ? '' : 'none';
+
+            row.style.display = matchesCategory && matchesLocation && matchesStatus ? '' : 'none';
         });
     }
 
-    // Filter-Event-Listener
-    ['categoryFilter', 'locationFilter', 'statusFilter'].forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.addEventListener('change', applyFilters);
-        }
-    });
-
-    // Neue Event-Listener für Statusänderungen
-    window.addEventListener('toolStatusChanged', function() {
-        location.reload();
-    });
-
-    window.addEventListener('toolLent', function() {
-        location.reload();
-    });
-
-    window.addEventListener('toolReturned', function() {
-        location.reload();
-    });
+    categoryFilter.addEventListener('change', applyFilters);
+    locationFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
 });
 
-function deleteTool(barcode) {
-    if (!confirm('Möchten Sie dieses Werkzeug wirklich in den Papierkorb verschieben?')) {
+// Lösch-Funktion
+async function deleteTool(barcode) {
+    if (!confirm('Möchten Sie dieses Werkzeug wirklich löschen?')) {
         return;
     }
     
-    console.log('Lösche Werkzeug mit Barcode:', barcode);
-    
-    fetch(`/tools/${barcode}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => {
-        console.log('Server Antwort Status:', response.status);
-        return response.json();
-    })
-    .then(data => {
-        console.log('Server Antwort:', data);
-        if (data.success) {
-            location.reload();
+    try {
+        const response = await fetch(`/tools/${barcode}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.reload();
         } else {
-            alert(data.message || 'Fehler beim Löschen des Werkzeugs');
+            alert(result.message || 'Ein Fehler ist aufgetreten');
         }
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen des Werkzeugs');
-    });
+        alert('Ein Fehler ist aufgetreten');
+    }
 }
 </script>
 {% endblock %} 

@@ -26,10 +26,11 @@ def login_required(f):
         # Wenn Setup benötigt wird, zur Login-Seite weiterleiten
         if needs_setup():
             flash('System-Setup erforderlich. Bitte als Administrator anmelden.', 'info')
-            return redirect(url_for('auth.login')) # Geändert von auth.setup
+            return redirect(url_for('auth.login'))
 
         # Wenn nicht eingeloggt, zum Login weiterleiten
-        if 'user_id' not in session:
+        if not current_user.is_authenticated:
+            flash('Bitte melden Sie sich an, um auf diese Seite zuzugreifen.', 'info')
             return redirect(url_for('auth.login', next=request.url))
 
         return f(*args, **kwargs)

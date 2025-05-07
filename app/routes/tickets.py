@@ -1,8 +1,10 @@
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash
 from app.models.ticket_db import TicketDatabase
+from app.models.database import Database
 from app.utils.decorators import login_required, admin_required
 import logging
 from datetime import datetime
+from flask_login import current_user
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 ticket_db = TicketDatabase()
@@ -74,7 +76,7 @@ def create():
                 }), 400
             
             # Benutzer aus Session oder 'Anonym'
-            created_by = session.get('username', 'Anonym')
+            created_by = current_user.username
             
             ticket_db.query(
                 """
@@ -135,100 +137,78 @@ def detail(id):
         """,
         [id]
     )
+
+    # Hole alle Mitarbeiter aus der Hauptdatenbank
+    with Database.get_db() as db:
+        workers = db.execute(
+            """
+            SELECT username, username as name
+            FROM users
+            WHERE is_active = 1
+            ORDER BY username
+            """
+        ).fetchall()
     
-    return render_template('tickets/detail.html', ticket=ticket, notes=notes)
+    return render_template('tickets/detail.html', ticket=ticket, notes=notes, workers=workers)
 
 @bp.route('/<int:id>/update', methods=['POST'])
-@admin_required
+@login_required
 def update(id):
+    """Aktualisiert ein Ticket"""
     try:
-        logging.info(f"Update-Anfrage für Ticket #{id} empfangen")
-        logging.info(f"Content-Type: {request.content_type}")
-        logging.info(f"Request Data: {request.get_data()}")
-        
-        # Versuche zuerst JSON zu parsen, falls nicht möglich, verwende Form-Daten
-        try:
-            data = request.get_json()
-        except:
-            data = request.form.to_dict()
-            
-        logging.info(f"Verarbeitete Daten: {data}")
-        
-        if not data:
-            logging.error("Keine Daten in der Anfrage")
-            return jsonify({
-                'success': False,
-                'message': 'Keine Daten erhalten'
-            }), 400
-            
-        status = data.get('status')
-        assigned_to = data.get('assigned_to')
-        resolution_notes = data.get('resolution_notes')
-        author_name = data.get('author_name')
-        
-        logging.info(f"Verarbeite Daten: status={status}, assigned_to={assigned_to}, has_notes={'ja' if resolution_notes else 'nein'}, author={author_name}")
+        # Hole das Ticket
+        ticket = ticket_db.get_ticket(id)
+        if not ticket:
+            flash('Ticket nicht gefunden', 'error')
+            return redirect(url_for('tickets.index'))
 
+        # Hole die Formulardaten
+        status = request.form.get('status')
+        assigned_to = request.form.get('assigned_to')
+        resolution_notes = request.form.get('resolution_notes')
+        author_name = current_user.username  # Benutzername aus current_user
+        category = request.form.get('category')
+        due_date = request.form.get('due_date')
+        estimated_time = request.form.get('estimated_time')
+        actual_time = request.form.get('actual_time')
+        is_private = request.form.get('is_private') == 'on'
+
+        # Validiere die Eingaben
         if not status:
-            logging.error("Status fehlt in den Daten")
-            return jsonify({
-                'success': False,
-                'message': 'Status ist erforderlich'
-            }), 400
+            flash('Status ist erforderlich', 'error')
+            return redirect(url_for('tickets.detail', id=id))
 
         if not author_name:
-            logging.error("Name fehlt in den Daten")
-            return jsonify({
-                'success': False,
-                'message': 'Name ist erforderlich'
-            }), 400
+            flash('Sie müssen eingeloggt sein, um Tickets zu bearbeiten', 'error')
+            return redirect(url_for('tickets.detail', id=id))
 
-        if status not in ['offen', 'in_bearbeitung', 'gelöst']:
-            logging.error(f"Ungültiger Status: {status}")
-            return jsonify({
-                'success': False,
-                'message': 'Ungültiger Status'
-            }), 400
-
-        # Update ticket status and assigned_to
-        logging.info("Führe Ticket-Update durch...")
-        ticket_db.query(
-            """
-            UPDATE tickets 
-            SET status = ?,
-                assigned_to = ?,
-                updated_at = CURRENT_TIMESTAMP,
-                resolved_at = CASE 
-                    WHEN ? = 'gelöst' THEN CURRENT_TIMESTAMP 
-                    ELSE NULL 
-                END
-            WHERE id = ?
-            """,
-            [status, assigned_to, status, id]
+        # Aktualisiere das Ticket
+        ticket_db.update_ticket(
+            id=id,
+            status=status,
+            assigned_to=assigned_to,
+            category=category,
+            due_date=due_date,
+            estimated_time=estimated_time,
+            actual_time=actual_time,
+            last_modified_by=author_name
         )
-        logging.info("Ticket-Update erfolgreich")
 
-        # Add note if provided
-        if resolution_notes and resolution_notes.strip():
-            logging.info("Füge neue Notiz hinzu...")
-            ticket_db.query(
-                """
-                INSERT INTO ticket_notes (ticket_id, note, created_by)
-                VALUES (?, ?, ?)
-                """,
-                [id, resolution_notes.strip(), author_name]
+        # Füge eine Notiz hinzu, wenn vorhanden
+        if resolution_notes:
+            ticket_db.add_note(
+                ticket_id=id,
+                note=resolution_notes,
+                author_name=author_name,
+                is_private=is_private
             )
-            logging.info("Notiz erfolgreich hinzugefügt")
 
-        logging.info("Update erfolgreich abgeschlossen")
-        return redirect(url_for('tickets.index'))
+        flash('Ticket erfolgreich aktualisiert', 'success')
+        return redirect(url_for('tickets.detail', id=id))
 
     except Exception as e:
-        logging.error(f"Fehler beim Aktualisieren des Tickets #{id}: {str(e)}")
-        logging.exception(e)  # Dies gibt den kompletten Stacktrace aus
-        return jsonify({
-            'success': False,
-            'message': f'Ein Fehler ist aufgetreten: {str(e)}'
-        }), 500 
+        flash(f'Fehler beim Aktualisieren des Tickets: {str(e)}', 'error')
+        return redirect(url_for('tickets.detail', id=id))
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 @admin_required

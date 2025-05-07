@@ -54,7 +54,7 @@ def index():
         import traceback
         print(traceback.format_exc())
         flash('Fehler beim Laden der Mitarbeiter', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -91,12 +91,11 @@ def add():
             
     return render_template('workers/add.html', departments=departments)
 
-@bp.route('/<barcode>', methods=['GET', 'POST'])
+@bp.route('/<string:original_barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
-def details(barcode):
+def details(original_barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
-        # Lade Abteilungen aus Settings
         departments = Database.query('''
             SELECT value as name
             FROM settings 
@@ -109,36 +108,78 @@ def details(barcode):
         
         if request.method == 'POST':
             data = request.form
-            
+            new_barcode = data.get('barcode').strip()
+            firstname = data.get('firstname').strip()
+            lastname = data.get('lastname').strip()
+            department = data.get('department', '')
+            email = data.get('email', '').strip()
+
+            if not all([new_barcode, firstname, lastname]):
+                flash('Barcode, Vorname und Nachname sind Pflichtfelder.', 'error')
+                # Umleitung zurück zur Detailseite mit dem *originalen* Barcode, falls die Validierung fehlschlägt
+                return redirect(url_for('workers.details', original_barcode=original_barcode))
+
             with Database.get_db() as conn:
+                # Prüfen, ob der Mitarbeiter existiert
+                worker = conn.execute("SELECT * FROM workers WHERE barcode = ? AND deleted = 0", [original_barcode]).fetchone()
+                if not worker:
+                    flash('Mitarbeiter nicht gefunden.', 'error')
+                    return redirect(url_for('workers.index'))
+
+                barcode_changed = (new_barcode != original_barcode)
+
+                if barcode_changed:
+                    # Prüfen, ob der neue Barcode bereits existiert (für Tools, Consumables oder andere Worker)
+                    exists_count = conn.execute("""
+                        SELECT COUNT(*) as count FROM (
+                            SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
+                            UNION ALL 
+                            SELECT barcode FROM consumables WHERE barcode = ? AND deleted = 0
+                            UNION ALL
+                            SELECT barcode FROM workers WHERE barcode = ? AND barcode != ? AND deleted = 0
+                        )
+                    """, [new_barcode, new_barcode, new_barcode, original_barcode]).fetchone()['count']
+                    
+                    if exists_count > 0:
+                        flash(f'Der Barcode "{new_barcode}" existiert bereits. Bitte wählen Sie einen anderen.', 'error')
+                        return redirect(url_for('workers.details', original_barcode=original_barcode))
+                    
+                    # Update Barcode in referenzierenden Tabellen
+                    conn.execute("UPDATE lendings SET worker_barcode = ? WHERE worker_barcode = ?", [new_barcode, original_barcode])
+                    conn.execute("UPDATE consumable_usages SET worker_barcode = ? WHERE worker_barcode = ?", [new_barcode, original_barcode])
+                    # Ggf. weitere Tabellen hier hinzufügen, die worker_barcode referenzieren
+
+                # Update der Mitarbeiterdaten (inkl. ggf. neuem Barcode)
                 conn.execute('''
                     UPDATE workers 
-                    SET firstname = ?,
+                    SET barcode = ?,
+                        firstname = ?,
                         lastname = ?,
-                        department = ?
-                    WHERE barcode = ? AND deleted = 0
+                        department = ?,
+                        email = ?,
+                        sync_status = 'pending' 
+                    WHERE barcode = ? AND deleted = 0 
                 ''', [
-                    data.get('firstname'),
-                    data.get('lastname'),
-                    data.get('department'),
-                    barcode
+                    new_barcode, 
+                    firstname,
+                    lastname,
+                    department,
+                    email,
+                    original_barcode # Wichtig: WHERE-Klausel nutzt den originalen Barcode
                 ])
                 conn.commit()
             
-            return jsonify({'success': True})
+            flash('Mitarbeiter erfolgreich aktualisiert', 'success')
+            # Nach erfolgreicher Aktualisierung zum (ggf. neuen) Barcode weiterleiten
+            return redirect(url_for('workers.details', original_barcode=new_barcode))
         
         # GET-Anfrage: Details anzeigen
         with Database.get_db() as conn:
-            # Mitarbeiter-Details laden
-            worker = conn.execute('''
-                SELECT * FROM workers 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
+            worker = conn.execute('SELECT * FROM workers WHERE barcode = ? AND deleted = 0', [original_barcode]).fetchone()
             if not worker:
-                return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
+                flash('Mitarbeiter nicht gefunden.', 'error')
+                return redirect(url_for('workers.index'))
             
-            # Aktuelle Ausleihen laden
             current_lendings = conn.execute('''
                 SELECT l.*, t.name as tool_name
                 FROM lendings l
@@ -146,7 +187,7 @@ def details(barcode):
                 WHERE l.worker_barcode = ?
                 AND l.returned_at IS NULL
                 ORDER BY l.lent_at DESC
-            ''', [barcode]).fetchall()
+            ''', [original_barcode]).fetchall()
             
             # Ausleihhistorie laden (alle Ausleihen)
             lending_history = conn.execute('''
@@ -161,7 +202,7 @@ def details(barcode):
                 JOIN tools t ON l.tool_barcode = t.barcode AND t.deleted = 0
                 WHERE l.worker_barcode = ?
                 ORDER BY l.lent_at DESC
-            ''', [barcode]).fetchall()
+            ''', [original_barcode]).fetchall()
             
             # Verbrauchsmaterial-Historie laden
             usage_history = conn.execute('''
@@ -170,7 +211,7 @@ def details(barcode):
                 JOIN consumables c ON u.consumable_barcode = c.barcode AND c.deleted = 0
                 WHERE u.worker_barcode = ?
                 ORDER BY u.used_at DESC
-            ''', [barcode]).fetchall()
+            ''', [original_barcode]).fetchall()
             
             return render_template('workers/details.html',
                                worker=worker,

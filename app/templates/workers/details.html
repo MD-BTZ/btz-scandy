@@ -117,43 +117,39 @@
 <!-- Edit Modal -->
 <dialog id="editModal" class="modal">
     <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Mitarbeiter bearbeiten</h3>
-        <form id="editForm" method="POST">
+        <h3 class="font-bold text-lg">Mitarbeiter bearbeiten</h3>
+        <form id="editWorkerForm" method="POST" action="{{ url_for('workers.details', original_barcode=worker.barcode) }}">
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Vorname</span>
                 </label>
                 <input type="text" name="firstname" class="input input-bordered" value="{{ worker.firstname }}" required>
             </div>
-            
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Nachname</span>
                 </label>
                 <input type="text" name="lastname" class="input input-bordered" value="{{ worker.lastname }}" required>
             </div>
-            
+
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Barcode</span>
                 </label>
                 <input type="text" name="barcode" class="input input-bordered" value="{{ worker.barcode }}" required>
             </div>
-            
+
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Abteilung</span>
                 </label>
                 <select name="department" class="select select-bordered">
-                    <option value="">Keine Abteilung</option>
-                    {% for department in departments %}
-                    <option value="{{ department }}" {{ 'selected' if department == worker.department }}>
-                        {{ department }}
-                    </option>
+                    <option value="" {% if not worker.department %}selected{% endif %}>Keine Abteilung</option>
+                    {% for dep in departments %}
+                    <option value="{{ dep }}" {% if worker.department == dep %}selected{% endif %}>{{ dep }}</option>
                     {% endfor %}
                 </select>
             </div>
-            
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">E-Mail</span>
@@ -235,7 +231,7 @@ async function returnTool(barcode) {
 }
 
 // Formular-Handling
-document.getElementById('editForm').addEventListener('submit', async function(e) {
+document.getElementById('editWorkerForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);

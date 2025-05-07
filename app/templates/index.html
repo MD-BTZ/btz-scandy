@@ -20,7 +20,7 @@
             <div class="max-w-2xl">
                 <h1 class="text-4xl font-bold mb-4">Willkommen bei Scandy</h1>
                 <p class="text-xl mb-6">Ihr digitales Werkzeug- und Inventarmanagement</p>
-                {% if not session.get('user_id') %}
+                {% if not current_user.is_authenticated %}
                 <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
                     <i class="fas fa-sign-in-alt mr-2"></i>Anmelden
                 </a>

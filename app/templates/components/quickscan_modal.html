@@ -24,33 +24,14 @@
                                 </div>
                                 <div class="divider my-1"></div>
                                 <div class="space-y-1">
-                                    <p id="itemName" class="font-bold text-base opacity-50">Noch kein Artikel gescannt</p>
-                                    <div class="flex items-center gap-2" id="itemStatusContainer" style="display: none;">
-                                        <span id="itemStatus" class="badge badge-lg"></span>
-                                        <!-- Ersetze Text durch Icons -->
-                                        <span id="itemActionIcon" class="text-xl">
-                                            <i class="fas fa-arrow-left text-success hidden" id="returnIcon" title="Wird zurückgegeben"></i>
-                                            <i class="fas fa-arrow-right text-warning hidden" id="lendIcon" title="Wird ausgeliehen"></i>
-                                        </span>
-                                    </div>
-                                    <p id="itemDetails" class="text-sm opacity-50">Details werden nach Scan angezeigt</p>
-                                    <!-- Mengeneingabe für Verbrauchsmaterial -->
-                                    <div id="quantityContainer" class="form-control w-full max-w-xs hidden mt-2">
-                                        <label class="label p-0">
-                                            <span class="label-text text-sm">Menge</span>
-                                        </label>
-                                        <div class="flex items-center gap-2">
-                                            <button type="button" class="btn btn-sm btn-square quantity-btn" data-action="decrease">
-                                                <i class="fas fa-minus"></i>
-                                            </button>
-                                            <span id="quantityDisplay" class="text-lg font-bold min-w-[2rem] text-center">1</span>
-                                            <button type="button" class="btn btn-sm btn-square quantity-btn" data-action="increase">
-                                                <i class="fas fa-plus"></i>
-                                            </button>
-                                        </div>
+                                    <p id="processedItemInput" class="font-bold text-base opacity-50">Noch kein Artikel gescannt</p>
+                                    <div class="flex items-center gap-2">
+                                        <span id="itemTypeDisplay" class="badge badge-lg"></span>
+                                        <span id="itemStatusDisplay" class="badge badge-lg"></span>
                                     </div>
                                 </div>
                             </div>
+                            
                             <!-- Mitarbeiter Info -->
                             <div class="pl-4">
                                 <div class="flex items-center gap-2">
@@ -59,15 +40,15 @@
                                 </div>
                                 <div class="divider my-1"></div>
                                 <div class="space-y-1">
-                                    <p id="workerName" class="font-bold text-base opacity-50">Noch kein Mitarbeiter gescannt</p>
-                                    <p id="workerDepartment" class="text-sm opacity-50">Abteilung wird nach Scan angezeigt</p>
+                                    <p id="processedWorkerInput" class="font-bold text-base opacity-50">Noch kein Mitarbeiter gescannt</p>
+                                    <p id="workerDepartmentDisplay" class="text-sm opacity-50">Abteilung wird nach Scan angezeigt</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-
+            
             <!-- Steps Container -->
             <div class="flex-1 flex flex-col">
                 <!-- Step 1: Artikel Scan -->
@@ -92,29 +73,8 @@
                             <canvas id="itemConfirmBarcode" class="max-w-full"></canvas>
                         </div>
                     </div>
-                    
-                    <!-- Anzeige der verarbeiteten Eingabe -->
-                    <div class="mt-4">
-                        <div class="divider">oder</div>
-                        <div class="bg-base-200 p-4 rounded-lg">
-                            <div class="flex items-center justify-between">
-                                <div class="flex-1">
-                                    <h4 class="font-semibold mb-1">Verarbeitete Eingabe</h4>
-                                    <p id="processedItemInput" class="text-lg font-mono text-center opacity-50">Keine Eingabe</p>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button id="undoItemBtn" class="btn btn-square btn-ghost" title="Letzte Eingabe rückgängig machen">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                    <button id="confirmItemBtn" class="btn btn-primary hidden">
-                                        <i class="fas fa-check mr-2"></i>Bestätigen
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
-
+                
                 <!-- Step 2: Mitarbeiter Scan -->
                 <div id="step2" class="scan-step hidden flex-1">
                     <h4 class="font-bold text-base mb-2 text-center">Mitarbeiter scannen</h4>
@@ -135,27 +95,6 @@
                             <h3 class="font-bold text-base mb-1">Vorgang bestätigen</h3>
                             <p class="text-sm mb-2">Scannen Sie diesen Barcode zur Bestätigung</p>
                             <canvas id="finalConfirmBarcode" class="max-w-full"></canvas>
-                        </div>
-                    </div>
-                    
-                    <!-- Anzeige der verarbeiteten Mitarbeiter-Eingabe -->
-                    <div class="mt-4">
-                        <div class="divider">oder</div>
-                        <div class="bg-base-200 p-4 rounded-lg">
-                            <div class="flex items-center justify-between">
-                                <div class="flex-1">
-                                    <h4 class="font-semibold mb-1">Verarbeitete Mitarbeiter-Eingabe</h4>
-                                    <p id="processedWorkerInput" class="text-lg font-mono text-center opacity-50">Keine Eingabe</p>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button id="undoWorkerButton" class="btn btn-square btn-ghost" title="Letzte Eingabe rückgängig machen">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                    <button id="confirmWorkerButton" class="btn btn-primary hidden">
-                                        <i class="fas fa-check mr-2"></i>Bestätigen
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>

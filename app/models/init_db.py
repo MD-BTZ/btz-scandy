@@ -171,28 +171,57 @@ def init_db():
             )
         ''')
         
-        # Homepage Notices Tabelle wird durch Migration v1->v2 erstellt
-        # cursor.execute('''
-        #     CREATE TABLE IF NOT EXISTS homepage_notices (
-        #         ...
-        #     )
-        # ''')
+        # Departments Tabelle
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS departments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                deleted INTEGER DEFAULT 0,
+                deleted_at TIMESTAMP
+            )
+        ''')
         
-        # Initiale Hinweise werden durch Migration v1->v2 eingefügt
-        # cursor.execute('SELECT COUNT(*) FROM homepage_notices')
-        # if cursor.fetchone()[0] == 0:
-        #     cursor.execute('''
-        #         INSERT INTO homepage_notices ...
-        #     ''')
+        # Stelle sicher, dass die users Tabelle existiert
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')),
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         
-        logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")
+        # Prüfe ob Admin-Benutzer existiert
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = cursor.fetchone()[0]
+        if admin_count == 0:
+            logger.warning("Kein Admin-Benutzer gefunden. Erstelle Standard-Admin...")
+            try:
+                cursor.execute(
+                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
+                    ('Admin', generate_password_hash('BTZ-Scandy25'), 'admin')
+                )
+                cursor.execute(
+                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
+                    ('Mitarbeiter', generate_password_hash('BTZ-BT11'), 'mitarbeiter')
+                )
+                cursor.execute(
+                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
+                    ('Test', generate_password_hash('test'), 'anwender')
+                )
+                logger.info("Standard-Benutzerkonten hinzugefügt.")
+            except Exception as e:
+                logger.error(f"Fehler beim Erstellen der Standard-Benutzer: {e}")
         
         conn.commit()
-
-# init_users Funktion ist entfernt, Logik ist in migrations._migrate_v1_to_v2
+        logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")
 
 if __name__ == '__main__':
-    # Dieser Teil wird normalerweise nicht direkt ausgeführt, wenn die App läuft
     logger.warning("init_db.py direkt ausgeführt - Initialisiere nur Basis-DB.")
     init_db()
     logger.warning("Manuelle Ausführung beendet. Für Migrationen bitte die App starten.") 

@@ -10,6 +10,9 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 import base64
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -36,11 +39,10 @@ def get_workers():
     } for w in workers])
 
 @bp.route('/inventory/tools/<barcode>', methods=['GET'])
-@login_required
 def get_tool(barcode):
     """Sucht ein Werkzeug anhand des Barcodes"""
     try:
-        print(f"Suche Werkzeug mit Barcode: {barcode}")
+        logger.info(f"Suche Werkzeug mit Barcode: {barcode}")
         
         # Prüfe zuerst ob es ein Verbrauchsmaterial ist
         consumable = Database.query('''
@@ -59,7 +61,6 @@ def get_tool(barcode):
                     'description': consumable['description'],
                     'category': consumable['category'],
                     'location': consumable['location'],
-                    'quantity': consumable['quantity'],
                     'min_quantity': consumable['min_quantity']
                 }
             })
@@ -97,7 +98,7 @@ def get_tool(barcode):
             
         tool_dict = dict(tool)
         tool_dict['type'] = 'tool'
-        print(f"Gefundenes Werkzeug: {tool_dict}")
+        logger.info(f"Gefundenes Werkzeug: {tool_dict}")
             
         return jsonify({
             'success': True,
@@ -105,48 +106,61 @@ def get_tool(barcode):
         })
         
     except Exception as e:
-        print(f"Fehler bei Werkzeugsuche: {str(e)}")
+        logger.error(f"Fehler bei Werkzeugsuche: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Fehler bei der Suche: {str(e)}'
         }), 500
 
 @bp.route('/inventory/workers/<barcode>', methods=['GET'])
-@mitarbeiter_required
-def get_worker_by_barcode(barcode):
+def get_worker(barcode):
+    """Gibt Details zu einem Mitarbeiter zurück"""
     try:
-        # Debug-Logging
-        print(f"Suche Mitarbeiter mit Barcode: {barcode}")
+        logger.info(f"Suche Mitarbeiter mit Barcode: {barcode}")
         
         worker = Database.query('''
-            SELECT 
-                id,
-                barcode,
-                firstname,
-                lastname,
-                department,
-                email
+            SELECT id, barcode, firstname, lastname, department
             FROM workers 
-            WHERE barcode = ? 
-            AND deleted = 0
+            WHERE barcode = ? AND deleted = 0
         ''', [barcode], one=True)
         
-        # Debug-Logging
-        print(f"Gefundener Mitarbeiter: {worker}")
-        
         if not worker:
-            print(f"Kein Mitarbeiter gefunden für Barcode: {barcode}")
-            return jsonify({'error': 'Mitarbeiter nicht gefunden'}), 404
-            
-        # Konvertiere Row-Objekt in Dictionary
-        worker_dict = dict(worker)
-        print(f"Konvertierter Mitarbeiter: {worker_dict}")
-            
-        return jsonify(worker_dict)
+            logger.error(f"Mitarbeiter nicht gefunden: {barcode}")
+            return jsonify({
+                'success': False,
+                'message': 'Mitarbeiter nicht gefunden'
+            }), 404
         
+        # Hole aktuelle Ausleihen
+        lendings = Database.query('''
+            SELECT t.name as tool_name, 
+                   l.lent_at,
+                   CASE 
+                       WHEN julianday('now') - julianday(l.lent_at) > 7 
+                       THEN 1 ELSE 0 
+                   END as is_overdue
+            FROM lendings l
+            JOIN tools t ON t.barcode = l.tool_barcode
+            WHERE l.worker_barcode = ? AND l.returned_at IS NULL
+            ORDER BY l.lent_at DESC
+        ''', [barcode])
+        
+        worker_dict = dict(worker)
+        worker_dict['current_lendings'] = [dict(l) for l in lendings]
+        
+        logger.info(f"Gefundener Mitarbeiter: {worker_dict}")
+        
+        return jsonify({
+            'success': True,
+            'data': worker_dict
+        })
+            
     except Exception as e:
-        print(f"Fehler bei Mitarbeitersuche: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Fehler beim Abrufen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Interner Serverfehler'
+        }), 500
 
 @bp.route('/settings/colors', methods=['POST'])
 @admin_required
@@ -518,191 +532,8 @@ def get_item(barcode):
         print('Fehler beim Abrufen des Artikels:', str(e))
         return jsonify({'error': 'Interner Serverfehler'}), 500
 
-@bp.route('/inventory/workers/<barcode>')
-@login_required
-def get_worker(barcode):
-    """Gibt Details zu einem Mitarbeiter zurück"""
-    try:
-        with Database.get_db() as db:
-            worker = db.execute('''
-                SELECT id, barcode, firstname, lastname, department
-                FROM workers 
-                WHERE barcode = ?
-            ''', (barcode,)).fetchone()
-            
-            if not worker:
-                return jsonify({'error': 'Mitarbeiter nicht gefunden'}), 404
-            
-            # Hole aktuelle Ausleihen
-            lendings = db.execute('''
-                SELECT t.name as tool_name, 
-                       l.lent_at,
-                       CASE 
-                           WHEN julianday('now') - julianday(l.lent_at) > 7 
-                           THEN 1 ELSE 0 
-                       END as is_overdue
-                FROM lendings l
-                JOIN tools t ON t.id = l.tool_id
-                WHERE l.worker_id = ? AND l.returned_at IS NULL
-                ORDER BY l.lent_at DESC
-            ''', (worker['id'],)).fetchall()
-            
-            return jsonify({
-                'id': worker['id'],
-                'barcode': worker['barcode'],
-                'firstname': worker['firstname'],
-                'lastname': worker['lastname'],
-                'department': worker['department'],
-                'current_lendings': [dict(l) for l in lendings]
-            })
-            
-    except Exception as e:
-        print('Fehler beim Abrufen des Mitarbeiters:', str(e))
-        return jsonify({'error': 'Interner Serverfehler'}), 500
-
-@bp.route('/scan', methods=['POST'])
-@login_required
-def scan():
-    """Verarbeitet einen Barcode-Scan"""
-    try:
-        data = request.get_json()
-        barcode = data.get('barcode')
-        
-        if not barcode:
-            return jsonify({
-                'success': False,
-                'message': 'Kein Barcode angegeben'
-            }), 400
-            
-        with Database.get_db() as db:
-            # Prüfe zuerst ob es ein Verbrauchsmaterial ist (C-Prefix)
-            if barcode.startswith('C'):
-                item = db.execute('''
-                    SELECT c.*,
-                           CASE 
-                               WHEN quantity <= 0 THEN 'nicht_verfügbar'
-                               WHEN quantity <= min_quantity THEN 'kritisch'
-                               WHEN quantity <= min_quantity * 2 THEN 'niedrig'
-                               ELSE 'verfügbar'
-                           END as status,
-                           CASE 
-                               WHEN quantity <= 0 THEN 'Nicht verfügbar'
-                               WHEN quantity <= min_quantity THEN 'Kritisch'
-                               WHEN quantity <= min_quantity * 2 THEN 'Niedrig'
-                               ELSE 'Verfügbar'
-                           END as status_text
-                    FROM consumables c
-                    WHERE c.barcode = ? AND c.deleted = 0
-                ''', [barcode]).fetchone()
-                
-                if item:
-                    item_dict = dict(item)
-                    item_dict['type'] = 'consumable'
-                    return jsonify({
-                        'success': True,
-                        'data': {
-                            'type': 'consumable',
-                            'name': item['name'],
-                            'barcode': item['barcode'],
-                            'description': item['description'],
-                            'category': item['category'],
-                            'location': item['location'],
-                            'quantity': item['quantity'],
-                            'min_quantity': item['min_quantity'],
-                            'status': item['status'],
-                            'status_text': item['status_text']
-                        }
-                    })
-            
-            # Wenn kein Verbrauchsmaterial, dann prüfe ob es ein Werkzeug ist (T-Prefix)
-            elif barcode.startswith('T'):
-                item = db.execute('''
-                    SELECT t.*, 
-                           CASE 
-                               WHEN EXISTS (
-                                   SELECT 1 FROM lendings l 
-                                   WHERE l.tool_barcode = t.barcode 
-                                   AND l.returned_at IS NULL
-                               ) THEN 'ausgeliehen'
-                               WHEN t.status = 'defekt' THEN 'defekt'
-                               ELSE 'verfügbar'
-                           END as current_status,
-                           CASE 
-                               WHEN EXISTS (
-                                   SELECT 1 FROM lendings l 
-                                   WHERE l.tool_barcode = t.barcode 
-                                   AND l.returned_at IS NULL
-                               ) THEN 'Ausgeliehen'
-                               WHEN t.status = 'defekt' THEN 'Defekt'
-                               ELSE 'Verfügbar'
-                           END as status_text,
-                           (
-                               SELECT w.firstname || ' ' || w.lastname
-                               FROM lendings l
-                               JOIN workers w ON l.worker_barcode = w.barcode
-                               WHERE l.tool_barcode = t.barcode
-                               AND l.returned_at IS NULL
-                               LIMIT 1
-                           ) as current_worker
-                    FROM tools t
-                    WHERE t.barcode = ? AND t.deleted = 0
-                ''', [barcode]).fetchone()
-                
-                if item:
-                    item_dict = dict(item)
-                    item_dict['type'] = 'tool'
-                    return jsonify({
-                        'success': True,
-                        'data': {
-                            'type': 'tool',
-                            'name': item['name'],
-                            'barcode': item['barcode'],
-                            'description': item['description'],
-                            'category': item['category'],
-                            'location': item['location'],
-                            'status': item['current_status'],
-                            'status_text': item['status_text'],
-                            'current_worker': item['current_worker']
-                        }
-                    })
-            
-            # Wenn kein Werkzeug, dann prüfe ob es ein Mitarbeiter ist (W-Prefix)
-            elif barcode.startswith('W'):
-                worker = db.execute('''
-                    SELECT w.*,
-                           COUNT(DISTINCT l.id) as active_lendings
-                    FROM workers w
-                    LEFT JOIN lendings l ON w.barcode = l.worker_barcode 
-                                      AND l.returned_at IS NULL
-                    WHERE w.barcode = ? AND w.deleted = 0
-                    GROUP BY w.id
-                ''', [barcode]).fetchone()
-                
-                if worker:
-                    return jsonify({
-                        'success': True,
-                        'data': {
-                            'type': 'worker',
-                            'name': f"{worker['firstname']} {worker['lastname']}",
-                            'barcode': worker['barcode'],
-                            'department': worker['department'],
-                            'active_lendings': worker['active_lendings']
-                        }
-                    })
-            
-            return jsonify({
-                'success': False,
-                'message': 'Artikel oder Mitarbeiter nicht gefunden'
-            }), 404
-            
-    except Exception as e:
-        print(f"Scan-Fehler: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Scannen: {str(e)}'
-        }), 500
-
 @bp.route('/quickscan/process_lending', methods=['POST'])
+@login_required
 def quickscan_process_lending():
     """Verarbeitet Ausleihen und Rückgaben von Werkzeugen und Verbrauchsmaterialien"""
     try:

@@ -94,7 +94,6 @@
                     </div>
                     {% endif %}
 
-                    {% if session.get('is_admin') %}
                     <div class="divider"></div>
                     
                     <button onclick="document.getElementById('updateModal').showModal()" 
@@ -102,14 +101,12 @@
                         <i class="fas fa-edit mr-2"></i>
                         Ticket bearbeiten
                     </button>
-                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-{% if session.get('is_admin') %}
 <!-- Update Modal -->
 <dialog id="updateModal" class="modal">
     <div class="modal-box">
@@ -134,20 +131,60 @@
 
             <div class="form-control mb-4">
                 <label class="label">
+                    <span class="label-text">Kategorie</span>
+                </label>
+                <input type="text" name="category" class="input input-bordered" 
+                       value="{{ ticket.category or '' }}"
+                       placeholder="Kategorie des Tickets">
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Fälligkeitsdatum</span>
+                </label>
+                <input type="datetime-local" name="due_date" class="input input-bordered" 
+                       value="{{ ticket.due_date or '' }}">
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Geschätzte Zeit (Minuten)</span>
+                </label>
+                <input type="number" name="estimated_time" class="input input-bordered" 
+                       value="{{ ticket.estimated_time or '' }}"
+                       min="0">
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Tatsächliche Zeit (Minuten)</span>
+                </label>
+                <input type="number" name="actual_time" class="input input-bordered" 
+                       value="{{ ticket.actual_time or '' }}"
+                       min="0">
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
                     <span class="label-text">Ihr Name</span>
                 </label>
                 <input type="text" name="author_name" class="input input-bordered" 
-                       placeholder="Ihr Name für die Notiz"
-                       required>
+                       value="{{ current_user.username }}"
+                       readonly>
             </div>
 
             <div class="form-control mb-4">
                 <label class="label">
                     <span class="label-text">Zugewiesen an</span>
                 </label>
-                <input type="text" name="assigned_to" class="input input-bordered" 
-                       placeholder="Name des zuständigen Mitarbeiters"
-                       value="{{ ticket.assigned_to or '' }}">
+                <select name="assigned_to" class="select select-bordered w-full">
+                    <option value="">Nicht zugewiesen</option>
+                    {% for worker in workers %}
+                    <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
+                        {{ worker.name }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="form-control mb-4">
@@ -156,6 +193,13 @@
                 </label>
                 <textarea name="resolution_notes" class="textarea textarea-bordered h-24" 
                           placeholder="Notiz zum Ticket hinzufügen"></textarea>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label cursor-pointer">
+                    <span class="label-text">Private Notiz</span>
+                    <input type="checkbox" name="is_private" class="checkbox" />
+                </label>
             </div>
 
             <div class="modal-action">
@@ -171,7 +215,6 @@
         </form>
     </div>
 </dialog>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -214,7 +257,12 @@ document.getElementById('updateForm').addEventListener('submit', async function(
         status: formData.get('status'),
         assigned_to: formData.get('assigned_to'),
         resolution_notes: formData.get('resolution_notes'),
-        author_name: formData.get('author_name')
+        author_name: formData.get('author_name'),
+        category: formData.get('category'),
+        due_date: formData.get('due_date'),
+        estimated_time: formData.get('estimated_time'),
+        actual_time: formData.get('actual_time'),
+        is_private: formData.get('is_private') === 'on'
     };
     
     try {

@@ -10,7 +10,7 @@ bp = Blueprint('tools', __name__, url_prefix='/tools')
 logger = logging.getLogger(__name__) # Logger für dieses Modul
 
 @bp.route('/')
-@mitarbeiter_required
+@login_required
 def index():
     """Zeigt alle aktiven Werkzeuge"""
     logger.debug(f"[ROUTE] tools.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
@@ -76,6 +76,49 @@ def index():
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True) # exc_info für Traceback
         flash('Fehler beim Laden der Werkzeuge', 'error')
         return redirect(url_for('main.index'))
+
+@bp.route('/add', methods=['GET', 'POST'])
+@login_required
+def add():
+    """Fügt ein neues Werkzeug hinzu (für alle eingeloggten Nutzer)"""
+    logger.debug(f"[ROUTE] tools.add: Entered route (Method: {request.method}). User: {current_user.id}")
+    if request.method == 'POST':
+        barcode = request.form.get('barcode')
+        name = request.form.get('name')
+        description = request.form.get('description')
+        category = request.form.get('category')
+        location = request.form.get('location')
+        
+        if not all([barcode, name, category, location]):
+            flash('Bitte alle Pflichtfelder ausfüllen', 'error')
+            return redirect(url_for('tools.add'))
+            
+        try:
+            Database.query('''
+                INSERT INTO tools 
+                (barcode, name, description, category, location, status)
+                VALUES (?, ?, ?, ?, ?, 'verfügbar')
+            ''', [barcode, name, description, category, location])
+            
+            flash('Werkzeug erfolgreich hinzugefügt', 'success')
+            return redirect(url_for('tools.index'))
+            
+        except Exception as e:
+            flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
+            return redirect(url_for('tools.add'))
+    
+    # GET-Anfrage
+    try:
+        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
+        categories = Database.get_categories('tools')
+        locations = Database.get_locations('tools')
+        
+        return render_template('tools/add.html',
+                             categories=[c['name'] for c in categories],
+                             locations=[l['name'] for l in locations])
+    except Exception as e:
+        flash(f'Fehler beim Laden der Auswahloptionen: {str(e)}', 'error')
+        return redirect(url_for('tools.index'))
 
 @bp.route('/<barcode>')
 @login_required
@@ -181,69 +224,6 @@ def update(id):
         print(f"Fehler beim Aktualisieren des Werkzeugs: {str(e)}")
         flash(f'Fehler beim Aktualisieren: {str(e)}', 'error')
         return redirect(url_for('tools.index'))
-
-@bp.route('/add', methods=['GET', 'POST'])
-@login_required
-def add():
-    """Fügt ein neues Werkzeug hinzu (jeder eingeloggte Nutzer)"""
-    logger.debug(f"[ROUTE] tools.add: Entered route (Method: {request.method}). User: {current_user.id}")
-    if request.method == 'POST':
-        barcode = request.form.get('barcode')
-        name = request.form.get('name')
-        description = request.form.get('description')
-        category = request.form.get('category')
-        location = request.form.get('location')
-        
-        if not all([barcode, name, category, location]):
-            flash('Bitte alle Pflichtfelder ausfüllen', 'error')
-            return redirect(url_for('tools.add'))
-            
-        try:
-            # Prüfe ob Barcode bereits existiert
-            existing = Database.query('SELECT 1 FROM tools WHERE barcode = ?', [barcode], one=True)
-            if existing:
-                flash('Ein Werkzeug mit diesem Barcode existiert bereits', 'error')
-                return redirect(url_for('tools.add'))
-            
-            Database.query('''
-                INSERT INTO tools (barcode, name, description, category, location, status)
-                VALUES (?, ?, ?, ?, ?, 'verfügbar')
-            ''', [barcode, name, description, category, location])
-            
-            flash('Werkzeug erfolgreich hinzugefügt', 'success')
-            return redirect(url_for('tools.index'))
-            
-        except Exception as e:
-            print(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
-            flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
-            return redirect(url_for('tools.add'))
-    
-    # --- GET Request Logic ---    
-    logger.debug("[ROUTE] tools.add: Handling GET request.")
-    try:
-        # Lade Kategorien und Standorte aus der settings-Tabelle
-        logger.debug("[ROUTE] tools.add: Fetching categories and locations from settings.")
-        with Database.get_db() as db:
-            cursor = db.execute(
-                "SELECT value FROM settings WHERE key LIKE 'category_%' AND value IS NOT NULL AND value != '' ORDER BY value"
-            )
-            categories = [row['value'] for row in cursor.fetchall()]
-            logger.debug(f"[ROUTE] tools.add: Found categories: {categories}")
-            
-            cursor = db.execute(
-                "SELECT value FROM settings WHERE key LIKE 'location_%' AND value IS NOT NULL AND value != '' ORDER BY value"
-            )
-            locations = [row['value'] for row in cursor.fetchall()]
-            logger.debug(f"[ROUTE] tools.add: Found locations: {locations}")
-        
-        logger.debug("[ROUTE] tools.add: Rendering add.html template.")
-        return render_template('tools/add.html', categories=categories, locations=locations)
-        
-    except Exception as e:
-        logger.error(f"[ROUTE] tools.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
-        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
-        # Wichtig: Wohin wird hier weitergeleitet? Bleibt bei tools.index
-        return redirect(url_for('tools.index')) 
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required

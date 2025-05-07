@@ -8,6 +8,98 @@ import logging # Import logging
 bp = Blueprint('consumables', __name__, url_prefix='/consumables')
 logger = logging.getLogger(__name__) # Logger für dieses Modul
 
+@bp.route('/')
+@login_required
+def index():
+    """Zeigt alle aktiven Verbrauchsmaterialien"""
+    logger.debug(f"[ROUTE] consumables.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
+    try:
+        with Database.get_db() as conn:
+            consumables = conn.execute('''
+                SELECT c.*,
+                       CASE 
+                           WHEN c.quantity <= 0 THEN 'ausverkauft'
+                           WHEN c.quantity <= c.min_quantity THEN 'niedrig'
+                           ELSE 'verfügbar'
+                       END as current_status
+                FROM consumables c
+                WHERE c.deleted = 0
+                ORDER BY c.name
+            ''').fetchall()
+            
+            categories = conn.execute('''
+                SELECT DISTINCT category FROM consumables
+                WHERE deleted = 0 AND category IS NOT NULL
+                ORDER BY category
+            ''').fetchall()
+            
+            locations = conn.execute('''
+                SELECT DISTINCT location FROM consumables
+                WHERE deleted = 0 AND location IS NOT NULL
+                ORDER BY location
+            ''').fetchall()
+            
+            logger.debug(f"[ROUTE] consumables.index: Preparing template. User is Admin: {current_user.is_admin}")
+            
+            return render_template('consumables/index.html',
+                               consumables=consumables,
+                               categories=[c['category'] for c in categories],
+                               locations=[l['location'] for l in locations],
+                               is_admin=current_user.is_admin)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}", exc_info=True)
+        return render_template('consumables/index.html',
+                           consumables=[],
+                           categories=[],
+                           locations=[],
+                           is_admin=current_user.is_admin)
+
+@bp.route('/add', methods=['GET', 'POST'])
+@login_required
+def add():
+    """Fügt ein neues Verbrauchsmaterial hinzu (für alle eingeloggten Nutzer)"""
+    logger.debug(f"[ROUTE] consumables.add: Entered route (Method: {request.method}). User: {current_user.id}")
+    if request.method == 'POST':
+        name = request.form.get('name')
+        barcode = request.form.get('barcode')
+        description = request.form.get('description')
+        category = request.form.get('category')
+        location = request.form.get('location')
+        quantity = request.form.get('quantity', type=int)
+        min_quantity = request.form.get('min_quantity', type=int)
+        
+        try:
+            Database.query('''
+                INSERT INTO consumables 
+                (name, barcode, description, category, location, quantity, min_quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', [name, barcode, description, category, location, quantity, min_quantity])
+            
+            flash('Verbrauchsmaterial erfolgreich hinzugefügt', 'success')
+            return redirect(url_for('consumables.index'))
+            
+        except Exception as e:
+            flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
+    
+    # --- GET Request Logic --- 
+    logger.debug("[ROUTE] consumables.add: Handling GET request.")   
+    try:
+        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
+        logger.debug("[ROUTE] consumables.add: Fetching categories and locations using helpers.")
+        categories = Database.get_categories('consumables')
+        locations = Database.get_locations('consumables')
+        logger.debug(f"[ROUTE] consumables.add: Found categories: {categories}")
+        logger.debug(f"[ROUTE] consumables.add: Found locations: {locations}")
+        
+        logger.debug("[ROUTE] consumables.add: Rendering add.html template.")
+        return render_template('consumables/add.html',
+                             categories=[c['name'] for c in categories],
+                             locations=[l['name'] for l in locations])
+    except Exception as e:
+        logger.error(f"[ROUTE] consumables.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
+        return redirect(url_for('consumables.index'))
+
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
 def detail(barcode):
@@ -154,99 +246,6 @@ def delete(id):
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)})
-
-@bp.route('/')
-@mitarbeiter_required
-def index():
-    """Zeigt alle aktiven Verbrauchsmaterialien"""
-    logger.debug(f"[ROUTE] consumables.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
-    try:
-        with Database.get_db() as conn:
-            consumables = conn.execute('''
-                SELECT c.*,
-                       CASE 
-                           WHEN c.quantity <= 0 THEN 'ausverkauft'
-                           WHEN c.quantity <= c.min_quantity THEN 'niedrig'
-                           ELSE 'verfügbar'
-                       END as current_status
-                FROM consumables c
-                WHERE c.deleted = 0
-                ORDER BY c.name
-            ''').fetchall()
-            
-            categories = conn.execute('''
-                SELECT DISTINCT category FROM consumables
-                WHERE deleted = 0 AND category IS NOT NULL
-                ORDER BY category
-            ''').fetchall()
-            
-            locations = conn.execute('''
-                SELECT DISTINCT location FROM consumables
-                WHERE deleted = 0 AND location IS NOT NULL
-                ORDER BY location
-            ''').fetchall()
-            
-            logger.debug(f"[ROUTE] consumables.index: Preparing template. User is Admin: {current_user.is_admin}")
-            
-            return render_template('consumables/index.html',
-                               consumables=consumables,
-                               categories=[c['category'] for c in categories],
-                               locations=[l['location'] for l in locations],
-                               is_admin=current_user.is_admin)
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}", exc_info=True)
-        return render_template('consumables/index.html',
-                           consumables=[],
-                           categories=[],
-                           locations=[],
-                           is_admin=current_user.is_admin)
-
-@bp.route('/add', methods=['GET', 'POST'])
-@login_required
-def add():
-    """Neues Verbrauchsmaterial hinzufügen (jeder eingeloggte Nutzer)"""
-    logger.debug(f"[ROUTE] consumables.add: Entered route (Method: {request.method}). User: {current_user.id}")
-    if request.method == 'POST':
-        name = request.form.get('name')
-        barcode = request.form.get('barcode')
-        description = request.form.get('description')
-        category = request.form.get('category')
-        location = request.form.get('location')
-        quantity = request.form.get('quantity', type=int)
-        min_quantity = request.form.get('min_quantity', type=int)
-        
-        try:
-            Database.query('''
-                INSERT INTO consumables 
-                (name, barcode, description, category, location, quantity, min_quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', [name, barcode, description, category, location, quantity, min_quantity])
-            
-            flash('Verbrauchsmaterial erfolgreich hinzugefügt', 'success')
-            return redirect(url_for('consumables.index'))
-            
-        except Exception as e:
-            flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
-    
-    # --- GET Request Logic --- 
-    logger.debug("[ROUTE] consumables.add: Handling GET request.")   
-    try:
-        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-        logger.debug("[ROUTE] consumables.add: Fetching categories and locations using helpers.")
-        categories = Database.get_categories('consumables')
-        locations = Database.get_locations('consumables')
-        logger.debug(f"[ROUTE] consumables.add: Found categories: {categories}")
-        logger.debug(f"[ROUTE] consumables.add: Found locations: {locations}")
-        
-        logger.debug("[ROUTE] consumables.add: Rendering add.html template.")
-        return render_template('consumables/add.html',
-                             categories=[c['name'] for c in categories],
-                             locations=[l['name'] for l in locations])
-    except Exception as e:
-        logger.error(f"[ROUTE] consumables.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
-        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
-        # Hier gab es keinen expliziten Redirect, fügen wir einen hinzu
-        return redirect(url_for('consumables.index')) 
 
 @bp.route('/<barcode>/adjust-stock', methods=['POST'])
 @login_required

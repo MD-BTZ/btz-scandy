@@ -125,7 +125,6 @@ def _migrate_v1_to_v2(conn):
         logger.error(f"Fehler während der Migration von v1 auf v2: {e}", exc_info=True)
         return False
 
-
 def run_migrations(db_path):
     """Prüft die Schema-Version und führt notwendige Migrationen aus."""
     logger.info(f"Prüfe Datenbank-Schema-Migrationen für: {db_path}")
@@ -150,14 +149,6 @@ def run_migrations(db_path):
                 if not _migrate_v1_to_v2(conn):
                     raise Exception("Migration von v1 auf v2 fehlgeschlagen!")
                 current_version = 2 # Update für den Fall weiterer Migrationen
-
-            # --- Migration v2 -> v3 (Beispiel für Zukunft) ---
-            # if current_version < 3:
-            #    if not _migrate_v2_to_v3(conn):
-            #        raise Exception("Migration von v2 auf v3 fehlgeschlagen!")
-            #    current_version = 3
-
-            # ... weitere Migrationen hier hinzufügen ...
 
             conn.commit() # Änderungen speichern
             logger.info("Datenbank-Migrationen erfolgreich abgeschlossen.")

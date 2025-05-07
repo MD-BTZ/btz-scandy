@@ -34,9 +34,13 @@
 {% for worker in workers %}
 <tr class="hover data-row" data-department="{{ worker.department or '' }}">
     <td>
-        <a href="{{ url_for('workers.details', barcode=worker.barcode) }}" class="link link-hover font-medium">
-            {{ worker.firstname }} {{ worker.lastname }}
-        </a>
+        <div class="flex items-center space-x-3">
+            <div>
+                <a href="{{ url_for('workers.details', original_barcode=worker.barcode) }}" class="link link-hover font-medium">
+                    {{ worker.firstname }} {{ worker.lastname }}
+                </a>
+            </div>
+        </div>
     </td>
     <td>
         <div class="badge badge-outline">{{ worker.barcode }}</div>
@@ -73,7 +77,7 @@
     {% if is_admin %}
     <td class="text-right">
         <div class="btn-group">
-            <a href="{{ url_for('workers.details', barcode=worker.barcode) }}" class="btn btn-sm btn-ghost">
+            <a href="{{ url_for('workers.details', original_barcode=worker.barcode) }}" class="btn btn-sm btn-ghost">
                 <i class="fas fa-edit"></i>
             </a>
             <button class="btn btn-sm btn-ghost btn-error" onclick="deleteWorker('{{ worker.barcode }}')">
