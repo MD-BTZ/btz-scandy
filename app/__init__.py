@@ -228,4 +228,21 @@ def create_app(test_config=None):
                 else:
                     print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
     
+    # Temporärer Code zum Setzen der DB-Version (Bitte nach dem nächsten Start entfernen!)
+    with app.app_context():
+        from .models.database import Database
+        try:
+            print("INFO: Versuche PRAGMA user_version = 2 für inventory.db zu setzen...")
+            with Database.get_db() as conn:
+                conn.execute("PRAGMA user_version = 2;")
+                conn.commit()
+                current_db_version = conn.execute("PRAGMA user_version;").fetchone()[0]
+                if current_db_version == 2:
+                    print("INFO: PRAGMA user_version erfolgreich auf 2 gesetzt.")
+                else:
+                    print(f"WARNUNG: PRAGMA user_version konnte nicht auf 2 gesetzt werden. Aktuell: {current_db_version}")
+        except Exception as e_pragma:
+            print(f"FEHLER beim Setzen von PRAGMA user_version: {e_pragma}")
+    # Ende temporärer Code
+
     return app
