@@ -274,7 +274,7 @@
 // Chart initialisieren wenn das Element existiert und Daten vorhanden sind
 function initChart() {
     const chartCanvas = document.getElementById('consumableTrendChart');
-    const trendData = '{{ stats.consumable_trend|tojson|escapejs if stats is defined and stats.consumable_trend is defined else '' }}';
+    const trendData = '{{ stats.consumable_trend|tojson if stats is defined and stats.consumable_trend is defined else '' }}';
     let trend = null;
     try {
         if (trendData) {
