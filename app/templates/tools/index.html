@@ -29,9 +29,9 @@
 
 <select class="select select-bordered w-full max-w-xs" id="statusFilter">
     <option value="">Alle Status</option>
-    <option value="available">Verfügbar</option>
-    <option value="lent">Ausgeliehen</option>
-    <option value="maintenance">In Wartung</option>
+    <option value="verfügbar">Verfügbar</option>
+    <option value="ausgeliehen">Ausgeliehen</option>
+    <option value="defekt">Defekt</option>
 </select>
 {% endblock %}
 
@@ -65,21 +65,23 @@
         <div class="badge badge-secondary badge-outline">{{ tool.location }}</div>
     </td>
     <td>
-        {% if tool.status == 'available' %}
+        {% if tool.status == 'verfügbar' %}
             <div class="badge badge-success gap-1">
                 <i class="fas fa-check"></i>
                 Verfügbar
             </div>
-        {% elif tool.status == 'lent' %}
+        {% elif tool.status == 'ausgeliehen' %}
             <div class="badge badge-warning gap-1">
                 <i class="fas fa-tools"></i>
                 Ausgeliehen
             </div>
-        {% elif tool.status == 'maintenance' %}
+        {% elif tool.status == 'defekt' %}
             <div class="badge badge-error gap-1">
                 <i class="fas fa-wrench"></i>
-                In Wartung
+                Defekt
             </div>
+        {% else %}
+            <div class="badge badge-ghost gap-1">{{ tool.status|capitalize }}</div>
         {% endif %}
     </td>
     <td class="text-right">
@@ -131,8 +133,8 @@ async function deleteTool(barcode) {
     }
     
     try {
-        const response = await fetch(`/tools/${barcode}/delete`, {
-            method: 'POST',
+        const response = await fetch(`/admin/tools/${barcode}/delete`, {
+            method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
             }

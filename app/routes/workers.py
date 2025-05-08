@@ -267,7 +267,7 @@ def edit(barcode):
         flash('Fehler beim Aktualisieren des Mitarbeiters', 'error')
         return redirect(url_for('workers.details', barcode=barcode))
 
-@bp.route('/<barcode>/delete', methods=['POST'])
+@bp.route('/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
 def delete_by_barcode(barcode):
     """Löscht einen Mitarbeiter (Soft Delete)"""
@@ -280,8 +280,10 @@ def delete_by_barcode(barcode):
             ''', [barcode]).fetchone()
             
             if not worker:
-                flash('Mitarbeiter nicht gefunden', 'error')
-                return redirect(url_for('workers.index'))
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter nicht gefunden'
+                }), 404
                 
             # Prüfe ob der Mitarbeiter noch Werkzeuge ausgeliehen hat
             lending = conn.execute('''
@@ -290,8 +292,10 @@ def delete_by_barcode(barcode):
             ''', [barcode]).fetchone()
             
             if lending:
-                flash('Mitarbeiter muss zuerst alle Werkzeuge zurückgeben', 'error')
-                return redirect(url_for('workers.details', barcode=barcode))
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter muss zuerst alle Werkzeuge zurückgeben'
+                }), 400
                 
             # Führe Soft Delete durch
             conn.execute('''
@@ -304,13 +308,17 @@ def delete_by_barcode(barcode):
             
             conn.commit()
             
-            flash('Mitarbeiter erfolgreich gelöscht', 'success')
-            return redirect(url_for('workers.index'))
+            return jsonify({
+                'success': True,
+                'message': 'Mitarbeiter erfolgreich gelöscht'
+            })
             
     except Exception as e:
-        print(f"Fehler beim Löschen des Mitarbeiters: {str(e)}")
-        flash('Fehler beim Löschen des Mitarbeiters', 'error')
-        return redirect(url_for('workers.details', barcode=barcode))
+        logger.error(f"Fehler beim Löschen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
 
 @bp.route('/workers/search')
 @mitarbeiter_required

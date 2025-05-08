@@ -41,8 +41,10 @@
                     <i class="fas fa-edit mr-2"></i>Bearbeiten
                 </button>
                 {% if not tool.current_borrower %}
-                <button class="btn btn-error" onclick="deleteTool('{{ tool.barcode }}')">
-                    <i class="fas fa-trash mr-2"></i>Löschen
+                <button class="btn btn-danger" 
+                        onclick="deleteItem('tool', '{{ tool.barcode }}')"
+                        data-barcode="{{ tool.barcode }}">
+                    <i class="fas fa-trash"></i> In den Papierkorb
                 </button>
                 {% endif %}
             </div>
@@ -160,32 +162,6 @@ function showEditModal() {
 
 function closeEditModal() {
     document.getElementById('editModal').close();
-}
-
-async function deleteTool(barcode) {
-    if (!confirm('Möchten Sie dieses Werkzeug wirklich löschen?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/tools/${barcode}/delete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            window.location.href = '/tools';
-        } else {
-            alert(result.message || 'Ein Fehler ist aufgetreten');
-        }
-    } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Ein Fehler ist aufgetreten');
-    }
 }
 
 // Formular-Handling

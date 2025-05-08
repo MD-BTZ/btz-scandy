@@ -149,66 +149,116 @@ def detail(id):
             """
         ).fetchall()
     
-    return render_template('tickets/detail.html', ticket=ticket, notes=notes, workers=workers)
+    return render_template('tickets/detail.html', 
+                         ticket=ticket, 
+                         notes=notes, 
+                         workers=workers,
+                         now=datetime.now())
 
 @bp.route('/<int:id>/update', methods=['POST'])
 @login_required
 def update(id):
     """Aktualisiert ein Ticket"""
     try:
+        # Logging für Debugging
+        logging.info(f"Update-Anfrage für Ticket {id}")
+        logging.info(f"Form-Daten: {request.form}")
+        
         # Hole das Ticket
-        ticket = ticket_db.get_ticket(id)
+        ticket = ticket_db.query(
+            """
+            SELECT *
+            FROM tickets
+            WHERE id = ?
+            """,
+            [id],
+            one=True
+        )
+        
         if not ticket:
-            flash('Ticket nicht gefunden', 'error')
-            return redirect(url_for('tickets.index'))
+            logging.error(f"Ticket {id} nicht gefunden")
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
 
         # Hole die Formulardaten
         status = request.form.get('status')
         assigned_to = request.form.get('assigned_to')
         resolution_notes = request.form.get('resolution_notes')
-        author_name = current_user.username  # Benutzername aus current_user
-        category = request.form.get('category')
+        author_name = current_user.username
+        priority = request.form.get('priority')
         due_date = request.form.get('due_date')
         estimated_time = request.form.get('estimated_time')
         actual_time = request.form.get('actual_time')
         is_private = request.form.get('is_private') == 'on'
 
+        # Logging der verarbeiteten Daten
+        logging.info(f"Verarbeitete Daten: status={status}, assigned_to={assigned_to}, priority={priority}, due_date={due_date}")
+
         # Validiere die Eingaben
         if not status:
-            flash('Status ist erforderlich', 'error')
-            return redirect(url_for('tickets.detail', id=id))
+            logging.error("Status fehlt in der Anfrage")
+            return jsonify({
+                'success': False,
+                'message': 'Status ist erforderlich'
+            }), 400
 
         if not author_name:
-            flash('Sie müssen eingeloggt sein, um Tickets zu bearbeiten', 'error')
-            return redirect(url_for('tickets.detail', id=id))
+            logging.error("Kein Benutzername verfügbar")
+            return jsonify({
+                'success': False,
+                'message': 'Sie müssen eingeloggt sein, um Tickets zu bearbeiten'
+            }), 401
 
-        # Aktualisiere das Ticket
-        ticket_db.update_ticket(
-            id=id,
-            status=status,
-            assigned_to=assigned_to,
-            category=category,
-            due_date=due_date,
-            estimated_time=estimated_time,
-            actual_time=actual_time,
-            last_modified_by=author_name
-        )
-
-        # Füge eine Notiz hinzu, wenn vorhanden
-        if resolution_notes:
-            ticket_db.add_note(
-                ticket_id=id,
-                note=resolution_notes,
-                author_name=author_name,
-                is_private=is_private
+        try:
+            # Aktualisiere das Ticket
+            ticket_db.query(
+                """
+                UPDATE tickets
+                SET status = ?,
+                    assigned_to = ?,
+                    priority = ?,
+                    due_date = ?,
+                    estimated_time = ?,
+                    actual_time = ?,
+                    last_modified_by = ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                [status, assigned_to, priority, due_date, estimated_time, actual_time, author_name, id]
             )
+            logging.info(f"Ticket {id} erfolgreich aktualisiert")
 
-        flash('Ticket erfolgreich aktualisiert', 'success')
-        return redirect(url_for('tickets.detail', id=id))
+            # Füge eine Notiz hinzu, wenn vorhanden
+            if resolution_notes:
+                ticket_db.query(
+                    """
+                    INSERT INTO ticket_notes (ticket_id, note, created_by, is_private, created_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                    """,
+                    [id, resolution_notes, author_name, is_private]
+                )
+                logging.info(f"Notiz zu Ticket {id} hinzugefügt")
+
+            return jsonify({
+                'success': True,
+                'message': 'Ticket erfolgreich aktualisiert'
+            })
+
+        except Exception as db_error:
+            logging.error(f"Datenbankfehler bei Ticket {id}: {str(db_error)}")
+            return jsonify({
+                'success': False,
+                'message': f'Datenbankfehler: {str(db_error)}'
+            }), 500
 
     except Exception as e:
-        flash(f'Fehler beim Aktualisieren des Tickets: {str(e)}', 'error')
-        return redirect(url_for('tickets.detail', id=id))
+        logging.error(f"Unerwarteter Fehler bei Ticket {id}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Unerwarteter Fehler: {str(e)}'
+        }), 500
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 @admin_required

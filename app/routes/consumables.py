@@ -18,8 +18,9 @@ def index():
             consumables = conn.execute('''
                 SELECT c.*,
                        CASE 
-                           WHEN c.quantity <= 0 THEN 'ausverkauft'
-                           WHEN c.quantity <= c.min_quantity THEN 'niedrig'
+                           WHEN c.quantity <= 0 THEN 'nicht_verfügbar'
+                           WHEN c.quantity <= c.min_quantity THEN 'kritisch'
+                           WHEN c.quantity <= c.min_quantity * 2 THEN 'niedrig'
                            ELSE 'verfügbar'
                        END as current_status
                 FROM consumables c
@@ -174,7 +175,7 @@ def detail(barcode):
     history = Database.query('''
         SELECT 
             'Bestandsänderung' as action_type,
-            strftime('%d.%m.%Y %H:%M', cu.used_at) as action_date,
+            strftime('%d.%m.%Y %H:%M', datetime(cu.used_at, 'localtime')) as action_date,
             CASE 
                 WHEN cu.worker_barcode = 'admin' THEN 'Admin'
                 ELSE w.firstname || ' ' || w.lastname 
@@ -337,7 +338,7 @@ def view_consumable(barcode):
         flash(f'Fehler beim Laden des Verbrauchsmaterials: {str(e)}', 'error')
         return redirect(url_for('consumables.index'))
 
-@bp.route('/<barcode>/delete', methods=['POST'])
+@bp.route('/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
 def delete_by_barcode(barcode):
     """Löscht ein Verbrauchsmaterial anhand des Barcodes (Soft Delete)"""
@@ -359,8 +360,8 @@ def delete_by_barcode(barcode):
             conn.execute('''
                 UPDATE consumables 
                 SET deleted = 1,
-                    deleted_at = datetime('now'),
-                    modified_at = datetime('now')
+                    deleted_at = datetime('now', 'localtime'),
+                    modified_at = datetime('now', 'localtime')
                 WHERE barcode = ?
             ''', [barcode])
             

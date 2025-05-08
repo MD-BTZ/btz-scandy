@@ -4,7 +4,7 @@ function editTool(barcode) {
 
 function deleteTool(barcode) {
     if (confirm('Werkzeug wirklich löschen?')) {
-        fetch(`/tools/${barcode}/delete`, {
+        fetch(`/admin/tools/${barcode}/delete`, {
             method: 'DELETE'
         }).then(response => response.json())
         .then(data => {
@@ -23,7 +23,7 @@ function editConsumable(barcode) {
 
 function deleteConsumable(barcode) {
     if (confirm('Verbrauchsmaterial wirklich löschen?')) {
-        fetch(`/consumables/${barcode}/delete`, {
+        fetch(`/admin/consumables/${barcode}/delete`, {
             method: 'DELETE'
         }).then(response => response.json())
         .then(data => {
@@ -42,7 +42,7 @@ function editWorker(barcode) {
 
 function deleteWorker(barcode) {
     if (confirm('Mitarbeiter wirklich löschen?')) {
-        fetch(`/workers/${barcode}/delete`, {
+        fetch(`/admin/workers/${barcode}/delete`, {
             method: 'DELETE'
         }).then(response => response.json())
         .then(data => {

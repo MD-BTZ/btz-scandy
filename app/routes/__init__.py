@@ -11,20 +11,21 @@ from app.routes.history import bp as history_bp
 from app.routes.main import bp as main_bp
 from app.routes.dashboard import bp as dashboard_bp
 from app.routes.lending import bp as lending_bp
+from app.routes.tickets import bp as tickets_bp
 
 def init_app(app):
     """Registriert alle Blueprints mit ihren URL-Präfixen"""
     app.register_blueprint(main_bp)  # Kein Präfix für main
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(admin_bp, url_prefix='/admin')
-    app.register_blueprint(tools_bp, url_prefix='/tools')
-    app.register_blueprint(workers_bp, url_prefix='/workers')
-    app.register_blueprint(consumables_bp, url_prefix='/consumables')
-    app.register_blueprint(api_bp, url_prefix='/api')
-    app.register_blueprint(quick_scan_bp, url_prefix='/quick-scan')
-    app.register_blueprint(history_bp, url_prefix='/history')
-    app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(workers_bp)
+    app.register_blueprint(consumables_bp)
     app.register_blueprint(lending_bp, url_prefix='/lending')
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(history_bp)
+    app.register_blueprint(quick_scan_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(tickets_bp, url_prefix='/tickets')
 
 __all__ = [
     'auth_bp', 'tools_bp', 'workers_bp', 'consumables_bp',

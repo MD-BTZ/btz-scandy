@@ -1857,7 +1857,8 @@ def tickets():
         SELECT 
             t.*,
             datetime(t.created_at) as created_at,
-            datetime(t.updated_at) as updated_at
+            datetime(t.updated_at) as updated_at,
+            t.due_date
         FROM tickets t
         WHERE 1=1
     """
@@ -1880,7 +1881,16 @@ def tickets():
     query += " ORDER BY t.created_at DESC"
     
     tickets = ticket_db.query(query, params)
-    return render_template('tickets/index.html', tickets=tickets)
+    
+    # Konvertiere due_date in datetime-Objekte
+    for ticket in tickets:
+        if ticket['due_date']:
+            try:
+                ticket['due_date'] = datetime.strptime(ticket['due_date'], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                ticket['due_date'] = None
+    
+    return render_template('tickets/index.html', tickets=tickets, now=datetime.now())
 
 @bp.route('/system', methods=['GET', 'POST'])
 @login_required

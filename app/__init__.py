@@ -148,6 +148,7 @@ def create_app(test_config=None):
     # Logger einrichten
     from app.utils.logger import init_app_logger
     init_app_logger(app)
+    app.logger.setLevel(logging.DEBUG)  # Setze Logging-Level auf DEBUG
     app.logger.info("\n=== ANWENDUNGSSTART ===")
     
     # Verzeichnisse erstellen

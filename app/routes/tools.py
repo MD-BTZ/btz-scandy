@@ -5,7 +5,7 @@ from app.utils.decorators import admin_required, login_required, mitarbeiter_req
 from datetime import datetime
 import logging
 
-# Explizit URL-Präfix setzen
+# Blueprint mit URL-Präfix definieren
 bp = Blueprint('tools', __name__, url_prefix='/tools')
 logger = logging.getLogger(__name__) # Logger für dieses Modul
 
@@ -339,51 +339,6 @@ def edit(barcode):
     except Exception as e:
         print(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}")
         flash('Fehler beim Bearbeiten des Werkzeugs', 'error')
-        return redirect(url_for('tools.detail', barcode=barcode))
-
-@bp.route('/<barcode>/delete', methods=['POST'])
-@mitarbeiter_required
-def delete_by_barcode(barcode):
-    """Löscht ein Werkzeug (Soft Delete)"""
-    try:
-        with Database.get_db() as conn:
-            # Prüfe ob das Werkzeug existiert
-            tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            if not tool:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-                
-            # Prüfe ob das Werkzeug ausgeliehen ist
-            lending = conn.execute('''
-                SELECT * FROM lendings
-                WHERE tool_barcode = ? AND returned_at IS NULL
-            ''', [barcode]).fetchone()
-            
-            if lending:
-                flash('Werkzeug muss zuerst zurückgegeben werden', 'error')
-                return redirect(url_for('tools.detail', barcode=barcode))
-                
-            # Führe Soft Delete durch
-            conn.execute('''
-                UPDATE tools 
-                SET deleted = 1,
-                    deleted_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [barcode])
-            
-            conn.commit()
-            
-            flash('Werkzeug erfolgreich gelöscht', 'success')
-            return redirect(url_for('tools.index'))
-            
-    except Exception as e:
-        print(f"Fehler beim Löschen des Werkzeugs: {str(e)}")
-        flash('Fehler beim Löschen des Werkzeugs', 'error')
         return redirect(url_for('tools.detail', barcode=barcode))
 
 # Weitere Tool-Routen...

@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import session, redirect, url_for, request, flash, abort
+from flask import session, redirect, url_for, request, flash, abort, jsonify
 from datetime import datetime
 from app.utils.logger import loggers
 from flask_login import current_user
@@ -70,15 +70,26 @@ def mitarbeiter_required(f):
     def decorated_function(*args, **kwargs):
         logger.debug(f"[DECORATOR] mitarbeiter_required: Checking user {getattr(current_user, 'id', 'Guest')}")
         if not current_user.is_authenticated:
-             logger.warning(f"[DECORATOR] mitarbeiter_required: User not authenticated. Redirecting to login.")
-             flash("Bitte melden Sie sich an.", "info")
-             return redirect(url_for('auth.login', next=request.url))
+            logger.warning(f"[DECORATOR] mitarbeiter_required: User not authenticated. Redirecting to login.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Bitte melden Sie sich an.',
+                    'redirect': url_for('auth.login', next=request.url)
+                }), 401
+            flash("Bitte melden Sie sich an.", "info")
+            return redirect(url_for('auth.login', next=request.url))
         
         is_mitarbeiter = getattr(current_user, 'is_mitarbeiter', False)
         logger.debug(f"[DECORATOR] mitarbeiter_required: User role is '{getattr(current_user, 'role', 'N/A')}', is_mitarbeiter evaluated to {is_mitarbeiter}")
         
         if not is_mitarbeiter: 
             logger.warning(f"[DECORATOR] mitarbeiter_required: User {current_user.id} lacks permission. Aborting with 403.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine Berechtigung für diese Aktion.'
+                }), 403
             abort(403)
         
         logger.debug(f"[DECORATOR] mitarbeiter_required: Access granted for user {current_user.id}. Proceeding to route function.")

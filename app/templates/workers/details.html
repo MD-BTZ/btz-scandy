@@ -31,8 +31,10 @@
                     <i class="fas fa-edit mr-2"></i>Bearbeiten
                 </button>
                 {% if not current_lendings %}
-                <button class="btn btn-error" onclick="deleteWorker('{{ worker.barcode }}')">
-                    <i class="fas fa-trash mr-2"></i>Löschen
+                <button class="btn btn-danger" 
+                        onclick="deleteItem('worker', '{{ worker.barcode }}')"
+                        data-barcode="{{ worker.barcode }}">
+                    <i class="fas fa-trash"></i> In den Papierkorb
                 </button>
                 {% endif %}
             </div>
@@ -180,8 +182,8 @@ async function deleteWorker(barcode) {
     }
     
     try {
-        const response = await fetch(`/workers/${barcode}/delete`, {
-            method: 'POST',
+        const response = await fetch(`/admin/workers/${barcode}/delete`, {
+            method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
             }

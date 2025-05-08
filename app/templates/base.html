@@ -426,5 +426,11 @@
             <p>Veröffentlicht unter MIT License</p>
         </div>
     </footer>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/delete.js') }}"></script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

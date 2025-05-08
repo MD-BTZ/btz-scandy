@@ -24,8 +24,8 @@
                                 </div>
                                 <div class="divider my-1"></div>
                                 <div class="space-y-1">
-                                    <p id="processedItemInput" class="font-bold text-base opacity-50">Noch kein Artikel gescannt</p>
-                                    <div class="flex items-center gap-2">
+                                    <p id="processedItemInput" class="font-bold text-base opacity-50 break-words max-w-full truncate" title="">Noch kein Artikel gescannt</p>
+                                    <div class="flex flex-col items-start gap-2 mt-1">
                                         <span id="itemTypeDisplay" class="badge badge-lg"></span>
                                         <span id="itemStatusDisplay" class="badge badge-lg"></span>
                                     </div>
@@ -67,10 +67,10 @@
                             <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
                         </div>
                         <!-- Confirmation Barcode wird direkt im Scanner-Bereich angezeigt -->
-                        <div id="itemConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200">
-                            <h3 class="font-bold text-base mb-1">Aktion bestätigen</h3>
-                            <p class="text-sm mb-2">Scannen Sie diesen Barcode zur Bestätigung</p>
-                            <canvas id="itemConfirmBarcode" class="max-w-full"></canvas>
+                        <div id="itemConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200 py-4">
+                            <h3 class="font-bold text-base mb-1 break-words w-full">Aktion bestätigen</h3>
+                            <p class="text-sm mb-2 break-words w-full">Scannen Sie diesen Barcode zur Bestätigung</p>
+                            <canvas id="itemConfirmBarcode" class="max-w-xs w-full mb-2"></canvas>
                         </div>
                     </div>
                 </div>
@@ -91,10 +91,10 @@
                             <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
                         </div>
                         <!-- Final Confirmation wird direkt im Scanner-Bereich angezeigt -->
-                        <div id="finalConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200">
-                            <h3 class="font-bold text-base mb-1">Vorgang bestätigen</h3>
-                            <p class="text-sm mb-2">Scannen Sie diesen Barcode zur Bestätigung</p>
-                            <canvas id="finalConfirmBarcode" class="max-w-full"></canvas>
+                        <div id="finalConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200 py-4">
+                            <h3 class="font-bold text-base mb-1 break-words w-full">Vorgang bestätigen</h3>
+                            <p class="text-sm mb-2 break-words w-full">Scannen Sie diesen Barcode zur Bestätigung</p>
+                            <canvas id="finalConfirmBarcode" class="max-w-xs w-full mb-2"></canvas>
                         </div>
                     </div>
                 </div>

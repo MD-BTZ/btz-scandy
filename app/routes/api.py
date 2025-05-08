@@ -238,55 +238,47 @@ def after_request(response):
 @login_required
 def return_tool():
     try:
-        data = request.json
+        data = request.get_json()
         tool_barcode = data.get('tool_barcode')
-        worker_barcode = data.get('worker_barcode')  # Optional für Validierung
+        worker_barcode = data.get('worker_barcode')
         
-        if not tool_barcode:
+        if not all([tool_barcode, worker_barcode]):
             return jsonify({
-                'success': False, 
-                'message': 'Werkzeug-Barcode fehlt'
+                'success': False,
+                'message': 'Fehlende Parameter'
             }), 400
             
         with Database.get_db() as conn:
-            # Prüfe aktuellen Ausleihstatus
-            current_lending = conn.execute("""
-                SELECT l.*, w.firstname || ' ' || w.lastname as worker_name
-                FROM lendings l
-                JOIN workers w ON l.worker_barcode = w.barcode
-                WHERE l.tool_barcode = ? 
-                AND l.returned_at IS NULL
-            """, [tool_barcode]).fetchone()
-            
-            if not current_lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Keine aktive Ausleihe für dieses Werkzeug gefunden'
-                }), 400
-            
-            # Wenn ein Mitarbeiter-Barcode angegeben wurde, prüfe ob er berechtigt ist
-            if worker_barcode and current_lending['worker_barcode'] != worker_barcode:
-                return jsonify({
-                    'success': False,
-                    'message': f'Dieses Werkzeug wurde von {current_lending["worker_name"]} ausgeliehen'
-                }), 403
-            
-            # Aktualisiere Ausleihe
-            conn.execute("""
-                UPDATE lendings 
-                SET returned_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-                    sync_status = 'pending'
+            # Prüfe ob die Ausleihe existiert
+            lending = conn.execute('''
+                SELECT * FROM lendings
                 WHERE tool_barcode = ? 
+                AND worker_barcode = ?
                 AND returned_at IS NULL
-            """, [tool_barcode])
+            ''', [tool_barcode, worker_barcode]).fetchone()
+            
+            if not lending:
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine aktive Ausleihe gefunden'
+                }), 404
+                
+            # Setze Rückgabedatum
+            conn.execute('''
+                UPDATE lendings 
+                SET returned_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+                WHERE tool_barcode = ? 
+                AND worker_barcode = ?
+                AND returned_at IS NULL
+            ''', [tool_barcode, worker_barcode])
             
             # Setze Tool-Status zurück
-            conn.execute("""
+            conn.execute('''
                 UPDATE tools 
                 SET status = 'verfügbar',
                     sync_status = 'pending'
                 WHERE barcode = ?
-            """, [tool_barcode])
+            ''', [tool_barcode])
             
             conn.commit()
             
@@ -300,32 +292,6 @@ def return_tool():
             'success': False,
             'message': f'Fehler bei der Rückgabe: {str(e)}'
         }), 500
-
-@bp.route('/tools/<barcode>/delete', methods=['POST'])
-@admin_required
-def delete_tool(barcode):
-    db = Database()
-    result = db.soft_delete_tool(barcode)
-    return jsonify(result)
-
-# Sync-Routen temporär deaktiviert
-"""
-@bp.route('/sync/start', methods=['POST'])
-def start_sync():
-    sync_manager = current_app.extensions.get('sync_manager')
-    if sync_manager:
-        sync_manager.start_sync_scheduler()
-        return jsonify({'success': True, 'message': 'Sync-Scheduler gestartet'})
-    return jsonify({'success': False, 'message': 'Sync-Manager nicht verfügbar'})
-
-@bp.route('/sync/stop', methods=['POST'])
-def stop_sync():
-    sync_manager = current_app.extensions.get('sync_manager')
-    if sync_manager:
-        sync_manager.stop_sync_scheduler()
-        return jsonify({'success': True, 'message': 'Sync-Scheduler gestoppt'})
-    return jsonify({'success': False, 'message': 'Sync-Manager nicht verfügbar'})
-"""
 
 @bp.route('/sync/auto', methods=['POST'])
 @admin_required

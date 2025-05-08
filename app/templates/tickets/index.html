@@ -1,183 +1,150 @@
-{% extends "base.html" %}
+{% extends "shared/list_base.html" %}
 
-{% block title %}Tickets{% endblock %}
-
-{% block content %}
-<div class="container mx-auto px-4 py-8">
-    <!-- Toast Container -->
-    <div id="toastContainer" class="fixed top-4 right-4 z-50"></div>
-    
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold">Tickets</h1>
-        <div class="flex gap-2">
-            <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
-                <i class="fas fa-plus mr-2"></i>
-                Neues Ticket
-            </a>
-        </div>
-    </div>
-
-    <!-- Filter und Suche -->
-    <div class="card bg-base-100 shadow-xl mb-6">
-        <div class="card-body">
-            <!-- Suchleiste -->
-            <div class="form-control mb-4">
-                <div class="input-group">
-                    <input type="text" 
-                           id="searchInput" 
-                           placeholder="Tickets durchsuchen..." 
-                           class="input input-bordered w-full">
-                    <button class="btn btn-square">
-                        <i class="fas fa-search"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Filter -->
-            <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="form-control">
-                    <label class="label">
-                        <span class="label-text">Status</span>
-                    </label>
-                    <select name="status" class="select select-bordered w-full">
-                        <option value="">Alle</option>
-                        <option value="offen">Offen</option>
-                        <option value="in_bearbeitung">In Bearbeitung</option>
-                        <option value="gelöst">Gelöst</option>
-                    </select>
-                </div>
-
-                <div class="form-control">
-                    <label class="label">
-                        <span class="label-text">Priorität</span>
-                    </label>
-                    <select name="priority" class="select select-bordered w-full">
-                        <option value="">Alle</option>
-                        <option value="niedrig">Niedrig</option>
-                        <option value="normal">Normal</option>
-                        <option value="hoch">Hoch</option>
-                        <option value="kritisch">Kritisch</option>
-                    </select>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Tickets Kachelansicht -->
-    {% if tickets %}
-    <div id="ticketsView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for ticket in tickets %}
-        <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow ticket-card" 
-             data-status="{{ ticket.status }}"
-             data-priority="{{ ticket.priority }}"
-             data-created-by="{{ ticket.created_by }}"
-             data-assigned-to="{{ ticket.assigned_to or '' }}">
-            <div class="card-body">
-                <!-- Ticket Header -->
-                <div class="flex justify-between items-start">
-                    <h2 class="card-title text-lg">
-                        <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="hover:text-primary">
-                            #{{ ticket.id }} - {{ ticket.title }}
-                        </a>
-                    </h2>
-                    <span class="badge badge-{{ 
-                        'success' if ticket.status == 'gelöst' 
-                        else 'warning' if ticket.status == 'in_bearbeitung' 
-                        else 'error' 
-                    }}">
-                        {{ ticket.status }}
-                    </span>
-                </div>
-                
-                <!-- Ticket Beschreibung -->
-                <p class="text-base-content/70 line-clamp-2 mt-2">{{ ticket.description }}</p>
-                
-                <!-- Ticket Meta-Informationen -->
-                <div class="flex flex-wrap gap-2 mt-4">
-                    <div class="badge badge-outline">
-                        <i class="fas fa-user mr-1"></i>
-                        {{ ticket.created_by }}
-                    </div>
-                    <div class="badge badge-outline">
-                        <i class="fas fa-calendar mr-1"></i>
-                        {{ ticket.created_at }}
-                    </div>
-                    <div class="badge badge-{{ 
-                        'error' if ticket.priority == 'hoch' 
-                        else 'warning' if ticket.priority == 'normal' 
-                        else 'success' 
-                    }}">
-                        <i class="fas fa-flag mr-1"></i>
-                        {{ ticket.priority }}
-                    </div>
-                    {% if ticket.assigned_to %}
-                    <div class="badge badge-outline">
-                        <i class="fas fa-user-tag mr-1"></i>
-                        {{ ticket.assigned_to }}
-                    </div>
-                    {% endif %}
-                </div>
-                
-                <!-- Ticket Aktionen -->
-                <div class="card-actions justify-end mt-4">
-                    <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-ghost btn-sm">
-                        <i class="fas fa-eye mr-1"></i>Details
-                    </a>
-                    <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-ghost btn-sm">
-                        <i class="fas fa-edit mr-1"></i>Bearbeiten
-                    </a>
-                    <button onclick="deleteTicket('{{ ticket.id }}')" class="btn btn-ghost btn-sm text-error">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="card bg-base-100 shadow-xl">
-        <div class="card-body text-center">
-            <p class="text-base-content/60">Keine Tickets gefunden.</p>
-            <div class="mt-4">
-                <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
-                    <i class="fas fa-plus mr-2"></i>
-                    Erstes Ticket erstellen
-                </a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+{% block actions %}
+<div class="flex gap-2">
+    <a href="{{ url_for('tickets.create') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Neues Ticket
+    </a>
 </div>
+{% endblock %}
+
+{% block filters %}
+<div class="flex flex-wrap gap-2">
+    <select class="select select-bordered w-full max-w-xs" name="status" onchange="this.form.submit()">
+        <option value="alle" {% if not request.args.get('status') %}selected{% endif %}>Status: Alle</option>
+        <option value="offen" {% if request.args.get('status') == 'offen' %}selected{% endif %}>Offen</option>
+        <option value="in_bearbeitung" {% if request.args.get('status') == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+        <option value="erledigt" {% if request.args.get('status') == 'erledigt' %}selected{% endif %}>Erledigt</option>
+    </select>
+    <select class="select select-bordered w-full max-w-xs" name="priority" onchange="this.form.submit()">
+        <option value="alle" {% if not request.args.get('priority') %}selected{% endif %}>Priorität: Alle</option>
+        <option value="niedrig" {% if request.args.get('priority') == 'niedrig' %}selected{% endif %}>Niedrig</option>
+        <option value="normal" {% if request.args.get('priority') == 'normal' %}selected{% endif %}>Normal</option>
+        <option value="hoch" {% if request.args.get('priority') == 'hoch' %}selected{% endif %}>Hoch</option>
+    </select>
+    <select class="select select-bordered w-full max-w-xs" name="assigned_to" onchange="this.form.submit()">
+        <option value="">Zugewiesen an: Alle</option>
+        {% for worker in workers %}
+        <option value="{{ worker.barcode }}" {% if request.args.get('assigned_to') == worker.barcode %}selected{% endif %}>{{ worker.name }}</option>
+        {% endfor %}
+    </select>
+    <select class="select select-bordered w-full max-w-xs" name="created_by" onchange="this.form.submit()">
+        <option value="">Erstellt von: Alle</option>
+        {% for worker in workers %}
+        <option value="{{ worker.barcode }}" {% if request.args.get('created_by') == worker.barcode %}selected{% endif %}>{{ worker.name }}</option>
+        {% endfor %}
+    </select>
+</div>
+{% endblock %}
+
+{% block table_headers %}
+<th>ID</th>
+<th>Titel</th>
+<th>Status</th>
+<th>Priorität</th>
+<th>Zugewiesen an</th>
+<th>Erstellt von</th>
+<th>Erstellt am</th>
+<th>Fällig am</th>
+<th>Geschätzte Zeit</th>
+<th>Tatsächliche Zeit</th>
+<th class="text-right">Aktionen</th>
+{% endblock %}
+
+{% block table_rows %}
+{% for ticket in tickets %}
+<tr class="hover">
+    <td>#{{ ticket.id }}</td>
+    <td>
+        <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="link link-hover font-medium">
+            {{ ticket.title }}
+        </a>
+    </td>
+    <td>
+        <span class="badge 
+            {% if ticket.status == 'offen' %}badge-info
+            {% elif ticket.status == 'in_bearbeitung' %}badge-warning
+            {% elif ticket.status in ['erledigt', 'gelöst'] %}badge-success
+            {% else %}badge-ghost{% endif %}">
+            {% if ticket.status == 'offen' %}Offen
+            {% elif ticket.status == 'in_bearbeitung' %}In Bearbeitung
+            {% elif ticket.status == 'erledigt' %}Erledigt
+            {% elif ticket.status == 'gelöst' %}Gelöst
+            {% else %}{{ ticket.status|capitalize }}{% endif %}
+        </span>
+    </td>
+    <td>
+        <span class="badge 
+            {% if ticket.priority == 'niedrig' %}badge-secondary
+            {% elif ticket.priority == 'normal' %}badge-primary
+            {% elif ticket.priority == 'hoch' %}badge-danger
+            {% elif ticket.priority == 'kritisch' %}badge-error
+            {% else %}badge-ghost{% endif %}">
+            {% if ticket.priority == 'niedrig' %}Niedrig
+            {% elif ticket.priority == 'normal' %}Normal
+            {% elif ticket.priority == 'hoch' %}Hoch
+            {% elif ticket.priority == 'kritisch' %}Kritisch
+            {% else %}{{ ticket.priority|capitalize }}{% endif %}
+        </span>
+    </td>
+    <td>{{ ticket.assigned_to or '-' }}</td>
+    <td>{{ ticket.created_by }}</td>
+    <td>{{ ticket.created_at }}</td>
+    <td>
+        {% if ticket.due_date %}
+            {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
+                <span class="text-danger">{{ ticket.due_date }}</span>
+            {% else %}
+                {{ ticket.due_date }}
+            {% endif %}
+        {% else %}
+            -
+        {% endif %}
+    </td>
+    <td>{{ ticket.estimated_time or '-' }}</td>
+    <td>{{ ticket.actual_time or '-' }}</td>
+    <td class="text-right">
+        <div class="btn-group">
+            <a href="{{ url_for('tickets.detail', id=ticket.id) }}" class="btn btn-sm btn-ghost" title="Details anzeigen">
+                <i class="fas fa-eye"></i>
+            </a>
+            {% if current_user.is_admin %}
+            <button type="button" class="btn btn-sm btn-ghost btn-error" title="Löschen" onclick="deleteTicket({{ ticket.id }})">
+                <i class="fas fa-trash"></i>
+            </button>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-// Suchfunktion
-document.getElementById('searchInput').addEventListener('input', function(e) {
-    const searchTerm = e.target.value.toLowerCase();
-    const cards = document.querySelectorAll('.ticket-card');
-    
-    cards.forEach(card => {
-        const title = card.querySelector('.card-title').textContent.toLowerCase();
-        const description = card.querySelector('p').textContent.toLowerCase();
-        const matches = title.includes(searchTerm) || description.includes(searchTerm);
-        card.style.display = matches ? '' : 'none';
+function deleteTicket(id) {
+    if (!confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
+        return;
+    }
+    fetch(`/tickets/${id}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Löschen des Tickets');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Fehler beim Löschen des Tickets');
     });
-});
-
-// Filter-Funktionalität
-document.getElementById('filterForm').addEventListener('change', function() {
-    const status = this.querySelector('[name="status"]').value;
-    const priority = this.querySelector('[name="priority"]').value;
-    
-    const cards = document.querySelectorAll('.ticket-card');
-    cards.forEach(card => {
-        const matchesStatus = !status || card.dataset.status === status;
-        const matchesPriority = !priority || card.dataset.priority === priority;
-        
-        card.style.display = (matchesStatus && matchesPriority) ? '' : 'none';
-    });
-});
+}
 </script>
 {% endblock %} 

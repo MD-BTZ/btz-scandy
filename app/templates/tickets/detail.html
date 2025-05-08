@@ -46,6 +46,12 @@
                                 <span class="text-sm text-base-content/60">{{ note.created_at }}</span>
                             </div>
                             <p class="whitespace-pre-wrap">{{ note.note }}</p>
+                            {% if note.is_private %}
+                            <div class="badge badge-warning mt-2">
+                                <i class="fas fa-lock mr-1"></i>
+                                Private Notiz
+                            </div>
+                            {% endif %}
                             <div class="divider"></div>
                         </div>
                         {% endfor %}
@@ -72,6 +78,13 @@
                         <p>{{ ticket.priority }}</p>
                     </div>
 
+                    {% if ticket.category %}
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Kategorie</span>
+                        <p>{{ ticket.category }}</p>
+                    </div>
+                    {% endif %}
+
                     <div class="mb-4">
                         <span class="text-sm font-medium">Erstellt von</span>
                         <p>{{ ticket.created_by }}</p>
@@ -86,6 +99,29 @@
                         <span class="text-sm font-medium">Zugewiesen an</span>
                         <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
                     </div>
+
+                    {% if ticket.due_date %}
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Fälligkeitsdatum</span>
+                        <p class="{{ 'text-error' if ticket.due_date < now else '' }}">
+                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if ticket.estimated_time %}
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Geschätzte Zeit</span>
+                        <p>{{ ticket.estimated_time }} Minuten</p>
+                    </div>
+                    {% endif %}
+
+                    {% if ticket.actual_time %}
+                    <div class="mb-4">
+                        <span class="text-sm font-medium">Tatsächliche Zeit</span>
+                        <p>{{ ticket.actual_time }} Minuten</p>
+                    </div>
+                    {% endif %}
 
                     {% if ticket.resolved_at %}
                     <div class="mb-4">
@@ -125,6 +161,26 @@
                     </option>
                     <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>
                         Gelöst
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Priorität</span>
+                </label>
+                <select name="priority" class="select select-bordered w-full" required>
+                    <option value="niedrig" {% if ticket.priority == 'niedrig' %}selected{% endif %}>
+                        Niedrig
+                    </option>
+                    <option value="normal" {% if ticket.priority == 'normal' %}selected{% endif %}>
+                        Normal
+                    </option>
+                    <option value="hoch" {% if ticket.priority == 'hoch' %}selected{% endif %}>
+                        Hoch
+                    </option>
+                    <option value="kritisch" {% if ticket.priority == 'kritisch' %}selected{% endif %}>
+                        Kritisch
                     </option>
                 </select>
             </div>
@@ -248,31 +304,16 @@ function showToast(type, message) {
 document.getElementById('updateForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichern...';
-    
-    const formData = new FormData(this);
-    const data = {
-        status: formData.get('status'),
-        assigned_to: formData.get('assigned_to'),
-        resolution_notes: formData.get('resolution_notes'),
-        author_name: formData.get('author_name'),
-        category: formData.get('category'),
-        due_date: formData.get('due_date'),
-        estimated_time: formData.get('estimated_time'),
-        actual_time: formData.get('actual_time'),
-        is_private: formData.get('is_private') === 'on'
-    };
-    
     try {
+        const formData = new FormData(this);
         const response = await fetch(this.action, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
-            body: JSON.stringify(data)
+            body: formData,
+            credentials: 'same-origin'
         });
         
         if (!response.ok) {
@@ -282,22 +323,14 @@ document.getElementById('updateForm').addEventListener('submit', async function(
         const result = await response.json();
         
         if (result.success) {
-            showToast('success', result.message);
-            document.getElementById('updateModal').close();
-            
-            // Zur Ticket-Übersichtsseite zurückkehren
-            setTimeout(() => {
-                window.location.href = "{{ url_for('tickets.index') }}";
-            }, 1000);
+            showToast('success', 'Ticket erfolgreich aktualisiert');
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            throw new Error(result.message || 'Ein Fehler ist aufgetreten');
+            showToast('error', result.message || 'Ein Fehler ist aufgetreten');
         }
     } catch (error) {
-        console.error('Fehler:', error);
-        showToast('error', error.message || 'Ein Fehler ist aufgetreten');
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Speichern';
+        console.error('Fehler beim Aktualisieren:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
     }
 });
 
