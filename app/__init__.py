@@ -120,12 +120,19 @@ def initialize_and_migrate_databases():
         current_config = config['default']()
         db_path = current_config.DATABASE
 
-        # 1. Migrationen ausführen (stellt sicher, dass das Schema aktuell ist)
-        run_migrations(db_path)
+        # 1. SchemaManager initialisieren und Schema validieren/aktualisieren
+        logger.info("Initialisiere SchemaManager und validiere/aktualisiere Schema...")
+        schema_manager = SchemaManager(Database)
+        schema_manager.init_schema()
+        
+        if not schema_manager.validate_schema():
+            logger.error("Schema-Validierung fehlgeschlagen!")
+            raise Exception("Schema-Validierung fehlgeschlagen")
+        
+        logger.info(f"Schema-Version: {schema_manager.get_schema_version()}")
 
-        # 2. Basis-DB-Initialisierung (stellt sicher, dass alle Tabellen existieren, falls DB komplett neu)
-        logger.info("Führe Basis-DB-Initialisierung durch (CREATE TABLE IF NOT EXISTS)...")
-        init_db()
+        # 2. Migrationen ausführen (für komplexere Änderungen)
+        run_migrations(db_path)
 
         # 3. Ticket-Datenbank initialisieren
         logger.info("Initialisiere Ticket-Datenbank...")

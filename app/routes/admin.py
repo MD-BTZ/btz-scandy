@@ -755,97 +755,305 @@ def manual_lending():
 @mitarbeiter_required
 def trash():
     """Papierkorb mit gelöschten Einträgen"""
-    tools = Database.query('''
-        SELECT * FROM tools WHERE deleted = 1
-    ''')
-    consumables = Database.query('''
-        SELECT * FROM consumables WHERE deleted = 1
-    ''')
-    workers = Database.query('''
-        SELECT * FROM workers WHERE deleted = 1
-    ''')
-    
-    return render_template('admin/trash.html',
-                         tools=tools,
-                         consumables=consumables,
-                         workers=workers)
+    try:
+        with Database.get_db() as conn:
+            # Gelöschte Werkzeuge
+            tools = conn.execute('''
+                SELECT * FROM tools 
+                WHERE deleted = 1 
+                ORDER BY deleted_at DESC
+            ''').fetchall()
+            
+            logger.debug(f"Gelöschte Werkzeuge gefunden: {len(tools)}")
+            for tool in tools:
+                logger.debug(f"Tool: {dict(tool)}")
+            
+            # Gelöschte Verbrauchsmaterialien
+            consumables = conn.execute('''
+                SELECT * FROM consumables 
+                WHERE deleted = 1 
+                ORDER BY deleted_at DESC
+            ''').fetchall()
+            
+            logger.debug(f"Gelöschte Verbrauchsmaterialien gefunden: {len(consumables)}")
+            for consumable in consumables:
+                logger.debug(f"Consumable: {dict(consumable)}")
+            
+            # Gelöschte Mitarbeiter
+            workers = conn.execute('''
+                SELECT * FROM workers 
+                WHERE deleted = 1 
+                ORDER BY deleted_at DESC
+            ''').fetchall()
+            
+            logger.debug(f"Gelöschte Mitarbeiter gefunden: {len(workers)}")
+            for worker in workers:
+                logger.debug(f"Worker: {dict(worker)}")
+            
+            return render_template('admin/trash.html',
+                               tools=tools,
+                               consumables=consumables,
+                               workers=workers)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden des Papierkorbs', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/tools/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
 def delete_tool(barcode):
     """Werkzeug in den Papierkorb verschieben"""
     try:
-        Database.query('''
-            UPDATE tools 
-            SET deleted = 1,
-                deleted_at = datetime('now'),
-                modified_at = datetime('now'),
-                sync_status = 'pending'
-            WHERE barcode = ?
-        ''', [barcode])
-        return jsonify({'success': True})
+        with Database.get_db() as conn:
+            # Prüfe ob das Werkzeug existiert
+            tool = conn.execute('''
+                SELECT * FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
+            
+            logger.debug(f"Zu löschendes Werkzeug gefunden: {dict(tool) if tool else 'Nicht gefunden'}")
+            
+            if not tool:
+                return jsonify({
+                    'success': False,
+                    'message': 'Werkzeug nicht gefunden'
+                }), 404
+                
+            # Prüfe ob das Werkzeug ausgeliehen ist
+            lending = conn.execute('''
+                SELECT * FROM lendings
+                WHERE tool_barcode = ? AND returned_at IS NULL
+            ''', [barcode]).fetchone()
+            
+            if lending:
+                return jsonify({
+                    'success': False,
+                    'message': 'Werkzeug muss zuerst zurückgegeben werden'
+                }), 400
+                
+            # Führe Soft Delete durch
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.debug(f"Setze deleted_at auf: {current_time}")
+            
+            conn.execute('''
+                UPDATE tools 
+                SET deleted = 1,
+                    deleted_at = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [current_time, barcode])
+            
+            conn.commit()
+            
+            # Überprüfe nach dem Update
+            updated_tool = conn.execute('''
+                SELECT * FROM tools 
+                WHERE barcode = ?
+            ''', [barcode]).fetchone()
+            logger.debug(f"Werkzeug nach Update: {dict(updated_tool)}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Werkzeug wurde in den Papierkorb verschoben'
+            })
+            
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
 
 @bp.route('/consumables/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
 def delete_consumable(barcode):
     """Verbrauchsmaterial in den Papierkorb verschieben"""
     try:
-        Database.query('''
-            UPDATE consumables 
-            SET deleted = 1,
-                deleted_at = datetime('now'),
-                modified_at = datetime('now'),
-                sync_status = 'pending'
-            WHERE barcode = ?
-        ''', [barcode])
-        return jsonify({'success': True})
+        with Database.get_db() as conn:
+            # Prüfe ob das Verbrauchsmaterial existiert
+            consumable = conn.execute('''
+                SELECT * FROM consumables 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
+            
+            if not consumable:
+                return jsonify({
+                    'success': False,
+                    'message': 'Verbrauchsmaterial nicht gefunden'
+                }), 404
+                
+            # Führe Soft Delete durch
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.debug(f"Setze deleted_at auf: {current_time}")
+            
+            conn.execute('''
+                UPDATE consumables 
+                SET deleted = 1,
+                    deleted_at = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [current_time, barcode])
+            
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Verbrauchsmaterial wurde in den Papierkorb verschoben'
+            })
+            
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
 
 @bp.route('/workers/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
 def delete_worker(barcode):
     """Mitarbeiter in den Papierkorb verschieben"""
     try:
-        Database.query('''
-            UPDATE workers 
-            SET deleted = 1,
-                deleted_at = datetime('now'),
-                modified_at = datetime('now'),
-                sync_status = 'pending'
-            WHERE barcode = ?
-        ''', [barcode])
-        return jsonify({'success': True})
+        with Database.get_db() as conn:
+            # Prüfe ob der Mitarbeiter existiert
+            worker = conn.execute('''
+                SELECT * FROM workers 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
+            
+            if not worker:
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter nicht gefunden'
+                }), 404
+                
+            # Prüfe ob der Mitarbeiter noch Werkzeuge ausgeliehen hat
+            lending = conn.execute('''
+                SELECT * FROM lendings
+                WHERE worker_barcode = ? AND returned_at IS NULL
+            ''', [barcode]).fetchone()
+            
+            if lending:
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter muss zuerst alle Werkzeuge zurückgeben'
+                }), 400
+                
+            # Führe Soft Delete durch
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.debug(f"Setze deleted_at auf: {current_time}")
+            
+            conn.execute('''
+                UPDATE workers 
+                SET deleted = 1,
+                    deleted_at = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [current_time, barcode])
+            
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Mitarbeiter wurde in den Papierkorb verschoben'
+            })
+            
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Fehler beim Löschen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
 
 @bp.route('/trash/restore/<type>/<barcode>', methods=['POST'])
 @mitarbeiter_required
 def restore_item(type, barcode):
-    """Element aus dem Papierkorb wiederherstellen"""
+    """Stellt einen gelöschten Eintrag wieder her"""
     try:
-        table = {
-            'tool': 'tools',
-            'consumable': 'consumables',
-            'worker': 'workers'
-        }.get(type)
-        
-        if not table:
-            return jsonify({'success': False, 'error': 'Ungültiger Typ'}), 400
+        with Database.get_db() as conn:
+            if type == 'tool':
+                # Prüfe ob das Werkzeug existiert
+                tool = conn.execute('''
+                    SELECT * FROM tools 
+                    WHERE barcode = ? AND deleted = 1
+                ''', [barcode]).fetchone()
+                
+                if not tool:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Werkzeug nicht gefunden'
+                    }), 404
+                    
+                # Stelle das Werkzeug wieder her
+                conn.execute('''
+                    UPDATE tools 
+                    SET deleted = 0,
+                        deleted_at = NULL,
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [barcode])
+                
+            elif type == 'consumable':
+                # Prüfe ob das Verbrauchsmaterial existiert
+                consumable = conn.execute('''
+                    SELECT * FROM consumables 
+                    WHERE barcode = ? AND deleted = 1
+                ''', [barcode]).fetchone()
+                
+                if not consumable:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Verbrauchsmaterial nicht gefunden'
+                    }), 404
+                    
+                # Stelle das Verbrauchsmaterial wieder her
+                conn.execute('''
+                    UPDATE consumables 
+                    SET deleted = 0,
+                        deleted_at = NULL,
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [barcode])
+                
+            elif type == 'worker':
+                # Prüfe ob der Mitarbeiter existiert
+                worker = conn.execute('''
+                    SELECT * FROM workers 
+                    WHERE barcode = ? AND deleted = 1
+                ''', [barcode]).fetchone()
+                
+                if not worker:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Mitarbeiter nicht gefunden'
+                    }), 404
+                    
+                # Stelle den Mitarbeiter wieder her
+                conn.execute('''
+                    UPDATE workers 
+                    SET deleted = 0,
+                        deleted_at = NULL,
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [barcode])
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Ungültiger Typ'
+                }), 400
+                
+            conn.commit()
             
-        Database.query(f'''
-            UPDATE {table}
-            SET deleted = 0,
-                deleted_at = NULL,
-                modified_at = datetime('now'),
-                sync_status = 'pending'
-            WHERE barcode = ?
-        ''', [barcode])
-        return jsonify({'success': True})
+            return jsonify({
+                'success': True,
+                'message': 'Eintrag wurde wiederhergestellt'
+            })
+            
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Fehler beim Wiederherstellen des Eintrags: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Wiederherstellen: {str(e)}'
+        }), 500
 
 def get_label_setting(key, default):
     value = Database.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
@@ -2197,3 +2405,105 @@ def upload_icon():
             }), 500
     
     return jsonify({'success': False, 'error': 'Ungültige Datei'}), 400
+
+@bp.route('/tools/<barcode>/delete-permanent', methods=['DELETE'])
+@mitarbeiter_required
+def delete_tool_permanent(barcode):
+    """Werkzeug endgültig löschen"""
+    try:
+        with Database.get_db() as conn:
+            # Prüfe ob das Werkzeug existiert und gelöscht ist
+            tool = conn.execute('''
+                SELECT * FROM tools 
+                WHERE barcode = ? AND deleted = 1
+            ''', [barcode]).fetchone()
+            
+            if not tool:
+                return jsonify({
+                    'success': False,
+                    'message': 'Werkzeug nicht gefunden oder nicht gelöscht'
+                }), 404
+                
+            # Lösche das Werkzeug endgültig
+            conn.execute('DELETE FROM tools WHERE barcode = ?', [barcode])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Werkzeug wurde endgültig gelöscht'
+            })
+            
+    except Exception as e:
+        logger.error(f"Fehler beim endgültigen Löschen des Werkzeugs: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/consumables/<barcode>/delete-permanent', methods=['DELETE'])
+@mitarbeiter_required
+def delete_consumable_permanent(barcode):
+    """Verbrauchsmaterial endgültig löschen"""
+    try:
+        with Database.get_db() as conn:
+            # Prüfe ob das Verbrauchsmaterial existiert und gelöscht ist
+            consumable = conn.execute('''
+                SELECT * FROM consumables 
+                WHERE barcode = ? AND deleted = 1
+            ''', [barcode]).fetchone()
+            
+            if not consumable:
+                return jsonify({
+                    'success': False,
+                    'message': 'Verbrauchsmaterial nicht gefunden oder nicht gelöscht'
+                }), 404
+                
+            # Lösche das Verbrauchsmaterial endgültig
+            conn.execute('DELETE FROM consumables WHERE barcode = ?', [barcode])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Verbrauchsmaterial wurde endgültig gelöscht'
+            })
+            
+    except Exception as e:
+        logger.error(f"Fehler beim endgültigen Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/workers/<barcode>/delete-permanent', methods=['DELETE'])
+@mitarbeiter_required
+def delete_worker_permanent(barcode):
+    """Mitarbeiter endgültig löschen"""
+    try:
+        with Database.get_db() as conn:
+            # Prüfe ob der Mitarbeiter existiert und gelöscht ist
+            worker = conn.execute('''
+                SELECT * FROM workers 
+                WHERE barcode = ? AND deleted = 1
+            ''', [barcode]).fetchone()
+            
+            if not worker:
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter nicht gefunden oder nicht gelöscht'
+                }), 404
+                
+            # Lösche den Mitarbeiter endgültig
+            conn.execute('DELETE FROM workers WHERE barcode = ?', [barcode])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Mitarbeiter wurde endgültig gelöscht'
+            })
+            
+    except Exception as e:
+        logger.error(f"Fehler beim endgültigen Löschen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500

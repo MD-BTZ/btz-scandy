@@ -16,49 +16,53 @@ def index():
     logger.debug(f"[ROUTE] tools.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
     try:
         with Database.get_db() as conn:
-            # Debug: Prüfe aktive Ausleihen
-            active_lendings = conn.execute('''
-                SELECT tool_barcode, worker_barcode, lent_at 
-                FROM lendings 
-                WHERE returned_at IS NULL
-            ''').fetchall()
-            logger.debug(f"[ROUTE] tools.index: Active lendings: {active_lendings}")
-
+            # Hole alle nicht-gelöschten Werkzeuge
             tools = conn.execute('''
-                SELECT t.*,
+                SELECT t.*, 
                        CASE 
-                           WHEN l.tool_barcode IS NOT NULL THEN 'ausgeliehen'
-                           WHEN t.status = 'defekt' THEN 'defekt'
-                           ELSE 'verfügbar'
+                           WHEN EXISTS (
+                               SELECT 1 FROM lendings l 
+                               WHERE l.tool_barcode = t.barcode 
+                               AND l.returned_at IS NULL
+                           ) THEN 'ausgeliehen'
+                           ELSE t.status
                        END as current_status,
-                       w.firstname || ' ' || w.lastname as lent_to,
-                       l.lent_at as lending_date,
-                       t.location,
-                       t.category
+                       (
+                           SELECT w.firstname || ' ' || w.lastname
+                           FROM lendings l
+                           JOIN workers w ON l.worker_barcode = w.barcode
+                           WHERE l.tool_barcode = t.barcode
+                           AND l.returned_at IS NULL
+                           LIMIT 1
+                       ) as current_worker_name,
+                       (
+                           SELECT l.worker_barcode
+                           FROM lendings l
+                           WHERE l.tool_barcode = t.barcode
+                           AND l.returned_at IS NULL
+                           LIMIT 1
+                       ) as current_worker_barcode
                 FROM tools t
-                LEFT JOIN (
-                    SELECT tool_barcode, worker_barcode, lent_at
-                    FROM lendings
-                    WHERE returned_at IS NULL
-                ) l ON t.barcode = l.tool_barcode
-                LEFT JOIN workers w ON l.worker_barcode = w.barcode
                 WHERE t.deleted = 0
-                GROUP BY t.barcode
                 ORDER BY t.name
             ''').fetchall()
             
-            # Debug-Ausgabe (jetzt mit Logger)
-            logger.debug(f"[ROUTE] tools.index: Preparing template. User is Admin: {current_user.is_admin}")
-            
+            # Hole vordefinierte Kategorien und Standorte
             categories = conn.execute('''
-                SELECT DISTINCT category FROM tools
-                WHERE deleted = 0 AND category IS NOT NULL
+                SELECT DISTINCT category 
+                FROM tools 
+                WHERE category IS NOT NULL 
+                AND category != '' 
+                AND deleted = 0
                 ORDER BY category
             ''').fetchall()
             
             locations = conn.execute('''
-                SELECT DISTINCT location FROM tools
-                WHERE deleted = 0 AND location IS NOT NULL
+                SELECT DISTINCT location 
+                FROM tools 
+                WHERE location IS NOT NULL 
+                AND location != '' 
+                AND deleted = 0
                 ORDER BY location
             ''').fetchall()
             
@@ -73,7 +77,7 @@ def index():
                                is_admin=current_user.is_admin)
                                
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True) # exc_info für Traceback
+        logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True)
         flash('Fehler beim Laden der Werkzeuge', 'error')
         return redirect(url_for('main.index'))
 
