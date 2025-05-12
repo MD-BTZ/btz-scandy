@@ -80,32 +80,7 @@ def _migrate_v1_to_v2(conn):
             is_active INTEGER DEFAULT 1
         )''')
 
-        # 2. Standard-Benutzer hinzufügen (nur wenn Tabelle leer war/ist)
-        cursor.execute("SELECT COUNT(*) FROM users")
-        if cursor.fetchone()[0] == 0:
-            logger.info("Füge Standard-Benutzer hinzu...")
-            try:
-                # Verwende INSERT OR IGNORE, falls doch ein Constraint verletzt wird
-                cursor.execute(
-                    'INSERT OR IGNORE INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Admin', generate_password_hash('BTZ-Scandy25'), 'admin')
-                )
-                cursor.execute(
-                    'INSERT OR IGNORE INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Mitarbeiter', generate_password_hash('BTZ-BT11'), 'mitarbeiter')
-                )
-                cursor.execute(
-                    'INSERT OR IGNORE INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Test', generate_password_hash('test'), 'anwender')
-                )
-                logger.info("Standard-Benutzerkonten hinzugefügt (oder bereits vorhanden).")
-            except Exception as e_insert:
-                logger.error(f"Fehler beim Einfügen der Standardbenutzer: {e_insert}")
-                # Optional: Fehler weitergeben, wenn kritisch? Hier eher nicht.
-        else:
-            logger.info("'users'-Tabelle ist nicht leer, überspringe das Hinzufügen von Standard-Benutzern.")
-
-        # 3. Homepage Notices Tabelle erstellen (IF NOT EXISTS ist sicher)
+        # 2. Homepage Notices Tabelle erstellen (IF NOT EXISTS ist sicher)
         logger.info("Erstelle 'homepage_notices'-Tabelle (falls nicht vorhanden)...")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS homepage_notices (

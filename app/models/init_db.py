@@ -190,17 +190,8 @@ def init_db():
         admin_count = cursor.fetchone()[0]
         logger.info(f"Admin-User-Count: {admin_count}")
         
-        # Nur wenn die Tabelle leer ist (erster Start), erstelle den Standard-Admin
         if admin_count == 0:
-            logger.warning("Kein Admin-Benutzer gefunden. Erstelle Standard-Admin...")
-            try:
-                cursor.execute(
-                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Admin', generate_password_hash('Admin'), 'admin')
-                )
-                logger.info("Admin-Benutzer eingefügt. BITTE SOFORT DAS PASSWORT ÄNDERN!")
-            except Exception as e:
-                logger.error(f"Fehler beim Erstellen des Standard-Admins: {e}")
+            logger.warning("Kein Admin-Benutzer gefunden. Bitte Setup-Route verwenden!")
         else:
             logger.info("Mindestens ein Admin-Benutzer existiert bereits.")
         
