@@ -123,9 +123,9 @@
             <div class="flex-1 flex items-center min-w-0">
                 <div class="w-24 flex-shrink-0"></div>
                 <h1 class="text-xl font-bold truncate">
-                    {% if 'tools' in request.endpoint %}Werkzeuge
+                    {% if 'tools' in request.endpoint %}{{ app_labels.tools.name }}
                     {% elif 'workers' in request.endpoint %}Mitarbeiter
-                    {% elif 'consumables' in request.endpoint %}Verbrauchsmaterial
+                    {% elif 'consumables' in request.endpoint %}{{ app_labels.consumables.name }}
                     {% elif 'tickets' in request.endpoint %}Tickets
                     {% elif request.endpoint == 'main.about' %}Über Scandy
                     {% else %}Dashboard{% endif %}
@@ -236,7 +236,7 @@
                                 <i class="fas fa-undo-alt mr-2"></i>Rückgabe
                             </button>
                             <button class="btn btn-accent" onclick="showConsumableModal()">
-                                <i class="fas fa-box-open mr-2"></i>Verbrauchsmaterial
+                                <i class="{{ app_labels.consumables.icon }} mr-2"></i>{{ app_labels.consumables.name }}
                             </button>
                         </div>
                     </div>

@@ -224,43 +224,41 @@ def details(original_barcode):
         print(f"Fehler in worker details: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/<barcode>/edit', methods=['POST'])
+@bp.route('/<barcode>/edit', methods=['GET', 'POST'])
 @mitarbeiter_required
 def edit(barcode):
     """Bearbeitet einen Mitarbeiter"""
     try:
-        with Database.get_db() as conn:
-            # Prüfe ob der Mitarbeiter existiert
-            worker = conn.execute('''
-                SELECT * FROM workers 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
+        if request.method == 'POST':
+            firstname = request.form.get('firstname')
+            lastname = request.form.get('lastname')
+            department = request.form.get('department')
+            email = request.form.get('email')
+            phone = request.form.get('phone')
+            new_barcode = request.form.get('barcode')  # Neuer Barcode aus dem Formular
             
-            if not worker:
-                flash('Mitarbeiter nicht gefunden', 'error')
-                return redirect(url_for('workers.index'))
+            if not all([firstname, lastname]):
+                flash('Vor- und Nachname sind erforderlich', 'error')
+                return redirect(url_for('workers.edit', barcode=barcode))
                 
-            # Aktualisiere die Daten
-            conn.execute('''
-                UPDATE workers 
-                SET firstname = ?,
-                    lastname = ?,
-                    department = ?,
-                    email = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [
-                request.form['firstname'],
-                request.form['lastname'],
-                request.form.get('department', ''),
-                request.form.get('email', ''),
-                barcode
-            ])
-            
-            conn.commit()
-            
-            flash('Mitarbeiter erfolgreich aktualisiert', 'success')
-            return redirect(url_for('workers.details', barcode=barcode))
+            with Database.get_db() as conn:
+                # Aktualisiere den Mitarbeiter
+                conn.execute('''
+                    UPDATE workers 
+                    SET firstname = ?,
+                        lastname = ?,
+                        department = ?,
+                        email = ?,
+                        phone = ?,
+                        barcode = ?,
+                        sync_status = 'pending'
+                    WHERE barcode = ?
+                ''', [firstname, lastname, department, email, phone, new_barcode, barcode])
+                
+                conn.commit()
+                
+                flash('Mitarbeiter erfolgreich aktualisiert', 'success')
+                return redirect(url_for('workers.detail', barcode=new_barcode))  # Weiterleitung mit neuem Barcode
             
     except Exception as e:
         print(f"Fehler beim Aktualisieren des Mitarbeiters: {str(e)}")

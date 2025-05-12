@@ -88,7 +88,7 @@ def add():
         # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
         logger.debug("[ROUTE] consumables.add: Fetching categories and locations using helpers.")
         categories = Database.get_categories('consumables')
-        locations = Database.get_locations('consumables')
+        locations = Database.get_locations()
         logger.debug(f"[ROUTE] consumables.add: Found categories: {categories}")
         logger.debug(f"[ROUTE] consumables.add: Found locations: {locations}")
         
@@ -108,9 +108,10 @@ def detail(barcode):
     if request.method == 'POST':
         try:
             data = request.form
+            new_barcode = data.get('barcode')  # Neuer Barcode aus dem Formular
             
             with Database.get_db() as conn:
-                # Aktuelle Daten abrufen
+                # Prüfe ob das Verbrauchsmaterial existiert
                 current = conn.execute('''
                     SELECT * FROM consumables 
                     WHERE barcode = ? AND deleted = 0
@@ -122,7 +123,25 @@ def detail(barcode):
                         'message': 'Verbrauchsmaterial nicht gefunden'
                     }), 404
                 
-                # Update durchführen (OHNE modified_at)
+                # Prüfe ob der neue Barcode bereits existiert (wenn er sich geändert hat)
+                if new_barcode != barcode:
+                    exists_count = conn.execute("""
+                        SELECT COUNT(*) as count FROM (
+                            SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
+                            UNION ALL 
+                            SELECT barcode FROM consumables WHERE barcode = ? AND barcode != ? AND deleted = 0
+                            UNION ALL
+                            SELECT barcode FROM workers WHERE barcode = ? AND deleted = 0
+                        )
+                    """, [new_barcode, new_barcode, barcode, new_barcode]).fetchone()['count']
+                    
+                    if exists_count > 0:
+                        return jsonify({
+                            'success': False,
+                            'message': f'Der Barcode "{new_barcode}" existiert bereits'
+                        }), 400
+                
+                # Update durchführen
                 conn.execute('''
                     UPDATE consumables 
                     SET name = ?,
@@ -130,7 +149,9 @@ def detail(barcode):
                         category = ?,
                         location = ?,
                         quantity = ?,
-                        min_quantity = ?
+                        min_quantity = ?,
+                        barcode = ?,
+                        sync_status = 'pending'
                     WHERE barcode = ?
                 ''', [
                     data.get('name'),
@@ -139,6 +160,7 @@ def detail(barcode):
                     data.get('location'),
                     int(data.get('quantity', current['quantity'])),
                     int(data.get('min_quantity', current['min_quantity'])),
+                    new_barcode,
                     barcode
                 ])
                 
@@ -148,11 +170,11 @@ def detail(barcode):
                         INSERT INTO consumable_usages 
                         (consumable_barcode, worker_barcode, quantity, used_at)
                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    ''', [barcode, 'admin', int(data.get('quantity', current['quantity'])) - current['quantity']])
+                    ''', [new_barcode, 'admin', int(data.get('quantity', current['quantity'])) - current['quantity']])
                 
                 conn.commit()
                 
-            return jsonify({'success': True})
+            return jsonify({'success': True, 'redirect': url_for('consumables.detail', barcode=new_barcode)})
             
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}", exc_info=True)
@@ -169,7 +191,7 @@ def detail(barcode):
     
     # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
     categories = Database.get_categories('consumables')
-    locations = Database.get_locations('consumables')
+    locations = Database.get_locations()
     
     # Hole Bestandsänderungen
     history = Database.query('''

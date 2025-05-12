@@ -6,7 +6,7 @@
 {% if current_user.is_authenticated %}
 <div class="flex gap-2">
     <a href="{{ url_for('consumables.add') }}" class="btn btn-primary">
-        <i class="fas fa-plus"></i> Neues Verbrauchsmaterial
+        <i class="fas fa-plus"></i> {{ app_labels.consumables.add }}
     </a>
 </div>
 {% endif %}

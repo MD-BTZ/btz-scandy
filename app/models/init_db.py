@@ -8,19 +8,8 @@ logger = logging.getLogger(__name__)
 
 def init_db():
     """Initialisiert die Hauptdatenbank (inventory.db) - Basis-Tabellen."""
-    # Hole die Konfiguration
-    from app.config import config
-    current_config = config['default']()
-    
-    # Verwende den korrekten Pfad aus der Config
-    db_path = current_config.DATABASE
-    
-    # Stelle sicher, dass das Verzeichnis existiert
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    logger.info(f"Initialisiere Datenbank-Basistabellen (IF NOT EXISTS) in: {db_path}")
-    
-    with sqlite3.connect(db_path) as conn:
+    try:
+        conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         
         # Tools Tabelle
@@ -199,27 +188,30 @@ def init_db():
         # Prüfe ob Admin-Benutzer existiert
         cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         admin_count = cursor.fetchone()[0]
+        logger.info(f"Admin-User-Count: {admin_count}")
+        
+        # Nur wenn die Tabelle leer ist (erster Start), erstelle den Standard-Admin
         if admin_count == 0:
             logger.warning("Kein Admin-Benutzer gefunden. Erstelle Standard-Admin...")
             try:
                 cursor.execute(
                     'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Admin', generate_password_hash('BTZ-Scandy25'), 'admin')
+                    ('Admin', generate_password_hash('Admin'), 'admin')
                 )
-                cursor.execute(
-                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Mitarbeiter', generate_password_hash('BTZ-BT11'), 'mitarbeiter')
-                )
-                cursor.execute(
-                    'INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)',
-                    ('Test', generate_password_hash('test'), 'anwender')
-                )
-                logger.info("Standard-Benutzerkonten hinzugefügt.")
+                logger.info("Admin-Benutzer eingefügt. BITTE SOFORT DAS PASSWORT ÄNDERN!")
             except Exception as e:
-                logger.error(f"Fehler beim Erstellen der Standard-Benutzer: {e}")
+                logger.error(f"Fehler beim Erstellen des Standard-Admins: {e}")
+        else:
+            logger.info("Mindestens ein Admin-Benutzer existiert bereits.")
         
         conn.commit()
         logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Datenbankinitialisierung: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 if __name__ == '__main__':
     logger.warning("init_db.py direkt ausgeführt - Initialisiere nur Basis-DB.")

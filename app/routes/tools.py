@@ -47,23 +47,26 @@ def index():
                 ORDER BY t.name
             ''').fetchall()
             
-            # Hole vordefinierte Kategorien und Standorte
+            # Hole vordefinierte Kategorien aus den Einstellungen
             categories = conn.execute('''
-                SELECT DISTINCT category 
-                FROM tools 
-                WHERE category IS NOT NULL 
-                AND category != '' 
-                AND deleted = 0
-                ORDER BY category
+                SELECT value 
+                FROM settings 
+                WHERE key LIKE 'category_%'
+                AND key NOT LIKE '%_tools'
+                AND key NOT LIKE '%_consumables'
+                AND value IS NOT NULL 
+                AND value != ''
+                ORDER BY value
             ''').fetchall()
             
+            # Hole vordefinierte Standorte aus den Einstellungen
             locations = conn.execute('''
-                SELECT DISTINCT location 
-                FROM tools 
-                WHERE location IS NOT NULL 
-                AND location != '' 
-                AND deleted = 0
-                ORDER BY location
+                SELECT value 
+                FROM settings 
+                WHERE key LIKE 'location_%'
+                AND value IS NOT NULL 
+                AND value != ''
+                ORDER BY value
             ''').fetchall()
             
             logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
@@ -72,8 +75,8 @@ def index():
             
             return render_template('tools/index.html',
                                tools=tools,
-                               categories=[c['category'] for c in categories],
-                               locations=[l['location'] for l in locations],
+                               categories=[c['value'] for c in categories],
+                               locations=[l['value'] for l in locations],
                                is_admin=current_user.is_admin)
                                
     except Exception as e:
@@ -114,8 +117,23 @@ def add():
     # GET-Anfrage
     try:
         # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-        categories = Database.get_categories('tools')
-        locations = Database.get_locations('tools')
+        categories = Database.query('''
+            SELECT value as name
+            FROM settings
+            WHERE key LIKE 'category_%'
+            AND value IS NOT NULL
+            AND value != ''
+            ORDER BY value
+        ''')
+        
+        locations = Database.query('''
+            SELECT value as name
+            FROM settings
+            WHERE key LIKE 'location_%'
+            AND value IS NOT NULL
+            AND value != ''
+            ORDER BY value
+        ''')
         
         return render_template('tools/add.html',
                              categories=[c['name'] for c in categories],
@@ -146,9 +164,9 @@ def detail(barcode):
         flash('Werkzeug nicht gefunden', 'error')
         return redirect(url_for('tools.index'))
     
-    # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-    categories = Database.get_categories('tools')
-    locations = Database.get_locations('tools')
+    # Hole Kategorien und Standorte
+    categories = Database.get_categories()
+    locations = Database.get_locations()
     
     # Hole kombinierten Verlauf aus Ausleihen und Statusänderungen
     history = Database.query('''
@@ -285,6 +303,7 @@ def edit(barcode):
             description = request.form.get('description')
             category = request.form.get('category')
             location = request.form.get('location')
+            new_barcode = request.form.get('barcode')  # Neuer Barcode aus dem Formular
             
             if not name:
                 flash('Name ist erforderlich', 'error')
@@ -298,14 +317,15 @@ def edit(barcode):
                         description = ?,
                         category = ?,
                         location = ?,
+                        barcode = ?,
                         sync_status = 'pending'
                     WHERE barcode = ?
-                ''', [name, description, category, location, barcode])
+                ''', [name, description, category, location, new_barcode, barcode])
                 
                 conn.commit()
                 
                 flash('Werkzeug erfolgreich aktualisiert', 'success')
-                return redirect(url_for('tools.detail', barcode=barcode))
+                return redirect(url_for('tools.detail', barcode=new_barcode))  # Weiterleitung mit neuem Barcode
                 
         else:
             # GET: Zeige Bearbeitungsformular

@@ -318,42 +318,27 @@ class Database:
             return []
     
     @classmethod
-    def get_locations(cls, usage=None):
-        """Gibt alle Standorte mit der Anzahl der zugeordneten Werkzeuge und Verbrauchsmaterialien zurück"""
+    def get_locations(cls):
+        """Hole alle Standorte"""
         try:
-            # Basis-Query
-            query = """
-                SELECT 
-                    s.value as name,
-                    s.description as usage,
-                    (SELECT COUNT(*) FROM tools WHERE location = s.value AND deleted = 0) as tools_count,
-                    (SELECT COUNT(*) FROM consumables WHERE location = s.value AND deleted = 0) as consumables_count
-                FROM settings s
-                WHERE s.key LIKE 'location_%'
-                AND s.value IS NOT NULL 
-                AND s.value != ''
-            """
-            
-            # Füge Verwendungszweck-Filter hinzu
-            if usage == 'tools':
-                query += " AND (s.description = 'tools' OR s.description = 'both')"
-            elif usage == 'consumables':
-                query += " AND (s.description = 'consumables' OR s.description = 'both')"
-            
-            query += " ORDER BY s.value"
-            
-            locations = cls.query(query)
-            return [
-                {
-                    'name': loc['name'],
-                    'usage': loc['usage'],
-                    'tools_count': loc['tools_count'],
-                    'consumables_count': loc['consumables_count']
-                }
-                for loc in locations
-            ]
+            with cls.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT s.value as name,
+                           COUNT(DISTINCT t.id) as tool_count,
+                           COUNT(DISTINCT c.id) as consumable_count
+                    FROM settings s
+                    LEFT JOIN tools t ON t.location = s.value
+                    LEFT JOIN consumables c ON c.location = s.value
+                    WHERE s.key LIKE 'location_%'
+                    AND s.value IS NOT NULL
+                    AND s.value != ''
+                    GROUP BY s.value
+                    ORDER BY s.value
+                """)
+                return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            logging.error(f"Fehler beim Laden der Standorte: {str(e)}")
+            print(f"Fehler beim Abrufen der Standorte: {e}")
             return []
     
     @classmethod
@@ -369,15 +354,11 @@ class Database:
                     (SELECT COUNT(*) FROM consumables WHERE category = s.value AND deleted = 0) as consumables_count
                 FROM settings s
                 WHERE s.key LIKE 'category_%'
+                AND s.key NOT LIKE '%_tools'
+                AND s.key NOT LIKE '%_consumables'
                 AND s.value IS NOT NULL 
                 AND s.value != ''
             """
-            
-            # Füge Verwendungszweck-Filter hinzu
-            if usage == 'tools':
-                query += " AND (s.description = 'tools' OR s.description = 'both')"
-            elif usage == 'consumables':
-                query += " AND (s.description = 'consumables' OR s.description = 'both')"
             
             query += " ORDER BY s.value"
             
@@ -569,58 +550,20 @@ class BaseModel:
         )
 
 def init_db():
-    """Initialisiert die Hauptdatenbank, falls sie leer ist oder Tabellen fehlen.
-    Erstellt die notwendigen Tabellen.
-    """
-    logger.info("Initialisiere Datenbank...")
-    conn = Database.get_db_connection() # Nutze get_db_connection für eine neue Verbindung
-    cursor = conn.cursor()
-    
+    """Initialisiert die Hauptdatenbank, falls sie leer ist oder Tabellen fehlen."""
     try:
-        # Lese das Schema aus der schema.sql Datei
-        schema_path = Path(current_app.root_path) / 'schema.sql'
-        if schema_path.exists():
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                schema = f.read()
-                cursor.executescript(schema)
-            logger.info("Datenbankschema aus schema.sql erfolgreich angewendet.")
-        else:
-            logger.warning("schema.sql nicht gefunden, Tabellen werden nicht automatisch erstellt.")
-
-        # Stelle sicher, dass die users Tabelle existiert (wird hier hinzugefügt)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE, -- Optional aber empfohlen
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')), -- Definiert erlaubte Rollen
-                is_active INTEGER DEFAULT 1, -- 1 für aktiv, 0 für inaktiv
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        logger.info("Tabelle 'users' erfolgreich erstellt oder bereits vorhanden.")
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
         
-        # Füge hier ggf. weitere Tabellen-Checks oder Default-Daten hinzu
-        
-        # Beispiel: Ersten Admin-Benutzer erstellen, wenn noch keiner existiert
+        # Prüfe ob Admin-Benutzer existiert
         cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         admin_count = cursor.fetchone()[0]
+        logger.info(f"Admin-User-Count: {admin_count}")
+        
         if admin_count == 0:
-            logger.warning("Kein Admin-Benutzer gefunden. Erstelle Standard-Admin...")
-            try:
-                from werkzeug.security import generate_password_hash
-                # Standard-Admin: admin / password (BITTE SOFORT ÄNDERN!)
-                default_admin_username = 'admin'
-                default_admin_password = 'password' # SEHR UNSICHER!
-                hashed_password = generate_password_hash(default_admin_password)
-                cursor.execute("""
-                    INSERT INTO users (username, password_hash, role, is_active)
-                    VALUES (?, ?, ?, ?) 
-                """, (default_admin_username, hashed_password, 'admin', 1))
-                logger.info(f"Standard-Admin '{default_admin_username}' mit Passwort '{default_admin_password}' erstellt. BITTE SOFORT ÄNDERN!")
-            except Exception as e:
-                logger.error(f"Fehler beim Erstellen des Standard-Admins: {e}")
+            logger.warning("Kein Admin-Benutzer gefunden.")
+        else:
+            logger.info("Mindestens ein Admin-Benutzer existiert bereits.")
 
         conn.commit()
         logger.info("Datenbank erfolgreich initialisiert.")

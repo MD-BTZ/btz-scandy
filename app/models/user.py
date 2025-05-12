@@ -48,7 +48,7 @@ class User(UserMixin):
         if row:
             # Erstellt ein User-Objekt aus der Datenbankzeile
             return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                        role=row['role'], is_active=row['is_active'], email=row.get('email'))
+                        role=row['role'], is_active=row.get('is_active', True), email=row.get('email'))
         return None
 
     @staticmethod
@@ -60,7 +60,7 @@ class User(UserMixin):
             row = Database.query(sql, [int(user_id)], one=True)
             if row:
                 return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                            role=row['role'], is_active=row['is_active'], email=row.get('email'))
+                            role=row['role'], is_active=row.get('is_active', True), email=row.get('email'))
         except ValueError:
             logger.error(f"Ungültige user_id empfangen: {user_id}")
             return None
@@ -98,7 +98,7 @@ class User(UserMixin):
         row = Database.query(sql, [email], one=True)
         if row:
             return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                        role=row['role'], is_active=row['is_active'], email=row['email'])
+                        role=row['role'], is_active=row.get('is_active', True), email=row['email'])
         return None
 
     # Beispiel für eine Methode zum Aktualisieren (kann erweitert werden)

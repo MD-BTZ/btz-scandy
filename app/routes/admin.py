@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app
 from app.models.database import Database
 from app.utils.decorators import admin_required, mitarbeiter_required
 from werkzeug.utils import secure_filename
@@ -14,14 +14,14 @@ from app.models.user import User
 import sqlite3
 from app.utils.error_handler import handle_errors, safe_db_query
 from flask_login import login_required, current_user
-from app import backup_manager
-from backup import DatabaseBackup
-from app.config import Config
-import openpyxl # Import für Excel-Erstellung
-from io import BytesIO # Import für Excel-Erstellung im Speicher
+from app.models.settings import Settings
+from app.utils.backup_manager import backup_manager
+import openpyxl
+from io import BytesIO
 import time
 from PIL import Image
 import io
+from app.config.config import Config
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def get_recent_activity():
             c.name as item_name,
             w.firstname || ' ' || w.lastname as worker_name,
             cu.used_at as action_date
-        FROM consumable_usages cu
+        FROM consumable_usage cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         JOIN workers w ON cu.worker_barcode = w.barcode
         ORDER BY action_date DESC
@@ -62,7 +62,7 @@ def get_material_usage():
         SELECT 
             c.name,
             SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-        FROM consumable_usages cu
+        FROM consumable_usage cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         GROUP BY c.name
         ORDER BY total_quantity DESC
@@ -138,7 +138,7 @@ def get_consumables_forecast():
                 c.quantity as current_amount,
                 COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0) as avg_daily_usage
             FROM consumables c
-            LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
+            LEFT JOIN consumable_usage cu ON c.barcode = cu.consumable_barcode
                 AND cu.used_at >= date('now', '-30 days')
             WHERE c.deleted = 0
             GROUP BY c.barcode, c.name, c.quantity
@@ -246,22 +246,22 @@ def dashboard():
     # Werkzeug-Statistiken
     tool_stats = Database.query('''
         WITH valid_tools AS (
-            SELECT barcode 
-            FROM tools 
+            SELECT id, barcode
+            FROM tools
             WHERE deleted = 0
         )
-        SELECT 
+        SELECT
             COUNT(*) as total,
-            SUM(CASE 
+            SUM(CASE
                 WHEN NOT EXISTS (
-                    SELECT 1 FROM lendings l 
-                    WHERE l.tool_barcode = t.barcode 
+                    SELECT 1 FROM lendings l
+                    WHERE l.tool_barcode = t.barcode
                     AND l.returned_at IS NULL
-                ) AND status = 'verfügbar' THEN 1 
-                ELSE 0 
+                ) AND status = 'verfügbar' THEN 1
+                ELSE 0
             END) as available,
             (
-                SELECT COUNT(DISTINCT l.tool_barcode) 
+                SELECT COUNT(DISTINCT l.tool_barcode)
                 FROM lendings l
                 JOIN valid_tools vt ON l.tool_barcode = vt.barcode
                 WHERE l.returned_at IS NULL
@@ -270,7 +270,7 @@ def dashboard():
         FROM tools t
         WHERE t.deleted = 0
     ''', one=True)
-
+    
     # Verbrauchsmaterial-Statistiken
     consumable_stats = {
         'total': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0', one=True)['count'],
@@ -278,7 +278,7 @@ def dashboard():
         'warning': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity AND quantity >= min_quantity * 0.5', one=True)['count'],
         'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity * 0.5', one=True)['count']
     }
-
+    
     # Mitarbeiter-Statistiken
     worker_stats = {
         'total': Database.query('SELECT COUNT(*) as count FROM workers WHERE deleted = 0', one=True)['count'],
@@ -290,10 +290,9 @@ def dashboard():
             ORDER BY department
         ''')
     }
-
-    # Die restlichen Variablen wie bisher:
-    stats = {
-        'maintenance_issues': Database.query("""
+    
+    # Warnungen für defekte Werkzeuge
+    tool_warnings = Database.query('''
             SELECT name, status, 
                 CASE 
                     WHEN status = 'defekt' THEN 'error'
@@ -302,8 +301,10 @@ def dashboard():
             FROM tools 
             WHERE status = 'defekt' AND deleted = 0
             ORDER BY name
-        """),
-        'inventory_warnings': Database.query("""
+        ''')
+    
+    # Warnungen für niedrigen Materialbestand
+    consumable_warnings = Database.query('''
             SELECT
                 name as message,
                 CASE
@@ -318,10 +319,13 @@ def dashboard():
             WHERE quantity < min_quantity AND deleted = 0
             ORDER BY quantity / min_quantity ASC
             LIMIT 5
-        """),
-        'consumable_trend': get_consumable_trend()
-    }
-    current_lendings = Database.query("""
+        ''')
+    
+    # Materialverbrauch-Trend
+    consumable_trend = get_consumable_trend()
+    
+    # Aktuelle Ausleihen
+    current_lendings = Database.query('''
         SELECT 
             l.*, 
             t.name as tool_name, 
@@ -332,34 +336,35 @@ def dashboard():
         JOIN workers w ON l.worker_barcode = w.barcode
         WHERE l.returned_at IS NULL
         ORDER BY l.lent_at DESC
-    """)
-    consumable_usages = Database.query("""
-        SELECT 
+    ''')
+    
+    # Letzte Materialentnahmen
+    recent_consumable_usage = Database.query('''
+        SELECT
             c.name as consumable_name,
             cu.quantity,
             w.firstname || ' ' || w.lastname as worker_name,
             cu.used_at
-        FROM consumable_usages cu
+        FROM consumable_usage cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         JOIN workers w ON cu.worker_barcode = w.barcode
         ORDER BY cu.used_at DESC
         LIMIT 10
-    """)
+    ''')
+    
+    # Bestandsprognose
     consumables_forecast = get_consumables_forecast()
-    backups = get_backup_info()
-
-    return render_template(
-        'admin/dashboard.html',
-        tool_stats=tool_stats,
-        consumable_stats=consumable_stats,
-        worker_stats=worker_stats,
-        stats=stats,
-        current_lendings=current_lendings,
-        consumable_usages=consumable_usages,
-        consumables_forecast=consumables_forecast,
-        backups=backups,
-        Config=Config
-    )
+    
+    return render_template('admin/dashboard.html',
+                         tool_stats=tool_stats,
+                         consumable_stats=consumable_stats,
+                         worker_stats=worker_stats,
+                         tool_warnings=tool_warnings,
+                         consumable_warnings=consumable_warnings,
+                         consumable_trend=consumable_trend,
+                         current_lendings=current_lendings,
+                         recent_consumable_usage=recent_consumable_usage,
+                         consumables_forecast=consumables_forecast)
 
 def get_consumable_trend():
     """Hole die Top 5 Materialverbrauch der letzten 7 Tage"""
@@ -369,7 +374,7 @@ def get_consumable_trend():
                 c.name,
                 date(cu.used_at) as date,
                 SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as daily_quantity
-            FROM consumable_usages cu
+            FROM consumable_usage cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             WHERE cu.used_at >= date('now', '-6 days')
             GROUP BY c.name, date(cu.used_at)
@@ -383,7 +388,7 @@ def get_consumable_trend():
             SELECT 
                 c.name,
                 SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-            FROM consumable_usages cu
+            FROM consumable_usage cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             WHERE cu.used_at >= date('now', '-6 days')
             GROUP BY c.name
@@ -732,7 +737,7 @@ def manual_lending():
                 'Verbrauchsmaterial' as category,
                 cu.used_at as action_date,
                 cu.quantity as amount
-            FROM consumable_usages cu
+            FROM consumable_usage cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             JOIN workers w ON cu.worker_barcode = w.barcode
             WHERE DATE(cu.used_at) >= DATE('now', '-7 days')
@@ -1531,6 +1536,8 @@ def add_location():
             SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
             FROM settings 
             WHERE key LIKE 'location_%'
+            AND key NOT LIKE '%_tools'
+            AND key NOT LIKE '%_consumables'
         """).fetchone()
         next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
         
@@ -1611,6 +1618,8 @@ def add_category():
             SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
             FROM settings 
             WHERE key LIKE 'category_%'
+            AND key NOT LIKE '%_tools'
+            AND key NOT LIKE '%_consumables'
         """).fetchone()
         next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
         
@@ -2477,7 +2486,7 @@ def delete_consumable_permanent(barcode):
 @bp.route('/workers/<barcode>/delete-permanent', methods=['DELETE'])
 @mitarbeiter_required
 def delete_worker_permanent(barcode):
-    """Mitarbeiter endgültig löschen"""
+    """Mitarbeiter endgültig löschen."""
     try:
         with Database.get_db() as conn:
             # Prüfe ob der Mitarbeiter existiert und gelöscht ist

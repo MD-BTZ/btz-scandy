@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
 from app.models.migrations import run_migrations
+from app.routes import auth, tools, consumables, workers, setup
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -122,8 +123,8 @@ def initialize_and_migrate_databases():
 
         # 1. SchemaManager initialisieren und Schema validieren/aktualisieren
         logger.info("Initialisiere SchemaManager und validiere/aktualisiere Schema...")
-        schema_manager = SchemaManager(Database)
-        schema_manager.init_schema()
+        schema_manager = SchemaManager(db_path)
+        schema_manager.initialize()
         
         if not schema_manager.validate_schema():
             logger.error("Schema-Validierung fehlgeschlagen!")
@@ -178,7 +179,7 @@ def create_app(test_config=None):
     from app.routes import (
         main, auth, admin, tools, workers, 
         consumables, lending, dashboard, history, 
-        quick_scan, api, tickets
+        quick_scan, api, tickets, setup
     )
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
@@ -192,6 +193,7 @@ def create_app(test_config=None):
     app.register_blueprint(quick_scan.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(tickets.bp, url_prefix='/tickets')
+    app.register_blueprint(setup.bp)
     
     # Fehlerbehandlung registrieren
     handle_errors(app)

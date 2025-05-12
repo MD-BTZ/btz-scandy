@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, render_template, current_app, redirect, url_for
 from ..models.database import Database
 from ..utils.system_structure import get_system_structure
+from ..utils.auth_utils import needs_setup
 
 # Kein URL-Präfix für den Main-Blueprint
 bp = Blueprint('main', __name__, url_prefix='')
@@ -8,6 +9,10 @@ bp = Blueprint('main', __name__, url_prefix='')
 @bp.route('/')
 def index():
     """Zeigt die Hauptseite mit Statistiken"""
+    # Prüfe ob Setup erforderlich ist
+    if needs_setup():
+        return redirect(url_for('setup.setup'))
+        
     try:
         # Werkzeug-Statistiken mit verbesserter Abfrage
         tool_stats = Database.query('''

@@ -214,67 +214,101 @@ const QuickScan = {
     handleScannerInput(barcode, input) {
         console.log('[DEBUG] handleScannerInput - Barcode:', barcode, 'Input ID:', input.id);
 
-        // Easter Egg Check
-        if (barcode.toUpperCase() === 'DANCE') { 
+        // Easter Egg Checks - Case Insensitive
+        const upperBarcode = barcode.toUpperCase();
+        console.log('[DEBUG] Checking for Easter Eggs with:', upperBarcode);
+        console.log('[DEBUG] Is AIIO?', upperBarcode === 'AIIO');
+        
+        if (upperBarcode === 'DANCE') {
             console.log("[DEBUG] Easter Egg: DANCE detected!");
-            this.showDancingEmojis(); // Rufe die Funktion auf
+            this.showDancingEmojis();
             showToast('success', '🦓 Zebra-Party! 🦓');
-            this.keyBuffer = ''; // Buffer leeren
-            this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput'); // Anzeige zurücksetzen
-            return; // Verarbeitung hier beenden
-        }
-
-        // Prüfe ZUERST auf Bestätigungscode
-        if (this.confirmationBarcode && barcode.includes(this.confirmationBarcode)) {
-            console.log('[DEBUG] Bestätigungscode erkannt');
-            if (input.id === 'itemScanInput') {
-                console.log('[DEBUG] Bestätigung für itemScanInput');
-                // Artikel wurde bestätigt
-                this.currentProcess.confirmed = true;
-                // Verstecke die Bestätigungskarte und zeige den Worker-Scan
-                document.getElementById('itemConfirm').classList.add('hidden');
-                document.getElementById('step1').classList.add('hidden');
-                document.getElementById('step2').classList.remove('hidden');
-                this.currentStep = 2;
-                this.focusCurrentInput();
-                this.confirmationBarcode = null;
-
-                // Stelle sicher, dass die Mitarbeiterinfo im oberen Display zurückgesetzt ist
-                const workerNameDisplay = document.getElementById('processedWorkerInput');
-                const workerDepartmentDisplay = document.getElementById('workerDepartmentDisplay');
-                if (workerNameDisplay) {
-                    workerNameDisplay.textContent = 'Noch kein Mitarbeiter gescannt';
-                    workerNameDisplay.classList.add('opacity-50');
-                }
-                if (workerDepartmentDisplay) {
-                    workerDepartmentDisplay.textContent = 'Abteilung wird nach Scan angezeigt';
-                    workerDepartmentDisplay.classList.add('opacity-50');
-                }
-
-            } else if (input.id === 'workerScanInput') {
-                console.log('[DEBUG] Bestätigung für workerScanInput');
-                // Mitarbeiter wurde bestätigt, jetzt können wir die Aktion ausführen
-                document.getElementById('workerScanPrompt').classList.add('hidden');
-                document.getElementById('finalConfirm').classList.remove('hidden');
-                this.executeStoredProcess();
-            }
+            this.keyBuffer = '';
+            this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput');
             return;
         }
 
-        console.log('[DEBUG] Kein Bestätigungscode. Barcode-Länge:', barcode.length, 'Current Step:', this.currentStep);
-        // Wenn kein Bestätigungscode, verarbeite als normalen Scan
-        if (barcode.length >= 3) { // Mindestlänge für Barcodes angepasst, oft sind es mehr als 3
-            if (input.id === 'itemScanInput' && this.currentStep === 1) {
-                console.log('[DEBUG] Rufe handleItemScan für Barcode:', barcode);
-                this.handleItemScan(barcode);
-            } else if (input.id === 'workerScanInput' && this.currentStep === 2) {
-                console.log('[DEBUG] Rufe handleWorkerScan für Barcode:', barcode);
-                this.handleWorkerScan(barcode);
-            } else {
-                console.log('[DEBUG] Bedingungen für handleItemScan/handleWorkerScan nicht erfüllt. Input ID:', input.id, 'Current Step:', this.currentStep);
+        if (upperBarcode === 'VIBE') {
+            console.log("[DEBUG] Easter Egg: VIBE detected!");
+            const overlay = document.createElement('div');
+            overlay.className = 'zebra-overlay';
+            document.body.appendChild(overlay);
+            
+            const videoLeft = document.createElement('video');
+            videoLeft.src = "/static/videos/vibe.mp4";
+            videoLeft.className = 'dancing-zebra left';
+            videoLeft.loop = true;
+            videoLeft.autoplay = true;
+            
+            const videoRight = document.createElement('video');
+            videoRight.src = "/static/videos/vibe.mp4";
+            videoRight.className = 'dancing-zebra right';
+            videoRight.loop = true;
+            videoRight.autoplay = true;
+            
+            document.body.appendChild(videoLeft);
+            document.body.appendChild(videoRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                videoLeft.remove();
+                videoRight.remove();
+            }, 10000);
+            
+            this.keyBuffer = '';
+            this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput');
+            return;
+        }
+
+        if (upperBarcode === 'AIIO') {
+            console.log("[DEBUG] Easter Egg: AIIO detected!");
+            const overlay = document.createElement('div');
+            overlay.className = 'aiio-overlay';
+            document.body.appendChild(overlay);
+            
+            const videoLeft = document.createElement('video');
+            videoLeft.src = "/static/videos/oiia.mp4";
+            videoLeft.className = 'aiio-video left';
+            videoLeft.loop = true;
+            videoLeft.autoplay = true;
+            videoLeft.controls = true;
+            
+            const videoRight = document.createElement('video');
+            videoRight.src = "/static/videos/oiia.mp4";
+            videoRight.className = 'aiio-video right';
+            videoRight.loop = true;
+            videoRight.autoplay = true;
+            videoRight.controls = true;
+            
+            document.body.appendChild(videoLeft);
+            document.body.appendChild(videoRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                videoLeft.remove();
+                videoRight.remove();
+            }, 10000);
+            
+            this.keyBuffer = '';
+            this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput');
+            return;
+        }
+
+        // Normale Barcode-Verarbeitung
+        if (this.confirmationBarcode && barcode.includes(this.confirmationBarcode)) {
+            // Bestätigungscode-Logik
+            if (this.currentStep === 1) {
+                this.currentStep = 2;
+                this.goToStep(2);
+            } else if (this.currentStep === 2) {
+                this.executeStoredProcess();
             }
         } else {
-            console.log('[DEBUG] Barcode zu kurz oder falscher Schritt.');
+            if (this.currentStep === 1) {
+                this.handleItemScan(barcode);
+            } else if (this.currentStep === 2) {
+                this.handleWorkerScan(barcode);
+            }
         }
     },
 
@@ -671,6 +705,26 @@ const QuickScan = {
         }
         if (input === 'DANCE') {
             this.showDancingEmojis();
+            return;
+        }
+        if (input === 'AIIO') {
+            console.log("[DEBUG] Easter Egg: AIIO detected!");
+            const overlay = document.createElement('div');
+            overlay.className = 'aiio-overlay';
+            document.body.appendChild(overlay);
+            
+            const video = document.createElement('video');
+            video.src = "/static/videos/oiia.mp4";
+            video.className = 'aiio-video';
+            video.loop = true;
+            video.autoplay = true;
+            
+            document.body.appendChild(video);
+            
+            setTimeout(() => {
+                overlay.remove();
+                video.remove();
+            }, 10000);
             return;
         }
         

@@ -36,8 +36,8 @@
             <div class="card-body">
                 <div class="flex justify-between items-start mb-4">
                     <h2 class="card-title">
-                        <i class="fas fa-tools text-primary mr-2"></i>
-                        Werkzeuge
+                        <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
+                        {{ app_labels.tools.name }}
                     </h2>
                     <span class="badge badge-primary">{{ tool_stats.total }} Gesamt</span>
                 </div>
@@ -72,8 +72,8 @@
             <div class="card-body">
                 <div class="flex justify-between items-start mb-4">
                     <h2 class="card-title">
-                        <i class="fas fa-box-open text-secondary mr-2"></i>
-                        Verbrauchsmaterial
+                        <i class="{{ app_labels.consumables.icon }} text-secondary mr-2"></i>
+                        {{ app_labels.consumables.name }}
                     </h2>
                     <span class="badge badge-secondary">{{ consumable_stats.total }} Artikel</span>
                 </div>
@@ -142,8 +142,8 @@
                             <i class="fas fa-1 text-info"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold">Werkzeug ausleihen</h3>
-                            <p>Öffnen Sie den QuickScan und scannen Sie nacheinander den Mitarbeiter- und Werkzeug-Barcode.</p>
+                            <h3 class="font-bold">{{ app_labels.tools.name }} ausleihen</h3>
+                            <p>Öffnen Sie den QuickScan und scannen Sie nacheinander den Mitarbeiter- und {{ app_labels.tools.name }}-Barcode.</p>
                         </div>
                     </div>
                     <div class="flex items-start gap-4">
@@ -151,8 +151,8 @@
                             <i class="fas fa-2 text-info"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold">Werkzeug zurückgeben</h3>
-                            <p>Scannen Sie einfach den Werkzeug-Barcode erneut, um die Rückgabe zu registrieren.</p>
+                            <h3 class="font-bold">{{ app_labels.tools.name }} zurückgeben</h3>
+                            <p>Scannen Sie einfach den {{ app_labels.tools.name }}-Barcode erneut, um die Rückgabe zu registrieren.</p>
                         </div>
                     </div>
                     <div class="flex items-start gap-4">
@@ -161,7 +161,7 @@
                         </div>
                         <div>
                             <h3 class="font-bold">Übersicht behalten</h3>
-                            <p>In der Werkzeugübersicht sehen Sie alle aktiven Ausleihen und den Status jedes Werkzeugs.</p>
+                            <p>In der {{ app_labels.tools.name }}-Übersicht sehen Sie alle aktiven Ausleihen und den Status jedes {{ app_labels.tools.name }}s.</p>
                         </div>
                     </div>
                 </div>
@@ -178,11 +178,11 @@
                 <div class="space-y-4">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        <span>Bitte melden Sie beschädigte Werkzeuge umgehend beim Berufstrainer.</span>
+                        <span>Bitte melden Sie beschädigte {{ app_labels.tools.name }} umgehend beim Berufstrainer.</span>
                     </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-clock"></i>
-                        <span>Werkzeuge sollten am Ende des Arbeitstages zurückgegeben werden.</span>
+                        <span>{{ app_labels.tools.name }} sollten am Ende des Arbeitstages zurückgegeben werden.</span>
                     </div>
                     <div class="alert alert-success">
                         <i class="fas fa-check-circle"></i>

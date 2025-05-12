@@ -18,8 +18,8 @@
         <div class="card bg-base-100 shadow-md h-80">
             <div class="card-body p-3 h-full flex flex-col justify-between">
                 <h2 class="card-title text-base mb-2">
-                    <i class="fas fa-tools text-primary"></i>
-                    Werkzeuge
+                    <i class="{{ app_labels.tools.icon }} text-primary"></i>
+                    {{ app_labels.tools.name }}
                 </h2>
                 <div class="stats stats-vertical flex-1">
                     <div class="stat py-1">
@@ -45,8 +45,8 @@
         <div class="card bg-base-100 shadow-md h-80">
             <div class="card-body p-3 h-full flex flex-col justify-between">
                 <h2 class="card-title text-base mb-2">
-                    <i class="fas fa-box-open text-primary"></i>
-                    Verbrauchsmaterial
+                    <i class="{{ app_labels.consumables.icon }} text-primary"></i>
+                    {{ app_labels.consumables.name }}
                 </h2>
                 <div class="stats stats-vertical flex-1">
                     <div class="stat py-1">
@@ -102,7 +102,7 @@
                     <table class="table table-zebra w-full text-xs">
                         <thead>
                             <tr>
-                                <th>Werkzeug</th>
+                                <th>{{ app_labels.tools.name }}</th>
                                 <th>Mitarbeiter</th>
                                 <th>Datum</th>
                             </tr>
@@ -133,7 +133,7 @@
             <div class="card-body">
                 <h2 class="card-title">
                     <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Werkzeug-Warnungen
+                    {{ app_labels.tools.name }}-Warnungen
                 </h2>
                 <div class="overflow-x-auto">
                     <table class="table table-zebra w-full">
@@ -169,7 +169,7 @@
             <div class="card-body">
                 <h2 class="card-title">
                     <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Verbrauchsmaterial-Warnungen
+                    {{ app_labels.consumables.name }}-Warnungen
                 </h2>
                 <div class="overflow-x-auto">
                     <table class="table table-zebra w-full">

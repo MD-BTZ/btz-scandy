@@ -13,7 +13,10 @@
     
     <!-- Schritt 1: Artikel scannen -->
     <div id="step1" class="mb-8">
-        <h2 class="text-xl font-semibold mb-4">Artikel scannen</h2>
+        <h2 class="text-xl font-semibold mb-4">
+            <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
+            {{ app_labels.tools.name }} ausleihen
+        </h2>
         <div class="bg-white p-6 rounded-lg shadow">
             <input type="text" id="itemScanInput" class="w-full p-2 border rounded mb-4" placeholder="Barcode scannen...">
             <div id="processedItemInput" class="text-gray-500 opacity-50 mb-4">Keine Eingabe</div>
@@ -23,7 +26,10 @@
 
     <!-- Schritt 2: Mitarbeiter scannen -->
     <div id="step2" class="hidden mb-8">
-        <h2 class="text-xl font-semibold mb-4">Mitarbeiter scannen</h2>
+        <h2 class="text-xl font-semibold mb-4">
+            <i class="{{ app_labels.consumables.icon }} text-secondary mr-2"></i>
+            {{ app_labels.consumables.name }} ausgeben
+        </h2>
         <div class="bg-white p-6 rounded-lg shadow">
             <input type="text" id="workerScanInput" class="w-full p-2 border rounded mb-4" placeholder="Mitarbeiter-Barcode scannen...">
             <div id="processedWorkerInput" class="text-gray-500 opacity-50 mb-4">Keine Eingabe</div>

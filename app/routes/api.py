@@ -394,8 +394,8 @@ def admin_process_lending():
     try:
         data = request.json
         item_type = data.get('type')
-        item_id = data.get('item_id')
-        worker_id = data.get('worker_id')
+        item_barcode = data.get('item_barcode')
+        worker_barcode = data.get('worker_barcode')
         action = data.get('action')
         
         with Database.get_db() as conn:
@@ -403,36 +403,36 @@ def admin_process_lending():
                 if action == 'lend':
                     conn.execute(
                         '''INSERT INTO lendings 
-                           (tool_id, worker_id, lent_at) 
+                           (tool_barcode, worker_barcode, lent_at) 
                            VALUES (?, ?, CURRENT_TIMESTAMP)''',
-                        [item_id, worker_id]
+                        [item_barcode, worker_barcode]
                     )
                     conn.execute(
-                        'UPDATE tools SET status = "ausgeliehen" WHERE id = ?',
-                        [item_id]
+                        'UPDATE tools SET status = "ausgeliehen" WHERE barcode = ?',
+                        [item_barcode]
                     )
                 else:
                     conn.execute(
                         '''UPDATE lendings 
                            SET returned_at = CURRENT_TIMESTAMP 
-                           WHERE tool_id = ? AND returned_at IS NULL''',
-                        [item_id]
+                           WHERE tool_barcode = ? AND returned_at IS NULL''',
+                        [item_barcode]
                     )
                     conn.execute(
-                        'UPDATE tools SET status = "verfügbar" WHERE id = ?',
-                        [item_id]
+                        'UPDATE tools SET status = "verfügbar" WHERE barcode = ?',
+                        [item_barcode]
                     )
             
             elif item_type == 'consumable':
                 conn.execute(
                     '''INSERT INTO consumable_usage 
-                       (consumable_id, worker_id, quantity, used_at) 
+                       (consumable_barcode, worker_barcode, quantity, used_at) 
                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)''',
-                    [item_id, worker_id]
+                    [item_barcode, worker_barcode]
                 )
                 conn.execute(
-                    'UPDATE consumables SET quantity = quantity - 1 WHERE id = ?',
-                    [item_id]
+                    'UPDATE consumables SET quantity = quantity - 1 WHERE barcode = ?',
+                    [item_barcode]
                 )
             
             conn.commit()

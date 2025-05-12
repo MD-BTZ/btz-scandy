@@ -19,8 +19,11 @@
                             <!-- Artikel Info -->
                             <div class="border-r pr-4">
                                 <div class="flex items-center gap-2">
-                                    <i class="fas fa-box text-primary text-xl"></i>
-                                    <h2 class="card-title text-base">Artikel</h2>
+                                    <i class="{{ app_labels.tools.icon }} text-primary text-xl"></i>
+                                    <h2 class="card-title text-base">
+                                        <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
+                                        {{ app_labels.tools.name }} ausleihen
+                                    </h2>
                                 </div>
                                 <div class="divider my-1"></div>
                                 <div class="space-y-1">
@@ -35,8 +38,11 @@
                             <!-- Mitarbeiter Info -->
                             <div class="pl-4">
                                 <div class="flex items-center gap-2">
-                                    <i class="fas fa-user text-primary text-xl"></i>
-                                    <h2 class="card-title text-base">Mitarbeiter</h2>
+                                    <i class="{{ app_labels.consumables.icon }} text-secondary text-xl"></i>
+                                    <h2 class="card-title text-base">
+                                        <i class="{{ app_labels.consumables.icon }} text-secondary mr-2"></i>
+                                        {{ app_labels.consumables.name }} ausgeben
+                                    </h2>
                                 </div>
                                 <div class="divider my-1"></div>
                                 <div class="space-y-1">
@@ -53,7 +59,7 @@
             <div class="flex-1 flex flex-col">
                 <!-- Step 1: Artikel Scan -->
                 <div id="step1" class="scan-step flex-1">
-                    <h4 class="font-bold text-base mb-2 text-center">Werkzeug oder Material scannen</h4>
+                    <h4 class="font-bold text-base mb-2 text-center">{{ app_labels.tools.name }} oder {{ app_labels.consumables.name }} scannen</h4>
                     <div class="scan-area bg-base-200 rounded-lg p-4 h-[200px] flex items-center justify-center relative">
                         <div class="scan-line"></div>
                         <input type="text" 
@@ -129,4 +135,86 @@
 </dialog>
 
 <!-- JsBarcode Library -->
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script> 
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<!-- VIBE Easter Egg Overlay -->
+<div id="vibeOverlay" class="fixed inset-0 bg-black/80 z-[9999999] hidden">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-4xl font-bold">
+        VIBE MODE ACTIVATED! 🎵
+    </div>
+    <video id="vibeVideoLeft" class="fixed top-1/2 left-[5%] -translate-y-1/2 w-[400px] h-auto" loop>
+        <source src="{{ url_for('static', filename='videos/vibe.mp4') }}" type="video/mp4">
+    </video>
+    <video id="vibeVideoRight" class="fixed top-1/2 right-[5%] -translate-y-1/2 w-[400px] h-auto" loop>
+        <source src="{{ url_for('static', filename='videos/vibe.mp4') }}" type="video/mp4">
+    </video>
+</div>
+
+<script>
+    // Bestehender Code für das Zebra-Easter Egg
+    let lastInput = '';
+    const danceCode = 'DANCE';
+    const vibeCode = 'VIBE';
+    
+    document.getElementById('itemScanInput').addEventListener('input', function(e) {
+        lastInput = e.target.value.toUpperCase();
+        
+        // Zebra Easter Egg
+        if (lastInput === danceCode) {
+            const overlay = document.createElement('div');
+            overlay.className = 'zebra-overlay';
+            document.body.appendChild(overlay);
+            
+            const zebraLeft = document.createElement('img');
+            zebraLeft.src = "{{ url_for('static', filename='images/zebra.gif') }}";
+            zebraLeft.className = 'dancing-zebra left';
+            zebraLeft.style.animation = 'dance 1s infinite';
+            
+            const zebraRight = document.createElement('img');
+            zebraRight.src = "{{ url_for('static', filename='images/zebra.gif') }}";
+            zebraRight.className = 'dancing-zebra right';
+            zebraRight.style.animation = 'dance 1s infinite';
+            
+            document.body.appendChild(zebraLeft);
+            document.body.appendChild(zebraRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                zebraLeft.remove();
+                zebraRight.remove();
+            }, 5000);
+            
+            e.target.value = '';
+        }
+        
+        // VIBE Easter Egg
+        if (lastInput === vibeCode) {
+            const overlay = document.createElement('div');
+            overlay.className = 'zebra-overlay';
+            document.body.appendChild(overlay);
+            
+            const videoLeft = document.createElement('video');
+            videoLeft.src = "{{ url_for('static', filename='videos/vibe.mp4') }}";
+            videoLeft.className = 'dancing-zebra left';
+            videoLeft.loop = true;
+            videoLeft.autoplay = true;
+            
+            const videoRight = document.createElement('video');
+            videoRight.src = "{{ url_for('static', filename='videos/vibe.mp4') }}";
+            videoRight.className = 'dancing-zebra right';
+            videoRight.loop = true;
+            videoRight.autoplay = true;
+            
+            document.body.appendChild(videoLeft);
+            document.body.appendChild(videoRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                videoLeft.remove();
+                videoRight.remove();
+            }, 10000);
+            
+            e.target.value = '';
+        }
+    });
+</script> 
