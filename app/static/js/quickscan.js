@@ -263,32 +263,67 @@ const QuickScan = {
         if (upperBarcode === 'AIIO') {
             console.log("[DEBUG] Easter Egg: AIIO detected!");
             const overlay = document.createElement('div');
-            overlay.className = 'aiio-overlay';
+            overlay.className = 'zebra-overlay';
             document.body.appendChild(overlay);
-            
-            const videoLeft = document.createElement('video');
-            videoLeft.src = "/static/videos/oiia.mp4";
-            videoLeft.className = 'aiio-video left';
-            videoLeft.loop = true;
-            videoLeft.autoplay = true;
-            videoLeft.controls = true;
-            
-            const videoRight = document.createElement('video');
-            videoRight.src = "/static/videos/oiia.mp4";
-            videoRight.className = 'aiio-video right';
-            videoRight.loop = true;
-            videoRight.autoplay = true;
-            videoRight.controls = true;
-            
-            document.body.appendChild(videoLeft);
-            document.body.appendChild(videoRight);
-            
-            setTimeout(() => {
-                overlay.remove();
-                videoLeft.remove();
-                videoRight.remove();
-            }, 10000);
-            
+
+            // Video-Element erzeugen
+            const video = document.createElement('video');
+            video.src = "/static/videos/aiio.webm";
+            video.className = 'dancing-zebra';
+            video.loop = true;
+            video.autoplay = true;
+            video.style.position = 'fixed';
+            video.style.width = '640px';
+            video.style.height = '480px';
+            video.style.zIndex = 2147483647;
+            document.body.appendChild(video);
+
+            // Startposition und Geschwindigkeit
+            let x = Math.random() * (window.innerWidth - 640);
+            let y = Math.random() * (window.innerHeight - 480);
+            let dx = 5.0 * (Math.random() > 0.5 ? 1 : -1);
+            let dy = 5.0 * (Math.random() > 0.5 ? 1 : -1);
+
+            function animateDVDLogo() {
+                x += dx;
+                y += dy;
+                // Kollision mit Rändern
+                if (x <= 0 || x + 640 >= window.innerWidth) dx *= -1;
+                if (y <= 0 || y + 480 >= window.innerHeight) dy *= -1;
+                video.style.left = x + 'px';
+                video.style.top = y + 'px';
+                if (!video._stopAnimation) {
+                    requestAnimationFrame(animateDVDLogo);
+                }
+            }
+            animateDVDLogo();
+
+            // Modal in den Hintergrund schicken
+            const modal = document.getElementById('quickScanModal');
+            let oldModalOverflow = null;
+            if (modal) {
+                // Video INS Modal einfügen
+                modal.appendChild(video);
+                // Modal-Overflow sichtbar machen, damit das Video nicht beschnitten wird
+                oldModalOverflow = modal.style.overflow;
+                modal.style.overflow = 'visible';
+            } else {
+                document.body.appendChild(video);
+            }
+
+            // Entferne das Video, wenn das Modal geschlossen wird
+            if (modal) {
+                modal.addEventListener('close', function removeAiioVideo() {
+                    overlay.remove();
+                    video._stopAnimation = true;
+                    video.remove();
+                    if (oldModalOverflow !== null) {
+                        modal.style.overflow = oldModalOverflow;
+                    }
+                    modal.removeEventListener('close', removeAiioVideo);
+                });
+            }
+
             this.keyBuffer = '';
             this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput');
             return;
@@ -710,20 +745,28 @@ const QuickScan = {
         if (input === 'AIIO') {
             console.log("[DEBUG] Easter Egg: AIIO detected!");
             const overlay = document.createElement('div');
-            overlay.className = 'aiio-overlay';
+            overlay.className = 'zebra-overlay';
             document.body.appendChild(overlay);
             
-            const video = document.createElement('video');
-            video.src = "/static/videos/oiia.mp4";
-            video.className = 'aiio-video';
-            video.loop = true;
-            video.autoplay = true;
+            const videoLeft = document.createElement('video');
+            videoLeft.src = "/static/videos/aiio.webm";
+            videoLeft.className = 'dancing-zebra left';
+            videoLeft.loop = true;
+            videoLeft.autoplay = true;
             
-            document.body.appendChild(video);
+            const videoRight = document.createElement('video');
+            videoRight.src = "/static/videos/aiio.webm";
+            videoRight.className = 'dancing-zebra right';
+            videoRight.loop = true;
+            videoRight.autoplay = true;
+            
+            document.body.appendChild(videoLeft);
+            document.body.appendChild(videoRight);
             
             setTimeout(() => {
                 overlay.remove();
-                video.remove();
+                videoLeft.remove();
+                videoRight.remove();
             }, 10000);
             return;
         }

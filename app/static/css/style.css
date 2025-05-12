@@ -151,8 +151,35 @@ dialog#quickScanModal .modal-box {
     color: hsl(var(--bc));
 }
 
-/* AIIO Easter Egg Styles */
-.aiio-overlay {
+/* Video Styles mit Greenscreen */
+.dancing-zebra {
+    mix-blend-mode: screen;
+    filter: brightness(1.2) contrast(1.2);
+    background-color: #089c04;
+    background-blend-mode: difference;
+}
+
+.dancing-zebra.left {
+    position: fixed;
+    left: 10%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40%;
+    height: auto;
+    z-index: 10000;
+}
+
+.dancing-zebra.right {
+    position: fixed;
+    right: 10%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40%;
+    height: auto;
+    z-index: 10000;
+}
+
+.zebra-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -160,14 +187,4 @@ dialog#quickScanModal .modal-box {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
     z-index: 9999;
-}
-
-.aiio-video {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    height: 80%;
-    z-index: 10000;
 }
