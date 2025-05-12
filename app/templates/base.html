@@ -96,7 +96,16 @@
             </a>
             {% endif %}
 
-            {# Ticket-Erstellung für alle eingeloggten Benutzer #}
+            <!-- Über Scandy (öffentlich) -->
+            <a href="{{ url_for('main.about') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint == 'main.about' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-question-circle text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Über Scandy</span>
+            </a>
+
+            <!-- Ticket-Erstellung für alle eingeloggten Benutzer -->
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -182,11 +191,6 @@
                             </a>
                         </li>
                         {% endif %}
-                        <li>
-                            <a href="{{ url_for('main.about') }}" class="{% if request.endpoint == 'main.about' %}active{% endif %}">
-                                <i class="fas fa-info-circle mr-2"></i>Über Scandy
-                            </a>
-                        </li>
                     </ul>
                 </div>
                 <a href="{{ url_for('admin.trash') }}" 

@@ -662,7 +662,6 @@ const QuickScan = {
     goToStep(step) {
         document.querySelectorAll('.scan-step').forEach(el => el.classList.add('hidden'));
         document.getElementById(`step${step}`).classList.remove('hidden');
-        
         document.querySelectorAll('.steps .step').forEach((el, index) => {
             if (index + 1 <= step) {
                 el.classList.add('step-primary');
@@ -670,9 +669,8 @@ const QuickScan = {
                 el.classList.remove('step-primary');
             }
         });
-        
         this.currentStep = step;
-        // this.focusCurrentInput(); // Auch hier auskommentieren
+        this.focusCurrentInput(); // Fokus wieder aktivieren
     },
     
     focusCurrentInput() {
@@ -946,4 +944,21 @@ function updateBufferDisplay(buffer, isWorker = false) {
     if (typeof updateScanBuffer === 'function') {
         updateScanBuffer(buffer, isWorker);
     }
+}
+
+// Neue Toast-Funktion für unten rechts
+function showToast(type, message) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
 } 
