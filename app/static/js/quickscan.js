@@ -6,6 +6,7 @@ const QuickScan = {
     lastKeyTime: 0,
     keyBuffer: '',
     isInitialized: false,
+    activeInputType: null, // 'item' oder 'worker'
     
     // Neuer Zwischenspeicher für den aktuellen Prozess
     currentProcess: {
@@ -137,6 +138,113 @@ const QuickScan = {
                 }
             });
         });
+
+        // Event-Listener für das neue sichtbare Eingabefeld
+        const activeInput = document.getElementById('quickScanActiveInput');
+        if (activeInput) {
+            activeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const value = activeInput.value.trim();
+                    const upperValue = value.toUpperCase();
+                    if (upperValue === 'DANCE') {
+                        QuickScan.showDancingEmojis();
+                        showToast('success', '🦓 Zebra-Party! 🦓');
+                        activeInput.value = '';
+                        return;
+                    }
+                    if (upperValue === 'VIBE') {
+                        // VIBE Easter Egg (wie in handleScannerInput)
+                        const overlay = document.createElement('div');
+                        overlay.className = 'zebra-overlay';
+                        document.body.appendChild(overlay);
+                        const videoLeft = document.createElement('video');
+                        videoLeft.src = "/static/videos/vibe.mp4";
+                        videoLeft.className = 'dancing-zebra left';
+                        videoLeft.loop = true;
+                        videoLeft.autoplay = true;
+                        const videoRight = document.createElement('video');
+                        videoRight.src = "/static/videos/vibe.mp4";
+                        videoRight.className = 'dancing-zebra right';
+                        videoRight.loop = true;
+                        videoRight.autoplay = true;
+                        document.body.appendChild(videoLeft);
+                        document.body.appendChild(videoRight);
+                        setTimeout(() => {
+                            overlay.remove();
+                            videoLeft.remove();
+                            videoRight.remove();
+                        }, 10000);
+                        activeInput.value = '';
+                        return;
+                    }
+                    if (upperValue === 'AIIO') {
+                        // AIIO Easter Egg (wie in handleScannerInput)
+                        const overlay = document.createElement('div');
+                        overlay.className = 'zebra-overlay';
+                        document.body.appendChild(overlay);
+                        const video = document.createElement('video');
+                        video.src = "/static/videos/aiio.webm";
+                        video.className = 'dancing-zebra';
+                        video.loop = true;
+                        video.autoplay = true;
+                        video.style.position = 'fixed';
+                        video.style.width = '640px';
+                        video.style.height = '480px';
+                        video.style.zIndex = 2147483647;
+                        document.body.appendChild(video);
+                        let x = Math.random() * (window.innerWidth - 640);
+                        let y = Math.random() * (window.innerHeight - 480);
+                        let dx = 5.0 * (Math.random() > 0.5 ? 1 : -1);
+                        let dy = 5.0 * (Math.random() > 0.5 ? 1 : -1);
+                        function animateDVDLogo() {
+                            x += dx;
+                            y += dy;
+                            if (x <= 0 || x + 640 >= window.innerWidth) dx *= -1;
+                            if (y <= 0 || y + 480 >= window.innerHeight) dy *= -1;
+                            video.style.left = x + 'px';
+                            video.style.top = y + 'px';
+                            if (!video._stopAnimation) {
+                                requestAnimationFrame(animateDVDLogo);
+                            }
+                        }
+                        animateDVDLogo();
+                        const modal = document.getElementById('quickScanModal');
+                        let oldModalOverflow = null;
+                        if (modal) {
+                            modal.appendChild(video);
+                            oldModalOverflow = modal.style.overflow;
+                            modal.style.overflow = 'visible';
+                        } else {
+                            document.body.appendChild(video);
+                        }
+                        if (modal) {
+                            modal.addEventListener('close', function removeAiioVideo() {
+                                overlay.remove();
+                                video._stopAnimation = true;
+                                video.remove();
+                                if (oldModalOverflow !== null) {
+                                    modal.style.overflow = oldModalOverflow;
+                                }
+                                modal.removeEventListener('close', removeAiioVideo);
+                            });
+                        }
+                        activeInput.value = '';
+                        return;
+                    }
+                    // Normale Verarbeitung
+                    if (value) {
+                        if (this.activeInputType === 'item') {
+                            this.handleItemScan(value);
+                        } else if (this.activeInputType === 'worker') {
+                            this.handleWorkerScan(value);
+                        }
+                        // Nach Scan/Eingabe Feld wieder ausblenden
+                        document.getElementById('quickScanActiveInputContainer').classList.add('hidden');
+                        this.activeInputType = null;
+                    }
+                }
+            });
+        }
     },
 
     handleKeyInput(e, input) {
@@ -347,175 +455,84 @@ const QuickScan = {
         }
     },
 
+    setCardState(type, state) {
+        // type: 'item' oder 'worker', state: 'active', 'success', 'default'
+        const card = document.getElementById(type === 'item' ? 'itemCard' : 'workerCard');
+        // Entferne alle Hintergrundfarben
+        card.style.backgroundColor = '';
+        if (state === 'active') {
+            card.style.backgroundColor = '#FEF08A'; // Tailwind yellow-200
+        } else if (state === 'success') {
+            card.style.backgroundColor = '#BBF7D0'; // Tailwind green-200
+        } else {
+            card.style.backgroundColor = '';
+        }
+    },
+
     async handleItemScan(barcode) {
-        console.log("[DEBUG] handleItemScan - Barcode:", barcode);
-        
         try {
             const response = await fetch(`/api/inventory/tools/${barcode}`);
             const data = await response.json();
-            
             if (!data.success) {
-                this.showError("Artikel nicht gefunden");
+                this.showError("Artikel nicht gefunden", 'item');
+                this.setCardState('item', 'active');
                 return;
             }
-            
             const item = data.data;
-            console.log("[DEBUG] Gefundener Artikel:", item);
-            
             this.scannedItem = item;
-            
-            const processedItemInputDisplay = document.getElementById('processedItemInput');
-            const itemTypeDisplay = document.getElementById('itemTypeDisplay');
-            const itemStatusDisplay = document.getElementById('itemStatusDisplay');
-            
-            if (processedItemInputDisplay) {
-                processedItemInputDisplay.textContent = item.name || 'Unbek. Artikel';
-                processedItemInputDisplay.classList.remove('opacity-50');
-                console.log("[DEBUG] processedItemInputDisplay textContent gesetzt auf:", processedItemInputDisplay.textContent);
-            }
-            
-            if (itemTypeDisplay) {
-                itemTypeDisplay.textContent = item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug';
-                itemTypeDisplay.className = 'badge badge-lg '; // Reset classes
+            // Bestandswert robust ermitteln
+            let quantity = (typeof item.quantity === 'number') ? item.quantity :
+                           (typeof item.current_stock === 'number') ? item.current_stock :
+                           (typeof item.current_amount === 'number') ? item.current_amount : 0;
+            let min_quantity = (typeof item.min_quantity === 'number') ? item.min_quantity : 0;
+            // Anzeige auf Karte aktualisieren
+            const itemCardContent = document.getElementById('itemCardContent');
+            if (itemCardContent) {
+                let html = `<div class='font-bold mb-1'>${item.name || 'Unbek. Artikel'}</div>`;
+                html += `<div class='badge badge-lg ${item.type === 'consumable' ? 'badge-info' : 'badge-neutral'} mb-1'>${item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug'}</div>`;
+                html += `<div class='badge badge-lg mb-1'>${item.status_text || (item.type === 'consumable' ? (quantity > 0 ? 'Verfügbar' : 'Fehlt') : 'Unbekannt')}</div>`;
                 if (item.type === 'consumable') {
-                    itemTypeDisplay.classList.add('badge-info');
-                } else {
-                    itemTypeDisplay.classList.add('badge-neutral');
+                    html += `<div class='text-sm mt-1'>Bestand: <span class='font-mono'>${quantity}</span> / <span class='font-mono'>${min_quantity}</span> (min)</div>`;
                 }
-                console.log("[DEBUG] itemTypeDisplay textContent gesetzt auf:", itemTypeDisplay.textContent, "Class:", itemTypeDisplay.className);
+                html += `<div class='text-xs text-gray-400 mt-2'>(erneut klicken zum Ändern)</div>`;
+                itemCardContent.innerHTML = html;
             }
-            
-            if (itemStatusDisplay) {
-                itemStatusDisplay.textContent = item.status_text || (item.type === 'consumable' ? (item.quantity > 0 ? 'Verfügbar' : 'Fehlt') : 'Unbekannt');
-                itemStatusDisplay.className = 'badge badge-lg '; // Reset classes
-                let statusClass = 'badge-ghost'; 
-                if (item.type === 'tool') {
-                    if (item.current_status === 'verfügbar') statusClass = 'badge-success';
-                    else if (item.current_status === 'ausgeliehen') statusClass = 'badge-warning';
-                    else if (item.current_status === 'defekt') statusClass = 'badge-error';
-                } else if (item.type === 'consumable') {
-                    if (item.quantity > item.min_quantity) statusClass = 'badge-success';
-                    else if (item.quantity > 0) statusClass = 'badge-warning';
-                    else statusClass = 'badge-error';
-                }
-                itemStatusDisplay.classList.add(statusClass);
-                console.log("[DEBUG] itemStatusDisplay textContent gesetzt auf:", itemStatusDisplay.textContent, "Class:", itemStatusDisplay.className);
-            }
-            
-            let action;
+            this.setCardState('item', 'success');
+            this.setCardState('worker', this.activeInputType === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
+            this.updateConfirmButtonState();
+            // Mengen-Modal für Verbrauchsgüter anzeigen
             if (item.type === 'consumable') {
-                action = 'consume';
-            } else {
-                action = item.current_status === 'verfügbar' ? 'lend' : 'return';
-            }
-            
-            this.currentProcess = {
-                item_barcode: item.barcode,
-                item_type: item.type,
-                action: action,
-                quantity: item.type === 'consumable' ? 1 : undefined // Menge für Verbrauchsmaterial initial auf 1
-            };
-            
-            const itemConfirmCard = document.getElementById('itemConfirm');
-            if (itemConfirmCard) {
-                itemConfirmCard.classList.remove('hidden');
-                console.log("[DEBUG] itemConfirm wird jetzt angezeigt.");
-            }
-            
-            this.confirmationBarcode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const canvas = document.getElementById('itemConfirmBarcode');
-            if (canvas) { 
-                JsBarcode(canvas, this.confirmationBarcode, {
-                    format: "CODE128",
-                    width: 2,
-                    height: 50,
-                    displayValue: true
-                });
-                console.log("[DEBUG] Bestätigungs-Barcode generiert:", this.confirmationBarcode);
-            } else {
-                console.error("[FEHLER] Canvas-Element 'itemConfirmBarcode' nicht gefunden!");
-            }
-
-            // Mengenmodal für Verbrauchsmaterialien wieder aktivieren
-            if (item.type === 'consumable') {
-                console.log("[DEBUG] Artikel ist Verbrauchsmaterial, zeige Mengenmodal.");
                 this.showQuantityModal();
-            } else {
-                // Für Werkzeuge direkt zum nächsten Schritt (implizit durch Bestätigungsscan)
-                // oder hier Logik, falls keine Bestätigung per Scan gewünscht wäre.
             }
-
-            showToast('success', `Artikel erkannt: ${item.name || 'Unbek. Artikel'} (${item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug'})`);
-            
         } catch (error) {
-            console.error("Fehler beim Abrufen des Artikels:", error);
-            this.showError("Fehler beim Abrufen des Artikels");
+            this.showError("Fehler beim Abrufen des Artikels", 'item');
         }
     },
 
     async handleWorkerScan(barcode) {
-        console.log("[DEBUG] handleWorkerScan - Barcode:", barcode);
         try {
             const response = await fetch(`/api/inventory/workers/${barcode}`);
-            const result = await response.json(); // Renamed data to result to avoid conflict with outer scope if any
-            
-            if (!result.success) { // Assuming API returns {success: boolean, ...}
-                this.showError(result.message || 'Mitarbeiter nicht gefunden');
-                this.keyBuffer = ''; // Clear buffer to allow new scan
-                this.updateDisplay(this.keyBuffer, true); // Update display for worker
+            const result = await response.json();
+            if (!result.success) {
+                this.showError(result.message || 'Mitarbeiter nicht gefunden', 'worker');
+                this.setCardState('worker', 'active');
                 return;
             }
-            
-            const worker = result.data; // Assuming worker data is in result.data
-            console.log("[DEBUG] Gefundener Mitarbeiter:", worker);
-            
-            this.scannedWorker = worker; // Store full worker object
-            this.scannedWorker.barcode = barcode; // Ensure barcode is part of the stored object
-            
-            const workerNameDisplay = document.getElementById('processedWorkerInput');
-            const workerDepartmentDisplay = document.getElementById('workerDepartmentDisplay');
-            
-            if (workerNameDisplay) {
-                workerNameDisplay.textContent = `${worker.firstname || 'N/A'} ${worker.lastname || 'N/A'}`;
-                workerNameDisplay.classList.remove('opacity-50');
-                console.log("[DEBUG] workerNameDisplay textContent gesetzt auf:", workerNameDisplay.textContent);
+            const worker = result.data;
+            this.scannedWorker = worker;
+            // Anzeige auf Karte aktualisieren
+            const workerCardContent = document.getElementById('workerCardContent');
+            if (workerCardContent) {
+                let html = `<div class='font-bold mb-1'>${worker.firstname || ''} ${worker.lastname || ''}</div>`;
+                html += `<div class='text-sm mb-1'>${worker.department || 'Keine Abteilung'}</div>`;
+                html += `<div class='text-xs text-gray-400 mt-2'>(erneut klicken zum Ändern)</div>`;
+                workerCardContent.innerHTML = html;
             }
-            
-            if (workerDepartmentDisplay) {
-                workerDepartmentDisplay.textContent = worker.department || 'Keine Abteilung';
-                workerDepartmentDisplay.classList.remove('opacity-50');
-                console.log("[DEBUG] workerDepartmentDisplay textContent gesetzt auf:", workerDepartmentDisplay.textContent);
-            }
-            
-            showToast('success', `Mitarbeiter erkannt: ${worker.firstname || ''} ${worker.lastname || ''}`);
-            
-            // Generiere finalen Bestätigungsbarcode
-            this.confirmationBarcode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const canvas = document.getElementById('finalConfirmBarcode');
-            if (canvas) {
-                JsBarcode(canvas, this.confirmationBarcode, {
-                    format: "CODE128",
-                    width: 2,
-                    height: 50,
-                    displayValue: true
-                });
-                console.log("[DEBUG] Finaler Bestätigungs-Barcode generiert:", this.confirmationBarcode);
-            } else {
-                console.error("[FEHLER] Canvas-Element 'finalConfirmBarcode' nicht gefunden!");
-            }
-            
-            // Verstecke den normalen Scan-Prompt und zeige die finale Bestätigungskarte
-            const workerScanPrompt = document.getElementById('workerScanPrompt');
-            const finalConfirmCard = document.getElementById('finalConfirm');
-            if (workerScanPrompt) workerScanPrompt.classList.add('hidden');
-            if (finalConfirmCard) finalConfirmCard.classList.remove('hidden');
-            console.log("[DEBUG] FinalConfirmCard wird angezeigt, workerScanPrompt versteckt.");
-            
+            this.setCardState('worker', 'success');
+            this.setCardState('item', this.activeInputType === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
+            this.updateConfirmButtonState();
         } catch (error) {
-            console.error("Fehler beim Abrufen des Mitarbeiters:", error);
-            this.showError("Fehler beim Abrufen des Mitarbeiters");
-            this.keyBuffer = ''; // Clear buffer on error
-            this.updateDisplay(this.keyBuffer, true);
+            this.showError("Fehler beim Abrufen des Mitarbeiters", 'worker');
         }
     },
 
@@ -543,9 +560,9 @@ const QuickScan = {
                 body: JSON.stringify({
                     item_barcode: this.scannedItem.barcode,
                     worker_barcode: this.scannedWorker.barcode,
-                    action: this.currentProcess.action,
-                    item_type: this.currentProcess.item_type,
-                    quantity: this.currentProcess.quantity || 1
+                    action: this.scannedItem.type === 'consumable' ? 'consume' : 'lend',
+                    item_type: this.scannedItem.type,
+                    quantity: this.scannedItem.type === 'consumable' ? (this.currentProcess.quantity || 1) : 1
                 })
             });
 
@@ -553,7 +570,7 @@ const QuickScan = {
             console.log("Server-Antwort:", data);
 
             if (data.success) {
-                showToast('success', data.message);
+                showToast('success', data.message || 'Vorgang erfolgreich!');
                 
                 // Schließe das Modal
                 const modal = document.getElementById('quickScanModal');
@@ -562,7 +579,7 @@ const QuickScan = {
                 }
                 
                 // Aktualisiere die Verbrauchshistorie, wenn es sich um ein Verbrauchsmaterial handelt
-                if (this.currentProcess.item_type === 'consumable') {
+                if (this.scannedItem.type === 'consumable') {
                     // Lade die Seite neu, um die aktualisierte Historie anzuzeigen
                     window.location.reload();
                 }
@@ -578,85 +595,26 @@ const QuickScan = {
     },
 
     reset() {
-        // Reset interne Variablen
-        this.keyBuffer = '';
-        this.lastKeyTime = Date.now();
-        this.currentStep = 1;
         this.scannedItem = null;
         this.scannedWorker = null;
-        this.currentProcess = {
-            item: null,
-            worker: null,
-            action: null,
-            confirmed: false,
-            quantity: 1 // Standardmenge beim Reset
-        };
-        this.confirmationBarcode = null;
-
-        // Explizit das Zebra-Overlay entfernen, falls vorhanden
-        const zebraOverlay = document.querySelector('.zebra-overlay');
-        if (zebraOverlay) {
-            console.log("Removing existing zebra overlay in reset.");
-            zebraOverlay.remove();
+        this.keyBuffer = '';
+        this.activeInputType = null;
+        // Karten zurücksetzen
+        const itemCardContent = document.getElementById('itemCardContent');
+        if (itemCardContent) {
+            itemCardContent.innerHTML = `<p class='text-base opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
         }
-        // Auch die Zebras selbst entfernen, falls der Timeout noch nicht lief
-        document.querySelectorAll('.dancing-zebra').forEach(el => el.remove());
-        // TODO: Auch die Musik stoppen? (Falls sie noch läuft)
-        // Aktuell wird die Musik im Timeout von showDancingEmojis gestoppt.
-        // Wenn das Modal vorher geschlossen wird, läuft sie evtl. weiter.
-
-        // Reset UI-Elemente
-        const itemInput = document.getElementById('itemScanInput');
-        const workerInput = document.getElementById('workerScanInput');
-        if (itemInput) itemInput.value = '';
-        if (workerInput) workerInput.value = '';
-
-        // Verstecke alle Bestätigungskarten
-        const itemConfirm = document.getElementById('itemConfirm');
-        const finalConfirm = document.getElementById('finalConfirm');
-        if (itemConfirm) itemConfirm.classList.add('hidden');
-        if (finalConfirm) finalConfirm.classList.add('hidden');
-
-        // Reset Mengenanzeige
-        const quantityDisplay = document.getElementById('quantityDisplay');
-        if (quantityDisplay) {
-            quantityDisplay.textContent = '1';
-            quantityDisplay.dataset.max = '';
+        const workerCardContent = document.getElementById('workerCardContent');
+        if (workerCardContent) {
+            workerCardContent.innerHTML = `<p class='text-base opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
         }
-
-        // Reset Info-Karten
-        const processedItemInput = document.getElementById('processedItemInput');
-        const itemTypeDisplay = document.getElementById('itemTypeDisplay');
-        const itemStatusDisplay = document.getElementById('itemStatusDisplay');
-        const processedWorkerInput = document.getElementById('processedWorkerInput');
-        const workerDepartmentDisplay = document.getElementById('workerDepartmentDisplay');
-        
-        if (processedItemInput) {
-            processedItemInput.textContent = 'Noch kein Artikel gescannt';
-            processedItemInput.classList.add('opacity-50');
-        }
-        if (itemTypeDisplay) {
-            itemTypeDisplay.textContent = '';
-            itemTypeDisplay.className = 'badge badge-lg';
-        }
-        if (itemStatusDisplay) {
-            itemStatusDisplay.textContent = '';
-            itemStatusDisplay.className = 'badge badge-lg';
-        }
-        if (processedWorkerInput) {
-            processedWorkerInput.textContent = 'Noch kein Mitarbeiter gescannt';
-            processedWorkerInput.classList.add('opacity-50');
-        }
-        if (workerDepartmentDisplay) {
-            workerDepartmentDisplay.textContent = 'Abteilung wird nach Scan angezeigt';
-            workerDepartmentDisplay.classList.add('opacity-50');
-        }
-
-        // Setze Schritt zurück
-        this.goToStep(1);
-        
-        // Fokus auf das aktuelle Eingabefeld (ENTFERNT BEIM RESET)
-        // this.focusCurrentInput(); 
+        // Kartenfarben zurücksetzen
+        this.setCardState('item', 'default');
+        this.setCardState('worker', 'default');
+        // Eingabefeld ausblenden
+        const inputContainer = document.getElementById('quickScanActiveInputContainer');
+        if (inputContainer) inputContainer.classList.add('hidden');
+        this.updateConfirmButtonState();
     },
 
     goToStep(step) {
@@ -851,10 +809,31 @@ const QuickScan = {
         }, 10000); // 10 Sekunden
     },
 
-    showError(message) {
+    showError(message, type = null) {
         console.error("Fehler:", message);
         showToast('error', message);
-        this.reset();
+        if (type === 'item') {
+            // Nur Item-Eingabe zurücksetzen
+            this.scannedItem = null;
+            const itemCardContent = document.getElementById('itemCardContent');
+            if (itemCardContent) {
+                itemCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
+            }
+            this.setCardState('item', 'active');
+            this.updateConfirmButtonState();
+        } else if (type === 'worker') {
+            // Nur Worker-Eingabe zurücksetzen
+            this.scannedWorker = null;
+            const workerCardContent = document.getElementById('workerCardContent');
+            if (workerCardContent) {
+                workerCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
+            }
+            this.setCardState('worker', 'active');
+            this.updateConfirmButtonState();
+        } else {
+            // Fallback: alles zurücksetzen
+            this.reset();
+        }
     },
 
     showQuantityModal() {
@@ -868,18 +847,12 @@ const QuickScan = {
     confirmQuantity() {
         const quantityInput = document.getElementById('quantityInput');
         const quantity = parseInt(quantityInput.value);
-
         if (quantity > 0) {
             this.currentProcess.quantity = quantity;
-            console.log("[DEBUG] Menge bestätigt:", this.currentProcess.quantity);
             this.closeQuantityModal();
-            // Fokus auf das itemScanInput, um den Bestätigungsbarcode zu scannen
-            // oder Hinweis geben, den angezeigten Barcode zu scannen.
-            // Da das itemScanInput readonly ist, muss der Nutzer den Barcode scannen.
-            // Ein expliziter Fokus ist hier nicht unbedingt nötig, aber schadet nicht.
-            const itemInput = document.getElementById('itemScanInput');
-            if(itemInput) itemInput.focus(); 
-            showToast('info', 'Bitte scannen Sie jetzt den Bestätigungs-Barcode für den Artikel.');
+            // Nach Mengenbestätigung: Karte bleibt grün, kein weiterer Scan nötig
+            this.setCardState('item', 'success');
+            this.updateConfirmButtonState();
         } else {
             showToast('error', 'Bitte eine gültige Menge eingeben.');
         }
@@ -892,6 +865,71 @@ const QuickScan = {
             this.init();
         } else {
             console.error("Cannot open QuickScan modal - modal not found!");
+        }
+    },
+
+    activateInput(type) {
+        // Zeige das sichtbare Eingabefeld an und setze Typ
+        this.activeInputType = type;
+        const inputContainer = document.getElementById('quickScanActiveInputContainer');
+        const input = document.getElementById('quickScanActiveInput');
+        if (inputContainer && input) {
+            input.value = '';
+            inputContainer.classList.remove('hidden');
+            input.focus();
+            input.placeholder = type === 'item' ? 'Werkzeug/Verbrauchsgut scannen oder eingeben' : 'Mitarbeiter scannen oder eingeben';
+        }
+        // Kartenfarben setzen
+        this.setCardState('item', type === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
+        this.setCardState('worker', type === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
+    },
+
+    // Button-Status aktualisieren
+    updateConfirmButtonState() {
+        const btn = document.getElementById('quickScanConfirmBtn');
+        if (btn) {
+            btn.disabled = !(this.scannedItem && this.scannedWorker);
+        }
+    },
+
+    // Bestätigen-Button (hier nur Demo)
+    async confirm() {
+        if (this.scannedItem && this.scannedWorker) {
+            try {
+                // Bestimme Aktion für Werkzeuge: 'lend' oder 'return'
+                let action = 'lend';
+                if (this.scannedItem.type !== 'consumable') {
+                    if (this.scannedItem.current_status === 'ausgeliehen') {
+                        action = 'return';
+                    }
+                } else {
+                    action = 'consume';
+                }
+                const response = await fetch('/api/quickscan/process_lending', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        item_barcode: this.scannedItem.barcode,
+                        worker_barcode: this.scannedWorker.barcode,
+                        action: action,
+                        item_type: this.scannedItem.type,
+                        quantity: this.scannedItem.type === 'consumable' ? (this.currentProcess.quantity || 1) : 1
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('success', data.message || 'Vorgang erfolgreich!');
+                    const modal = document.getElementById('quickScanModal');
+                    if (modal) modal.close();
+                    this.reset();
+                } else {
+                    this.showError(data.message || 'Fehler bei der Verarbeitung');
+                }
+            } catch (error) {
+                this.showError('Fehler bei der Verarbeitung');
+            }
         }
     }
 };

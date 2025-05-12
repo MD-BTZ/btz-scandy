@@ -26,6 +26,60 @@
         {% endif %}
     {% endwith %}
 
+    <!-- Rollenübersicht -->
+    <div class="card bg-base-100 shadow-lg mb-6">
+        <div class="card-body">
+            <h2 class="card-title text-lg mb-4">
+                <i class="fas fa-users-cog mr-2"></i>
+                Rollenübersicht
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Admin -->
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h3 class="font-bold mb-2 flex items-center">
+                        <span class="badge badge-error mr-2">Admin</span>
+                        <span>Administrator</span>
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li><i class="fas fa-check text-success mr-1"></i>Vollzugriff auf alle Funktionen</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Systemverwaltung</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Benutzerverwaltung</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Ticketverwaltung</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Manuelle Ausleihe</li>
+                    </ul>
+                </div>
+                <!-- Mitarbeiter -->
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h3 class="font-bold mb-2 flex items-center">
+                        <span class="badge badge-warning mr-2">Mitarbeiter</span>
+                        <span>Mitarbeiter</span>
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li><i class="fas fa-check text-success mr-1"></i>Werkzeug-Übersicht</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Verbrauchsmaterial-Übersicht</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Manuelle Ausleihe</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine Benutzerverwaltung</li>
+                    </ul>
+                </div>
+                <!-- Anwender -->
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h3 class="font-bold mb-2 flex items-center">
+                        <span class="badge badge-info mr-2">Anwender</span>
+                        <span>Benutzer</span>
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li><i class="fas fa-check text-success mr-1"></i>Werkzeug-Übersicht</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Verbrauchsmaterial-Übersicht</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine Mitarbeiter-Funktionen</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine manuelle Ausleihe</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="overflow-x-auto bg-base-100 rounded-lg shadow w-full">
         <table class="table w-full">
             <thead>

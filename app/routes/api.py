@@ -61,7 +61,8 @@ def get_tool(barcode):
                     'description': consumable['description'],
                     'category': consumable['category'],
                     'location': consumable['location'],
-                    'min_quantity': consumable['min_quantity']
+                    'min_quantity': consumable['min_quantity'],
+                    'quantity': consumable['quantity']
                 }
             })
         

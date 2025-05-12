@@ -1,114 +1,39 @@
 <!-- QuickScan Modal -->
 <dialog id="quickScanModal" class="modal">
-    <div class="modal-box max-w-4xl max-h-[95vh] flex flex-col p-4">
-        <h3 class="font-bold text-lg mb-2 text-center">QuickScan</h3>
-        
-        <!-- Progress Steps -->
-        <ul class="steps w-full mb-2">
-            <li class="step step-primary" data-content="1">Artikel scannen</li>
-            <li class="step" data-content="2">Mitarbeiter scannen</li>
-        </ul>
-        
-        <!-- Content Container -->
-        <div class="flex flex-col flex-1">
-            <!-- Permanent Info Card Container -->
-            <div id="permanentInfo" class="mb-2">
-                <div class="card bg-base-200">
-                    <div class="card-body p-8">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-                            <!-- Artikel Info -->
-                            <div class="border-b md:border-b-0 md:border-r pr-0 md:pr-12 pb-8 md:pb-0">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <i class="{{ app_labels.tools.icon }} text-primary text-2xl"></i>
-                                    <h2 class="card-title text-xl whitespace-nowrap overflow-hidden text-ellipsis">
-                                        <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
-                                        {{ app_labels.tools.name }} ausleihen
-                                    </h2>
-                                </div>
-                                <div class="divider my-2"></div>
-                                <div class="space-y-2">
-                                    <p id="processedItemInput" class="font-bold text-base opacity-50 break-words max-w-full truncate" title="">Noch kein Artikel gescannt</p>
-                                    <div class="flex flex-col items-start gap-4 mt-2">
-                                        <span id="itemTypeDisplay" class="badge badge-lg"></span>
-                                        <span id="itemStatusDisplay" class="badge badge-lg"></span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Mitarbeiter Info -->
-                            <div class="pl-0 md:pl-12">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <i class="{{ app_labels.consumables.icon }} text-secondary text-2xl"></i>
-                                    <h2 class="card-title text-xl whitespace-nowrap overflow-hidden text-ellipsis">
-                                        <i class="{{ app_labels.consumables.icon }} text-secondary mr-2"></i>
-                                        {{ app_labels.consumables.name }} ausgeben
-                                    </h2>
-                                </div>
-                                <div class="divider my-2"></div>
-                                <div class="space-y-2">
-                                    <p id="processedWorkerInput" class="font-bold text-base opacity-50">Noch kein Mitarbeiter gescannt</p>
-                                    <p id="workerDepartmentDisplay" class="text-base opacity-50">Abteilung wird nach Scan angezeigt</p>
-                                </div>
-                            </div>
-                        </div>
+    <div class="modal-box w-full max-w-4xl max-h-[95vh] flex flex-col p-4 relative">
+        <button class="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost text-xl" onclick="document.getElementById('quickScanModal').close()" aria-label="Schließen">&times;</button>
+        <h3 class="font-bold text-base mb-4 text-center">QuickScan</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 justify-center">
+            <!-- Karte: Werkzeug/Verbrauchsgut -->
+            <div id="itemCard" class="card w-[320px] h-[320px] min-w-[320px] min-h-[320px] bg-base-200 cursor-pointer transition hover:shadow-2xl hover:scale-[1.03] active:scale-[0.98] border-2 border-transparent" onclick="QuickScan.activateInput('item')">
+                <div class="card-body flex flex-col items-center justify-center h-full">
+                    <i class="fas fa-tools text-2xl text-primary mb-1"></i>
+                    <h2 class="card-title text-base mb-1">Werkzeug / Verbrauchsgut</h2>
+                    <div id="itemCardContent">
+                        <p class="text-sm opacity-50">Klicken &amp; Barcode scannen oder eingeben</p>
                     </div>
                 </div>
             </div>
-            
-            <!-- Steps Container -->
-            <div class="flex-1 flex flex-col">
-                <!-- Step 1: Artikel Scan -->
-                <div id="step1" class="scan-step flex-1">
-                    <div class="scan-area bg-base-200 rounded-lg p-4 h-[200px] flex items-center justify-center relative">
-                        <div class="scan-line"></div>
-                        <input type="text" 
-                               id="itemScanInput"
-                               class="input input-bordered w-full bg-transparent text-center opacity-0 absolute inset-0" 
-                               placeholder="Nur Barcode-Scanner Eingabe möglich"
-                               autocomplete="off"
-                               readonly>
-                        <div id="scanPrompt" class="text-center">
-                            <i class="fas fa-barcode text-4xl text-primary mb-2"></i>
-                            <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
-                        </div>
-                        <!-- Confirmation Barcode wird direkt im Scanner-Bereich angezeigt -->
-                        <div id="itemConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200 py-4">
-                            <h3 class="font-bold text-base mb-1 break-words w-full">Aktion bestätigen</h3>
-                            <p class="text-sm mb-2 break-words w-full">Scannen Sie diesen Barcode zur Bestätigung</p>
-                            <canvas id="itemConfirmBarcode" class="max-w-xs w-full mb-2"></canvas>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Step 2: Mitarbeiter Scan -->
-                <div id="step2" class="scan-step hidden flex-1">
-                    <div class="scan-area bg-base-200 rounded-lg p-4 h-[200px] flex items-center justify-center relative">
-                        <div class="scan-line"></div>
-                        <input type="text" 
-                               id="workerScanInput"
-                               class="input input-bordered w-full bg-transparent text-center opacity-0 absolute inset-0" 
-                               placeholder="Nur Barcode-Scanner Eingabe möglich"
-                               autocomplete="off"
-                               readonly>
-                        <div id="workerScanPrompt" class="text-center">
-                            <i class="fas fa-barcode text-4xl text-primary mb-2"></i>
-                            <p class="text-sm opacity-70">Bitte verwenden Sie den Barcode-Scanner</p>
-                        </div>
-                        <!-- Final Confirmation wird direkt im Scanner-Bereich angezeigt -->
-                        <div id="finalConfirm" class="text-center hidden absolute inset-0 flex flex-col items-center justify-center bg-base-200 py-4">
-                            <h3 class="font-bold text-base mb-1 break-words w-full">Vorgang bestätigen</h3>
-                            <p class="text-sm mb-2 break-words w-full">Scannen Sie diesen Barcode zur Bestätigung</p>
-                            <canvas id="finalConfirmBarcode" class="max-w-xs w-full mb-2"></canvas>
-                        </div>
+            <!-- Karte: Mitarbeiter -->
+            <div id="workerCard" class="card w-[320px] h-[320px] min-w-[320px] min-h-[320px] bg-base-200 cursor-pointer transition hover:shadow-2xl hover:scale-[1.03] active:scale-[0.98] border-2 border-transparent" onclick="QuickScan.activateInput('worker')">
+                <div class="card-body flex flex-col items-center justify-center h-full">
+                    <i class="fas fa-id-badge text-2xl text-secondary mb-1"></i>
+                    <h2 class="card-title text-base mb-1">Mitarbeiter</h2>
+                    <div id="workerCardContent">
+                        <p class="text-sm opacity-50">Klicken &amp; Barcode scannen oder eingeben</p>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="modal-action mt-2">
-            <form method="dialog">
-                <button class="btn">Schließen</button>
-            </form>
+        <!-- Sichtbares Eingabefeld, das nur bei aktiver Karte angezeigt wird -->
+        <div class="flex flex-col items-center gap-2 mt-4">
+            <div id="quickScanActiveInputContainer" class="hidden w-full max-w-sm">
+                <input type="text" id="quickScanActiveInput" class="input input-bordered w-full" autocomplete="off" />
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button class="btn btn-ghost hover:btn-warning active:scale-95 transition" type="button" onclick="QuickScan.reset()">Reset</button>
+                <button class="btn btn-primary hover:btn-success active:scale-95 transition" id="quickScanConfirmBtn" type="button" onclick="QuickScan.confirm()" disabled>Bestätigen</button>
+            </div>
         </div>
     </div>
 </dialog>

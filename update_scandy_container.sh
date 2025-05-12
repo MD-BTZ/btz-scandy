@@ -13,8 +13,8 @@ fi
 echo "Kopiere $ARCHIV in den Container..."
 docker cp "$ARCHIV" $CONTAINER:/tmp/
 
-echo "Entpacke Archiv im Container (ohne Datenbank-Verzeichnis zu überschreiben)..."
-docker exec $CONTAINER bash -c "tar --exclude='database' -xzf /tmp/$(basename $ARCHIV) -C $APP_DIR --strip-components=1"
+echo "Entpacke Archiv im Container..."
+docker exec $CONTAINER bash -c "tar -xzf /tmp/$(basename $ARCHIV) -C $APP_DIR --strip-components=1"
 
 echo "Entferne Archiv aus dem Container..."
 docker exec $CONTAINER rm /tmp/$(basename $ARCHIV)
