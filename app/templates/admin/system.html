@@ -4,91 +4,121 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-bold mb-6">Systemverwaltung</h1>
+    <h1 class="text-2xl font-bold mb-6">
+        <i class="fas fa-cogs text-primary mr-2"></i>
+        Systemverwaltung
+    </h1>
 
-    <!-- Import/Export-Bereich -->
-    <div class="card bg-base-100 shadow-xl mb-8">
-        <div class="card-body">
-            <h2 class="text-xl font-bold mb-4">Daten Export</h2>
-            <!-- Nur Export Section -->
-            <div>
-                <h3 class="text-lg font-semibold mb-3">Gesamtdaten Exportieren</h3>
-                <a href="{{ url_for('admin.export_all_data') }}" 
-                    class="btn btn-primary w-full md:w-auto">
-                    <i class="fas fa-file-excel mr-2"></i>Gesamtdaten exportieren (Excel)
-                </a>
-                <p class="text-xs mt-2 text-base-content/70">Exportiert Werkzeuge, Mitarbeiter, Verbrauchsmaterial und Verlauf in eine Excel-Datei mit mehreren Arbeitsblättern.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Daten Export -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-file-export text-primary mr-2"></i>
+                    Daten Export
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3">Gesamtdaten Exportieren</h3>
+                        <a href="{{ url_for('admin.export_all_data') }}" 
+                            class="btn btn-primary w-full md:w-auto">
+                            <i class="fas fa-file-excel mr-2"></i>Gesamtdaten exportieren (Excel)
+                        </a>
+                        <p class="text-xs mt-2 text-base-content/70">Exportiert {{ app_labels.tools.name }}, Mitarbeiter, {{ app_labels.consumables.name }} und Verlauf in eine Excel-Datei mit mehreren Arbeitsblättern.</p>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Gesamt-Import (NotBackup) -->
-    <div class="card bg-base-100 shadow-xl mb-8">
-        <div class="card-body">
-            <h2 class="text-xl font-bold mb-4 text-warning"><i class="fas fa-exclamation-triangle mr-2"></i>Daten Import (NotBackup)</h2>
-            <p class="mb-4 text-sm">Diese Funktion dient zum Importieren von Daten aus einer zuvor exportierten Gesamt-Excel-Datei. 
-                <strong>Achtung:</strong> Bestehende Einträge (Werkzeuge, Mitarbeiter, Verbrauchsmaterial) mit demselben Barcode werden überschrieben! 
-                Der Verlauf wird nicht importiert. Nutzen Sie die reguläre Backup-Funktion für eine vollständige Daten-Sicherung und -Wiederherstellung.</p>
-            <form action="{{ url_for('admin.import_all_data') }}" method="post" enctype="multipart/form-data" class="flex flex-col md:flex-row gap-2 items-start md:items-end">
-                <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered file-input-warning w-full max-w-xs" required>
-                <button type="submit" class="btn btn-warning">
-                    <i class="fas fa-upload mr-2"></i>Gesamt-Datei importieren
-                </button>
-            </form>
+        <!-- Daten Import -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-warning">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Daten Import (NotBackup)
+                </h2>
+                <p class="mb-4 text-sm">Diese Funktion dient zum Importieren von Daten aus einer zuvor exportierten Gesamt-Excel-Datei. 
+                    <strong>Achtung:</strong> Bestehende Einträge ({{ app_labels.tools.name }}, Mitarbeiter, {{ app_labels.consumables.name }}) mit demselben Barcode werden überschrieben! 
+                    Der Verlauf wird nicht importiert. Nutzen Sie die reguläre Backup-Funktion für eine vollständige Daten-Sicherung und -Wiederherstellung.</p>
+                <form action="{{ url_for('admin.import_all_data') }}" method="post" enctype="multipart/form-data" class="flex flex-col md:flex-row gap-2 items-start md:items-end">
+                    <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered file-input-warning w-full max-w-xs" required>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-upload mr-2"></i>Gesamt-Datei importieren
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Backup-Verwaltung -->
-    <div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card bg-base-100 shadow-xl mb-8">
         <div class="card-body">
-            <h2 class="text-xl font-bold mb-4">Backup-Verwaltung</h2>
-            <!-- Aktuelle Datenbank & Backup Erstellen Buttons -->
-            <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <h3 class="text-lg font-semibold mb-2">Aktuelle Datenbank</h3>
-                    <button id="downloadCurrentBtn" class="btn btn-primary w-full">
-                        <i class="fas fa-download mr-2"></i> Aktuelle DB herunterladen
-                    </button>
-                </div>
-                <div>
-                    <h3 class="text-lg font-semibold mb-2">Backup Erstellen</h3>
-                    <button id="createBackupBtn" class="btn btn-secondary w-full"> <!-- Klasse geändert zu btn-secondary -->
-                        <i class="fas fa-save mr-2"></i> Neues Backup erstellen
-                    </button>
-                </div>
-            </div>
+            <h2 class="card-title">
+                <i class="fas fa-database text-primary mr-2"></i>
+                Backup-Verwaltung
+            </h2>
             
-            <!-- Backup Hochladen -->
-            <div class="mb-6">
-                <h3 class="text-lg font-semibold mb-2">Backup hochladen & Wiederherstellen</h3>
-                <form id="uploadBackupForm" class="flex flex-col md:flex-row gap-2 items-start md:items-end">
-                    <input type="file" name="file" accept=".db" class="file-input file-input-bordered w-full max-w-xs" required>
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-upload mr-2"></i> Hochladen & Aktivieren
-                    </button>
-                </form>
-                <p class="text-xs mt-2 text-base-content/70">Achtung: Die aktuelle Datenbank wird überschrieben! Es wird automatisch ein Backup der aktuellen DB erstellt.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <!-- Aktuelle Datenbank -->
+                <div class="stat bg-base-200 rounded-box">
+                    <div class="stat-figure text-primary">
+                        <i class="fas fa-database text-3xl"></i>
+                    </div>
+                    <div class="stat-title">Aktuelle Datenbank</div>
+                    <div class="stat-actions">
+                        <button id="downloadCurrentBtn" class="btn btn-sm btn-primary">
+                            <i class="fas fa-download mr-2"></i>Herunterladen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Backup Erstellen -->
+                <div class="stat bg-base-200 rounded-box">
+                    <div class="stat-figure text-secondary">
+                        <i class="fas fa-save text-3xl"></i>
+                    </div>
+                    <div class="stat-title">Backup Erstellen</div>
+                    <div class="stat-actions">
+                        <button id="createBackupBtn" class="btn btn-sm btn-secondary">
+                            <i class="fas fa-save mr-2"></i>Neues Backup
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Backup Hochladen -->
+                <div class="stat bg-base-200 rounded-box">
+                    <div class="stat-figure text-warning">
+                        <i class="fas fa-upload text-3xl"></i>
+                    </div>
+                    <div class="stat-title">Backup Hochladen</div>
+                    <div class="stat-actions">
+                        <form id="uploadBackupForm" class="flex gap-2">
+                            <input type="file" name="file" accept=".db" class="file-input file-input-bordered file-input-sm w-full max-w-xs" required>
+                            <button type="submit" class="btn btn-sm btn-warning">
+                                <i class="fas fa-upload"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
 
             <!-- Backup-Liste -->
-            <div>
-                <h3 class="text-lg font-semibold mb-2">Verfügbare Backups</h3>
-                <div class="overflow-x-auto rounded-lg border border-base-200">
-                    <table class="table table-compact w-full">
-                        <thead class="bg-base-200">
-                            <tr>
-                                <th>Name</th>
-                                <th>Größe</th>
-                                <th>Erstellt am</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="backupsList">
-                            <!-- Wird per JavaScript gefüllt -->
-                        </tbody>
-                    </table>
-                </div>
+            <div class="overflow-x-auto rounded-lg border border-base-300">
+                <table class="table table-compact w-full">
+                    <thead class="bg-base-200">
+                        <tr>
+                            <th>Name</th>
+                            <th>Größe</th>
+                            <th>Erstellt am</th>
+                            <th class="text-right">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupsList">
+                        <!-- Wird per JavaScript gefüllt -->
+                    </tbody>
+                </table>
             </div>
+            <p class="text-xs mt-2 text-base-content/70">Achtung: Beim Hochladen eines Backups wird die aktuelle Datenbank überschrieben. Es wird automatisch ein Backup der aktuellen DB erstellt.</p>
         </div>
     </div>
 
@@ -106,54 +136,73 @@
     </dialog>
 
     <!-- Begriffe & Icons Verwaltung -->
-    <div class="card bg-base-100 shadow-xl mb-8">
+    <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-            <h2 class="text-xl font-bold mb-4">Begriffe & Icons</h2>
+            <h2 class="card-title">
+                <i class="fas fa-tags text-primary mr-2"></i>
+                Begriffe & Icons
+            </h2>
             <form method="POST" action="{{ url_for('admin.system') }}">
-                <div class="form-control mb-2">
-                    <label class="label">
-                        <span class="label-text">Name für Verleihgegenstände</span>
-                    </label>
-                    <input type="text" name="label_tools_name" class="input input-bordered" value="{{ app_labels['tools']['name'] }}" placeholder="z.B. Werkzeuge, Geräte, Maschinen">
-                </div>
-                <div class="form-control mb-2 relative">
-                    <label class="label flex items-center gap-2">
-                        <span class="label-text">Icon für Verleihgegenstände</span>
-                    </label>
-                    <input type="hidden" name="label_tools_icon" id="tools-icon-input" value="{{ app_labels['tools']['icon'] }}">
-                    <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-200 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tools')">
-                        <span><i id="tools-icon-preview" class="{{ app_labels['tools']['icon'] }} text-xl"></i></span>
-                        <span class="ml-2">Icon wählen</span>
-                        <i class="fas fa-chevron-down ml-auto"></i>
-                    </button>
-                    <div id="tools-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
-                        <input type="text" id="tools-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('tools')">
-                        <div id="tools-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Verleihgegenstände -->
+                    <div class="card bg-base-200">
+                        <div class="card-body">
+                            <h3 class="text-lg font-semibold mb-4">{{ app_labels.tools.name }}</h3>
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text">Name</span>
+                                </label>
+                                <input type="text" name="label_tools_name" class="input input-bordered" value="{{ app_labels['tools']['name'] }}" placeholder="z.B. Werkzeuge, Geräte, Maschinen">
+                            </div>
+                            <div class="form-control relative">
+                                <label class="label flex items-center gap-2">
+                                    <span class="label-text">Icon</span>
+                                </label>
+                                <input type="hidden" name="label_tools_icon" id="tools-icon-input" value="{{ app_labels['tools']['icon'] }}">
+                                <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tools')">
+                                    <span><i id="tools-icon-preview" class="{{ app_labels['tools']['icon'] }} text-xl"></i></span>
+                                    <span class="ml-2">Icon wählen</span>
+                                    <i class="fas fa-chevron-down ml-auto"></i>
+                                </button>
+                                <div id="tools-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
+                                    <input type="text" id="tools-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('tools')">
+                                    <div id="tools-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Verbrauchsmaterial -->
+                    <div class="card bg-base-200">
+                        <div class="card-body">
+                            <h3 class="text-lg font-semibold mb-4">{{ app_labels.consumables.name }}</h3>
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text">Name</span>
+                                </label>
+                                <input type="text" name="label_consumables_name" class="input input-bordered" value="{{ app_labels['consumables']['name'] }}" placeholder="z.B. Verbrauchsmaterial, Material, Artikel">
+                            </div>
+                            <div class="form-control relative">
+                                <label class="label flex items-center gap-2">
+                                    <span class="label-text">Icon</span>
+                                </label>
+                                <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ app_labels['consumables']['icon'] }}">
+                                <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('consumables')">
+                                    <span><i id="consumables-icon-preview" class="{{ app_labels['consumables']['icon'] }} text-xl"></i></span>
+                                    <span class="ml-2">Icon wählen</span>
+                                    <i class="fas fa-chevron-down ml-auto"></i>
+                                </button>
+                                <div id="consumables-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
+                                    <input type="text" id="consumables-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('consumables')">
+                                    <div id="consumables-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="form-control mb-2">
-                    <label class="label">
-                        <span class="label-text">Bezeichnung für Verbrauchsmaterial</span>
-                    </label>
-                    <input type="text" name="label_consumables_name" class="input input-bordered" value="{{ app_labels['consumables']['name'] }}" placeholder="z.B. Verbrauchsmaterial, Material, Artikel">
-                </div>
-                <div class="form-control mb-4 relative">
-                    <label class="label flex items-center gap-2">
-                        <span class="label-text">Icon für Verbrauchsmaterial</span>
-                    </label>
-                    <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ app_labels['consumables']['icon'] }}">
-                    <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-200 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('consumables')">
-                        <span><i id="consumables-icon-preview" class="{{ app_labels['consumables']['icon'] }} text-xl"></i></span>
-                        <span class="ml-2">Icon wählen</span>
-                        <i class="fas fa-chevron-down ml-auto"></i>
-                    </button>
-                    <div id="consumables-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
-                        <input type="text" id="consumables-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('consumables')">
-                        <div id="consumables-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
-                    </div>
-                </div>
-                <div class="card-actions justify-end">
+                <div class="card-actions justify-end mt-6">
                     <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>
                         Begriffe speichern
                     </button>
                 </div>
