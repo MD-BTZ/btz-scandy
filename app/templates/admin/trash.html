@@ -11,16 +11,16 @@
                 Papierkorb
             </h1>
             <div class="text-sm text-gray-500 mb-4">
-                <p>Anzahl gelöschter Werkzeuge: {{ tools|length }}</p>
-                <p>Anzahl gelöschter Verbrauchsmaterialien: {{ consumables|length }}</p>
+                <p>Anzahl gelöschter {{ app_labels.tools.name }}: {{ tools|length }}</p>
+                <p>Anzahl gelöschter {{ app_labels.consumables.name }}: {{ consumables|length }}</p>
                 <p>Anzahl gelöschter Mitarbeiter: {{ workers|length }}</p>
             </div>
         </div>
     </div>
 
-    <!-- Werkzeuge Tabelle -->
+    <!-- {{ app_labels.tools.name }} Tabelle -->
     <div class="mb-8">
-        <h2 class="text-xl font-bold mb-2">Gelöschte Werkzeuge</h2>
+        <h2 class="text-xl font-bold mb-2">Gelöschte {{ app_labels.tools.name }}</h2>
         <div class="card bg-base-100 shadow">
             <div class="card-body">
                 <div class="overflow-x-auto w-full">
@@ -51,7 +51,7 @@
                                 </td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="6" class="text-center py-4">Keine gelöschten Werkzeuge vorhanden</td></tr>
+                            <tr><td colspan="6" class="text-center py-4">Keine gelöschten {{ app_labels.tools.name }} vorhanden</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

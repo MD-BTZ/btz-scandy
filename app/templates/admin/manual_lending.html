@@ -51,7 +51,7 @@
                         <!-- Werkzeug-Liste -->
                         <div id="toolsList" class="h-96 overflow-hidden bg-white rounded-lg shadow">
                             <div class="p-4 border-b">
-                                <h3 class="font-semibold">Werkzeuge</h3>
+                                <h3 class="font-semibold">{{ app_labels.tools.name }}</h3>
                             </div>
                             <select size="10" 
                                     id="toolSelect"
@@ -76,7 +76,7 @@
                         <!-- Verbrauchsmaterial-Liste -->
                         <div id="consumablesList" class="h-96 overflow-hidden bg-white rounded-lg shadow hidden">
                             <div class="p-4 border-b">
-                                <h3 class="font-semibold">Verbrauchsmaterial</h3>
+                                <h3 class="font-semibold">{{ app_labels.consumables.name }}</h3>
                             </div>
                             <select size="10" 
                                     id="consumableSelect"
@@ -166,7 +166,7 @@
                             <div id="previewItem">Kein Artikel ausgewählt</div>
                         </div>
                         
-                        <!-- Mengenfeld (nur für Verbrauchsmaterial) -->
+                        <!-- Mengenfeld (nur für {{ app_labels.consumables.name }}) -->
                         <div id="amountField" class="mb-4 hidden">
                             <label class="text-sm font-medium text-gray-500">Menge</label>
                             <input type="number" 
@@ -203,8 +203,8 @@
     <div class="flex gap-4 mb-4">
         <select id="categoryFilter" class="select select-bordered">
             <option value="">Alle Kategorien</option>
-            <option value="Werkzeug">Werkzeuge</option>
-            <option value="Verbrauchsmaterial">Verbrauchsmaterial</option>
+            <option value="{{ app_labels.tools.name }}">{{ app_labels.tools.name }}</option>
+            <option value="{{ app_labels.consumables.name }}">{{ app_labels.consumables.name }}</option>
         </select>
         <input type="text" 
                id="searchInput" 
@@ -244,7 +244,7 @@
                     <td class="px-4 py-2">{{ lending.worker_name }}</td>
                     <td class="px-4 py-2">{{ lending.worker_barcode }}</td>
                     <td class="px-4 py-2">
-                        {% if lending.category == 'Werkzeug' %}
+                        {% if lending.category == app_labels.tools.name %}
                             Ausgeliehen am {{ lending.action_date }}
                         {% else %}
                             Ausgegeben am {{ lending.action_date }}
@@ -252,17 +252,17 @@
                     </td>
                     <td class="px-4 py-2">{{ lending.category }}</td>
                     <td class="px-4 py-2">
-                        {% if lending.category == 'Verbrauchsmaterial' %}
+                        {% if lending.category == app_labels.consumables.name %}
                             {{ lending.amount }} Stk
                         {% else %}
                             -
                         {% endif %}
                     </td>
                     <td class="px-4 py-2">
-                        {% if lending.category == 'Werkzeug' %}
+                        {% if lending.category == app_labels.tools.name %}
                             <button class="btn btn-sm btn-error" 
                                     data-barcode="{{ lending.item_barcode }}"
-                                    title="Werkzeug zurückgeben">
+                                    title="{{ app_labels.tools.name }} zurückgeben">
                                 <i class="fas fa-undo-alt"></i> Zurückgeben
                             </button>
                         {% endif %}
@@ -364,7 +364,7 @@ const ManualLending = {
             name.textContent = this.selectedItem.name;
             barcode.textContent = this.selectedItem.barcode;
             
-            // Zeige Bestandsinfo nur bei Verbrauchsmaterial
+            // Zeige Bestandsinfo nur bei {{ app_labels.consumables.name }}
             if (quantity) {
                 quantity.classList.toggle('hidden', this.selectedItem.type !== 'consumable');
             }
@@ -450,7 +450,7 @@ const ManualLending = {
                 item_type: this.selectedItem.type
             };
             
-            // Menge für Verbrauchsmaterial hinzufügen
+            // Menge für {{ app_labels.consumables.name }} hinzufügen
             if (this.selectedItem.type === 'consumable') {
                 const amount = document.getElementById('amount').value;
                 if (!amount || amount < 1) {
@@ -563,7 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function returnTool(barcode) {
-    if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+    if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {
         return;
     }
     

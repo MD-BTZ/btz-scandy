@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Werkzeug hinzufügen{% endblock %}
+{% block title %}{{ app_labels.tools.name }} hinzufügen{% endblock %}
 
 {% block content %}
 <div class="card bg-base-100 shadow-xl">
     <div class="card-body">
-        <h2 class="card-title mb-4">Neues Werkzeug hinzufügen</h2>
+        <h2 class="card-title mb-4">Neues {{ app_labels.tools.name }} hinzufügen</h2>
         
         <form method="POST" action="{{ url_for('tools.add') }}" class="max-w-lg">
             <div class="form-control mb-4">

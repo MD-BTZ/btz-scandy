@@ -24,44 +24,47 @@
                 Schritt 1: Stammdaten pflegen (Admin-Bereich)
             </div>
             <div class="collapse-content bg-base-100 peer-checked:bg-base-200">
-            <div class="card-body">
-                    <p class="mb-4 text-sm opacity-75">Bevor Sie Werkzeuge, Material oder Mitarbeiter hinzufügen, sollten Sie Kategorien, Standorte und Abteilungen definieren. Diese werden später in Dropdown-Menüs benötigt.</p>
-                    
-                    <div class="alert alert-info mb-4 text-sm">
-                        <div><i class="fas fa-info-circle mr-2"></i>Diese Einstellungen finden Sie im Admin-Bereich unter <strong>System</strong>.</div>
-                </div>
+                <div class="card-body">
+                    <p class="mb-4 text-sm opacity-75">Bevor Sie mit der Nutzung beginnen, müssen einige grundlegende Einstellungen vorgenommen werden.</p>
 
-                    <div class="space-y-4">
-                                        <div>
-                            <h4 class="font-bold mb-1">Kategorien verwalten</h4>
-                            <p class="text-sm mb-2 opacity-75">Dienen zur Gruppierung von Werkzeugen und/oder Verbrauchsmaterial (z.B. "Schraubendreher", "Elektrowerkzeug", "Reinigungsmittel").</p>
+                    <div class="space-y-6">
+                        <!-- Kategorien verwalten -->
+                        <div>
+                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-tags mr-2"></i>Kategorien verwalten</h4>
+                            <p class="text-sm mb-2 opacity-75">Erstellen Sie Kategorien für Ihre Werkzeuge und Materialien (z.B. "Handwerkzeuge", "Elektrowerkzeuge", "Verbrauchsmaterial").</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
-                                <li>Navigieren Sie zu <strong>Admin</strong> -> <strong>System</strong>.</li>
+                                <li>Navigieren Sie zum <strong>Dashboard</strong>.</li>
                                 <li>Suchen Sie den Abschnitt "Kategorien".</li>
-                                <li>Klicken Sie auf <strong>"Neu hinzufügen"</strong>, geben Sie den Namen ein und speichern Sie.</li>
-                                <li>Über die Icons können Sie festlegen, ob eine Kategorie für Werkzeuge und/oder Verbrauchsmaterial gilt.</li>
+                                <li>Geben Sie den Namen der neuen Kategorie in das Eingabefeld ein.</li>
+                                <li>Klicken Sie auf den Button <strong>"Hinzufügen"</strong>.</li>
                                 <li>Zum Löschen auf das Mülleimer-Icon klicken (nur möglich, wenn die Kategorie nicht mehr verwendet wird).</li>
-                                            </ul>
+                            </ul>
                         </div>
-                                        <div>
-                            <h4 class="font-bold mb-1">Standorte verwalten</h4>
-                            <p class="text-sm mb-2 opacity-75">Definieren Sie Lagerorte oder Bereiche (z.B. "Lager Halle 1", "Werkstatt West", "Bürobedarf").</p>
+
+                        <!-- Standorte verwalten -->
+                        <div>
+                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-map-marker-alt mr-2"></i>Standorte verwalten</h4>
+                            <p class="text-sm mb-2 opacity-75">Definieren Sie Lagerorte für Ihre Werkzeuge und Materialien (z.B. "Werkzeugraum", "Lager", "Werkstatt").</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
-                                <li>Navigieren Sie zu <strong>Admin</strong> -> <strong>System</strong>.</li>
+                                <li>Navigieren Sie zum <strong>Dashboard</strong>.</li>
                                 <li>Suchen Sie den Abschnitt "Standorte".</li>
-                                <li>Klicken Sie auf <strong>"Neu hinzufügen"</strong>, geben Sie den Namen ein und speichern Sie.</li>
+                                <li>Geben Sie den Namen des neuen Standorts in das Eingabefeld ein.</li>
+                                <li>Klicken Sie auf den Button <strong>"Hinzufügen"</strong>.</li>
                                 <li>Zum Löschen auf das Mülleimer-Icon klicken (nur möglich, wenn der Standort nicht mehr verwendet wird).</li>
-                                            </ul>
+                            </ul>
                         </div>
-                <div>
+
+                        <!-- Abteilungen verwalten -->
+                        <div>
                             <h4 class="font-bold mb-1">Abteilungen verwalten</h4>
                             <p class="text-sm mb-2 opacity-75">Ordnen Sie Mitarbeiter Abteilungen zu (z.B. "Elektro", "Sanitär", "Verwaltung").</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
-                                <li>Navigieren Sie zu <strong>Admin</strong> -> <strong>System</strong>.</li>
+                                <li>Navigieren Sie zum <strong>Dashboard</strong>.</li>
                                 <li>Suchen Sie den Abschnitt "Abteilungen".</li>
-                                <li>Klicken Sie auf <strong>"Neu hinzufügen"</strong>, geben Sie den Namen ein und speichern Sie.</li>
+                                <li>Geben Sie den Namen der neuen Abteilung in das Eingabefeld ein.</li>
+                                <li>Klicken Sie auf den Button <strong>"Hinzufügen"</strong>.</li>
                                 <li>Zum Löschen auf das Mülleimer-Icon klicken (nur möglich, wenn die Abteilung keinem Mitarbeiter mehr zugewiesen ist).</li>
-                                            </ul>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -73,10 +76,10 @@
              <input type="checkbox" class="peer" />
              <div class="collapse-title text-xl font-medium peer-checked:bg-base-200">
                 <i class="fas fa-database mr-2"></i>
-                Schritt 2: Mitarbeiter, Werkzeuge & Material anlegen
+                Schritt 2: Mitarbeiter, {{ app_labels.tools.name }} & {{ app_labels.consumables.name }} anlegen
             </div>
             <div class="collapse-content bg-base-100 peer-checked:bg-base-200">
-            <div class="card-body">
+                <div class="card-body">
                     <p class="mb-4 text-sm opacity-75">Nachdem die Stammdaten gepflegt sind, können Sie die eigentlichen Inventar- und Personendaten erfassen.</p>
 
                     <div class="space-y-6">
@@ -86,7 +89,7 @@
                             <p class="text-sm mb-2 opacity-75">Erfassen Sie alle Personen, die Werkzeuge ausleihen oder Material entnehmen sollen.</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
                                 <li>Navigieren Sie zum Menüpunkt <strong>Mitarbeiter</strong>.</li>
-                                <li>Klicken Sie auf den Button <strong>"Mitarbeiter hinzufügen"</strong>.</li>
+                                <li>Klicken Sie auf den Button <strong>"Neuer Mitarbeiter"</strong>.</li>
                                 <li>Füllen Sie die Felder aus:
                                     <ul class="list-circle list-inside ml-4">
                                         <li><strong>Vorname & Nachname:</strong> Selbsterklärend.</li>
@@ -95,37 +98,38 @@
                                         <li><strong>Email (Optional):</strong> Für Benachrichtigungen (falls implementiert).</li>
                                     </ul>
                                 </li>
-                                <li>Klicken Sie auf <strong>Speichern</strong>.</li>
+                                <li>Klicken Sie auf <strong>Hinzufügen</strong>.</li>
                             </ul>
                         </div>
                         
                         <!-- Werkzeuge hinzufügen -->
                         <div>
-                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-tools mr-2"></i>Werkzeuge hinzufügen</h4>
-                            <p class="text-sm mb-2 opacity-75">Erfassen Sie alle Werkzeuge, die verwaltet werden sollen.</p>
+                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-tools mr-2"></i>{{ app_labels.tools.name }} hinzufügen</h4>
+                            <p class="text-sm mb-2 opacity-75">Erfassen Sie alle {{ app_labels.tools.name }}, die ausgeliehen werden können.</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
-                                <li>Navigieren Sie zum Menüpunkt <strong>Werkzeuge</strong>.</li>
-                                <li>Klicken Sie auf den Button <strong>"Werkzeug hinzufügen"</strong>.</li>
+                                <li>Navigieren Sie zum Menüpunkt <strong>{{ app_labels.tools.name }}</strong>.</li>
+                                <li>Klicken Sie auf den Button <strong>"{{ app_labels.tools.name }} hinzufügen"</strong>.</li>
                                 <li>Füllen Sie die Felder aus:
                                     <ul class="list-circle list-inside ml-4">
-                                        <li><strong>Name:</strong> Eindeutige Bezeichnung (z.B. "Akkuschrauber Bosch Blau #3").</li>
-                                        <li><strong>Barcode:</strong> <span class="font-bold text-error">Sehr wichtig!</span> Scannen oder geben Sie den Barcode ein, der *physisch auf dem Werkzeug angebracht ist*. Dieser Barcode dient zur Identifikation. Er muss eindeutig sein.</li>
+                                        <li><strong>Name:</strong> Eindeutige Bezeichnung (z.B. "Bohrmaschine Bosch GSB 18V").</li>
+                                        <li><strong>Barcode:</strong> <span class="font-bold text-error">Sehr wichtig!</span> Scannen oder geben Sie den Barcode ein, der *am {{ app_labels.tools.name }}* angebracht ist. Dieser Barcode dient zur Identifikation. Er muss eindeutig sein.</li>
                                         <li><strong>Kategorie:</strong> Wählen Sie eine passende, zuvor angelegte Kategorie.</li>
                                         <li><strong>Standort:</strong> Wählen Sie den Lagerort aus.</li>
-                                        <li><strong>Beschreibung (Optional):</strong> Weitere Details zum Werkzeug.</li>
+                                        <li><strong>Status:</strong> Wählen Sie "Verfügbar" oder "Defekt".</li>
+                                        <li><strong>Beschreibung (Optional):</strong> Weitere Details.</li>
                                     </ul>
                                 </li>
-                                <li>Klicken Sie auf <strong>Speichern</strong>. Der Status ist standardmäßig "Verfügbar".</li>
+                                <li>Klicken Sie auf <strong>Hinzufügen</strong>.</li>
                             </ul>
                         </div>
 
                         <!-- Verbrauchsmaterial hinzufügen -->
                         <div>
-                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-box mr-2"></i>Verbrauchsmaterial hinzufügen</h4>
-                            <p class="text-sm mb-2 opacity-75">Erfassen Sie alle Verbrauchsmaterialien.</p>
+                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-box mr-2"></i>{{ app_labels.consumables.name }} hinzufügen</h4>
+                            <p class="text-sm mb-2 opacity-75">Erfassen Sie alle {{ app_labels.consumables.name }}.</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
-                                <li>Navigieren Sie zum Menüpunkt <strong>Material</strong>.</li>
-                                <li>Klicken Sie auf den Button <strong>"Material hinzufügen"</strong>.</li>
+                                <li>Navigieren Sie zum Menüpunkt <strong>{{ app_labels.consumables.name }}</strong>.</li>
+                                <li>Klicken Sie auf den Button <strong>"{{ app_labels.consumables.name }} hinzufügen"</strong>.</li>
                                 <li>Füllen Sie die Felder aus:
                                     <ul class="list-circle list-inside ml-4">
                                         <li><strong>Name:</strong> Eindeutige Bezeichnung (z.B. "Schrauben Senkkopf 4x40mm").</li>
@@ -137,7 +141,7 @@
                                         <li><strong>Beschreibung (Optional):</strong> Weitere Details.</li>
                                     </ul>
                                 </li>
-                                <li>Klicken Sie auf <strong>Speichern</strong>.</li>
+                                <li>Klicken Sie auf <strong>Hinzufügen</strong>.</li>
                             </ul>
                         </div>
                     </div>
@@ -151,52 +155,45 @@
             <div class="collapse-title text-xl font-medium peer-checked:bg-base-200">
                 <i class="fas fa-barcode mr-2"></i>
                 Schritt 3: Scannen & Manuelle Vorgänge
-                                        </div>
+            </div>
             <div class="collapse-content bg-base-100 peer-checked:bg-base-200">
-                            <div class="card-body">
+                <div class="card-body">
                     <p class="mb-4 text-sm opacity-75">Nachdem das System eingerichtet ist, können die Hauptprozesse durchgeführt werden.</p>
 
                     <div class="space-y-6">
                         <!-- Quick-Scan -->
-                                            <div>
-                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-camera mr-2"></i>Der Quick-Scan Prozess (Empfohlen)</h4>
+                        <div>
+                            <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-bolt mr-2"></i>Quick-Scan</h4>
                             <p class="text-sm mb-2 opacity-75">Der schnellste Weg, um Ausleihen, Rückgaben und Materialentnahmen zu erfassen.</p>
                             <ol class="list-decimal list-inside text-sm space-y-2">
                                 <li>Öffnen Sie <strong>Quick-Scan</strong> über die Navigation oder den prominenten Button.</li>
                                 <li>Das System ist bereit für den ersten Scan.</li>
                                 <li>
-                                    <strong>Werkzeug Ausleihe:</strong>
+                                    <strong>{{ app_labels.tools.name }} Ausleihe/Rückgabe:</strong>
                                     <ul class="list-disc list-inside ml-4">
-                                        <li>Scannen Sie den Barcode des <span class="font-bold">Werkzeugs</span>.</li>
+                                        <li>Scannen Sie den Barcode des <span class="font-bold">{{ app_labels.tools.name }}</span>.</li>
                                         <li>Das System zeigt Details an und prüft den Status.</li>
-                                        <li>Wenn verfügbar: Scannen Sie den Barcode Ihres <span class="font-bold">Mitarbeiterausweises</span>.</li>
-                                        <li>Fertig! Die Ausleihe wird gespeichert.</li>
-                                                </ul>
+                                        <li>Klicken Sie auf <strong>"Ausleihen/Zurückgeben"</strong>.</li>
+                                        <li>Wenn es sich um eine Ausleihe handelt: Scannen Sie den Barcode Ihres <span class="font-bold">Mitarbeiterausweises</span>.</li>
+                                        <li>Fertig! Die Aktion wird gespeichert.</li>
+                                    </ul>
                                 </li>
                                 <li>
-                                    <strong>Werkzeug Rückgabe:</strong>
+                                    <strong>{{ app_labels.consumables.name }} Entnahme:</strong>
                                     <ul class="list-disc list-inside ml-4">
-                                        <li>Scannen Sie den Barcode des <span class="font-bold">Werkzeugs</span>, das Sie zurückgeben möchten.</li>
-                                        <li>Das System erkennt, dass es ausgeliehen ist.</li>
-                                        <li>Optional: Melden Sie einen Defekt über den entsprechenden Button.</li>
-                                        <li>Fertig! Die Rückgabe wird gespeichert.</li>
-                                                </ul>
-                                </li>
-                                <li>
-                                    <strong>Material Entnahme:</strong>
-                                    <ul class="list-disc list-inside ml-4">
-                                        <li>Scannen Sie den Barcode des <span class="font-bold">Verbrauchsmaterials</span>.</li>
+                                        <li>Scannen Sie den Barcode des <span class="font-bold">{{ app_labels.consumables.name }}</span>.</li>
                                         <li>Das System zeigt Details und Bestand an.</li>
+                                        <li>Klicken Sie auf <strong>"{{ app_labels.consumables.name }} nutzen"</strong>.</li>
                                         <li>Geben Sie die <span class="font-bold">Menge</span> ein, die Sie entnehmen möchten.</li>
                                         <li>Scannen Sie den Barcode Ihres <span class="font-bold">Mitarbeiterausweises</span>.</li>
                                         <li>Fertig! Die Entnahme wird gespeichert und der Bestand reduziert.</li>
-                                                </ul>
+                                    </ul>
                                 </li>
                             </ol>
-                    </div>
+                        </div>
 
                         <!-- Manuelle Ausleihe/Ausgabe -->
-                    <div>
+                        <div>
                             <h4 class="font-bold mb-1 flex items-center"><i class="fas fa-edit mr-2"></i>Manuelle Ausleihe / Ausgabe (Alternative)</h4>
                             <p class="text-sm mb-2 opacity-75">Nützlich, wenn der Scanner nicht funktioniert, Barcodes unlesbar sind oder für spezielle Korrekturen.</p>
                             <ul class="list-disc list-inside text-sm space-y-1">
@@ -207,7 +204,7 @@
                                 <li>Geben Sie bei Materialausgabe die <strong>Menge</strong> an.</li>
                                 <li>Klicken Sie auf den Button <strong>"Aktion durchführen"</strong>.</li>
                                 <li>Eine Übersicht der letzten manuellen Vorgänge und aktuellen Ausleihen wird ebenfalls angezeigt.</li>
-                                                </ul>
+                            </ul>
                         </div>
                     </div>
                 </div>

@@ -14,7 +14,7 @@
 <div class="container mx-auto px-4 py-8">
     <!-- Statistik-Karten: immer eigene Zeile -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
-        <!-- Werkzeug-Statistiken -->
+        <!-- {{ app_labels.tools.name }}-Statistiken -->
         <div class="card bg-base-100 shadow-md h-80">
             <div class="card-body p-3 h-full flex flex-col justify-between">
                 <h2 class="card-title text-base mb-2">
@@ -41,7 +41,7 @@
                 </div>
             </div>
         </div>
-        <!-- Verbrauchsmaterial-Statistiken -->
+        <!-- {{ app_labels.consumables.name }}-Statistiken -->
         <div class="card bg-base-100 shadow-md h-80">
             <div class="card-body p-3 h-full flex flex-col justify-between">
                 <h2 class="card-title text-base mb-2">
@@ -128,7 +128,7 @@
 
     <!-- Warnungen und Hinweise: eigene Zeile -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <!-- Werkzeug-Warnungen -->
+        <!-- {{ app_labels.tools.name }}-Warnungen -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
@@ -164,7 +164,7 @@
             </div>
         </div>
 
-        <!-- Verbrauchsmaterial-Warnungen -->
+        <!-- {{ app_labels.consumables.name }}-Warnungen -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
@@ -433,7 +433,7 @@ function showToast(type, message) {
 }
 
 function returnTool(barcode) {
-    if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+    if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {
         return;
     }
     

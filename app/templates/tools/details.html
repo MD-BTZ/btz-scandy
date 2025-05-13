@@ -96,7 +96,7 @@
 <!-- Edit Modal -->
 <dialog id="editModal" class="modal">
     <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
+        <h3 class="font-bold text-lg mb-4">{{ app_labels.tools.name }} bearbeiten</h3>
         <form id="editForm" method="POST" action="{{ url_for('tools.update', id=tool.id) }}">
             <div class="form-control">
                 <label class="label">
