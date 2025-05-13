@@ -131,7 +131,7 @@ function setupBackupHandlers() {
 
 // Backup erstellen
 async function createBackup() {
-    console.log("createBackup function called!"); // Log 7: Inside createBackup function
+    console.log("createBackup function called!");
     try {
         const response = await fetch('/admin/backup/create', {
             method: 'POST'
@@ -206,15 +206,17 @@ async function deleteBackup(filename) {
         const response = await fetch(`/admin/backup/delete/${filename}`, {
             method: 'POST',
             headers: {
+                'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
         });
         
-        if (response.ok) {
+        const data = await response.json();
+        
+        if (data.status === 'success') {
             showSuccess('Backup wurde erfolgreich gelöscht');
             loadBackups();
         } else {
-            const data = await response.json();
             showError(data.message || 'Fehler beim Löschen des Backups');
         }
     } catch (error) {

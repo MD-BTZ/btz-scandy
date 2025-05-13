@@ -2,11 +2,11 @@ from flask import Blueprint, send_file, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
-from ..database import Database
+from app.models.database import Database
 import shutil
 import logging
 
-bp = Blueprint('backup', __name__, url_prefix='/backup')
+bp = Blueprint('backup', __name__, url_prefix='/admin/backup')
 
 # Logging einrichten
 logger = logging.getLogger(__name__)
@@ -97,4 +97,18 @@ def list_backups():
         return jsonify({'status': 'success', 'backups': backups})
     except Exception as e:
         logger.error(f"Fehler beim Auflisten der Backups: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@bp.route('/delete/<filename>', methods=['POST'])
+def delete_backup(filename):
+    """Löscht ein bestimmtes Backup"""
+    try:
+        backup_path = os.path.join(current_app.config['BACKUP_DIR'], secure_filename(filename))
+        if not os.path.exists(backup_path):
+            return jsonify({'status': 'error', 'message': 'Backup nicht gefunden'}), 404
+        
+        os.remove(backup_path)
+        return jsonify({'status': 'success', 'message': 'Backup erfolgreich gelöscht'})
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Backups: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500 

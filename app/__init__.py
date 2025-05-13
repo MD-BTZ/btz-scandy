@@ -20,7 +20,7 @@ from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
 from app.models.migrations import run_migrations
-from app.routes import auth, tools, consumables, workers, setup
+from app.routes import auth, tools, consumables, workers, setup, backup
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -179,7 +179,7 @@ def create_app(test_config=None):
     from app.routes import (
         main, auth, admin, tools, workers, 
         consumables, lending, dashboard, history, 
-        quick_scan, api, tickets, setup
+        quick_scan, api, tickets, setup, backup
     )
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
@@ -194,6 +194,7 @@ def create_app(test_config=None):
     app.register_blueprint(api.bp)
     app.register_blueprint(tickets.bp, url_prefix='/tickets')
     app.register_blueprint(setup.bp)
+    app.register_blueprint(backup.bp)
     
     # Fehlerbehandlung registrieren
     handle_errors(app)
