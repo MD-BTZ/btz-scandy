@@ -61,7 +61,7 @@ def create_admin_user(password):
             db.execute('''
                 INSERT INTO users (username, password_hash, role, is_active)
                 VALUES (?, ?, ?, ?)
-            ''', ['admin', password_hash, 'admin', True])
+            ''', ['Admin', password_hash, 'admin', True])
             db.commit()
             
             return True, "Admin-Benutzer wurde erfolgreich erstellt."

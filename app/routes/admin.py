@@ -188,11 +188,49 @@ def create_multi_sheet_excel(data_dict):
     Args:
         data_dict (dict): Ein Dictionary, bei dem Keys die Sheet-Namen sind
                           und Values Listen von Dictionaries (die Zeilen) sind.
-                          z.B. {'Werkzeuge': [{'name': 'Hammer', ...}, ...],
-                                'Mitarbeiter': [{'firstname': 'Max', ...}, ...]}
     """
     wb = openpyxl.Workbook()
     wb.remove(wb.active) # Standard-Sheet entfernen
+
+    # Deutsche Spaltenüberschriften
+    headers_de = {
+        'Werkzeuge': {
+            'barcode': 'Barcode',
+            'name': 'Name',
+            'category': 'Kategorie',
+            'location': 'Standort',
+            'status': 'Status',
+            'description': 'Beschreibung'
+        },
+        'Mitarbeiter': {
+            'barcode': 'Barcode',
+            'firstname': 'Vorname',
+            'lastname': 'Nachname',
+            'department': 'Abteilung',
+            'email': 'E-Mail'
+        },
+        'Verbrauchsmaterial': {
+            'barcode': 'Barcode',
+            'name': 'Name',
+            'category': 'Kategorie',
+            'location': 'Standort',
+            'quantity': 'Menge',
+            'min_quantity': 'Mindestmenge',
+            'description': 'Beschreibung'
+        },
+        'Verlauf': {
+            'lent_at': 'Ausgeliehen am',
+            'returned_at': 'Zurückgegeben am',
+            'tool_name': 'Werkzeug',
+            'tool_barcode': 'Werkzeug-Barcode',
+            'consumable_name': 'Verbrauchsmaterial',
+            'consumable_barcode': 'Material-Barcode',
+            'worker_name': 'Mitarbeiter',
+            'worker_barcode': 'Mitarbeiter-Barcode',
+            'type': 'Typ',
+            'quantity': 'Menge'
+        }
+    }
 
     for sheet_name, data in data_dict.items():
         ws = wb.create_sheet(title=sheet_name)
@@ -201,39 +239,63 @@ def create_multi_sheet_excel(data_dict):
             ws.cell(row=1, column=1, value="Keine Daten verfügbar")
             continue
         
+        # Headers aus dem ersten Datensatz holen
         headers = list(data[0].keys())
-        for col, header in enumerate(headers, 1):
-            ws.cell(row=1, column=col, value=header)
         
+        # Deutsche Überschriften setzen
+        for col, header in enumerate(headers, 1):
+            de_header = headers_de.get(sheet_name, {}).get(header, header)
+            cell = ws.cell(row=1, column=col, value=de_header)
+            # Formatierung der Überschriften
+            cell.font = openpyxl.styles.Font(bold=True)
+            cell.fill = openpyxl.styles.PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+            cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+        
+        # Daten einfügen
         for row_idx, item in enumerate(data, 2):
             for col_idx, key in enumerate(headers, 1):
-                value = item.get(key, '') 
-                # Konvertiere datetime-Objekte in Strings, da Excel sonst Probleme haben kann
+                value = item.get(key, '')
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                
+                # Datumsformatierung
                 if isinstance(value, datetime):
-                    # Format anpassen nach Bedarf (z.B. mit Uhrzeit)
-                    value = value.strftime('%Y-%m-%d %H:%M:%S') 
-                ws.cell(row=row_idx, column=col_idx, value=value)
+                    cell.number_format = 'DD.MM.YYYY HH:MM:SS'
+                # Zahlenformatierung
+                elif isinstance(value, (int, float)):
+                    cell.number_format = '#,##0'
+                    cell.alignment = openpyxl.styles.Alignment(horizontal='right')
+                # Textformatierung
+                else:
+                    cell.alignment = openpyxl.styles.Alignment(horizontal='left')
 
         # Spaltenbreiten automatisch anpassen
         for col_idx, column_cells in enumerate(ws.columns, 1):
             max_length = 0
-            # Buchstaben für die Spalte ermitteln (A, B, C, ...)
-            column_letter = openpyxl.utils.get_column_letter(col_idx) 
+            column_letter = openpyxl.utils.get_column_letter(col_idx)
             
             for cell in column_cells:
                 try:
-                    if cell.value: # Nur wenn Zelle einen Wert hat
-                        # Berücksichtige die Länge des Zellinhalts als String
+                    if cell.value:
                         cell_length = len(str(cell.value))
-                        if cell_length > max_length:
-                            max_length = cell_length
-                except: # Fehler ignorieren (z.B. bei ungültigen Zelltypen)
+                        max_length = max(max_length, cell_length)
+                except:
                     pass
             
-            # Setze die Spaltenbreite (Basisbreite + Puffer)
-            # Der Faktor 1.2 gibt etwas Puffer
-            adjusted_width = (max_length + 2) * 1.1 
+            # Spaltenbreite mit Puffer
+            adjusted_width = (max_length + 2) * 1.2
             ws.column_dimensions[column_letter].width = adjusted_width
+
+        # Rahmen für alle Zellen
+        thin_border = openpyxl.styles.Border(
+            left=openpyxl.styles.Side(style='thin'),
+            right=openpyxl.styles.Side(style='thin'),
+            top=openpyxl.styles.Side(style='thin'),
+            bottom=openpyxl.styles.Side(style='thin')
+        )
+        
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+            for cell in row:
+                cell.border = thin_border
 
     excel_file = BytesIO()
     wb.save(excel_file)
@@ -1177,7 +1239,7 @@ def export_all_data():
                     cu.used_at as lent_at, NULL as returned_at, c.name as consumable_name, c.barcode as consumable_barcode, 
                     w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
                     'Material Verbrauch' as type, cu.quantity
-                FROM consumable_usages cu
+                FROM consumable_usage cu
                 JOIN consumables c ON cu.consumable_barcode = c.barcode
                 JOIN workers w ON cu.worker_barcode = w.barcode
                 ORDER BY lent_at DESC

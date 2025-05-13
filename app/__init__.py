@@ -215,11 +215,6 @@ def create_app(test_config=None):
                     db.commit()
                     print("Vorhandene Benutzer gelöscht")
                 
-                # Erstelle Admin-Benutzer
-                from app.models.init_db import init_users
-                if init_users(app, 'admin'):
-                    print("Admin-Benutzer für Render erstellt (admin/admin)")
-                
                 # Demo-Daten laden
                 from app.models.demo_data import load_demo_data
                 load_demo_data()

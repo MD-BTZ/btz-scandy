@@ -13,7 +13,8 @@ const QuickScan = {
                 item: null,
                 worker: null,
         action: null,
-        confirmed: false
+        confirmed: false,
+        quantity: 1  // Standardmenge auf 1 setzen
     },
             
     init() {
@@ -837,15 +838,23 @@ const QuickScan = {
     },
 
     showQuantityModal() {
-        document.getElementById('quantityModal').showModal();
+        const modal = document.getElementById('quantityModal');
+        if (modal) {
+            modal.showModal();
+        }
     },
 
     closeQuantityModal() {
-        document.getElementById('quantityModal').close();
+        const modal = document.getElementById('quantityModal');
+        if (modal) {
+            modal.close();
+        }
     },
 
     confirmQuantity() {
         const quantityInput = document.getElementById('quantityInput');
+        if (!quantityInput) return;
+        
         const quantity = parseInt(quantityInput.value);
         if (quantity > 0) {
             this.currentProcess.quantity = quantity;
