@@ -4,8 +4,9 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
+    <!-- Header mit Ticket-ID und Status -->
     <div class="flex items-center mb-6">
-        <a href="{{ url_for('tickets.index') }}" class="btn btn-ghost btn-sm mr-4">
+        <a href="{{ url_for('admin.tickets') }}" class="btn btn-ghost btn-sm mr-4">
             <i class="fas fa-arrow-left"></i>
         </a>
         <h1 class="text-2xl font-bold">Ticket #{{ ticket.id }}</h1>
@@ -27,17 +28,66 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Ticket Details -->
         <div class="lg:col-span-2">
-            <div class="card bg-base-100 shadow-xl">
+            <!-- Hauptinformationen -->
+            <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
                     <h2 class="card-title">{{ ticket.title }}</h2>
+                    <div class="divider"></div>
                     <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
                 </div>
             </div>
 
-            <!-- Notizen Historie -->
-            <div class="card bg-base-100 shadow-xl mt-6">
+            <!-- Antworten und Kommunikation -->
+            <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <h3 class="font-bold mb-4">Notizen Historie</h3>
+                    <h3 class="font-bold mb-4">
+                        <i class="fas fa-comments text-primary mr-2"></i>
+                        Kommunikation
+                    </h3>
+                    
+                    <!-- Nachrichtenverlauf -->
+                    <div class="space-y-4 mb-6">
+                        {% if messages %}
+                            {% for message in messages %}
+                            <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
+                                <div class="chat-header">
+                                    {{ message.sender }}
+                                    <time class="text-xs opacity-50">{{ message.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
+                                    {{ message.message }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Neue Nachricht -->
+                    <form id="messageForm" class="mt-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Nachricht</span>
+                            </label>
+                            <textarea name="message" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Nachricht hier..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Nachricht senden
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Notizen Historie -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="font-bold mb-4">
+                        <i class="fas fa-history text-primary mr-2"></i>
+                        Notizen Historie
+                    </h3>
                     {% if notes %}
                         {% for note in notes %}
                         <div class="mb-4 last:mb-0">
@@ -66,69 +116,89 @@
         <div class="lg:col-span-1">
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h3 class="font-bold mb-4">Details</h3>
+                    <h3 class="font-bold mb-4">
+                        <i class="fas fa-info-circle text-primary mr-2"></i>
+                        Ticket Details
+                    </h3>
                     
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Status</span>
-                        <p>{{ ticket.status }}</p>
-                    </div>
+                    <div class="space-y-4">
+                        <!-- Status -->
+                        <div>
+                            <span class="text-sm font-medium">Status</span>
+                            <p class="badge badge-{{ 
+                                'success' if ticket.status == 'gelöst' 
+                                else 'warning' if ticket.status == 'in_bearbeitung' 
+                                else 'error' 
+                            }}">
+                                {{ ticket.status }}
+                            </p>
+                        </div>
 
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Priorität</span>
-                        <p>{{ ticket.priority }}</p>
-                    </div>
+                        <!-- Priorität -->
+                        <div>
+                            <span class="text-sm font-medium">Priorität</span>
+                            <p class="badge badge-{{ 
+                                'error' if ticket.priority == 'dringend'
+                                else 'warning' if ticket.priority == 'hoch'
+                                else 'info' if ticket.priority == 'normal'
+                                else 'ghost'
+                            }}">
+                                {{ ticket.priority }}
+                            </p>
+                        </div>
 
-                    {% if ticket.category %}
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Kategorie</span>
-                        <p>{{ ticket.category }}</p>
-                    </div>
-                    {% endif %}
+                        <!-- Kategorie -->
+                        {% if ticket.category %}
+                        <div>
+                            <span class="text-sm font-medium">Kategorie</span>
+                            <p>{{ ticket.category }}</p>
+                        </div>
+                        {% endif %}
 
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Erstellt von</span>
-                        <p>{{ ticket.created_by }}</p>
-                    </div>
+                        <!-- Erstellt von -->
+                        <div>
+                            <span class="text-sm font-medium">Erstellt von</span>
+                            <p>{{ ticket.created_by }}</p>
+                        </div>
 
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Erstellt am</span>
-                        <p>{{ ticket.created_at }}</p>
-                    </div>
+                        <!-- Erstellt am -->
+                        <div>
+                            <span class="text-sm font-medium">Erstellt am</span>
+                            <p>{{ ticket.created_at }}</p>
+                        </div>
 
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Zugewiesen an</span>
-                        <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
-                    </div>
+                        <!-- Zugewiesen an -->
+                        <div>
+                            <span class="text-sm font-medium">Zugewiesen an</span>
+                            <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
+                        </div>
 
-                    {% if ticket.due_date %}
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Fälligkeitsdatum</span>
-                        <p class="{{ 'text-error' if ticket.due_date < now else '' }}">
-                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
-                        </p>
-                    </div>
-                    {% endif %}
+                        <!-- Fälligkeitsdatum -->
+                        {% if ticket.due_date %}
+                        <div>
+                            <span class="text-sm font-medium">Fällig am</span>
+                            <p class="{{ 'text-error' if ticket.due_date < now and ticket.status not in ['gelöst', 'erledigt'] }}">
+                                {{ ticket.due_date }}
+                            </p>
+                        </div>
+                        {% endif %}
 
-                    {% if ticket.estimated_time %}
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Geschätzte Zeit</span>
-                        <p>{{ ticket.estimated_time }} Minuten</p>
-                    </div>
-                    {% endif %}
+                        <!-- Gelöst am -->
+                        {% if ticket.resolved_at %}
+                        <div>
+                            <span class="text-sm font-medium">Gelöst am</span>
+                            <p>{{ ticket.resolved_at }}</p>
+                        </div>
+                        {% endif %}
 
-                    {% if ticket.actual_time %}
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Tatsächliche Zeit</span>
-                        <p>{{ ticket.actual_time }} Minuten</p>
+                        <!-- Letzte Änderung -->
+                        {% if ticket.last_modified_by %}
+                        <div>
+                            <span class="text-sm font-medium">Letzte Änderung</span>
+                            <p>Von {{ ticket.last_modified_by }} am {{ ticket.last_modified_at }}</p>
+                        </div>
+                        {% endif %}
                     </div>
-                    {% endif %}
-
-                    {% if ticket.resolved_at %}
-                    <div class="mb-4">
-                        <span class="text-sm font-medium">Gelöst am</span>
-                        <p>{{ ticket.resolved_at }}</p>
-                    </div>
-                    {% endif %}
 
                     <div class="divider"></div>
                     
@@ -179,54 +249,10 @@
                     <option value="hoch" {% if ticket.priority == 'hoch' %}selected{% endif %}>
                         Hoch
                     </option>
-                    <option value="kritisch" {% if ticket.priority == 'kritisch' %}selected{% endif %}>
-                        Kritisch
+                    <option value="dringend" {% if ticket.priority == 'dringend' %}selected{% endif %}>
+                        Dringend
                     </option>
                 </select>
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text">Kategorie</span>
-                </label>
-                <input type="text" name="category" class="input input-bordered" 
-                       value="{{ ticket.category or '' }}"
-                       placeholder="Kategorie des Tickets">
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text">Fälligkeitsdatum</span>
-                </label>
-                <input type="datetime-local" name="due_date" class="input input-bordered" 
-                       value="{{ ticket.due_date or '' }}">
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text">Geschätzte Zeit (Minuten)</span>
-                </label>
-                <input type="number" name="estimated_time" class="input input-bordered" 
-                       value="{{ ticket.estimated_time or '' }}"
-                       min="0">
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text">Tatsächliche Zeit (Minuten)</span>
-                </label>
-                <input type="number" name="actual_time" class="input input-bordered" 
-                       value="{{ ticket.actual_time or '' }}"
-                       min="0">
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text">Ihr Name</span>
-                </label>
-                <input type="text" name="author_name" class="input input-bordered" 
-                       value="{{ current_user.username }}"
-                       readonly>
             </div>
 
             <div class="form-control mb-4">
@@ -245,121 +271,174 @@
 
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text">Neue Notiz</span>
+                    <span class="label-text">Fälligkeitsdatum</span>
                 </label>
-                <textarea name="resolution_notes" class="textarea textarea-bordered h-24" 
-                          placeholder="Notiz zum Ticket hinzufügen"></textarea>
-            </div>
-
-            <div class="form-control mb-4">
-                <label class="label cursor-pointer">
-                    <span class="label-text">Private Notiz</span>
-                    <input type="checkbox" name="is_private" class="checkbox" />
-                </label>
+                <input type="datetime-local" name="due_date" class="input input-bordered w-full"
+                       value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}">
             </div>
 
             <div class="modal-action">
-                <button type="button" class="btn btn-ghost" 
-                        onclick="document.getElementById('updateModal').close()">
-                    Abbrechen
-                </button>
-                <button type="submit" id="submitBtn" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary">
                     <i class="fas fa-save mr-2"></i>
                     Speichern
+                </button>
+                <button type="button" class="btn" onclick="document.getElementById('updateModal').close()">
+                    Abbrechen
                 </button>
             </div>
         </form>
     </div>
 </dialog>
+
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-// Toast-Funktion
-function showToast(type, message) {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `alert ${type === 'error' ? 'alert-error' : 'alert-success'} mb-2`;
-    
-    toast.innerHTML = `
-        <div>
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="${type === 'error' 
-                        ? 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'
-                        : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'}" />
-            </svg>
-            <span>${message}</span>
-        </div>
-    `;
-    
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.classList.add('fade-out');
-        setTimeout(() => container.removeChild(toast), 300);
-    }, 3000);
-}
-
-document.getElementById('updateForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    try {
-        const formData = new FormData(this);
-        const response = await fetch(this.action, {
+function deleteTicket(id) {
+    if (confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
+        fetch(`/tickets/${id}/delete`, {
             method: 'POST',
             headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: formData,
-            credentials: 'same-origin'
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/admin/tickets';
+            } else {
+                alert(data.message || 'Fehler beim Löschen des Tickets');
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            alert('Ein Fehler ist aufgetreten');
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('success', 'Ticket erfolgreich aktualisiert');
-            setTimeout(() => window.location.reload(), 1000);
-        } else {
-            showToast('error', result.message || 'Ein Fehler ist aufgetreten');
-        }
-    } catch (error) {
-        console.error('Fehler beim Aktualisieren:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
     }
-});
+}
 
-function deleteTicket(ticketId) {
-    if (!confirm('Möchten Sie dieses Ticket wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
-        return;
-    }
+// Formular für Ticket-Updates
+document.getElementById('updateForm').addEventListener('submit', function(e) {
+    e.preventDefault();
     
-    fetch(`/tickets/${ticketId}/delete`, {
+    const formData = new FormData(this);
+    const data = {
+        status: formData.get('status'),
+        priority: formData.get('priority'),
+        assigned_to: formData.get('assigned_to'),
+        due_date: formData.get('due_date')
+    };
+    
+    fetch(this.action, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify(data)
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast('success', 'Ticket erfolgreich gelöscht');
-            setTimeout(() => {
-                window.location.href = "{{ url_for('tickets.index') }}";
-            }, 1000);
+            window.location.reload();
         } else {
-            showToast('error', data.message || 'Fehler beim Löschen des Tickets');
+            alert(data.message || 'Fehler beim Speichern der Änderungen');
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten');
+        alert('Ein Fehler ist aufgetreten');
     });
-}
+});
+
+// Formular für interne Notizen
+document.getElementById('internalNoteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        resolution_notes: formData.get('resolution_notes')
+    };
+    
+    fetch(`/tickets/{{ ticket.id }}/update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Speichern der Notiz');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
+
+// Formular für öffentliche Antworten
+document.getElementById('responseForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        response: formData.get('response')
+    };
+    
+    fetch(`/tickets/{{ ticket.id }}/update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Speichern der Antwort');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
+
+// Nachrichtenformular
+document.getElementById('messageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        message: formData.get('message')
+    };
+    
+    fetch(`/tickets/{{ ticket.id }}/message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Senden der Nachricht');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
 </script>
 {% endblock %} 

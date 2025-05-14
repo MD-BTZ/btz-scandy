@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app, abort
 from app.models.database import Database
 from app.utils.decorators import admin_required, mitarbeiter_required
 from werkzeug.utils import secure_filename
@@ -22,11 +22,13 @@ import time
 from PIL import Image
 import io
 from app.config.config import Config
+from app.models.ticket_db import TicketDatabase
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
+ticket_db = TicketDatabase()
 
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
@@ -1137,6 +1139,15 @@ def get_app_labels():
             'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
         }
     }
+
+def get_all_users():
+    """Hole alle aktiven Benutzer für die Ticket-Zuweisung"""
+    return Database.query('''
+        SELECT id, username, role
+        FROM users
+        WHERE is_active = 1
+        ORDER BY username
+    ''')
 
 @bp.route('/server-settings', methods=['GET', 'POST'])
 @admin_required
@@ -2578,3 +2589,347 @@ def delete_worker_permanent(barcode):
             'success': False,
             'message': f'Fehler beim Löschen: {str(e)}'
         }), 500
+
+@bp.route('/tickets/<int:ticket_id>')
+@login_required
+@admin_required
+def ticket_detail(ticket_id):
+    """Zeigt die Details eines Tickets für Administratoren."""
+    print(f"DEBUG: Ticket-Detail-Ansicht für Ticket {ticket_id} wird geladen")
+    
+    # Hole das Ticket
+    ticket = ticket_db.query(
+        """
+        SELECT *
+        FROM tickets
+        WHERE id = ?
+        """,
+        [ticket_id],
+        one=True
+    )
+    
+    if not ticket:
+        print(f"DEBUG: Ticket {ticket_id} nicht gefunden")
+        flash('Ticket nicht gefunden', 'error')
+        return redirect(url_for('admin.tickets'))
+    
+    print(f"DEBUG: Ticket gefunden: {ticket}")
+    
+    # Konvertiere Datumsfelder
+    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+    for field in date_fields:
+        if ticket.get(field):
+            try:
+                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                ticket[field] = None
+    
+    # Hole die Notizen für das Ticket
+    notes = ticket_db.get_ticket_notes(ticket_id)
+    print(f"DEBUG: Gefundene Notizen: {notes}")
+    
+    # Hole die Nachrichten für das Ticket
+    messages = ticket_db.get_ticket_messages(ticket_id)
+    print(f"DEBUG: Gefundene Nachrichten: {messages}")
+    
+    # Hole die Historie des Tickets
+    history = ticket_db.get_ticket_history(ticket_id)
+    print(f"DEBUG: Gefundene Historie: {history}")
+    
+    # Hole alle Benutzer für die Zuweisung
+    users = get_all_users()
+    
+    # Definiere die Kategorien
+    categories = ['Hardware', 'Software', 'Netzwerk', 'Drucker', 'Sonstiges']
+    
+    # Definiere die Status-Farben
+    status_colors = {
+        'offen': 'danger',
+        'in_bearbeitung': 'warning',
+        'wartet_auf_antwort': 'info',
+        'gelöst': 'success',
+        'geschlossen': 'secondary'
+    }
+    
+    return render_template('admin/ticket_detail.html',
+                         ticket=ticket,
+                         notes=notes,
+                         messages=messages,
+                         history=history,
+                         users=users,
+                         categories=categories,
+                         status_colors=status_colors)
+
+@bp.route('/tickets/<int:ticket_id>/message', methods=['POST'])
+@login_required
+@admin_required
+def add_ticket_message(ticket_id):
+    """Fügt eine neue Nachricht zu einem Ticket hinzu."""
+    try:
+        # Prüfe ob das Ticket existiert
+        ticket = ticket_db.query(
+            "SELECT * FROM tickets WHERE id = ?",
+            [ticket_id],
+            one=True
+        )
+        
+        if not ticket:
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
+
+        # Hole die Nachricht aus dem Request
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'message': 'Ungültiges Anfrageformat. JSON erwartet.'
+            }), 400
+
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({
+                'success': False,
+                'message': 'Nachricht darf nicht leer sein'
+            }), 400
+
+        # Füge die Nachricht zur Datenbank hinzu
+        ticket_db.add_ticket_message(
+            ticket_id=ticket_id,
+            message=message,
+            sender=current_user.username,
+            is_admin=True
+        )
+
+        return jsonify({
+            'success': True,
+            'message': message  # Sende die Nachricht zurück
+        })
+
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Nachricht: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Speichern der Nachricht: {str(e)}'
+        }), 500
+
+@bp.route('/tickets/<int:ticket_id>/note', methods=['POST'])
+@login_required
+@admin_required
+def add_ticket_note(ticket_id):
+    """Fügt eine neue Notiz zu einem Ticket hinzu (immer öffentlich, keine Unterscheidung mehr)."""
+    try:
+        print(f"DEBUG: Notiz-Anfrage für Ticket {ticket_id} erhalten")
+        # Hole das Ticket
+        ticket = ticket_db.query(
+            """
+            SELECT *
+            FROM tickets
+            WHERE id = ?
+            """,
+            [ticket_id],
+            one=True
+        )
+        
+        if not ticket:
+            print(f"DEBUG: Ticket {ticket_id} nicht gefunden")
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
+
+        # Hole die Notiz
+        if not request.is_json:
+            print("DEBUG: Ungültiges Anfrageformat. JSON erwartet.")
+            return jsonify({
+                'success': False,
+                'message': 'Ungültiges Anfrageformat. JSON erwartet.'
+            }), 400
+
+        data = request.get_json()
+        note = data.get('note')
+        # is_private wird ignoriert, alle Notizen sind öffentlich
+        
+        if not note or not note.strip():
+            print("DEBUG: Notiz ist leer")
+            return jsonify({
+                'success': False,
+                'message': 'Notiz ist erforderlich'
+            }), 400
+
+        print(f"DEBUG: Notiz hinzufügen: {note}")
+        # Füge die Notiz hinzu (immer is_private=0)
+        with ticket_db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO ticket_notes (ticket_id, note, created_by, is_private, created_at)
+                VALUES (?, ?, ?, 0, datetime('now'))
+                """,
+                [ticket_id, note.strip(), current_user.username]
+            )
+            
+            # Aktualisiere das updated_at Feld des Tickets
+            cursor.execute(
+                """
+                UPDATE tickets
+                SET updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                [ticket_id]
+            )
+            
+            conn.commit()
+
+            # Hole die eingefügte Notiz
+            cursor.execute(
+                """
+                SELECT id, note, created_by, is_private, created_at
+                FROM ticket_notes
+                WHERE ticket_id = ? AND created_by = ? AND note = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                [ticket_id, current_user.username, note.strip()]
+            )
+            new_note = cursor.fetchone()
+
+            if not new_note:
+                print("DEBUG: Fehler beim Abrufen der neuen Notiz")
+                return jsonify({
+                    'success': False,
+                    'message': 'Fehler beim Abrufen der Notiz'
+                }), 500
+
+            print(f"DEBUG: Notiz erfolgreich hinzugefügt: {new_note}")
+            return jsonify({
+                'success': True,
+                'message': 'Notiz wurde gespeichert',
+                'note': {
+                    'id': new_note['id'],
+                    'note': new_note['note'],
+                    'created_by': new_note['created_by'],
+                    'is_private': 0,
+                    'created_at': new_note['created_at']
+                }
+            })
+
+    except Exception as e:
+        print(f"DEBUG: Fehler beim Hinzufügen der Notiz: {e}")
+        logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Speichern der Notiz: {str(e)}'
+        }), 500
+
+@bp.route('/tickets/<int:ticket_id>/update', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket(ticket_id):
+    """Aktualisiert ein Ticket."""
+    try:
+        print(f"DEBUG: Update-Ticket-Anfrage für Ticket {ticket_id} erhalten")
+        status = request.form.get('status')
+        assigned_to = request.form.get('assigned_to')
+        category = request.form.get('category')
+        due_date = request.form.get('due_date')
+        estimated_time = request.form.get('estimated_time')
+        actual_time = request.form.get('actual_time')
+        
+        print(f"DEBUG: Empfangene Daten: status={status}, assigned_to={assigned_to}, category={category}, due_date={due_date}, estimated_time={estimated_time}, actual_time={actual_time}")
+        
+        # Konvertiere due_date in datetime wenn vorhanden
+        if due_date:
+            try:
+                # Füge die Uhrzeit 23:59:59 hinzu, wenn nur das Datum angegeben wurde
+                if len(due_date) == 10:  # Format: YYYY-MM-DD
+                    due_date = f"{due_date} 23:59:59"
+                due_date = datetime.strptime(due_date, '%Y-%m-%d %H:%M:%S')
+                print(f"DEBUG: due_date konvertiert: {due_date}")
+            except ValueError as e:
+                print(f"DEBUG: Fehler bei der Konvertierung von due_date: {e}")
+                due_date = None
+        else:
+            due_date = None
+        
+        # Konvertiere Zeitfelder in Integer
+        if estimated_time:
+            try:
+                estimated_time = int(estimated_time)
+                print(f"DEBUG: estimated_time konvertiert: {estimated_time}")
+            except ValueError as e:
+                print(f"DEBUG: Fehler bei der Konvertierung von estimated_time: {e}")
+                estimated_time = None
+        if actual_time:
+            try:
+                actual_time = int(actual_time)
+                print(f"DEBUG: actual_time konvertiert: {actual_time}")
+            except ValueError as e:
+                print(f"DEBUG: Fehler bei der Konvertierung von actual_time: {e}")
+                actual_time = None
+        
+        # Aktualisiere das Ticket
+        with ticket_db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Hole das alte Ticket für die Historie
+            cursor.execute("SELECT * FROM tickets WHERE id = ?", [ticket_id])
+            old_ticket = cursor.fetchone()
+            
+            if not old_ticket:
+                raise ValueError("Ticket nicht gefunden")
+            
+            # Aktualisiere das Ticket
+            cursor.execute("""
+                UPDATE tickets 
+                SET status = ?,
+                    assigned_to = ?,
+                    category = ?,
+                    due_date = ?,
+                    estimated_time = ?,
+                    actual_time = ?,
+                    last_modified_by = ?,
+                    last_modified_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP,
+                    resolved_at = CASE 
+                        WHEN ? = 'gelöst' THEN CURRENT_TIMESTAMP 
+                        ELSE NULL 
+                    END
+                WHERE id = ?
+            """, [status, assigned_to, category, due_date, estimated_time, actual_time, 
+                  current_user.username, status, ticket_id])
+            
+            # Erstelle Historie-Einträge für geänderte Felder
+            changes = []
+            if old_ticket['status'] != status:
+                changes.append(('status', old_ticket['status'], status))
+            if old_ticket['assigned_to'] != assigned_to:
+                changes.append(('assigned_to', old_ticket['assigned_to'], assigned_to))
+            if old_ticket['category'] != category:
+                changes.append(('category', old_ticket['category'], category))
+            if old_ticket['due_date'] != due_date:
+                changes.append(('due_date', old_ticket['due_date'], due_date))
+            if old_ticket['estimated_time'] != estimated_time:
+                changes.append(('estimated_time', old_ticket['estimated_time'], estimated_time))
+            if old_ticket['actual_time'] != actual_time:
+                changes.append(('actual_time', old_ticket['actual_time'], actual_time))
+            
+            # Füge Historie-Einträge hinzu
+            for field_name, old_value, new_value in changes:
+                cursor.execute("""
+                    INSERT INTO ticket_history 
+                    (ticket_id, field_name, old_value, new_value, changed_by)
+                    VALUES (?, ?, ?, ?, ?)
+                """, [ticket_id, field_name, str(old_value), str(new_value), current_user.username])
+            
+            conn.commit()
+        
+        print(f"DEBUG: Ticket {ticket_id} erfolgreich aktualisiert")
+        flash('Ticket wurde erfolgreich aktualisiert', 'success')
+    except Exception as e:
+        print(f"DEBUG: Fehler beim Aktualisieren des Tickets: {e}")
+        flash(f'Fehler beim Aktualisieren des Tickets: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))

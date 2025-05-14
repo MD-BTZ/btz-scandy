@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from app.config import config
 import os
+import stat
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,26 @@ class TicketDatabase:
         self.db_path = current_config.TICKET_DATABASE
         # Stelle sicher, dass das Verzeichnis existiert
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        # Überprüfe und korrigiere die Berechtigungen
+        self._check_and_fix_permissions()
+        
+    def _check_and_fix_permissions(self):
+        """Überprüft und korrigiert die Berechtigungen der Datenbankdatei"""
+        try:
+            if os.path.exists(self.db_path):
+                # Aktuelle Berechtigungen abrufen
+                current_perms = stat.S_IMODE(os.lstat(self.db_path).st_mode)
+                # Gewünschte Berechtigungen: 664 (rw-rw-r--)
+                desired_perms = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH
+                
+                if current_perms != desired_perms:
+                    logger.info(f"Korrigiere Berechtigungen für {self.db_path}")
+                    os.chmod(self.db_path, desired_perms)
+                    logger.info("Berechtigungen erfolgreich korrigiert")
+            else:
+                logger.info(f"Datenbank {self.db_path} existiert noch nicht")
+        except Exception as e:
+            logger.error(f"Fehler beim Überprüfen/Korrigieren der Berechtigungen: {str(e)}")
         
     def get_connection(self):
         """Erstellt eine neue Verbindung zur Ticket-Datenbank."""
@@ -46,6 +67,14 @@ class TicketDatabase:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
+            # Schema Version Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Tickets Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS tickets (
@@ -60,12 +89,13 @@ class TicketDatabase:
                     created_by TEXT NOT NULL,
                     assigned_to TEXT,
                     resolution_notes TEXT,
+                    response TEXT,
                     last_modified_by TEXT,
                     last_modified_at TIMESTAMP,
                     category TEXT,
                     due_date TIMESTAMP,
-                    estimated_time INTEGER, -- in Minuten
-                    actual_time INTEGER, -- in Minuten
+                    estimated_time INTEGER,
+                    actual_time INTEGER,
                     FOREIGN KEY (created_by) REFERENCES users(username),
                     FOREIGN KEY (assigned_to) REFERENCES users(username),
                     FOREIGN KEY (last_modified_by) REFERENCES users(username)
@@ -89,7 +119,21 @@ class TicketDatabase:
                 )
             ''')
             
-            # Ticket History Tabelle für Änderungsverfolgung
+            # Ticket Messages Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    message TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                    FOREIGN KEY (sender) REFERENCES users(username)
+                )
+            ''')
+            
+            # Ticket History Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS ticket_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,8 +148,11 @@ class TicketDatabase:
                 )
             ''')
             
+            # Setze die Schema-Version
+            cursor.execute('INSERT OR REPLACE INTO schema_version (version) VALUES (3)')
+            
             conn.commit()
-            logger.info("Ticket-Datenbankschema erfolgreich initialisiert") 
+            logger.info("Ticket-Datenbankschema erfolgreich initialisiert")
 
     def update_ticket(self, id, status, assigned_to=None, category=None, due_date=None, 
                      estimated_time=None, actual_time=None, last_modified_by=None):
@@ -175,4 +222,85 @@ class TicketDatabase:
             return True
         except Exception as e:
             logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
+            raise
+
+    def get_ticket_messages(self, ticket_id):
+        """Holt alle Nachrichten für ein Ticket"""
+        try:
+            messages = self.query("""
+                SELECT *
+                FROM ticket_messages
+                WHERE ticket_id = ?
+                ORDER BY created_at ASC
+            """, [ticket_id])
+            return messages
+        except Exception as e:
+            logging.error(f"Fehler beim Abrufen der Ticket-Nachrichten: {str(e)}")
+            return []
+
+    def get_ticket_notes(self, ticket_id):
+        """Holt alle Notizen für ein Ticket"""
+        try:
+            notes = self.query("""
+                SELECT *
+                FROM ticket_notes
+                WHERE ticket_id = ?
+                ORDER BY created_at DESC
+            """, [ticket_id])
+            return notes
+        except Exception as e:
+            logging.error(f"Fehler beim Abrufen der Ticket-Notizen: {str(e)}")
+            return []
+
+    def get_ticket_history(self, ticket_id):
+        """Holt die Historie eines Tickets"""
+        try:
+            history = self.query("""
+                SELECT *
+                FROM ticket_history
+                WHERE ticket_id = ?
+                ORDER BY changed_at DESC
+            """, [ticket_id])
+            return history
+        except Exception as e:
+            logging.error(f"Fehler beim Abrufen der Ticket-Historie: {str(e)}")
+            return []
+
+    def add_ticket_message(self, ticket_id, message, sender, is_admin=False):
+        """Fügt eine neue Nachricht zu einem Ticket hinzu"""
+        try:
+            self.query("""
+                INSERT INTO ticket_messages 
+                (ticket_id, message, sender, is_admin, created_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+            """, [ticket_id, message, sender, is_admin])
+            
+            # Aktualisiere das updated_at Feld des Tickets
+            self.query("""
+                UPDATE tickets
+                SET updated_at = datetime('now')
+                WHERE id = ?
+            """, [ticket_id])
+            
+            return True
+        except Exception as e:
+            logging.error(f"Fehler beim Hinzufügen der Ticket-Nachricht: {str(e)}")
+            raise
+
+    def create_ticket(self, title, description, created_by, priority='normal', category=None, due_date=None, estimated_time=None):
+        """Erstellt ein neues Ticket"""
+        try:
+            # Füge das Ticket ein
+            self.query("""
+                INSERT INTO tickets 
+                (title, description, status, priority, created_by, category, due_date, estimated_time, created_at, updated_at)
+                VALUES (?, ?, 'offen', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            """, [title, description, priority, created_by, category, due_date, estimated_time])
+            
+            # Hole die ID des neuen Tickets
+            ticket_id = self.query("SELECT last_insert_rowid() as id", one=True)['id']
+            
+            return ticket_id
+        except Exception as e:
+            logging.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
             raise 

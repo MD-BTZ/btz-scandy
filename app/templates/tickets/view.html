@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header mit Ticket-ID und Status -->
+    <div class="flex items-center mb-6">
+        <a href="{{ url_for('tickets.create') }}" class="btn btn-ghost btn-sm mr-4">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="text-2xl font-bold">Ticket #{{ ticket.id }}</h1>
+        <span class="badge badge-{{ 
+            'success' if ticket.status == 'gelöst' 
+            else 'warning' if ticket.status == 'in_bearbeitung' 
+            else 'error' 
+        }} ml-4">
+            {{ ticket.status }}
+        </span>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6">
+        <!-- Ticket Details -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">{{ ticket.title }}</h2>
+                <div class="divider"></div>
+                <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+                <div class="text-sm text-base-content/60 mt-2">
+                    Erstellt am {{ ticket.created_at }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Antworten und Kommunikation -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h3 class="font-bold mb-4">
+                    <i class="fas fa-comments text-primary mr-2"></i>
+                    Kommunikation
+                    {% if message_count > 0 %}
+                    <span class="badge badge-primary ml-2">{{ message_count }} Nachricht(en)</span>
+                    {% endif %}
+                </h3>
+                
+                <!-- Nachrichtenverlauf -->
+                <div class="space-y-4 mb-6">
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
+                            <div class="chat-header">
+                                {{ message.sender }}
+                                <time class="text-xs opacity-50">{{ message.created_at }}</time>
+                            </div>
+                            <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
+                                {{ message.message }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
+                    {% endif %}
+                </div>
+
+                <!-- Neue Nachricht -->
+                <form id="messageForm" class="mt-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Neue Nachricht</span>
+                        </label>
+                        <textarea name="message" class="textarea textarea-bordered h-24" 
+                                placeholder="Ihre Nachricht hier..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-4">
+                        <i class="fas fa-paper-plane mr-2"></i>
+                        Nachricht senden
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Ticket Status -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h3 class="font-bold mb-4">
+                    <i class="fas fa-info-circle text-primary mr-2"></i>
+                    Ticket Status
+                </h3>
+                
+                <div class="space-y-4">
+                    <!-- Status -->
+                    <div>
+                        <span class="text-sm font-medium">Status</span>
+                        <p class="badge badge-{{ 
+                            'success' if ticket.status == 'gelöst' 
+                            else 'warning' if ticket.status == 'in_bearbeitung' 
+                            else 'error' 
+                        }}">
+                            {{ ticket.status }}
+                        </p>
+                    </div>
+
+                    <!-- Priorität -->
+                    <div>
+                        <span class="text-sm font-medium">Priorität</span>
+                        <p class="badge badge-{{ 
+                            'error' if ticket.priority == 'dringend'
+                            else 'warning' if ticket.priority == 'hoch'
+                            else 'info' if ticket.priority == 'normal'
+                            else 'ghost'
+                        }}">
+                            {{ ticket.priority }}
+                        </p>
+                    </div>
+
+                    <!-- Zugewiesen an -->
+                    <div>
+                        <span class="text-sm font-medium">Zugewiesen an</span>
+                        <p>{{ ticket.assigned_to or 'Noch nicht zugewiesen' }}</p>
+                    </div>
+
+                    <!-- Fälligkeitsdatum -->
+                    {% if ticket.due_date %}
+                    <div>
+                        <span class="text-sm font-medium">Fällig am</span>
+                        <p class="{{ 'text-error' if ticket.due_date < now and ticket.status not in ['gelöst', 'erledigt'] }}">
+                            {{ ticket.due_date }}
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('messageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        message: formData.get('message')
+    };
+    
+    fetch(`/tickets/{{ ticket.id }}/message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Füge die neue Nachricht zum Chat hinzu
+            const messagesContainer = document.querySelector('.space-y-4');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat chat-end';
+            messageDiv.innerHTML = `
+                <div class="chat-header">
+                    ${data.message.sender}
+                    <time class="text-xs opacity-50">${data.message.created_at}</time>
+                </div>
+                <div class="chat-bubble chat-bubble-secondary">
+                    ${data.message.message}
+                </div>
+            `;
+            
+            // Wenn keine Nachrichten vorhanden sind, entferne die "Keine Nachrichten" Meldung
+            const noMessages = messagesContainer.querySelector('.text-base-content\\/60');
+            if (noMessages) {
+                noMessages.remove();
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            
+            // Aktualisiere den Nachrichtenzähler
+            const messageCount = messagesContainer.querySelectorAll('.chat').length;
+            const counterBadge = document.querySelector('.badge-primary');
+            if (counterBadge) {
+                counterBadge.textContent = `${messageCount} Nachricht(en)`;
+            } else {
+                const header = document.querySelector('h3.font-bold');
+                const newBadge = document.createElement('span');
+                newBadge.className = 'badge badge-primary ml-2';
+                newBadge.textContent = `${messageCount} Nachricht(en)`;
+                header.appendChild(newBadge);
+            }
+            
+            // Leere das Formular
+            this.reset();
+            
+            // Scrolle zum Ende der Nachrichten
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+            alert(data.message || 'Fehler beim Senden der Nachricht');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
+</script>
+{% endblock %} 

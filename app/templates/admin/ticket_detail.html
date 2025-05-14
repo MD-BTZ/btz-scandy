@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte -->
+        <div class="lg:col-span-2">
+            <!-- Ticket Details -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="card-title">Ticket #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <p class="text-sm opacity-70">Erstellt von</p>
+                            <p>{{ ticket.created_by }}</p>
+                            <p class="text-sm opacity-70 mt-2">Erstellt am</p>
+                            <p>{{ ticket.created_at }}</p>
+                            <p class="text-sm opacity-70 mt-2">Priorität</p>
+                            <p>{{ ticket.priority }}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Kategorie</p>
+                            <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
+                            <p class="text-sm opacity-70 mt-2">Fällig am</p>
+                            <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
+                            <p class="text-sm opacity-70 mt-2">Geschätzte Zeit</p>
+                            <p>{{ ticket.estimated_time or 'Nicht gesetzt' }} Stunden</p>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div>
+                        <h3 class="font-bold mb-2">Beschreibung:</h3>
+                        <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kommunikation -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Kommunikation</h3>
+                    <div class="messages-container mb-4" style="max-height: 400px; overflow-y: auto;">
+                        {% if messages %}
+                            {% for message in messages %}
+                            <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
+                                <div class="chat-header">
+                                    {{ message.sender }}
+                                    <time class="text-xs opacity-50">{{ message.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
+                                    {{ message.message }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
+                        {% endif %}
+                    </div>
+                    <form id="messageForm" class="mt-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Nachricht</span>
+                            </label>
+                            <textarea name="message" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Nachricht hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Nachricht senden
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Notizen -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Notizen</h3>
+                    <form id="noteForm" class="mb-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Notiz</span>
+                            </label>
+                            <textarea name="note" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Notiz hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-sticky-note mr-2"></i>
+                            Notiz hinzufügen
+                        </button>
+                    </form>
+                    
+                    <div class="notes-container mt-4">
+                        {% if notes %}
+                            {% for note in notes %}
+                            <div class="chat chat-start">
+                                <div class="chat-header">
+                                    {{ note.created_by }}
+                                    <time class="text-xs opacity-50">{{ note.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble chat-bubble-info">
+                                    {{ note.note }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Notizen vorhanden.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Spalte -->
+        <div class="lg:col-span-1">
+            <!-- Ticket Aktionen -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Ticket Aktionen</h3>
+                    <form method="POST" action="{{ url_for('admin.update_ticket', ticket_id=ticket.id) }}">
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Status</span>
+                            </label>
+                            <select class="select select-bordered w-full" name="status" required>
+                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                            </select>
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Zugewiesen an</span>
+                            </label>
+                            <select class="select select-bordered w-full" name="assigned_to">
+                                <option value="">Nicht zugewiesen</option>
+                                {% for user in users %}
+                                <option value="{{ user.username }}" {% if ticket.assigned_to == user.username %}selected{% endif %}>
+                                    {{ user.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Kategorie</span>
+                            </label>
+                            <select class="select select-bordered w-full" name="category">
+                                <option value="">Keine Kategorie</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Fällig am</span>
+                            </label>
+                            <input type="date" class="input input-bordered w-full" name="due_date" 
+                                   value="{{ ticket.due_date.strftime('%Y-%m-%d') if ticket.due_date else '' }}">
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Geschätzte Zeit (Stunden)</span>
+                            </label>
+                            <input type="number" class="input input-bordered w-full" name="estimated_time" value="{{ ticket.estimated_time }}">
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Tatsächliche Zeit (Stunden)</span>
+                            </label>
+                            <input type="number" class="input input-bordered w-full" name="actual_time" value="{{ ticket.actual_time }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-full">Aktualisieren</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Ticket Historie -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Ticket Historie</h3>
+                    <div class="history-container" style="max-height: 400px; overflow-y: auto;">
+                        {% if history %}
+                            {% for entry in history %}
+                            <div class="mb-4">
+                                <div class="text-sm opacity-50">{{ entry.changed_at }}</div>
+                                <p class="mb-0">
+                                    <span class="font-medium">{{ entry.changed_by }}</span> hat 
+                                    <span class="font-medium">{{ entry.field_name }}</span> geändert:
+                                    {% if entry.old_value %}
+                                    <span class="text-error">{{ entry.old_value }}</span> →
+                                    {% endif %}
+                                    <span class="text-success">{{ entry.new_value }}</span>
+                                </p>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Änderungen vorhanden.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('messageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        message: formData.get('message')
+    };
+    
+    fetch(`/admin/tickets/{{ ticket.id }}/message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Nachricht erfolgreich gesendet
+            const messageInput = this.querySelector('textarea[name="message"]');
+            messageInput.value = ''; // Formular leeren
+            
+            // Neue Nachricht zur UI hinzufügen
+            const messagesContainer = document.querySelector('.messages-container');
+            const newMessage = document.createElement('div');
+            newMessage.className = 'chat chat-end';
+            
+            // Aktuelles Datum formatieren
+            const now = new Date();
+            const formattedDate = now.toLocaleString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            newMessage.innerHTML = `
+                <div class="chat-header">
+                    {{ current_user.username }}
+                    <time class="text-xs opacity-50">${formattedDate}</time>
+                </div>
+                <div class="chat-bubble chat-bubble-primary">
+                    ${data.message}
+                </div>
+            `;
+            
+            // Wenn keine Nachrichten vorhanden sind, entferne die "Keine Nachrichten" Meldung
+            const noMessages = messagesContainer.querySelector('.text-base-content\\/60');
+            if (noMessages) {
+                noMessages.remove();
+            }
+            
+            messagesContainer.appendChild(newMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+            alert(data.message || 'Fehler beim Senden der Nachricht');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
+
+// Notiz-Formular
+document.getElementById('noteForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const note = formData.get('note');
+    
+    try {
+        const response = await fetch(`/admin/tickets/{{ ticket.id }}/note`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                note: note
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Füge die neue Notiz zur Liste hinzu
+            const notesList = document.querySelector('.notes-container');
+            const noteData = data.note;
+            const noteElement = document.createElement('div');
+            noteElement.className = 'chat chat-start';
+            noteElement.innerHTML = `
+                <div class="chat-header">
+                    ${noteData.created_by}
+                    <time class="text-xs opacity-50">${noteData.created_at}</time>
+                </div>
+                <div class="chat-bubble chat-bubble-info">
+                    ${noteData.note}
+                </div>
+            `;
+            notesList.insertBefore(noteElement, notesList.firstChild);
+            // Formular zurücksetzen
+            this.reset();
+        } else {
+            alert(data.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    }
+});
+</script>
+{% endblock %} 
