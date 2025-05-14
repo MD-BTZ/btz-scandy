@@ -111,7 +111,7 @@
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="fas fa-ticket-alt text-xl"></i>
                  </div>
-                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Ticket</span>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftrag</span>
             </a>
 
             <!-- Versionsnummer am unteren Rand -->
@@ -135,7 +135,7 @@
                     {% if 'tools' in request.endpoint %}{{ app_labels.tools.name }}
                     {% elif 'workers' in request.endpoint %}Mitarbeiter
                     {% elif 'consumables' in request.endpoint %}{{ app_labels.consumables.name }}
-                    {% elif 'tickets' in request.endpoint %}Tickets
+                    {% elif 'tickets' in request.endpoint %}Aufträge
                     {% elif request.endpoint == 'main.about' %}Über Scandy
                     {% else %}Dashboard{% endif %}
                 </h1>
@@ -175,7 +175,7 @@
                         </li>
                         <li>
                             <a href="{{ url_for('admin.tickets') }}" class="{% if 'admin.tickets' in request.endpoint %}active{% endif %}">
-                                <i class="fas fa-ticket-alt mr-2"></i>Ticketverwaltung
+                                <i class="fas fa-ticket-alt mr-2"></i>Auftragsverwaltung
                             </a>
                         </li>
                         {% endif %}
