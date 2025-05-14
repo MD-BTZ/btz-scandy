@@ -4,104 +4,110 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Ticket erstellen -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-ticket-alt text-primary mr-2"></i>
-                    Neues Ticket erstellen
-                </h2>
-                <form method="POST" action="{{ url_for('tickets.create') }}" class="space-y-4">
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Titel</span>
-                        </label>
-                        <input type="text" name="title" class="input input-bordered" required>
-                    </div>
-                    
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Beschreibung</span>
-                        </label>
-                        <textarea name="description" class="textarea textarea-bordered h-24" required></textarea>
-                    </div>
-                    
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Priorität</span>
-                        </label>
-                        <select name="priority" class="select select-bordered">
-                            <option value="niedrig">Niedrig</option>
-                            <option value="normal" selected>Normal</option>
-                            <option value="hoch">Hoch</option>
-                            <option value="dringend">Dringend</option>
-                        </select>
-                    </div>
-                    
-                    <div class="card-actions justify-end">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-paper-plane mr-2"></i>
-                            Ticket absenden
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte: {{ ticket_system_name }} erstellen -->
+        <div class="lg:col-span-1">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Neue {{ ticket_system_name }} erstellen</h2>
+                    <form method="POST" action="{{ url_for('tickets.create') }}">
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Titel</span>
+                            </label>
+                            <input type="text" name="title" class="input input-bordered" required>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Beschreibung</span>
+                            </label>
+                            <textarea name="description" class="textarea textarea-bordered h-32" required></textarea>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Priorität</span>
+                            </label>
+                            <select name="priority" class="select select-bordered">
+                                <option value="niedrig">Niedrig</option>
+                                <option value="normal" selected>Normal</option>
+                                <option value="hoch">Hoch</option>
+                                <option value="dringend">Dringend</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full">
+                            <i class="fas fa-plus mr-2"></i>
+                            {{ ticket_system_name }} erstellen
                         </button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
 
-        <!-- Eigene Tickets -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-list text-primary mr-2"></i>
-                    Meine Tickets
-                </h2>
-                
-                {% if my_tickets %}
-                    <div class="overflow-x-auto">
-                        <table class="table table-compact w-full">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Titel</th>
-                                    <th>Status</th>
-                                    <th>Erstellt</th>
-                                    <th>Antwort</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for ticket in my_tickets %}
-                                <tr class="hover">
-                                    <td>#{{ ticket.id }}</td>
-                                    <td>
-                                        <a href="{{ url_for('tickets.view', id=ticket.id) }}" class="link link-hover font-medium">
-                                            {{ ticket.title }}
-                                        </a>
-                                    </td>
-                                    <td>
-                                        <span class="badge badge-{{ 'success' if ticket.status == 'gelöst' else 'warning' }}">
-                                            {{ ticket.status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ ticket.created_at }}</td>
-                                    <td>
-                                        {% if ticket.message_count and ticket.message_count > 0 %}
-                                            <span class="badge badge-info">{{ ticket.message_count }} Nachricht(en)</span>
-                                        {% else %}
-                                            <span class="badge badge-ghost">Keine Nachrichten</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="text-center py-8">
-                        <i class="fas fa-ticket-alt text-4xl text-base-content/20 mb-4"></i>
-                        <p class="text-base-content/70">Sie haben noch keine Tickets erstellt.</p>
-                    </div>
-                {% endif %}
+        <!-- Rechte Spalte: Meine {{ ticket_system_name }} -->
+        <div class="lg:col-span-2">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Meine {{ ticket_system_name }}</h2>
+                    
+                    {% if my_tickets %}
+                        <div class="overflow-x-auto">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Titel</th>
+                                        <th>Status</th>
+                                        <th>Priorität</th>
+                                        <th>Erstellt am</th>
+                                        <th>Nachrichten</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ticket in my_tickets %}
+                                    <tr>
+                                        <td>{{ ticket.id }}</td>
+                                        <td>
+                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
+                                                {{ ticket.title }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-{{ status_colors[ticket.status] }}">
+                                                {{ ticket.status }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-{{ priority_colors[ticket.priority] }}">
+                                                {{ ticket.priority }}
+                                            </span>
+                                        </td>
+                                        <td>{{ ticket.created_at }}</td>
+                                        <td>
+                                            {% if ticket.message_count > 0 %}
+                                            <span class="badge badge-primary">{{ ticket.message_count }}</span>
+                                            {% else %}
+                                            <span class="text-base-content/60">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" 
+                                               class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-base-content/60">Sie haben noch keine {{ ticket_system_name }} erstellt.</p>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>

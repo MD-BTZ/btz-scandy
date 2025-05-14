@@ -13,11 +13,11 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Linke Spalte -->
         <div class="lg:col-span-2">
-            <!-- Ticket Details -->
+            <!-- {{ ticket_system_name }} Details -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Ticket #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <h2 class="card-title">{{ ticket_system_name }} #{{ ticket.id }}: {{ ticket.title }}</h2>
                         <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -124,10 +124,10 @@
 
         <!-- Rechte Spalte -->
         <div class="lg:col-span-1">
-            <!-- Ticket Aktionen -->
+            <!-- {{ ticket_system_name }} Aktionen -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <h3 class="card-title mb-4">Ticket Aktionen</h3>
+                    <h3 class="card-title mb-4">{{ ticket_system_name }} Aktionen</h3>
                     <form method="POST" action="{{ url_for('admin.update_ticket', ticket_id=ticket.id) }}">
                         <div class="form-control mb-4">
                             <label class="label">
@@ -191,10 +191,10 @@
                 </div>
             </div>
 
-            <!-- Ticket Historie -->
+            <!-- {{ ticket_system_name }} Historie -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h3 class="card-title mb-4">Ticket Historie</h3>
+                    <h3 class="card-title mb-4">{{ ticket_system_name }} Historie</h3>
                     <div class="history-container" style="max-height: 400px; overflow-y: auto;">
                         {% if history %}
                             {% for entry in history %}

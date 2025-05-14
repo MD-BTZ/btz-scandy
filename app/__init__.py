@@ -153,6 +153,12 @@ def create_app(test_config=None):
     config_name = 'default' if test_config is None else test_config
     app.config.from_object(config[config_name])
     
+    # Systemnamen direkt setzen
+    app.config['SYSTEM_NAME'] = os.environ.get('SYSTEM_NAME') or 'Scandy'
+    app.config['TICKET_SYSTEM_NAME'] = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
+    app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
+    app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
+    
     # Logger einrichten
     from app.utils.logger import init_app_logger
     init_app_logger(app)
@@ -174,6 +180,16 @@ def create_app(test_config=None):
     
     # Context Processors registrieren
     register_context_processors(app)
+    
+    # Context Processor für Systemnamen
+    @app.context_processor
+    def inject_system_names():
+        return {
+            'system_name': app.config['SYSTEM_NAME'],
+            'ticket_system_name': app.config['TICKET_SYSTEM_NAME'],
+            'tool_system_name': app.config['TOOL_SYSTEM_NAME'],
+            'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME']
+        }
     
     # Blueprints registrieren
     from app.routes import (

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">{{ ticket_system_name }} Übersicht</h1>
+        <div class="flex gap-4">
+            <div class="form-control">
+                <select id="statusFilter" class="select select-bordered">
+                    <option value="">Alle Status</option>
+                    <option value="offen">Offen</option>
+                    <option value="in_bearbeitung">In Bearbeitung</option>
+                    <option value="wartet_auf_antwort">Wartet auf Antwort</option>
+                    <option value="gelöst">Gelöst</option>
+                    <option value="geschlossen">Geschlossen</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <select id="priorityFilter" class="select select-bordered">
+                    <option value="">Alle Prioritäten</option>
+                    <option value="niedrig">Niedrig</option>
+                    <option value="normal">Normal</option>
+                    <option value="hoch">Hoch</option>
+                    <option value="dringend">Dringend</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <input type="text" id="searchInput" placeholder="Suchen..." class="input input-bordered">
+            </div>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table w-full">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Titel</th>
+                    <th>Status</th>
+                    <th>Priorität</th>
+                    <th>Erstellt von</th>
+                    <th>Zugewiesen an</th>
+                    <th>Erstellt am</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr>
+                    <td>{{ ticket.id }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover">
+                            {{ ticket.title }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ status_colors[ticket.status] }}">
+                            {{ ticket.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ priority_colors[ticket.priority] }}">
+                            {{ ticket.priority }}
+                        </span>
+                    </td>
+                    <td>{{ ticket.created_by }}</td>
+                    <td>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</td>
+                    <td>{{ ticket.created_at }}</td>
+                    <td>
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" 
+                               class="btn btn-sm btn-primary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button class="btn btn-sm btn-error" 
+                                    onclick="deleteTicket({{ ticket.id }})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Filter-Funktionalität
+const statusFilter = document.getElementById('statusFilter');
+const priorityFilter = document.getElementById('priorityFilter');
+const searchInput = document.getElementById('searchInput');
+const tableRows = document.querySelectorAll('tbody tr');
+
+function applyFilters() {
+    const statusValue = statusFilter.value.toLowerCase();
+    const priorityValue = priorityFilter.value.toLowerCase();
+    const searchValue = searchInput.value.toLowerCase();
+
+    tableRows.forEach(row => {
+        const status = row.querySelector('td:nth-child(3)').textContent.toLowerCase();
+        const priority = row.querySelector('td:nth-child(4)').textContent.toLowerCase();
+        const title = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+        const createdBy = row.querySelector('td:nth-child(5)').textContent.toLowerCase();
+        const assignedTo = row.querySelector('td:nth-child(6)').textContent.toLowerCase();
+
+        const statusMatch = !statusValue || status.includes(statusValue);
+        const priorityMatch = !priorityValue || priority.includes(priorityValue);
+        const searchMatch = !searchValue || 
+            title.includes(searchValue) || 
+            createdBy.includes(searchValue) || 
+            assignedTo.includes(searchValue);
+
+        row.style.display = statusMatch && priorityMatch && searchMatch ? '' : 'none';
+    });
+}
+
+statusFilter.addEventListener('change', applyFilters);
+priorityFilter.addEventListener('change', applyFilters);
+searchInput.addEventListener('input', applyFilters);
+
+// Lösch-Funktionalität
+function deleteTicket(ticketId) {
+    if (confirm('Möchten Sie dieses {{ ticket_system_name }} wirklich löschen?')) {
+        fetch(`/admin/tickets/${ticketId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Entferne die Zeile aus der Tabelle
+                const row = document.querySelector(`tr:has(button[onclick="deleteTicket(${ticketId})"])`);
+                if (row) {
+                    row.remove();
+                }
+            } else {
+                alert(data.message || 'Fehler beim Löschen des {{ ticket_system_name }}s');
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            alert('Ein Fehler ist aufgetreten');
+        });
+    }
+}
+</script>
+{% endblock %} 
