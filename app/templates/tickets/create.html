@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Neues Ticket erstellen{% endblock %}
+{% block title %}Neuen Auftrag erstellen{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Linke Spalte: {{ ticket_system_name }} erstellen -->
+        <!-- Linke Spalte: Auftrag erstellen -->
         <div class="lg:col-span-1">
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h2 class="card-title mb-4">Neue {{ ticket_system_name }} erstellen</h2>
+                    <h2 class="card-title mb-4">Neuen Auftrag erstellen</h2>
                     <form method="POST" action="{{ url_for('tickets.create') }}">
                         <div class="form-control mb-4">
                             <label class="label">
@@ -39,18 +39,18 @@
                         
                         <button type="submit" class="btn btn-primary w-full">
                             <i class="fas fa-plus mr-2"></i>
-                            {{ ticket_system_name }} erstellen
+                            Auftrag erstellen
                         </button>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Rechte Spalte: Meine {{ ticket_system_name }} -->
+        <!-- Rechte Spalte: Meine Aufträge -->
         <div class="lg:col-span-2">
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h2 class="card-title mb-4">Meine {{ ticket_system_name }}</h2>
+                    <h2 class="card-title mb-4">Meine Aufträge</h2>
                     
                     {% if my_tickets %}
                         <div class="overflow-x-auto">
@@ -105,7 +105,7 @@
                             </table>
                         </div>
                     {% else %}
-                        <p class="text-base-content/60">Sie haben noch keine {{ ticket_system_name }} erstellt.</p>
+                        <p class="text-base-content/60">Sie haben noch keine Aufträge erstellt.</p>
                     {% endif %}
                 </div>
             </div>
