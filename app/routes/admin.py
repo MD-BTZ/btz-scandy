@@ -64,7 +64,7 @@ def get_material_usage():
         SELECT 
             c.name,
             SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-        FROM consumable_usage cu
+        FROM consumable_usages cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         GROUP BY c.name
         ORDER BY total_quantity DESC
@@ -140,7 +140,7 @@ def get_consumables_forecast():
                 c.quantity as current_amount,
                 COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0) as avg_daily_usage
             FROM consumables c
-            LEFT JOIN consumable_usage cu ON c.barcode = cu.consumable_barcode
+            LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
                 AND cu.used_at >= date('now', '-30 days')
             WHERE c.deleted = 0
             GROUP BY c.barcode, c.name, c.quantity
@@ -581,15 +581,15 @@ def manual_lending():
                         # Neue Verbrauchsmaterial-Ausgabe erstellen
                         db.execute('''
                             INSERT INTO consumable_usages 
-                            (consumable_barcode, worker_barcode, quantity, used_at, modified_at, sync_status)
-                            VALUES (?, ?, ?, datetime('now'), datetime('now'), 'pending')
+                            (consumable_barcode, worker_barcode, quantity, used_at, updated_at, sync_status)
+                            VALUES (?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), 'pending')
                         ''', [item_barcode, worker_barcode, quantity])
                         
                         # Bestand aktualisieren
                         db.execute('''
                             UPDATE consumables
                             SET quantity = quantity - ?,
-                                modified_at = datetime('now'),
+                                updated_at = datetime('now', 'localtime'),
                                 sync_status = 'pending'
                             WHERE barcode = ?
                         ''', [quantity, item_barcode])
@@ -801,7 +801,7 @@ def manual_lending():
                 'Verbrauchsmaterial' as category,
                 cu.used_at as action_date,
                 cu.quantity as amount
-            FROM consumable_usage cu
+            FROM consumable_usages cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             JOIN workers w ON cu.worker_barcode = w.barcode
             WHERE DATE(cu.used_at) >= DATE('now', '-7 days')

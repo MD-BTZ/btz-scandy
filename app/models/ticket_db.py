@@ -4,6 +4,7 @@ from pathlib import Path
 from app.config import config
 import os
 import stat
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class TicketDatabase:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         # Überprüfe und korrigiere die Berechtigungen
         self._check_and_fix_permissions()
+        self.init_schema()
         
     def _check_and_fix_permissions(self):
         """Überprüft und korrigiert die Berechtigungen der Datenbankdatei"""
@@ -303,4 +305,32 @@ class TicketDatabase:
             return ticket_id
         except Exception as e:
             logging.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
-            raise 
+            raise
+
+    def get_ticket(self, ticket_id):
+        """Holt ein einzelnes Ticket aus der Datenbank."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT *
+                FROM tickets
+                WHERE id = ?
+            """, [ticket_id])
+            ticket = cursor.fetchone()
+            
+            if ticket:
+                # Konvertiere das Row-Objekt in ein Dictionary
+                ticket_dict = dict(ticket)
+                
+                # Konvertiere Datumsfelder
+                date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+                for field in date_fields:
+                    if ticket_dict[field]:
+                        try:
+                            ticket_dict[field] = datetime.strptime(ticket_dict[field], '%Y-%m-%d %H:%M:%S')
+                        except (ValueError, TypeError):
+                            ticket_dict[field] = None
+                
+                return ticket_dict
+            
+            return None 

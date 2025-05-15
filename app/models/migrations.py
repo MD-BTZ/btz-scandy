@@ -7,7 +7,7 @@ import time
 logger = logging.getLogger(__name__)
 
 # Die Schema-Version, die die aktuelle Codebasis erwartet
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 4
 
 def get_db_connection(db_path, timeout=30):
     """Erstellt eine Datenbankverbindung mit Timeout."""
@@ -156,6 +156,116 @@ def _migrate_v2_to_v3(conn):
         conn.rollback()
         raise
 
+def _migrate_v3_to_v4(conn):
+    """Migration von Version 3 auf Version 4"""
+    try:
+        cursor = conn.cursor()
+        
+        # Prüfe ob die alte Tabelle existiert
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='consumable_usage'")
+        if cursor.fetchone():
+            # Benenne die Tabelle um
+            cursor.execute("ALTER TABLE consumable_usage RENAME TO consumable_usages")
+            logger.info("Tabelle consumable_usage zu consumable_usages umbenannt")
+        
+        # Füge modified_at Spalte hinzu, falls sie noch nicht existiert
+        try:
+            cursor.execute('ALTER TABLE consumable_usages ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+            cursor.execute('UPDATE consumable_usages SET modified_at = used_at WHERE modified_at IS NULL')
+            logger.info("modified_at Spalte zur consumable_usages Tabelle hinzugefügt")
+        except Exception as e:
+            logger.info(f"modified_at Spalte existiert bereits oder konnte nicht hinzugefügt werden: {e}")
+        
+        # Aktualisiere die Schema-Version
+        set_db_schema_version(conn, 4)
+        logger.info("Schema-Version auf 4 aktualisiert")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v3->v4: {e}")
+        return False
+
+def _migrate_ticket_db(conn):
+    """Migration der Ticket-Datenbank auf Version 3."""
+    logger.info("Führe Migration der Ticket-Datenbank auf Version 3 durch...")
+    cursor = conn.cursor()
+
+    try:
+        # Prüfe ob schema_version Tabelle existiert
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Hole aktuelle Version
+        cursor.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
+        result = cursor.fetchone()
+        current_version = result[0] if result else 0
+
+        if current_version < 3:
+            # Füge neue Spalten zur tickets Tabelle hinzu
+            cursor.execute("""
+                ALTER TABLE tickets ADD COLUMN last_modified_by TEXT;
+                ALTER TABLE tickets ADD COLUMN last_modified_at TIMESTAMP;
+                ALTER TABLE tickets ADD COLUMN category TEXT;
+                ALTER TABLE tickets ADD COLUMN due_date TIMESTAMP;
+                ALTER TABLE tickets ADD COLUMN estimated_time INTEGER;
+                ALTER TABLE tickets ADD COLUMN actual_time INTEGER;
+                ALTER TABLE tickets ADD COLUMN response TEXT;
+            """)
+
+            # Füge neue Spalten zur ticket_notes Tabelle hinzu
+            cursor.execute("""
+                ALTER TABLE ticket_notes ADD COLUMN modified_at TIMESTAMP;
+                ALTER TABLE ticket_notes ADD COLUMN modified_by TEXT;
+                ALTER TABLE ticket_notes ADD COLUMN is_private BOOLEAN DEFAULT 0;
+            """)
+
+            # Erstelle ticket_messages Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    message TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                    FOREIGN KEY (sender) REFERENCES users(username)
+                )
+            ''')
+
+            # Erstelle ticket_history Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    field_name TEXT NOT NULL,
+                    old_value TEXT,
+                    new_value TEXT,
+                    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    changed_by TEXT NOT NULL,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                    FOREIGN KEY (changed_by) REFERENCES users(username)
+                )
+            ''')
+
+            # Aktualisiere Schema-Version
+            cursor.execute("INSERT INTO schema_version (version) VALUES (3)")
+            conn.commit()
+            logger.info("Ticket-Datenbank erfolgreich auf Version 3 migriert")
+            return True
+
+        logger.info("Ticket-Datenbank ist bereits auf Version 3")
+        return True
+
+    except Exception as e:
+        logger.error(f"Fehler bei der Ticket-Datenbank-Migration: {str(e)}")
+        conn.rollback()
+        return False
+
 def run_migrations(db_path):
     """Prüft die Schema-Version und führt notwendige Migrationen aus."""
     logger.info(f"Prüfe Datenbank-Schema-Migrationen für: {db_path}")
@@ -189,6 +299,12 @@ def run_migrations(db_path):
                         raise Exception("Migration von v2 auf v3 fehlgeschlagen!")
                     current_version = 3
 
+                # --- Migration v3 -> v4 ---
+                if current_version < 4:
+                    if not _migrate_v3_to_v4(conn):
+                        raise Exception("Migration von v3 auf v4 fehlgeschlagen!")
+                    current_version = 4
+
                 conn.commit()
                 logger.info("Datenbank-Migrationen erfolgreich abgeschlossen.")
             elif current_version > CURRENT_SCHEMA_VERSION:
@@ -199,20 +315,43 @@ def run_migrations(db_path):
             break  # Erfolgreich, keine weiteren Versuche nötig
 
         except sqlite3.OperationalError as e:
-            if "database is locked" in str(e) and attempt < max_retries - 1:
-                logger.warning(f"Datenbank ist gesperrt (Versuch {attempt + 1}/{max_retries}). Warte {retry_delay} Sekunden...")
-                if conn:
-                    conn.close()
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponentielles Backoff
-                continue
-            raise
-        except Exception as e:
-            logger.error(f"Fehler während der Migration: {e}", exc_info=True)
-            if conn:
-                conn.rollback()
+            if "database is locked" in str(e).lower():
+                if attempt < max_retries - 1:
+                    logger.warning(f"Datenbank ist gesperrt. Versuche {attempt + 1} von {max_retries}...")
+                    time.sleep(retry_delay)
+                    continue
+            logger.error(f"Fehler bei der Datenbank-Migration: {str(e)}")
             raise
         finally:
             if conn:
                 conn.close()
-                logger.info("Datenbankverbindung für Migration geschlossen.") 
+
+def run_ticket_db_migrations(ticket_db_path):
+    """Führt Migrationen für die Ticket-Datenbank durch."""
+    logger.info(f"Prüfe Ticket-Datenbank-Migrationen für: {ticket_db_path}")
+    if not os.path.exists(ticket_db_path):
+        logger.warning(f"Ticket-Datenbankdatei {ticket_db_path} existiert nicht. Migrationen werden übersprungen (wird neu erstellt).")
+        return
+
+    conn = None
+    max_retries = 3
+    retry_delay = 1  # Sekunden
+
+    for attempt in range(max_retries):
+        try:
+            conn = get_db_connection(ticket_db_path)
+            if not _migrate_ticket_db(conn):
+                raise Exception("Ticket-Datenbank-Migration fehlgeschlagen!")
+            break  # Erfolgreich, keine weiteren Versuche nötig
+
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e).lower():
+                if attempt < max_retries - 1:
+                    logger.warning(f"Ticket-Datenbank ist gesperrt. Versuche {attempt + 1} von {max_retries}...")
+                    time.sleep(retry_delay)
+                    continue
+            logger.error(f"Fehler bei der Ticket-Datenbank-Migration: {str(e)}")
+            raise
+        finally:
+            if conn:
+                conn.close() 

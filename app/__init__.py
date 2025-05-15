@@ -21,6 +21,8 @@ from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
 from app.models.migrations import run_migrations
 from app.routes import auth, tools, consumables, workers, setup, backup
+from app.config import Config
+from app.routes import init_app
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -124,8 +126,18 @@ def initialize_and_migrate_databases():
         # 1. SchemaManager initialisieren und Schema validieren/aktualisieren
         logger.info("Initialisiere SchemaManager und validiere/aktualisiere Schema...")
         schema_manager = SchemaManager(db_path)
-        schema_manager.initialize()
         
+        # Initialisiere das Schema
+        if not schema_manager.initialize():
+            raise Exception("Schema-Initialisierung fehlgeschlagen")
+        
+        # Führe Schema-Updates durch
+        if schema_manager.needs_update():
+            logger.info("Schema-Update erforderlich...")
+            if not schema_manager.update():
+                raise Exception("Schema-Update fehlgeschlagen")
+        
+        # Validiere das Schema
         if not schema_manager.validate_schema():
             logger.error("Schema-Validierung fehlgeschlagen!")
             raise Exception("Schema-Validierung fehlgeschlagen")
@@ -266,5 +278,24 @@ def create_app(test_config=None):
         except Exception as e_pragma:
             print(f"FEHLER beim Setzen von PRAGMA user_version: {e_pragma}")
     # Ende temporärer Code
+
+    # Context Processor für Template-Variablen
+    @app.context_processor
+    def utility_processor():
+        return {
+            'status_colors': {
+                'offen': 'danger',
+                'in_bearbeitung': 'warning',
+                'wartet_auf_antwort': 'info',
+                'gelöst': 'success',
+                'geschlossen': 'secondary'
+            },
+            'priority_colors': {
+                'niedrig': 'info',
+                'normal': 'primary',
+                'hoch': 'warning',
+                'kritisch': 'error'
+            }
+        }
 
     return app

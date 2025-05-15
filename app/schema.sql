@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     resolved_at TIMESTAMP,
     resolution_notes TEXT,
+    response TEXT,
     FOREIGN KEY (created_by) REFERENCES users (username),
     FOREIGN KEY (assigned_to) REFERENCES users (username)
 );
@@ -41,4 +42,16 @@ CREATE TABLE IF NOT EXISTS ticket_notes (
     created_by TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE
+);
+
+-- Ticket-Kommunikation Tabelle
+CREATE TABLE IF NOT EXISTS ticket_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    is_admin BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
+    FOREIGN KEY (sender) REFERENCES users (username)
 ); 

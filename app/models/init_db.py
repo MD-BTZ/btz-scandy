@@ -97,10 +97,21 @@ def init_db():
                 used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 sync_status TEXT DEFAULT 'pending',
+                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
                 FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
             )
         ''')
+        
+        # Füge modified_at Spalte hinzu, falls sie noch nicht existiert
+        try:
+            cursor.execute('ALTER TABLE consumable_usages ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+            cursor.execute('UPDATE consumable_usages SET modified_at = used_at WHERE modified_at IS NULL')
+            conn.commit()
+            logger.info("modified_at Spalte zur consumable_usages Tabelle hinzugefügt")
+        except Exception as e:
+            logger.info(f"modified_at Spalte existiert bereits oder konnte nicht hinzugefügt werden: {e}")
+            conn.rollback()
         
         # Settings Tabelle
         cursor.execute('''

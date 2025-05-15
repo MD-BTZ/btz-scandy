@@ -78,51 +78,69 @@ def create():
             
     return render_template('tickets/create.html', my_tickets=my_tickets)
 
-@bp.route('/view/<int:id>')
+@bp.route('/view/<int:ticket_id>')
 @login_required
-def view(id):
-    """Zeigt die Detailansicht eines Tickets für den Benutzer."""
-    # Hole das Ticket
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ? AND created_by = ?
-        """,
-        [id, current_user.username],
-        one=True
-    )
+def view(ticket_id):
+    """Zeigt die Details eines Tickets für den Benutzer."""
+    logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
+    
+    ticket = ticket_db.get_ticket(ticket_id)
     
     if not ticket:
-        abort(404)
+        logging.error(f"Ticket {ticket_id} nicht gefunden")
+        flash('Ticket nicht gefunden.', 'error')
+        return redirect(url_for('tickets.create'))
+        
+    # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
+    if ticket['created_by'] != current_user.username and not current_user.is_admin:
+        logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
+        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
+        return redirect(url_for('tickets.create'))
     
-    # Konvertiere Datumsfelder
-    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-    for field in date_fields:
-        if ticket[field]:
-            try:
-                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                ticket[field] = None
+    # Hole die Nachrichten für das Ticket
+    logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
     
-    # Hole die Nachrichten für dieses Ticket
-    messages = ticket_db.query(
-        """
-        SELECT *
-        FROM ticket_messages
-        WHERE ticket_id = ?
-        ORDER BY created_at ASC
-        """,
-        [id]
-    )
+    # Direkte SQL-Abfrage mit Database.get_db()
+    with Database.get_db() as db:
+        cursor = db.cursor()
+        cursor.execute(
+            """
+            SELECT id, message, sender, is_admin, created_at
+            FROM ticket_messages
+            WHERE ticket_id = ?
+            ORDER BY created_at ASC
+            """,
+            [ticket_id]
+        )
+        raw_messages = cursor.fetchall()
+        logging.info(f"SQL-Abfrage ergab {len(raw_messages)} Nachrichten")
+        
+        # Konvertiere sqlite3.Row in Dictionaries und formatiere Datum
+        messages = []
+        for msg in raw_messages:
+            message_dict = dict(msg)
+            if message_dict['created_at']:
+                try:
+                    created_at = datetime.strptime(message_dict['created_at'], '%Y-%m-%d %H:%M:%S')
+                    message_dict['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
+                    logging.info(f"Nachricht {message_dict['id']} formatiert: {message_dict['created_at']}")
+                except ValueError as e:
+                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {message_dict['id']}: {str(e)}")
+            messages.append(message_dict)
+            logging.info(f"Nachricht verarbeitet: ID={message_dict['id']}, Sender={message_dict['sender']}, Text={message_dict['message']}, Datum={message_dict['created_at']}")
     
-    # Zähle die Anzahl der Nachrichten
-    message_count = len(messages) if messages else 0
+    message_count = len(messages)
+    logging.info(f"Nachrichtenanzahl: {message_count}")
     
-    return render_template('tickets/view.html', 
-                         ticket=ticket, 
+    # Hole die Notizen für das Ticket
+    notes = ticket_db.get_ticket_notes(ticket_id)
+    
+    return render_template('tickets/view.html',
+                         ticket=ticket,
                          messages=messages,
-                         message_count=message_count)
+                         notes=notes,
+                         message_count=message_count,
+                         now=datetime.now())
 
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
 @login_required
@@ -140,16 +158,21 @@ def add_message(ticket_id):
             one=True
         )
         if not ticket:
+            logging.error(f"Ticket {ticket_id} nicht gefunden für Benutzer {current_user.username}")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
         # Nachricht aus dem Request extrahieren
         data = request.get_json()
         if not data or 'message' not in data:
+            logging.error("Keine Nachricht im Request gefunden")
             return jsonify({'success': False, 'message': 'Keine Nachricht angegeben'}), 400
 
         message = data['message'].strip()
         if not message:
+            logging.error("Leere Nachricht")
             return jsonify({'success': False, 'message': 'Nachricht darf nicht leer sein'}), 400
+
+        logging.info(f"Versuche Nachricht zu speichern: Ticket {ticket_id}, Benutzer {current_user.username}, Nachricht: {message}")
 
         # Nachricht zur Datenbank hinzufügen
         with Database.get_db() as db:
@@ -173,31 +196,34 @@ def add_message(ticket_id):
             )
             
             db.commit()
+            logging.info(f"Nachricht erfolgreich gespeichert mit ID {cursor.lastrowid}")
 
             # Hole die eingefügte Nachricht
             cursor.execute(
                 """
                 SELECT id, message, sender, is_admin, created_at
                 FROM ticket_messages
-                WHERE ticket_id = ? AND sender = ? AND message = ?
-                ORDER BY created_at DESC
-                LIMIT 1
+                WHERE id = ?
                 """,
-                [ticket_id, current_user.username, message]
+                [cursor.lastrowid]
             )
             new_message = cursor.fetchone()
 
             if not new_message:
+                logging.error("Konnte die neue Nachricht nicht abrufen")
                 return jsonify({'success': False, 'message': 'Fehler beim Abrufen der Nachricht'}), 500
+
+            # Formatiere das Datum
+            created_at = datetime.strptime(new_message['created_at'], '%Y-%m-%d %H:%M:%S')
+            formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
 
             return jsonify({
                 'success': True,
                 'message': {
-                    'id': new_message['id'],
-                    'message': new_message['message'],
+                    'text': new_message['message'],
                     'sender': new_message['sender'],
-                    'is_admin': new_message['is_admin'],
-                    'created_at': new_message['created_at']
+                    'created_at': formatted_date,
+                    'is_admin': new_message['is_admin']
                 }
             })
 

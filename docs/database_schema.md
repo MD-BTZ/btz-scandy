@@ -141,3 +141,19 @@ Die App erwartet folgende Tabellen und Spalten:
 - `modified_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
 - FOREIGN KEY (`consumable_barcode`) REFERENCES `consumables`(`barcode`)
 - FOREIGN KEY (`worker_barcode`) REFERENCES `workers`
+
+### tickets
+- `id` (INTEGER, PRIMARY KEY AUTOINCREMENT)
+- `title` (TEXT, NOT NULL)
+- `description` (TEXT, NOT NULL)
+- `status` (TEXT, DEFAULT 'offen')
+- `priority` (TEXT, DEFAULT 'normal')
+- `created_by` (TEXT, NOT NULL)
+- `assigned_to` (TEXT)
+- `created_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
+- `updated_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
+- `resolved_at` (TIMESTAMP)
+- `resolution_notes` (TEXT)
+- `response` (TEXT)  -- Öffentliche Antwort an den Benutzer
+- FOREIGN KEY (`created_by`) REFERENCES `users`(`username`)
+- FOREIGN KEY (`assigned_to`) REFERENCES `users`(`username`)

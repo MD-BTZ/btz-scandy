@@ -5,7 +5,7 @@ class SchemaManager:
     def __init__(self, db_path):
         self.db_path = db_path
         self.current_version = self._get_current_version()
-        self.expected_version = 3  # Setze die erwartete Version auf 3
+        self.expected_version = 4  # Setze die erwartete Version auf 4
 
     def _get_current_version(self):
         """Hole die aktuelle Schema-Version"""
@@ -131,7 +131,7 @@ class SchemaManager:
         
         # Consumable Usage Tabelle
         conn.execute('''
-            CREATE TABLE IF NOT EXISTS consumable_usage (
+            CREATE TABLE IF NOT EXISTS consumable_usages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 consumable_barcode TEXT NOT NULL,
                 worker_barcode TEXT NOT NULL,
@@ -192,6 +192,79 @@ class SchemaManager:
                 error TEXT
             )
         ''')
+        
+        # Tickets Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT DEFAULT 'offen',
+                priority TEXT DEFAULT 'normal',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP,
+                created_by TEXT NOT NULL,
+                assigned_to TEXT,
+                resolution_notes TEXT,
+                response TEXT,
+                last_modified_by TEXT,
+                last_modified_at TIMESTAMP,
+                category TEXT,
+                due_date TIMESTAMP,
+                estimated_time INTEGER,
+                actual_time INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(username),
+                FOREIGN KEY (assigned_to) REFERENCES users(username),
+                FOREIGN KEY (last_modified_by) REFERENCES users(username)
+            )
+        ''')
+        
+        # Ticket Notes Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS ticket_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT NOT NULL,
+                modified_at TIMESTAMP,
+                modified_by TEXT,
+                is_private BOOLEAN DEFAULT 0,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(username),
+                FOREIGN KEY (modified_by) REFERENCES users(username)
+            )
+        ''')
+        
+        # Ticket History Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS ticket_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                field_name TEXT NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                changed_by TEXT NOT NULL,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                FOREIGN KEY (changed_by) REFERENCES users(username)
+            )
+        ''')
+
+        # Ticket Messages Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS ticket_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                is_admin BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                FOREIGN KEY (sender) REFERENCES users(username)
+            )
+        ''')
 
     def _insert_default_data(self, conn):
         """Fügt Standarddaten in die Datenbank ein."""
@@ -232,9 +305,13 @@ class SchemaManager:
                 # Initialisiere die Users-Tabelle
                 self.init_users_table()
                 
-                # Setze die Schema-Version
-                conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
-                conn.commit()
+                # Prüfe ob die Version bereits existiert
+                cursor = conn.cursor()
+                cursor.execute('SELECT version FROM schema_version WHERE version = ?', (self.expected_version,))
+                if not cursor.fetchone():
+                    # Setze die Schema-Version nur wenn sie noch nicht existiert
+                    conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
+                    conn.commit()
                 
                 print(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
                 return True
@@ -253,33 +330,125 @@ class SchemaManager:
             
         try:
             with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
                 # Führe Updates basierend auf der aktuellen Version durch
                 if self.current_version < 1:
                     self._create_tables(conn)
                     self._insert_default_data(conn)
-                    conn.execute('INSERT INTO schema_version (version) VALUES (1)')
+                    cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (1)')
                 
                 if self.current_version < 2:
                     # Füge maintenance_interval und last_checked zur tools Tabelle hinzu
-                    conn.execute('ALTER TABLE tools ADD COLUMN maintenance_interval INTEGER')
-                    conn.execute('ALTER TABLE tools ADD COLUMN last_checked TIMESTAMP')
-                    conn.execute('INSERT INTO schema_version (version) VALUES (2)')
+                    try:
+                        conn.execute('ALTER TABLE tools ADD COLUMN maintenance_interval INTEGER')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    try:
+                        conn.execute('ALTER TABLE tools ADD COLUMN last_checked TIMESTAMP')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (2)')
                 
                 if self.current_version < 3:
                     # Füge maintenance_interval und last_checked zur tools Tabelle hinzu
-                    conn.execute('ALTER TABLE tools ADD COLUMN maintenance_interval INTEGER')
-                    conn.execute('ALTER TABLE tools ADD COLUMN last_checked TIMESTAMP')
-                    conn.execute('INSERT INTO schema_version (version) VALUES (3)')
+                    try:
+                        conn.execute('ALTER TABLE tools ADD COLUMN maintenance_interval INTEGER')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    try:
+                        conn.execute('ALTER TABLE tools ADD COLUMN last_checked TIMESTAMP')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (3)')
+                
+                if self.current_version < 4:
+                    # Erstelle ticket_messages Tabelle
+                    conn.execute('''
+                        CREATE TABLE IF NOT EXISTS ticket_messages (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            ticket_id INTEGER NOT NULL,
+                            message TEXT NOT NULL,
+                            sender TEXT NOT NULL,
+                            is_admin BOOLEAN DEFAULT 0,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                            FOREIGN KEY (sender) REFERENCES users(username)
+                        )
+                    ''')
+                    cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (4)')
                 
                 conn.commit()
-            print(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
-            return True
+                print(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
+                return True
         except Exception as e:
             print(f"Fehler beim Aktualisieren der Datenbank: {str(e)}")
             return False
 
+    def _validate_table_columns(self, conn, table_name):
+        """Validiert die Spalten einer Tabelle gegen das erwartete Schema"""
+        cursor = conn.cursor()
+        
+        # Hole das aktuelle Tabellenschema
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        current_columns = {row[1]: {'type': row[2], 'notnull': row[3], 'pk': row[5]} for row in cursor.fetchall()}
+        
+        # Hole das erwartete Schema aus der CREATE TABLE Anweisung
+        cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        create_statement = cursor.fetchone()[0]
+        
+        # Extrahiere die Spaltendefinitionen aus der CREATE TABLE Anweisung
+        import re
+        # Ignoriere SQL-Schlüsselwörter und extrahiere nur die tatsächlichen Spaltennamen
+        column_defs = re.findall(r'(\w+)\s+([A-Z]+)(?:\s+NOT\s+NULL)?(?:\s+DEFAULT\s+[^,]+)?(?:\s+PRIMARY\s+KEY)?', create_statement)
+        expected_columns = {}
+        
+        # SQLite-Datentyp-Mapping
+        sqlite_type_mapping = {
+            'INTEGER': ['INTEGER', 'INT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'BIGINT', 'UNSIGNED BIG INT', 'INT2', 'INT8'],
+            'TEXT': ['TEXT', 'CHARACTER', 'VARCHAR', 'VARYING CHARACTER', 'NCHAR', 'NATIVE CHARACTER', 'NVARCHAR', 'CLOB'],
+            'REAL': ['REAL', 'DOUBLE', 'DOUBLE PRECISION', 'FLOAT'],
+            'BLOB': ['BLOB'],
+            'BOOLEAN': ['BOOLEAN', 'BOOL']
+        }
+        
+        for name, type_ in column_defs:
+            # Ignoriere SQL-Schlüsselwörter
+            if name.upper() not in ['CREATE', 'TABLE', 'IF', 'NOT', 'EXISTS', 'FOREIGN', 'KEY', 'ON', 'DELETE', 'CASCADE', 'UNIQUE']:
+                # Normalisiere den Datentyp
+                normalized_type = None
+                for sqlite_type, aliases in sqlite_type_mapping.items():
+                    if type_.upper() in aliases:
+                        normalized_type = sqlite_type
+                        break
+                if normalized_type:
+                    expected_columns[name] = {'type': normalized_type}
+        
+        # Validiere jede Spalte
+        missing_columns = []
+        wrong_type_columns = []
+        
+        for col_name, col_info in expected_columns.items():
+            if col_name not in current_columns:
+                missing_columns.append(col_name)
+            else:
+                current_type = current_columns[col_name]['type'].upper()
+                expected_type = col_info['type'].upper()
+                
+                # Prüfe ob der aktuelle Typ mit dem erwarteten Typ kompatibel ist
+                type_compatible = False
+                for sqlite_type, aliases in sqlite_type_mapping.items():
+                    if current_type in aliases and expected_type == sqlite_type:
+                        type_compatible = True
+                        break
+                
+                if not type_compatible:
+                    wrong_type_columns.append((col_name, current_type, expected_type))
+        
+        return missing_columns, wrong_type_columns
+
     def validate_schema(self):
-        """Validiert das aktuelle Schema"""
+        """Validiert das aktuelle Schema und fügt fehlende Spalten hinzu"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -287,16 +456,21 @@ class SchemaManager:
             # Prüfe ob alle erforderlichen Tabellen existieren
             required_tables = [
                 'tools', 'consumables', 'workers', 'lendings',
-                'consumable_usage', 'settings', 'users', 'access_settings'
+                'consumable_usages', 'settings', 'users', 'access_settings',
+                'tickets', 'ticket_notes', 'ticket_history', 'ticket_messages'
             ]
             
+            missing_tables = []
             for table in required_tables:
                 cursor.execute(f'''
                     SELECT name FROM sqlite_master 
                     WHERE type='table' AND name=?
                 ''', (table,))
                 if not cursor.fetchone():
-                    raise Exception(f"Fehlende Tabelle: {table}")
+                    missing_tables.append(table)
+            
+            if missing_tables:
+                raise Exception(f"Fehlende Tabellen: {', '.join(missing_tables)}")
             
             # Prüfe ob die Schema-Versionstabelle existiert
             cursor.execute(f'''
@@ -312,11 +486,45 @@ class SchemaManager:
             if not version or version[0] != self.expected_version:
                 raise Exception(f"Falsche Schema-Version: {version[0] if version else 'keine'} (erwartet: {self.expected_version})")
             
+            # Validiere die Spalten jeder Tabelle und füge fehlende Spalten hinzu
+            schema_errors = []
+            for table in required_tables:
+                missing_cols, wrong_type_cols = self._validate_table_columns(conn, table)
+                
+                # Füge fehlende Spalten hinzu
+                if missing_cols:
+                    print(f"Füge fehlende Spalten zur Tabelle {table} hinzu: {', '.join(missing_cols)}")
+                    for col in missing_cols:
+                        try:
+                            # Hole die Spaltendefinition aus der CREATE TABLE Anweisung
+                            cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                            create_statement = cursor.fetchone()[0]
+                            
+                            # Extrahiere die Spaltendefinition
+                            import re
+                            col_def = re.search(f"{col}\\s+([^,]+)(?:,|$)", create_statement)
+                            if col_def:
+                                col_type = col_def.group(1)
+                                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+                                print(f"Spalte {col} zur Tabelle {table} hinzugefügt")
+                        except Exception as e:
+                            schema_errors.append(f"Fehler beim Hinzufügen der Spalte {col} zur Tabelle {table}: {str(e)}")
+                
+                if wrong_type_cols:
+                    for col_name, current_type, expected_type in wrong_type_cols:
+                        schema_errors.append(f"Tabelle {table}: Falscher Datentyp für Spalte {col_name} (aktuell: {current_type}, erwartet: {expected_type})")
+            
+            if schema_errors:
+                raise Exception("Schema-Validierungsfehler:\n" + "\n".join(schema_errors))
+            
+            conn.commit()
             return True
             
         except Exception as e:
             print(f"Schema-Validierung fehlgeschlagen: {e}")
             return False
+        finally:
+            conn.close()
 
     def get_schema_version(self):
         """Gibt die aktuelle Schema-Version zurück"""
