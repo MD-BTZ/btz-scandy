@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Scandy Einrichtung - Optionale Einstellungen{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">
+        <i class="fas fa-cogs text-primary mr-2"></i>
+        Scandy Einrichtung
+    </h1>
+    {% if error %}
+    <div class="alert alert-error mb-4">
+        <i class="fas fa-exclamation-circle mr-2"></i>
+        {{ error }}
+    </div>
+    {% endif %}
+    <form method="POST" action="{{ url_for('setup.setup_optional') }}">
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title mb-4">Optionale Einstellungen</h2>
+                <!-- Kategorien -->
+                <div class="form-control mb-6">
+                    <label class="label">
+                        <span class="label-text">Kategorien</span>
+                    </label>
+                    <div id="categories-container">
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" name="categories[]" class="input input-bordered flex-1" placeholder="z.B. Elektrowerkzeuge">
+                            <button type="button" class="btn btn-error" onclick="removeField(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addField('categories')">
+                        <i class="fas fa-plus mr-2"></i>
+                        Kategorie hinzufügen
+                    </button>
+                </div>
+                <!-- Standorte -->
+                <div class="form-control mb-6">
+                    <label class="label">
+                        <span class="label-text">Standorte</span>
+                    </label>
+                    <div id="locations-container">
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" name="locations[]" class="input input-bordered flex-1" placeholder="z.B. Lager 1">
+                            <button type="button" class="btn btn-error" onclick="removeField(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addField('locations')">
+                        <i class="fas fa-plus mr-2"></i>
+                        Standort hinzufügen
+                    </button>
+                </div>
+                <!-- Abteilungen -->
+                <div class="form-control mb-6">
+                    <label class="label">
+                        <span class="label-text">Abteilungen</span>
+                    </label>
+                    <div id="departments-container">
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" name="departments[]" class="input input-bordered flex-1" placeholder="z.B. Werkstatt">
+                            <button type="button" class="btn btn-error" onclick="removeField(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addField('departments')">
+                        <i class="fas fa-plus mr-2"></i>
+                        Abteilung hinzufügen
+                    </button>
+                </div>
+                <div class="card-actions justify-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check mr-2"></i>
+                        Einrichtung abschließen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<script>
+function addField(type) {
+    const container = document.getElementById(`${type}-container`);
+    const newField = document.createElement('div');
+    newField.className = 'flex gap-2 mb-2';
+    newField.innerHTML = `
+        <input type="text" name="${type}[]" class="input input-bordered flex-1" placeholder="z.B. ${type === 'categories' ? 'Elektrowerkzeuge' : type === 'locations' ? 'Lager 1' : 'Werkstatt'}">
+        <button type="button" class="btn btn-error" onclick="removeField(this)">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    container.appendChild(newField);
+}
+function removeField(button) {
+    button.parentElement.remove();
+}
+</script>
+{% endblock %} 

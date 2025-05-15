@@ -11,7 +11,7 @@ def index():
     """Zeigt die Hauptseite mit Statistiken"""
     # Prüfe ob Setup erforderlich ist
     if needs_setup():
-        return redirect(url_for('setup.setup'))
+        return redirect(url_for('setup.setup_admin'))
         
     try:
         # Werkzeug-Statistiken mit verbesserter Abfrage
