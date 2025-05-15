@@ -51,7 +51,7 @@ def get_recent_activity():
             c.name as item_name,
             w.firstname || ' ' || w.lastname as worker_name,
             cu.used_at as action_date
-        FROM consumable_usage cu
+        FROM consumable_usages cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         JOIN workers w ON cu.worker_barcode = w.barcode
         ORDER BY action_date DESC
@@ -409,7 +409,7 @@ def dashboard():
             cu.quantity,
             w.firstname || ' ' || w.lastname as worker_name,
             cu.used_at
-        FROM consumable_usage cu
+        FROM consumable_usages cu
         JOIN consumables c ON cu.consumable_barcode = c.barcode
         JOIN workers w ON cu.worker_barcode = w.barcode
         ORDER BY cu.used_at DESC
@@ -438,7 +438,7 @@ def get_consumable_trend():
                 c.name,
                 date(cu.used_at) as date,
                 SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as daily_quantity
-            FROM consumable_usage cu
+            FROM consumable_usages cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             WHERE cu.used_at >= date('now', '-6 days')
             GROUP BY c.name, date(cu.used_at)
@@ -452,7 +452,7 @@ def get_consumable_trend():
             SELECT 
                 c.name,
                 SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-            FROM consumable_usage cu
+            FROM consumable_usages cu
             JOIN consumables c ON cu.consumable_barcode = c.barcode
             WHERE cu.used_at >= date('now', '-6 days')
             GROUP BY c.name
@@ -1250,7 +1250,7 @@ def export_all_data():
                     cu.used_at as lent_at, NULL as returned_at, c.name as consumable_name, c.barcode as consumable_barcode, 
                     w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
                     'Material Verbrauch' as type, cu.quantity
-                FROM consumable_usage cu
+                FROM consumable_usages cu
                 JOIN consumables c ON cu.consumable_barcode = c.barcode
                 JOIN workers w ON cu.worker_barcode = w.barcode
                 ORDER BY lent_at DESC
