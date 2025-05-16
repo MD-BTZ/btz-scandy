@@ -147,9 +147,15 @@
                    class="hover:opacity-80 transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-base-200"
                    title="Zurück zur Startseite">
                     <i class="fas fa-home text-xl text-primary"></i>
+                    {% if app_labels.custom_logo %}
+                    <img src="{{ url_for('static', filename=app_labels.custom_logo) }}" 
+                         alt="Benutzerdefiniertes Logo" 
+                         class="h-12 w-auto object-contain">
+                    {% else %}
                     <img src="{{ url_for('static', filename='images/BTZ_logo.jpg') }}" 
                          alt="BTZ Logo" 
-                         class="h-10 object-contain">
+                         class="h-12 w-auto object-contain">
+                    {% endif %}
                     <i class="fas fa-home text-xl text-primary"></i>
                 </a>
             </div>

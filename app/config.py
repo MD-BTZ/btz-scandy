@@ -1,3 +1,7 @@
+import os
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+
 class Config:
     """Basis-Konfiguration."""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
@@ -8,4 +12,5 @@ class Config:
     SYSTEM_NAME = os.environ.get('SYSTEM_NAME') or 'Scandy'
     TICKET_SYSTEM_NAME = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
     TOOL_SYSTEM_NAME = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
-    CONSUMABLE_SYSTEM_NAME = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter' 
+    CONSUMABLE_SYSTEM_NAME = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
+    UPLOAD_FOLDER = os.path.join(basedir, 'static', 'uploads') 

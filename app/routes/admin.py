@@ -931,106 +931,6 @@ def trash():
         flash('Fehler beim Laden des Papierkorbs', 'error')
         return redirect(url_for('admin.dashboard'))
 
-@bp.route('/consumables/<barcode>/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_consumable(barcode):
-    """Verbrauchsmaterial in den Papierkorb verschieben"""
-    try:
-        with Database.get_db() as conn:
-            # Prüfe ob das Verbrauchsmaterial existiert
-            consumable = conn.execute('''
-                SELECT * FROM consumables 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            if not consumable:
-                return jsonify({
-                    'success': False,
-                    'message': 'Verbrauchsmaterial nicht gefunden'
-                }), 404
-                
-            # Führe Soft Delete durch
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            logger.debug(f"Setze deleted_at auf: {current_time}")
-            
-            conn.execute('''
-                UPDATE consumables 
-                SET deleted = 1,
-                    deleted_at = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [current_time, barcode])
-            
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Verbrauchsmaterial wurde in den Papierkorb verschoben'
-            })
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
-
-@bp.route('/workers/<barcode>/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_worker(barcode):
-    """Mitarbeiter in den Papierkorb verschieben"""
-    try:
-        with Database.get_db() as conn:
-            # Prüfe ob der Mitarbeiter existiert
-            worker = conn.execute('''
-                SELECT * FROM workers 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            if not worker:
-                return jsonify({
-                    'success': False,
-                    'message': 'Mitarbeiter nicht gefunden'
-                }), 404
-                
-            # Prüfe ob der Mitarbeiter noch Werkzeuge ausgeliehen hat
-            lending = conn.execute('''
-                SELECT * FROM lendings
-                WHERE worker_barcode = ? AND returned_at IS NULL
-            ''', [barcode]).fetchone()
-            
-            if lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Mitarbeiter muss zuerst alle Werkzeuge zurückgeben'
-                }), 400
-                
-            # Führe Soft Delete durch
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            logger.debug(f"Setze deleted_at auf: {current_time}")
-            
-            conn.execute('''
-                UPDATE workers 
-                SET deleted = 1,
-                    deleted_at = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [current_time, barcode])
-            
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Mitarbeiter wurde in den Papierkorb verschoben'
-            })
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Mitarbeiters: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
-
 @bp.route('/trash/restore/<type>/<barcode>', methods=['POST'])
 @mitarbeiter_required
 def restore_item(type, barcode):
@@ -1135,7 +1035,8 @@ def get_app_labels():
         'consumables': {
             'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
             'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
-        }
+        },
+        'custom_logo': get_label_setting('custom_logo', None)
     }
 
 def get_all_users():
@@ -2184,25 +2085,29 @@ def tickets():
 @login_required
 @admin_required
 def system():
+    """Zeigt die Systemeinstellungen an."""
     if request.method == 'POST':
-        label_tools_name = request.form.get('label_tools_name')
-        label_tools_icon = request.form.get('label_tools_icon')
-        label_consumables_name = request.form.get('label_consumables_name')
-        label_consumables_icon = request.form.get('label_consumables_icon')
         try:
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name or 'Werkzeuge'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
-            flash('Begriffe & Icons wurden gespeichert.', 'success')
+            # Verarbeite Logo-Upload
+            if 'logo' in request.files:
+                file = request.files['logo']
+                if file and file.filename and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+                    Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['custom_logo', filename])
+                    flash('Logo erfolgreich hochgeladen', 'success')
+                else:
+                    flash('Ungültiges Dateiformat. Erlaubt sind: PNG, JPG, JPEG, GIF', 'error')
+            
+            flash('Einstellungen erfolgreich gespeichert', 'success')
+            return redirect(url_for('admin.system'))
+            
         except Exception as e:
-            flash(f'Fehler beim Speichern der Begriffe: {str(e)}', 'error')
-        return redirect(url_for('admin.system'))
+            logger.error(f"Fehler beim Speichern der Einstellungen: {e}")
+            flash('Fehler beim Speichern der Einstellungen', 'error')
+            
     return render_template('admin/system.html')
+
 
 @bp.route('/users')
 @admin_required
@@ -3061,3 +2966,126 @@ def delete_worker_soft():
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Mitarbeiters: {e}")
         return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
+
+@bp.route('/available-logos')
+@login_required
+@admin_required
+def available_logos():
+    try:
+        # Stelle sicher, dass der Ordner existiert
+        logos_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
+        os.makedirs(logos_dir, exist_ok=True)
+        
+        logos = []
+        if os.path.exists(logos_dir):
+            for filename in os.listdir(logos_dir):
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
+                    logos.append({
+                        'name': filename,
+                        'path': f'uploads/logos/{filename}'
+                    })
+        
+        return jsonify({
+            'success': True,
+            'logos': logos
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Logos: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Laden der Logos: {str(e)}'
+        }), 500
+
+@bp.route('/select-logo', methods=['POST'])
+@login_required
+@admin_required
+def select_logo():
+    data = request.get_json()
+    if not data or 'path' not in data:
+        return jsonify({'success': False, 'message': 'Kein Logo-Pfad angegeben'})
+    
+    logo_path = data['path']
+    # Speichere den Pfad in der Datenbank
+    Database.query('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                  ['custom_logo', logo_path])
+    
+    return jsonify({
+        'success': True,
+        'message': 'Logo erfolgreich ausgewählt'
+    })
+
+@bp.route('/upload-logo', methods=['POST'])
+@login_required
+@admin_required
+def upload_logo():
+    if 'logo' not in request.files:
+        return jsonify({'success': False, 'message': 'Keine Datei hochgeladen'}), 400
+        
+    file = request.files['logo']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'Keine Datei ausgewählt'}), 400
+        
+    if file and allowed_file(file.filename):
+        try:
+            # Erstelle den Logos-Ordner, falls er nicht existiert
+            logos_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
+            os.makedirs(logos_dir, exist_ok=True)
+            
+            # Generiere einen eindeutigen Dateinamen
+            filename = secure_filename(file.filename)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{timestamp}_{filename}"
+            
+            # Speichere die Datei
+            file_path = os.path.join(logos_dir, filename)
+            file.save(file_path)
+            
+            # Gib den relativen Pfad zurück
+            relative_path = f"uploads/logos/{filename}"
+            return jsonify({
+                'success': True,
+                'message': 'Logo erfolgreich hochgeladen',
+                'path': relative_path
+            })
+            
+        except Exception as e:
+            current_app.logger.error(f'Fehler beim Hochladen des Logos: {str(e)}')
+            return jsonify({'success': False, 'message': 'Fehler beim Hochladen des Logos'}), 500
+            
+    return jsonify({'success': False, 'message': 'Ungültiges Dateiformat'}), 400
+
+@bp.route('/delete-logo', methods=['POST'])
+@login_required
+@admin_required
+def delete_logo():
+    try:
+        data = request.get_json()
+        if not data or 'path' not in data:
+            return jsonify({'success': False, 'message': 'Kein Logo-Pfad angegeben'}), 400
+            
+        logo_path = data['path']
+        
+        # Verhindere das Löschen des BTZ-Logos
+        if logo_path == 'uploads/logos/btz-logo.png':
+            return jsonify({'success': False, 'message': 'Das BTZ-Logo kann nicht gelöscht werden'}), 400
+            
+        # Konstruiere den vollständigen Pfad
+        full_path = os.path.join(current_app.root_path, 'static', logo_path)
+        
+        # Prüfe ob die Datei existiert
+        if not os.path.exists(full_path):
+            return jsonify({'success': False, 'message': 'Logo nicht gefunden'}), 404
+            
+        # Lösche die Datei
+        os.remove(full_path)
+        
+        return jsonify({'success': True, 'message': 'Logo erfolgreich gelöscht'})
+        
+    except Exception as e:
+        current_app.logger.error(f'Fehler beim Löschen des Logos: {str(e)}')
+        return jsonify({'success': False, 'message': 'Fehler beim Löschen des Logos'}), 500
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS

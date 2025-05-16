@@ -9,6 +9,40 @@
         Systemverwaltung
     </h1>
 
+    <!-- Logo-Upload -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-image text-primary mr-2"></i>
+                Logo-Einstellungen
+            </h2>
+            
+            <!-- Verfügbare Logos -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-4">Verfügbare Logos</h3>
+                <div class="flex flex-wrap gap-2" id="availableLogos">
+                    <!-- Wird per JavaScript gefüllt -->
+                </div>
+            </div>
+
+            <!-- Logo-Upload Formular -->
+            <form method="POST" action="{{ url_for('admin.upload_logo') }}" enctype="multipart/form-data">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Neues Logo hochladen</span>
+                    </label>
+                    <input type="file" name="logo" id="logoInput" accept=".png,.jpg,.jpeg,.gif" class="file-input file-input-bordered w-full max-w-xs">
+                    <p class="text-xs mt-2 text-base-content/70">Erlaubte Formate: PNG, JPG, JPEG, GIF</p>
+                </div>
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload mr-2"></i>Logo hochladen
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <!-- Daten Export -->
         <div class="card bg-base-100 shadow-xl">
@@ -209,7 +243,6 @@
             </form>
         </div>
     </div>
-
 </div>
 
 <!-- Script Tag wieder hierher verschoben -->
@@ -355,6 +388,165 @@ document.addEventListener('click', function(e) {
         document.getElementById('consumables-icon-dropdown').classList.add('hidden');
     }
 });
+
+// Event-Listener für Logo-Upload
+document.getElementById('logoInput').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('logo', file);
+    
+    try {
+        const response = await fetch('/admin/upload-logo', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Aktualisiere das Logo-Bild
+            const logoImg = document.querySelector('.navbar-brand img');
+            if (logoImg) {
+                logoImg.src = data.path;
+            }
+            // Zeige Erfolgsmeldung
+            alert('Logo erfolgreich hochgeladen');
+            // Lade die verfügbaren Logos neu
+            loadAvailableLogos();
+        } else {
+            alert(data.message || 'Fehler beim Hochladen des Logos');
+        }
+    } catch (error) {
+        console.error('Fehler:', error);
+        alert('Fehler beim Hochladen des Logos');
+    }
+});
+
+// Funktion zum Laden der verfügbaren Logos
+async function loadAvailableLogos() {
+    console.log('=== START LOAD AVAILABLE LOGOS ===');
+    try {
+        console.log('Sende Anfrage an /admin/available-logos...');
+        const response = await fetch('/admin/available-logos');
+        console.log('Antwort erhalten:', response);
+        const data = await response.json();
+        console.log('Geladene Logos:', data);
+        
+        const container = document.getElementById('availableLogos');
+        console.log('Container gefunden:', container);
+        
+        if (!container) {
+            console.error('Container #availableLogos nicht gefunden!');
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        if (!data.success) {
+            console.error('Fehler vom Server:', data.message);
+            container.innerHTML = `<p class="text-center text-error">${data.message || 'Fehler beim Laden der Logos'}</p>`;
+            return;
+        }
+        
+        if (data.logos.length === 0) {
+            console.log('Keine Logos gefunden');
+            container.innerHTML = '<p class="text-center text-base-content/70">Keine Logos verfügbar</p>';
+            return;
+        }
+        
+        console.log('Rendere Logos:', data.logos);
+        data.logos.forEach(logo => {
+            const div = document.createElement('div');
+            div.className = 'relative group w-24'; // Feste Breite von 96px
+            div.innerHTML = `
+                <div class="bg-base-200 rounded-lg overflow-hidden h-12 flex items-center justify-center">
+                    <img src="/static/${logo.path}" alt="${logo.name}" class="h-12 w-auto object-contain">
+                </div>
+                <div class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    <button onclick="selectLogo('${logo.path}')" class="btn btn-sm btn-primary btn-circle">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    ${logo.path !== 'uploads/logos/btz-logo.png' ? `
+                    <button onclick="deleteLogo('${logo.path}')" class="btn btn-sm btn-error btn-circle">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+        console.log('=== END LOAD AVAILABLE LOGOS ===');
+    } catch (error) {
+        console.error('Fehler beim Laden der Logos:', error);
+        const container = document.getElementById('availableLogos');
+        if (container) {
+            container.innerHTML = '<p class="text-center text-error">Fehler beim Laden der Logos</p>';
+        }
+    }
+}
+
+// Stelle sicher, dass die Funktion beim Laden der Seite aufgerufen wird
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM geladen, rufe loadAvailableLogos auf...');
+    loadAvailableLogos();
+});
+
+// Funktion zum Auswählen eines Logos
+async function selectLogo(path) {
+    try {
+        const response = await fetch('/admin/select-logo', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Zeige Erfolgsmeldung
+            alert('Logo erfolgreich ausgewählt');
+            // Lade die Seite neu
+            window.location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Auswählen des Logos');
+        }
+    } catch (error) {
+        console.error('Fehler beim Auswählen des Logos:', error);
+        alert('Fehler beim Auswählen des Logos');
+    }
+}
+
+// Funktion zum Löschen eines Logos
+async function deleteLogo(path) {
+    if (!confirm('Möchten Sie dieses Logo wirklich löschen?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/delete-logo', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Lade die verfügbaren Logos neu
+            loadAvailableLogos();
+            // Zeige Erfolgsmeldung
+            alert('Logo erfolgreich gelöscht');
+        } else {
+            alert(data.message || 'Fehler beim Löschen des Logos');
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen des Logos:', error);
+        alert('Fehler beim Löschen des Logos');
+    }
+}
 </script>
 
 {% endblock %}
