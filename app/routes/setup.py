@@ -32,6 +32,8 @@ def setup_admin():
         
         if not username or len(username) < 3:
             return render_template('setup_admin.html', error='Der Benutzername muss mindestens 3 Zeichen lang sein.')
+        if len(username) > 50:
+            return render_template('setup_admin.html', error='Der Benutzername darf maximal 50 Zeichen lang sein.')
         if len(password) < 8:
             return render_template('setup_admin.html', error='Das Passwort muss mindestens 8 Zeichen lang sein.')
         if password != password_confirm:

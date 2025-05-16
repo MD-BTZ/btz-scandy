@@ -9,16 +9,16 @@
             <form method="POST" action="{{ url_for('tools.update', id=tool.id) }}">
                 <div class="form-control mb-4">
                     <label class="label">
-                        <span class="label-text">Name</span>
+                        <span class="label-text">Name (max. 50 Zeichen)</span>
                     </label>
-                    <input type="text" name="name" value="{{ tool.name }}" class="input input-bordered" required>
+                    <input type="text" name="name" class="input input-bordered" required maxlength="50" value="{{ tool.name }}">
                 </div>
                 
                 <div class="form-control mb-4">
                     <label class="label">
-                        <span class="label-text">Barcode</span>
+                        <span class="label-text">Barcode (max. 50 Zeichen)</span>
                     </label>
-                    <input type="text" name="barcode" value="{{ tool.barcode }}" class="input input-bordered" required>
+                    <input type="text" name="barcode" class="input input-bordered" required maxlength="50" value="{{ tool.barcode }}">
                 </div>
                 
                 <div class="form-control mb-4">

@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 from flask import current_app
-from app.utils.db_schema import SchemaManager
+from app.utils.db_schema import SchemaManager, validate_input, truncate_field
 import colorsys
 import logging
 from datetime import datetime, timedelta
@@ -338,9 +338,31 @@ def dashboard():
     # Verbrauchsmaterial-Statistiken
     consumable_stats = {
         'total': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0', one=True)['count'],
-        'sufficient': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity >= min_quantity', one=True)['count'],
-        'warning': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity AND quantity >= min_quantity * 0.5', one=True)['count'],
-        'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity * 0.5', one=True)['count']
+        'sufficient': Database.query('''
+            SELECT COUNT(*) as count 
+            FROM consumables c
+            WHERE deleted = 0 
+            AND quantity > min_quantity
+            AND (
+                SELECT COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0)
+                FROM consumable_usages cu
+                WHERE cu.consumable_barcode = c.barcode
+                AND cu.used_at >= date('now', '-30 days')
+            ) * 7 <= (quantity - min_quantity)
+        ''', one=True)['count'],
+        'warning': Database.query('''
+            SELECT COUNT(*) as count 
+            FROM consumables c
+            WHERE deleted = 0 
+            AND quantity > min_quantity
+            AND (
+                SELECT COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0)
+                FROM consumable_usages cu
+                WHERE cu.consumable_barcode = c.barcode
+                AND cu.used_at >= date('now', '-30 days')
+            ) * 7 > (quantity - min_quantity)
+        ''', one=True)['count'],
+        'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity <= min_quantity', one=True)['count']
     }
     
     # Mitarbeiter-Statistiken
@@ -355,35 +377,76 @@ def dashboard():
         ''')
     }
     
-    # Warnungen für defekte Werkzeuge
+    # Warnungen für defekte Werkzeuge und überfällige Ausleihen
     tool_warnings = Database.query('''
-            SELECT name, status, 
-                CASE 
-                    WHEN status = 'defekt' THEN 'error'
-                    ELSE 'warning'
-                END as severity
-            FROM tools 
-            WHERE status = 'defekt' AND deleted = 0
-            ORDER BY name
-        ''')
+        SELECT 
+            name,
+            CASE 
+                WHEN status = 'defekt' THEN 'defekt'
+                ELSE 'überfällig'
+            END as status,
+            CASE 
+                WHEN status = 'defekt' THEN 'error'
+                ELSE 'warning'
+            END as severity,
+            CASE
+                WHEN status = 'defekt' THEN 'Werkzeug ist defekt'
+                ELSE 'Ausleihe seit ' || ROUND((julianday('now') - julianday(lent_at))) || ' Tagen überfällig'
+            END as description
+        FROM tools t
+        LEFT JOIN lendings l ON t.barcode = l.tool_barcode AND l.returned_at IS NULL
+        WHERE (t.status = 'defekt' AND t.deleted = 0)
+           OR (l.lent_at IS NOT NULL AND julianday('now') - julianday(lent_at) > 5)
+        ORDER BY 
+            CASE 
+                WHEN status = 'defekt' THEN 0
+                ELSE 1
+            END,
+            name
+    ''')
     
     # Warnungen für niedrigen Materialbestand
     consumable_warnings = Database.query('''
-            SELECT
-                name as message,
-                CASE
-                    WHEN quantity < min_quantity * 0.5 THEN 'error'
-                    ELSE 'warning'
-                END as type,
-                CASE
-                    WHEN quantity < min_quantity * 0.5 THEN 'exclamation-triangle'
-                    ELSE 'exclamation'
-                END as icon
-            FROM consumables
-            WHERE quantity < min_quantity AND deleted = 0
-            ORDER BY quantity / min_quantity ASC
-            LIMIT 5
-        ''')
+        WITH avg_usage AS (
+            SELECT 
+                c.barcode,
+                c.name,
+                c.quantity,
+                c.min_quantity,
+                COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0) as avg_daily_usage
+            FROM consumables c
+            LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
+                AND cu.used_at >= date('now', '-30 days')
+            WHERE c.deleted = 0
+            GROUP BY c.barcode, c.name, c.quantity, c.min_quantity
+        )
+        SELECT
+            name as message,
+            CASE
+                WHEN quantity <= min_quantity THEN 'error'
+                ELSE 'warning'
+            END as type,
+            CASE
+                WHEN quantity <= min_quantity THEN 'exclamation-triangle'
+                ELSE 'exclamation'
+            END as icon,
+            CASE
+                WHEN quantity <= min_quantity THEN 'Kritischer Bestand'
+                ELSE 'Warnung: Bestand wird in ' || 
+                     ROUND((quantity - min_quantity) / NULLIF(avg_daily_usage, 0)) || 
+                     ' Tagen unter Mindestbestand fallen'
+            END as description
+        FROM avg_usage
+        WHERE quantity <= min_quantity 
+           OR (avg_daily_usage > 0 AND (quantity - min_quantity) / avg_daily_usage <= 7)
+        ORDER BY 
+            CASE 
+                WHEN quantity <= min_quantity THEN 0
+                ELSE 1
+            END,
+            quantity / min_quantity ASC
+        LIMIT 5
+    ''')
     
     # Materialverbrauch-Trend
     consumable_trend = get_consumable_trend()
@@ -867,71 +930,6 @@ def trash():
         logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
         flash('Fehler beim Laden des Papierkorbs', 'error')
         return redirect(url_for('admin.dashboard'))
-
-@bp.route('/tools/<barcode>/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_tool(barcode):
-    """Werkzeug in den Papierkorb verschieben"""
-    try:
-        with Database.get_db() as conn:
-            # Prüfe ob das Werkzeug existiert
-            tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            logger.debug(f"Zu löschendes Werkzeug gefunden: {dict(tool) if tool else 'Nicht gefunden'}")
-            
-            if not tool:
-                return jsonify({
-                    'success': False,
-                    'message': 'Werkzeug nicht gefunden'
-                }), 404
-                
-            # Prüfe ob das Werkzeug ausgeliehen ist
-            lending = conn.execute('''
-                SELECT * FROM lendings
-                WHERE tool_barcode = ? AND returned_at IS NULL
-            ''', [barcode]).fetchone()
-            
-            if lending:
-                return jsonify({
-                    'success': False,
-                    'message': 'Werkzeug muss zuerst zurückgegeben werden'
-                }), 400
-                
-            # Führe Soft Delete durch
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            logger.debug(f"Setze deleted_at auf: {current_time}")
-            
-            conn.execute('''
-                UPDATE tools 
-                SET deleted = 1,
-                    deleted_at = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [current_time, barcode])
-            
-            conn.commit()
-            
-            # Überprüfe nach dem Update
-            updated_tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ?
-            ''', [barcode]).fetchone()
-            logger.debug(f"Werkzeug nach Update: {dict(updated_tool)}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Werkzeug wurde in den Papierkorb verschoben'
-            })
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
 
 @bp.route('/consumables/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
@@ -2522,73 +2520,77 @@ def delete_tool_permanent(barcode):
             'message': f'Fehler beim Löschen: {str(e)}'
         }), 500
 
+@bp.route('/consumables/delete', methods=['DELETE'])
+@mitarbeiter_required
+def delete_consumable_soft():
+    try:
+        data = request.get_json()
+        if not data or 'barcode' not in data:
+            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
+            
+        barcode = data['barcode']
+        if len(barcode) > 50:
+            return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
+            
+        # Prüfe ob das Verbrauchsmaterial existiert
+        consumable = Database.query('SELECT * FROM consumables WHERE barcode = ?', [barcode])
+        if not consumable:
+            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
+            
+        # Prüfe ob das Verbrauchsmaterial bereits gelöscht ist
+        if consumable[0]['deleted'] == 1:
+            return jsonify({'success': False, 'message': 'Verbrauchsmaterial ist bereits gelöscht'}), 400
+            
+        # Führe das Soft-Delete durch
+        Database.query('UPDATE consumables SET deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE barcode = ?', [barcode])
+        return jsonify({'success': True, 'message': 'Verbrauchsmaterial erfolgreich gelöscht'})
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {e}")
+        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
+
 @bp.route('/consumables/<barcode>/delete-permanent', methods=['DELETE'])
 @mitarbeiter_required
 def delete_consumable_permanent(barcode):
-    """Verbrauchsmaterial endgültig löschen"""
     try:
-        with Database.get_db() as conn:
-            # Prüfe ob das Verbrauchsmaterial existiert und gelöscht ist
-            consumable = conn.execute('''
-                SELECT * FROM consumables 
-                WHERE barcode = ? AND deleted = 1
-            ''', [barcode]).fetchone()
+        # Prüfe ob das Verbrauchsmaterial existiert
+        consumable = Database.query('SELECT * FROM consumables WHERE barcode = ?', [barcode])
+        if not consumable:
+            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
             
-            if not consumable:
-                return jsonify({
-                    'success': False,
-                    'message': 'Verbrauchsmaterial nicht gefunden oder nicht gelöscht'
-                }), 404
-                
-            # Lösche das Verbrauchsmaterial endgültig
-            conn.execute('DELETE FROM consumables WHERE barcode = ?', [barcode])
-            conn.commit()
+        # Prüfe ob das Verbrauchsmaterial bereits gelöscht ist
+        if consumable[0]['deleted'] == 0:
+            return jsonify({'success': False, 'message': 'Verbrauchsmaterial muss zuerst gelöscht werden'}), 400
             
-            return jsonify({
-                'success': True,
-                'message': 'Verbrauchsmaterial wurde endgültig gelöscht'
-            })
-            
+        # Führe das permanente Löschen durch
+        Database.query('DELETE FROM consumables WHERE barcode = ?', [barcode])
+        return jsonify({'success': True, 'message': 'Verbrauchsmaterial permanent gelöscht'})
+        
     except Exception as e:
-        logger.error(f"Fehler beim endgültigen Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
+        logger.error(f"Fehler beim permanenten Löschen des Verbrauchsmaterials: {e}")
+        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
 
 @bp.route('/workers/<barcode>/delete-permanent', methods=['DELETE'])
 @mitarbeiter_required
 def delete_worker_permanent(barcode):
-    """Mitarbeiter endgültig löschen."""
     try:
-        with Database.get_db() as conn:
-            # Prüfe ob der Mitarbeiter existiert und gelöscht ist
-            worker = conn.execute('''
-                SELECT * FROM workers 
-                WHERE barcode = ? AND deleted = 1
-            ''', [barcode]).fetchone()
+        # Prüfe ob der Mitarbeiter existiert
+        worker = Database.query('SELECT * FROM workers WHERE barcode = ?', [barcode])
+        if not worker:
+            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
             
-            if not worker:
-                return jsonify({
-                    'success': False,
-                    'message': 'Mitarbeiter nicht gefunden oder nicht gelöscht'
-                }), 404
-                
-            # Lösche den Mitarbeiter endgültig
-            conn.execute('DELETE FROM workers WHERE barcode = ?', [barcode])
-            conn.commit()
+        # Prüfe ob der Mitarbeiter aktive Ausleihen hat
+        active_lendings = Database.query('SELECT COUNT(*) as count FROM lendings WHERE worker_barcode = ? AND returned_at IS NULL', [barcode])
+        if active_lendings[0]['count'] > 0:
+            return jsonify({'success': False, 'message': 'Mitarbeiter hat noch aktive Ausleihen'}), 400
             
-            return jsonify({
-                'success': True,
-                'message': 'Mitarbeiter wurde endgültig gelöscht'
-            })
-            
+        # Führe das permanente Löschen durch
+        Database.query('DELETE FROM workers WHERE barcode = ?', [barcode])
+        return jsonify({'success': True, 'message': 'Mitarbeiter permanent gelöscht'})
+        
     except Exception as e:
-        logger.error(f"Fehler beim endgültigen Löschen des Mitarbeiters: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Löschen: {str(e)}'
-        }), 500
+        logger.error(f"Fehler beim permanenten Löschen des Mitarbeiters: {e}")
+        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
 
 @bp.route('/tickets/<int:ticket_id>')
 @login_required
@@ -2933,3 +2935,129 @@ def update_ticket(ticket_id):
         flash(f'Fehler beim Aktualisieren des Tickets: {str(e)}', 'error')
     
     return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+@bp.route('/tools/add', methods=['POST'])
+@mitarbeiter_required
+def add_tool():
+    """Fügt ein neues Werkzeug hinzu"""
+    try:
+        data = {
+            'barcode': request.form.get('barcode'),
+            'name': request.form.get('name'),
+            'category': request.form.get('category'),
+            'location': request.form.get('location'),
+            'status': request.form.get('status', 'verfügbar'),
+            'description': request.form.get('description')
+        }
+        
+        # Validiere die Eingabedaten
+        is_valid, error_message = validate_input('tools', data)
+        if not is_valid:
+            flash(error_message, 'error')
+            return redirect(url_for('admin.tools'))
+            
+        # Validiere die Länge des Namens
+        if len(data['name']) > 50:
+            flash('Der Name darf maximal 50 Zeichen lang sein', 'error')
+            return redirect(url_for('admin.tools'))
+        
+        # Kürze die Felder auf die maximale Länge
+        for field in data:
+            if isinstance(data[field], str):
+                data[field] = truncate_field('tools', field, data[field])
+        
+        with Database.get_db() as conn:
+            # Prüfe ob der Barcode bereits existiert
+            existing = conn.execute('''
+                SELECT barcode FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [data['barcode']]).fetchone()
+            
+            if existing:
+                flash('Ein Werkzeug mit diesem Barcode existiert bereits', 'error')
+                return redirect(url_for('admin.tools'))
+            
+            # Füge das Werkzeug hinzu
+            conn.execute('''
+                INSERT INTO tools (
+                    barcode, name, category, location, status, description,
+                    created_at, updated_at, sync_status
+                ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+            ''', [
+                data['barcode'], data['name'], data['category'],
+                data['location'], data['status'], data['description']
+            ])
+            
+            conn.commit()
+            flash('Werkzeug wurde erfolgreich hinzugefügt', 'success')
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
+        flash(f'Fehler beim Hinzufügen des Werkzeugs: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.tools'))
+
+@bp.route('/tools/delete', methods=['DELETE'])
+@mitarbeiter_required
+def delete_tool():
+    try:
+        data = request.get_json()
+        if not data or 'barcode' not in data:
+            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
+            
+        barcode = data['barcode']
+        
+        # Validiere Barcode-Länge
+        if len(barcode) > 50:
+            return jsonify({'success': False, 'message': 'Barcode ist zu lang (maximal 50 Zeichen)'}), 400
+            
+        # Prüfe ob das Werkzeug existiert
+        tool = Database.query('SELECT * FROM tools WHERE barcode = ?', [barcode])
+        if not tool:
+            return jsonify({'success': False, 'message': 'Werkzeug nicht gefunden'}), 404
+            
+        # Prüfe ob das Werkzeug ausgeliehen ist
+        if tool[0]['status'] == 'ausgeliehen':
+            return jsonify({'success': False, 'message': 'Werkzeug kann nicht gelöscht werden, da es ausgeliehen ist'}), 400
+            
+        # Führe das Soft-Delete durch
+        Database.query('UPDATE tools SET deleted = 1 WHERE barcode = ?', [barcode])
+        return jsonify({'success': True, 'message': 'Werkzeug erfolgreich gelöscht'})
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Werkzeugs: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Löschen des Werkzeugs'}), 500
+
+@bp.route('/workers/delete', methods=['DELETE'])
+@mitarbeiter_required
+def delete_worker_soft():
+    try:
+        data = request.get_json()
+        if not data or 'barcode' not in data:
+            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
+            
+        barcode = data['barcode']
+        if len(barcode) > 50:
+            return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
+            
+        # Prüfe ob der Mitarbeiter existiert
+        worker = Database.query('SELECT * FROM workers WHERE barcode = ?', [barcode])
+        if not worker:
+            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
+            
+        # Prüfe ob der Mitarbeiter bereits gelöscht ist
+        if worker[0]['deleted'] == 1:
+            return jsonify({'success': False, 'message': 'Mitarbeiter ist bereits gelöscht'}), 400
+            
+        # Prüfe ob der Mitarbeiter aktive Ausleihen hat
+        active_lendings = Database.query('SELECT COUNT(*) as count FROM lendings WHERE worker_barcode = ? AND returned_at IS NULL', [barcode])
+        if active_lendings[0]['count'] > 0:
+            return jsonify({'success': False, 'message': 'Mitarbeiter hat noch aktive Ausleihen'}), 400
+            
+        # Führe das Soft-Delete durch
+        Database.query('UPDATE workers SET deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE barcode = ?', [barcode])
+        return jsonify({'success': True, 'message': 'Mitarbeiter erfolgreich gelöscht'})
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Mitarbeiters: {e}")
+        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500

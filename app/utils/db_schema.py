@@ -1,5 +1,9 @@
 import sqlite3
 from werkzeug.security import generate_password_hash
+from app.models.database import Database
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SchemaManager:
     def __init__(self, db_path):
@@ -661,3 +665,206 @@ class SchemaManager:
     def _get_db_connection(self):
         """Gibt eine Datenbankverbindung zurück"""
         return sqlite3.connect(self.db_path)
+
+# Maximale Längen für Textfelder
+FIELD_LENGTHS = {
+    'tools': {
+        'barcode': 50,
+        'name': 100,
+        'category': 50,
+        'location': 50,
+        'status': 20,
+        'description': 500
+    },
+    'consumables': {
+        'barcode': 50,
+        'name': 100,
+        'category': 50,
+        'location': 50,
+        'description': 500
+    },
+    'workers': {
+        'barcode': 50,
+        'firstname': 50,
+        'lastname': 50,
+        'department': 50,
+        'email': 100
+    },
+    'users': {
+        'username': 50,
+        'email': 100,
+        'role': 20
+    },
+    'tickets': {
+        'title': 200,
+        'description': 2000,
+        'category': 50,
+        'status': 20,
+        'priority': 20
+    }
+}
+
+# Numerische Limits
+NUMERIC_LIMITS = {
+    'consumables': {
+        'quantity': 1000000,  # Max 1 Million Stück
+        'min_quantity': 100000  # Max 100.000 als Mindestbestand
+    },
+    'tickets': {
+        'estimated_time': 1000,  # Max 1000 Stunden
+        'actual_time': 1000
+    }
+}
+
+def validate_field_length(table: str, field: str, value: str) -> bool:
+    """Überprüft, ob ein Textfeld die maximale Länge nicht überschreitet."""
+    if not value:
+        return True
+    
+    max_length = FIELD_LENGTHS.get(table, {}).get(field)
+    if max_length and len(str(value)) > max_length:
+        logger.warning(f"Feld {field} in Tabelle {table} überschreitet maximale Länge von {max_length}")
+        return False
+    return True
+
+def validate_numeric_limit(table: str, field: str, value: int) -> bool:
+    """Überprüft, ob ein numerisches Feld die Limits nicht überschreitet."""
+    if value is None:
+        return True
+    
+    max_value = NUMERIC_LIMITS.get(table, {}).get(field)
+    if max_value and value > max_value:
+        logger.warning(f"Feld {field} in Tabelle {table} überschreitet maximalen Wert von {max_value}")
+        return False
+    return True
+
+def truncate_field(table: str, field: str, value: str) -> str:
+    """Kürzt einen Text auf die maximale Länge."""
+    if not value:
+        return value
+    
+    max_length = FIELD_LENGTHS.get(table, {}).get(field)
+    if max_length and len(str(value)) > max_length:
+        logger.warning(f"Feld {field} in Tabelle {table} wurde auf {max_length} Zeichen gekürzt")
+        return str(value)[:max_length]
+    return value
+
+def apply_schema_constraints():
+    """Wendet die Schema-Einschränkungen auf die Datenbank an."""
+    try:
+        with Database.get_db() as conn:
+            # Tools
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tools (
+                    barcode TEXT PRIMARY KEY CHECK(length(barcode) <= 50),
+                    name TEXT NOT NULL CHECK(length(name) <= 100),
+                    category TEXT CHECK(length(category) <= 50),
+                    location TEXT CHECK(length(location) <= 50),
+                    status TEXT CHECK(length(status) <= 20),
+                    description TEXT CHECK(length(description) <= 500),
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending'
+                )
+            ''')
+
+            # Consumables
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS consumables (
+                    barcode TEXT PRIMARY KEY CHECK(length(barcode) <= 50),
+                    name TEXT NOT NULL CHECK(length(name) <= 100),
+                    category TEXT CHECK(length(category) <= 50),
+                    location TEXT CHECK(length(location) <= 50),
+                    quantity INTEGER NOT NULL CHECK(quantity >= 0 AND quantity <= 1000000),
+                    min_quantity INTEGER NOT NULL CHECK(min_quantity >= 0 AND min_quantity <= 100000),
+                    description TEXT CHECK(length(description) <= 500),
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending'
+                )
+            ''')
+
+            # Workers
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS workers (
+                    barcode TEXT PRIMARY KEY CHECK(length(barcode) <= 50),
+                    firstname TEXT NOT NULL CHECK(length(firstname) <= 50),
+                    lastname TEXT NOT NULL CHECK(length(lastname) <= 50),
+                    department TEXT CHECK(length(department) <= 50),
+                    email TEXT CHECK(length(email) <= 100),
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending'
+                )
+            ''')
+
+            # Users
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL CHECK(length(username) <= 50),
+                    email TEXT UNIQUE CHECK(length(email) <= 100),
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(length(role) <= 20),
+                    is_active INTEGER DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Tickets
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tickets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL CHECK(length(title) <= 200),
+                    description TEXT CHECK(length(description) <= 2000),
+                    category TEXT CHECK(length(category) <= 50),
+                    status TEXT NOT NULL CHECK(length(status) <= 20),
+                    priority TEXT NOT NULL CHECK(length(priority) <= 20),
+                    created_by TEXT NOT NULL,
+                    assigned_to TEXT,
+                    estimated_time INTEGER CHECK(estimated_time >= 0 AND estimated_time <= 1000),
+                    actual_time INTEGER CHECK(actual_time >= 0 AND actual_time <= 1000),
+                    due_date DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at DATETIME
+                )
+            ''')
+
+            conn.commit()
+            logger.info("Datenbank-Schema-Einschränkungen wurden erfolgreich angewendet")
+            return True
+
+    except Exception as e:
+        logger.error(f"Fehler beim Anwenden der Schema-Einschränkungen: {str(e)}")
+        return False
+
+def validate_input(table: str, data: dict) -> tuple[bool, str]:
+    """
+    Validiert Eingabedaten gegen die Schema-Definitionen.
+    Returns: (is_valid, error_message)
+    """
+    try:
+        # Textfelder validieren
+        for field, value in data.items():
+            if isinstance(value, str):
+                if not validate_field_length(table, field, value):
+                    return False, f"Feld {field} ist zu lang (max {FIELD_LENGTHS.get(table, {}).get(field)} Zeichen)"
+            
+            # Numerische Felder validieren
+            elif isinstance(value, (int, float)):
+                if not validate_numeric_limit(table, field, value):
+                    return False, f"Feld {field} überschreitet den maximalen Wert von {NUMERIC_LIMITS.get(table, {}).get(field)}"
+        
+        return True, ""
+    
+    except Exception as e:
+        logger.error(f"Fehler bei der Eingabevalidierung: {str(e)}")
+        return False, f"Validierungsfehler: {str(e)}"

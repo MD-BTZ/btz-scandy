@@ -112,29 +112,27 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function deleteWorker(barcode) {
-    if (!confirm('Möchten Sie diesen Mitarbeiter wirklich in den Papierkorb verschieben?')) {
-        return;
+    if (confirm('Möchten Sie diesen Mitarbeiter wirklich löschen?')) {
+        fetch('/admin/workers/delete', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ barcode: barcode })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert(data.message || 'Fehler beim Löschen des Mitarbeiters');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Löschen des Mitarbeiters');
+        });
     }
-    
-    fetch(`/workers/${barcode}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.message || 'Fehler beim Löschen des Mitarbeiters');
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Fehler beim Löschen des Mitarbeiters');
-    });
 }
 </script>
 {% endblock %} 

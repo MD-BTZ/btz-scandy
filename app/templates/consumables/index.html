@@ -125,29 +125,27 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Lösch-Funktion
-async function deleteConsumable(barcode) {
-    if (!confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/admin/consumables/${barcode}/delete`, {
+function deleteConsumable(barcode) {
+    if (confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {
+        fetch('/admin/consumables/delete', {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ barcode: barcode })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert(data.message || 'Fehler beim Löschen des Verbrauchsmaterials');
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Löschen des Verbrauchsmaterials');
         });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            window.location.reload();
-        } else {
-            alert(result.message || 'Ein Fehler ist aufgetreten');
-        }
-    } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Ein Fehler ist aufgetreten');
     }
 }
 </script>
