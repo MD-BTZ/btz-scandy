@@ -70,6 +70,51 @@ def add():
         min_quantity = request.form.get('min_quantity', type=int)
         
         try:
+            # Prüfe ob der Barcode bereits existiert
+            exists_count = Database.query('''
+                SELECT COUNT(*) as count FROM (
+                    SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
+                    UNION ALL 
+                    SELECT barcode FROM consumables WHERE barcode = ? AND deleted = 0
+                    UNION ALL
+                    SELECT barcode FROM workers WHERE barcode = ? AND deleted = 0
+                )
+            ''', [barcode, barcode, barcode], one=True)['count']
+            
+            if exists_count > 0:
+                flash('Dieser Barcode existiert bereits', 'error')
+                # Hole Kategorien und Standorte für das Template
+                categories = Database.query('''
+                    SELECT value FROM settings 
+                    WHERE key LIKE 'category_%' 
+                    AND value IS NOT NULL 
+                    AND value != '' 
+                    ORDER BY value
+                ''')
+                
+                locations = Database.query('''
+                    SELECT value FROM settings 
+                    WHERE key LIKE 'location_%' 
+                    AND value IS NOT NULL 
+                    AND value != '' 
+                    ORDER BY value
+                ''')
+                
+                # Gebe die Formulardaten zurück an das Template
+                return render_template('consumables/add.html',
+                                   categories=[c['value'] for c in categories],
+                                   locations=[l['value'] for l in locations],
+                                   form_data={
+                                       'name': name,
+                                       'barcode': barcode,
+                                       'description': description,
+                                       'category': category,
+                                       'location': location,
+                                       'quantity': quantity,
+                                       'min_quantity': min_quantity
+                                   })
+            
+            # Wenn Barcode eindeutig ist, füge das Verbrauchsmaterial hinzu
             Database.query('''
                 INSERT INTO consumables 
                 (name, barcode, description, category, location, quantity, min_quantity)
@@ -80,26 +125,60 @@ def add():
             return redirect(url_for('consumables.index'))
             
         except Exception as e:
-            flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
-    
-    # --- GET Request Logic --- 
-    logger.debug("[ROUTE] consumables.add: Handling GET request.")   
-    try:
-        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
-        logger.debug("[ROUTE] consumables.add: Fetching categories and locations using helpers.")
-        categories = Database.get_categories('consumables')
-        locations = Database.get_locations()
-        logger.debug(f"[ROUTE] consumables.add: Found categories: {categories}")
-        logger.debug(f"[ROUTE] consumables.add: Found locations: {locations}")
+            logger.error(f"Fehler beim Hinzufügen des Verbrauchsmaterials: {str(e)}", exc_info=True)
+            flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
+            # Hole Kategorien und Standorte für das Template
+            categories = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'category_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
+            
+            locations = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'location_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
+            
+            # Gebe die Formulardaten zurück an das Template
+            return render_template('consumables/add.html',
+                               categories=[c['value'] for c in categories],
+                               locations=[l['value'] for l in locations],
+                               form_data={
+                                   'name': name,
+                                   'barcode': barcode,
+                                   'description': description,
+                                   'category': category,
+                                   'location': location,
+                                   'quantity': quantity,
+                                   'min_quantity': min_quantity
+                               })
+            
+    else:
+        # GET: Zeige Formular
+        categories = Database.query('''
+            SELECT value FROM settings 
+            WHERE key LIKE 'category_%' 
+            AND value IS NOT NULL 
+            AND value != '' 
+            ORDER BY value
+        ''')
         
-        logger.debug("[ROUTE] consumables.add: Rendering add.html template.")
+        locations = Database.query('''
+            SELECT value FROM settings 
+            WHERE key LIKE 'location_%' 
+            AND value IS NOT NULL 
+            AND value != '' 
+            ORDER BY value
+        ''')
+        
         return render_template('consumables/add.html',
-                             categories=[c['name'] for c in categories],
-                             locations=[l['name'] for l in locations])
-    except Exception as e:
-        logger.error(f"[ROUTE] consumables.add: Fehler beim Laden der Auswahloptionen für GET: {str(e)}", exc_info=True)
-        flash('Fehler beim Laden der Hinzufügen-Seite', 'error')
-        return redirect(url_for('consumables.index'))
+                           categories=[c['value'] for c in categories],
+                           locations=[l['value'] for l in locations])
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required

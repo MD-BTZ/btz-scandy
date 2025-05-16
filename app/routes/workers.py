@@ -78,6 +78,31 @@ def add():
         email = request.form.get('email', '')
         
         try:
+            # Prüfe ob der Barcode bereits existiert
+            exists_count = Database.query('''
+                SELECT COUNT(*) as count FROM (
+                    SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
+                    UNION ALL 
+                    SELECT barcode FROM consumables WHERE barcode = ? AND deleted = 0
+                    UNION ALL
+                    SELECT barcode FROM workers WHERE barcode = ? AND deleted = 0
+                )
+            ''', [barcode, barcode, barcode], one=True)['count']
+            
+            if exists_count > 0:
+                flash('Dieser Barcode existiert bereits', 'error')
+                # Gebe die Formulardaten zurück an das Template
+                return render_template('workers/add.html',
+                                   departments=departments,
+                                   form_data={
+                                       'barcode': barcode,
+                                       'firstname': firstname,
+                                       'lastname': lastname,
+                                       'department': department,
+                                       'email': email
+                                   })
+            
+            # Wenn Barcode eindeutig ist, füge den Mitarbeiter hinzu
             Database.query(
                 '''INSERT INTO workers 
                    (barcode, firstname, lastname, department, email) 
@@ -88,6 +113,16 @@ def add():
             return redirect(url_for('workers.index'))
         except Exception as e:
             flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
+            # Gebe die Formulardaten zurück an das Template
+            return render_template('workers/add.html',
+                               departments=departments,
+                               form_data={
+                                   'barcode': barcode,
+                                   'firstname': firstname,
+                                   'lastname': lastname,
+                                   'department': department,
+                                   'email': email
+                               })
             
     return render_template('workers/add.html', departments=departments)
 

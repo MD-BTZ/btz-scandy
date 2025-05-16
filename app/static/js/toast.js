@@ -6,20 +6,20 @@ class Toast {
     createToastContainer() {
         const container = document.createElement('div');
         container.id = 'toast-container';
-        container.className = 'fixed bottom-4 right-4 z-50 flex flex-col gap-2';
+        container.className = 'fixed bottom-4 right-4 z-[9999] flex flex-col gap-2';
         document.body.appendChild(container);
     }
 
     show(message, type = 'info') {
         const toast = document.createElement('div');
         const colors = {
-            success: 'alert-success',
-            error: 'alert-error',
-            info: 'alert-info',
-            warning: 'alert-warning'
+            success: { bg: 'hsl(142.1 76.2% 36.3%)', color: '#fff' },
+            error:   { bg: 'hsl(0 84.2% 60.2%)', color: '#fff' },
+            info:    { bg: 'hsl(199 89% 48%)', color: '#fff' },
+            warning: { bg: 'hsl(48 96% 53%)', color: '#fff' }
         };
 
-        toast.className = `alert ${colors[type]} shadow-lg`;
+        toast.className = `alert alert-${type} shadow-lg toast-enter`;
         toast.innerHTML = `
             <div>
                 ${this.getIcon(type)}
@@ -27,11 +27,19 @@ class Toast {
             </div>
         `;
 
+        // Farben direkt setzen
+        toast.style.backgroundColor = colors[type].bg;
+        toast.style.color = colors[type].color;
+        toast.style.border = 'none';
+        toast.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)';
+
         const container = document.getElementById('toast-container');
         container.appendChild(toast);
 
+        // Nach 3 Sekunden ausblenden
         setTimeout(() => {
-            toast.classList.add('fade-out');
+            toast.classList.remove('toast-enter');
+            toast.classList.add('toast-exit');
             setTimeout(() => {
                 container.removeChild(toast);
             }, 300);

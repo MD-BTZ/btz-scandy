@@ -85,62 +85,122 @@ def index():
         return redirect(url_for('main.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
-@login_required
+@mitarbeiter_required
 def add():
-    """Fügt ein neues Werkzeug hinzu (für alle eingeloggten Nutzer)"""
-    logger.debug(f"[ROUTE] tools.add: Entered route (Method: {request.method}). User: {current_user.id}")
+    """Fügt ein neues Werkzeug hinzu"""
     if request.method == 'POST':
-        barcode = request.form.get('barcode')
         name = request.form.get('name')
+        barcode = request.form.get('barcode')
         description = request.form.get('description')
         category = request.form.get('category')
         location = request.form.get('location')
         
-        if not all([barcode, name, category, location]):
-            flash('Bitte alle Pflichtfelder ausfüllen', 'error')
-            return redirect(url_for('tools.add'))
-            
         try:
+            # Prüfe ob der Barcode bereits existiert
+            exists_count = Database.query('''
+                SELECT COUNT(*) as count FROM (
+                    SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
+                    UNION ALL 
+                    SELECT barcode FROM consumables WHERE barcode = ? AND deleted = 0
+                    UNION ALL
+                    SELECT barcode FROM workers WHERE barcode = ? AND deleted = 0
+                )
+            ''', [barcode, barcode, barcode], one=True)['count']
+            
+            if exists_count > 0:
+                flash('Dieser Barcode existiert bereits', 'error')
+                # Hole Kategorien und Standorte für das Template
+                categories = Database.query('''
+                    SELECT value FROM settings 
+                    WHERE key LIKE 'category_%' 
+                    AND value IS NOT NULL 
+                    AND value != '' 
+                    ORDER BY value
+                ''')
+                
+                locations = Database.query('''
+                    SELECT value FROM settings 
+                    WHERE key LIKE 'location_%' 
+                    AND value IS NOT NULL 
+                    AND value != '' 
+                    ORDER BY value
+                ''')
+                
+                # Gebe die Formulardaten zurück an das Template
+                return render_template('tools/add.html',
+                                   categories=[c['value'] for c in categories],
+                                   locations=[l['value'] for l in locations],
+                                   form_data={
+                                       'name': name,
+                                       'barcode': barcode,
+                                       'description': description,
+                                       'category': category,
+                                       'location': location
+                                   })
+            
+            # Wenn Barcode eindeutig ist, füge das Werkzeug hinzu
             Database.query('''
                 INSERT INTO tools 
-                (barcode, name, description, category, location, status)
+                (name, barcode, description, category, location, status)
                 VALUES (?, ?, ?, ?, ?, 'verfügbar')
-            ''', [barcode, name, description, category, location])
+            ''', [name, barcode, description, category, location])
             
             flash('Werkzeug erfolgreich hinzugefügt', 'success')
             return redirect(url_for('tools.index'))
             
         except Exception as e:
-            flash(f'Fehler beim Hinzufügen: {str(e)}', 'error')
-            return redirect(url_for('tools.add'))
-    
-    # GET-Anfrage
-    try:
-        # Hole vordefinierte Kategorien und Standorte aus den Einstellungen
+            print(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
+            flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
+            # Hole Kategorien und Standorte für das Template
+            categories = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'category_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
+            
+            locations = Database.query('''
+                SELECT value FROM settings 
+                WHERE key LIKE 'location_%' 
+                AND value IS NOT NULL 
+                AND value != '' 
+                ORDER BY value
+            ''')
+            
+            # Gebe die Formulardaten zurück an das Template
+            return render_template('tools/add.html',
+                               categories=[c['value'] for c in categories],
+                               locations=[l['value'] for l in locations],
+                               form_data={
+                                   'name': name,
+                                   'barcode': barcode,
+                                   'description': description,
+                                   'category': category,
+                                   'location': location
+                               })
+            
+    else:
+        # GET: Zeige Formular
         categories = Database.query('''
-            SELECT value as name
-            FROM settings
-            WHERE key LIKE 'category_%'
-            AND value IS NOT NULL
-            AND value != ''
+            SELECT value FROM settings 
+            WHERE key LIKE 'category_%' 
+            AND value IS NOT NULL 
+            AND value != '' 
             ORDER BY value
         ''')
         
         locations = Database.query('''
-            SELECT value as name
-            FROM settings
-            WHERE key LIKE 'location_%'
-            AND value IS NOT NULL
-            AND value != ''
+            SELECT value FROM settings 
+            WHERE key LIKE 'location_%' 
+            AND value IS NOT NULL 
+            AND value != '' 
             ORDER BY value
         ''')
         
         return render_template('tools/add.html',
-                             categories=[c['name'] for c in categories],
-                             locations=[l['name'] for l in locations])
-    except Exception as e:
-        flash(f'Fehler beim Laden der Auswahloptionen: {str(e)}', 'error')
-        return redirect(url_for('tools.index'))
+                           categories=[c['value'] for c in categories],
+                           locations=[l['value'] for l in locations])
 
 @bp.route('/<barcode>')
 @login_required
