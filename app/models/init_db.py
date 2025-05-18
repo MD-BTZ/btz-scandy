@@ -44,7 +44,8 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 deleted INTEGER DEFAULT 0,
                 deleted_at TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending'
+                sync_status TEXT DEFAULT 'pending',
+                modified_at TIMESTAMP
             )
         ''')
         
@@ -56,7 +57,6 @@ def init_db():
                 name TEXT NOT NULL,
                 description TEXT,
                 quantity INTEGER DEFAULT 0,
-                min_quantity INTEGER DEFAULT 0,
                 category TEXT,
                 location TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -64,9 +64,6 @@ def init_db():
                 deleted INTEGER DEFAULT 0,
                 deleted_at TIMESTAMP,
                 sync_status TEXT DEFAULT 'pending',
-                max_bestand INTEGER,
-                lieferant TEXT,
-                bestellnummer TEXT,
                 modified_at TIMESTAMP
             )
         ''')
@@ -79,6 +76,8 @@ def init_db():
                 worker_barcode TEXT NOT NULL,
                 lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 returned_at TIMESTAMP,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 sync_status TEXT DEFAULT 'pending',
                 modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -102,16 +101,6 @@ def init_db():
                 FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
             )
         ''')
-        
-        # Füge modified_at Spalte hinzu, falls sie noch nicht existiert
-        try:
-            cursor.execute('ALTER TABLE consumable_usages ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
-            cursor.execute('UPDATE consumable_usages SET modified_at = used_at WHERE modified_at IS NULL')
-            conn.commit()
-            logger.info("modified_at Spalte zur consumable_usages Tabelle hinzugefügt")
-        except Exception as e:
-            logger.info(f"modified_at Spalte existiert bereits oder konnte nicht hinzugefügt werden: {e}")
-            conn.rollback()
         
         # Settings Tabelle
         cursor.execute('''
@@ -182,29 +171,6 @@ def init_db():
                 deleted_at TIMESTAMP
             )
         ''')
-        
-        # Stelle sicher, dass die users Tabelle existiert
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role IN ('admin', 'mitarbeiter', 'anwender')),
-                is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Prüfe ob Admin-Benutzer existiert
-        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-        admin_count = cursor.fetchone()[0]
-        logger.info(f"Admin-User-Count: {admin_count}")
-        
-        if admin_count == 0:
-            logger.warning("Kein Admin-Benutzer gefunden. Bitte Setup-Route verwenden!")
-        else:
-            logger.info("Mindestens ein Admin-Benutzer existiert bereits.")
         
         conn.commit()
         logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")

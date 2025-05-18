@@ -1041,7 +1041,7 @@ def get_app_labels():
 
 def get_all_users():
     """Hole alle aktiven Benutzer für die Ticket-Zuweisung"""
-    return Database.query('''
+    return ticket_db.query('''
         SELECT id, username, role
         FROM users
         WHERE is_active = 1
@@ -2114,8 +2114,8 @@ def system():
 def manage_users():
     """Zeigt die Benutzerverwaltungsseite."""
     try:
-        # Hole alle Benutzer aus der Datenbank
-        users = Database.query("SELECT id, username, email, role, is_active FROM users ORDER BY username")
+        # Hole alle Benutzer aus der Ticket-Datenbank
+        users = ticket_db.query("SELECT id, username, email, role, is_active FROM users ORDER BY username")
         return render_template('admin/users.html', users=users)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Benutzerliste: {e}", exc_info=True)
@@ -2132,6 +2132,8 @@ def add_user():
         password = request.form.get('password')
         password_confirm = request.form.get('password_confirm')
         role = request.form.get('role')
+        firstname = request.form.get('firstname')
+        lastname = request.form.get('lastname')
 
         # Validierung
         if not all([username, password, password_confirm, role]):
@@ -2148,7 +2150,7 @@ def add_user():
 
         try:
             # User.create prüft bereits auf existierenden Usernamen/Email
-            new_user = User.create(username=username, password=password, role=role, email=email or None)
+            new_user = User.create(username=username, password=password, role=role, email=email or None, firstname=firstname, lastname=lastname)
             if new_user:
                 flash(f"Benutzer '{username}' erfolgreich erstellt.", 'success')
                 return redirect(url_for('admin.manage_users'))
@@ -2165,7 +2167,7 @@ def add_user():
         # Bei Fehler: Formular erneut anzeigen mit eingegebenen Daten (außer Passwort)
         return render_template('admin/user_form.html', 
                                roles=['admin', 'mitarbeiter', 'anwender'],
-                               username=username, email=email, selected_role=role)
+                               username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
 
     # GET Request: Formular anzeigen
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
@@ -2185,29 +2187,30 @@ def edit_user(user_id):
         password = request.form.get('password')
         password_confirm = request.form.get('password_confirm')
         role = request.form.get('role')
+        firstname = request.form.get('firstname')
+        lastname = request.form.get('lastname')
 
         # Validierung
         if not all([username, role]):
             flash("Bitte Benutzername und Rolle ausfüllen.", "error")
-            # Bei Fehler: Formular erneut anzeigen mit aktuellen Daten (außer Passwort)
             return render_template('admin/user_form.html', 
                                    user=user,
                                    roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role)
+                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
 
         if password and password != password_confirm:
             flash("Passwörter stimmen nicht überein.", "error")
             return render_template('admin/user_form.html', 
                                    user=user,
                                    roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role)
-            
+                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
+        
         if role not in ['admin', 'mitarbeiter', 'anwender']:
              flash("Ungültige Rolle ausgewählt.", "error")
              return render_template('admin/user_form.html', 
                                    user=user,
                                    roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role)
+                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
 
         try:
             # Prüfen, ob der Benutzername bereits von einem *anderen* Benutzer verwendet wird
@@ -2217,7 +2220,7 @@ def edit_user(user_id):
                  return render_template('admin/user_form.html', 
                                        user=user,
                                        roles=['admin', 'mitarbeiter', 'anwender'],
-                                       username=username, email=email, selected_role=role)
+                                       username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
                  
             # Prüfen, ob die E-Mail bereits von einem *anderen* Benutzer verwendet wird
             if email:
@@ -2227,32 +2230,32 @@ def edit_user(user_id):
                     return render_template('admin/user_form.html', 
                                            user=user,
                                            roles=['admin', 'mitarbeiter', 'anwender'],
-                                           username=username, email=email, selected_role=role)
-
+                                           username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
 
             # Update der Benutzerdaten
             update_data = {
                 'username': username,
-                'email': email or None, # Speichere NULL, wenn leer
-                'role': role
+                'email': email or None,
+                'role': role,
+                'firstname': firstname,
+                'lastname': lastname
             }
             
             # Passwort nur aktualisieren, wenn es eingegeben wurde
             if password:
-                user.set_password(password) # Aktualisiert das Passwort-Attribut direkt im Objekt
-                # Wir müssen das gehashte Passwort auch in update_data aufnehmen
-                update_data['password_hash'] = user.password_hash 
+                user.set_password(password)
+                update_data['password_hash'] = user.password_hash
 
-            # Aktualisiere die Datenbank
-            Database.query('''
+            # Aktualisiere die Datenbank (Ticketsystem!)
+            ticket_db.query('''
                 UPDATE users 
-                SET username = :username, email = :email, role = :role 
+                SET username = :username, email = :email, role = :role, firstname = :firstname, lastname = :lastname
                 WHERE id = :id
-            ''', {'username': update_data['username'], 'email': update_data['email'], 'role': update_data['role'], 'id': user_id})
+            ''', {'username': update_data['username'], 'email': update_data['email'], 'role': update_data['role'], 'firstname': update_data['firstname'], 'lastname': update_data['lastname'], 'id': user_id})
             
             # Wenn das Passwort geändert wurde, aktualisiere auch den Hash
             if 'password_hash' in update_data:
-                 Database.query('''
+                 ticket_db.query('''
                     UPDATE users 
                     SET password_hash = :password_hash
                     WHERE id = :id
@@ -2264,10 +2267,10 @@ def edit_user(user_id):
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren von Benutzer {user_id}: {e}", exc_info=True)
             flash("Ein unerwarteter Fehler ist aufgetreten.", 'error')
-            # Bei Fehler: Formular erneut anzeigen mit ursprünglichen Daten
             return render_template('admin/user_form.html', 
                                    user=user, 
-                                   roles=['admin', 'mitarbeiter', 'anwender'])
+                                   roles=['admin', 'mitarbeiter', 'anwender'],
+                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
 
     # GET Request: Formular anzeigen
     return render_template('admin/user_form.html', user=user, roles=['admin', 'mitarbeiter', 'anwender'])

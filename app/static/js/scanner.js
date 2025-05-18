@@ -4,14 +4,20 @@ class BarcodeScanner {
         this.activeCamera = 'environment';
         this.scanStep = 1;
         this.firstBarcode = null;
+        this.isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     }
 
     async startScanning(videoElement, resultCallback, validateCallback) {
         try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: this.activeCamera }
-            });
-            
+            const constraints = {
+                video: {
+                    facingMode: this.activeCamera,
+                    width: { ideal: this.isMobile ? 1280 : 1920 },
+                    height: { ideal: this.isMobile ? 720 : 1080 }
+                }
+            };
+
+            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoElement.srcObject = this.stream;
             
             if ('BarcodeDetector' in window) {
@@ -53,9 +59,15 @@ class BarcodeScanner {
     }
 
     switchCamera() {
-        this.activeCamera = this.activeCamera === 'environment' ? 'user' : 'environment';
-        this.stopScanning();
-        // Neustart des Scanners mit neuer Kamera
+        if (this.isMobile) {
+            this.activeCamera = this.activeCamera === 'environment' ? 'user' : 'environment';
+            this.stopScanning();
+            // Neustart des Scanners mit neuer Kamera
+            const videoElement = document.querySelector('#video');
+            if (videoElement) {
+                this.startScanning(videoElement, this.resultCallback, this.validateCallback);
+            }
+        }
     }
 }
 

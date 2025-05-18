@@ -54,6 +54,19 @@
         </div>
 
         <div class="form-control">
+            <label class="label" for="firstname">
+                <span class="label-text">Vorname <span class="text-error">*</span></span>
+            </label>
+            <input type="text" id="firstname" name="firstname" value="{{ request.form.firstname or (current_user_data.firstname if current_user_data) or '' }}" required class="input input-bordered w-full" />
+        </div>
+        <div class="form-control">
+            <label class="label" for="lastname">
+                <span class="label-text">Nachname <span class="text-error">*</span></span>
+            </label>
+            <input type="text" id="lastname" name="lastname" value="{{ request.form.lastname or (current_user_data.lastname if current_user_data) or '' }}" required class="input input-bordered w-full" />
+        </div>
+
+        <div class="form-control">
             <label class="label" for="role">
                 <span class="label-text">Rolle <span class="text-error">*</span></span>
             </label>

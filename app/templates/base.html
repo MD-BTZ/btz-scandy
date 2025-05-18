@@ -88,11 +88,25 @@
             {# Mitarbeiter Link nur für Mitarbeiter und Admins #}
             {% if current_user.is_authenticated and current_user.is_mitarbeiter %}
             <a href="{{ url_for('workers.index') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if 'workers' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint == 'workers.index' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="fas fa-users text-xl"></i>
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Mitarbeiter</span>
+            </a>
+            <a href="{{ url_for('tickets.create') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-ticket-alt text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftrag</span>
+            </a>
+            <a href="{{ url_for('workers.timesheet_list') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-clock text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Arbeitszeit</span>
             </a>
             {% endif %}
 
@@ -103,15 +117,6 @@
                      <i class="fas fa-question-circle text-xl"></i>
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Über Scandy</span>
-            </a>
-
-            <!-- Ticket-Erstellung für alle eingeloggten Benutzer -->
-            <a href="{{ url_for('tickets.create') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                     <i class="fas fa-ticket-alt text-xl"></i>
-                 </div>
-                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftrag</span>
             </a>
 
             <!-- Versionsnummer am unteren Rand -->

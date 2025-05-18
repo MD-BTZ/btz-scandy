@@ -1,6 +1,6 @@
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.models.database import Database
+from app.models.ticket_db import TicketDatabase
 import logging
 
 logger = logging.getLogger(__name__)
@@ -8,13 +8,15 @@ logger = logging.getLogger(__name__)
 class User(UserMixin):
     """Benutzermodell für Flask-Login und Datenbankinteraktion."""
 
-    def __init__(self, id, username, password_hash, role, is_active, email=None):
+    def __init__(self, id, username, password_hash, role, is_active, email=None, firstname=None, lastname=None):
         self.id = id
         self.username = username
         self.password_hash = password_hash
         self.role = role # admin, mitarbeiter, anwender
         self._db_is_active = bool(is_active) # Intern speichern
         self.email = email
+        self.firstname = firstname
+        self.lastname = lastname
 
     # Flask-Login erfordert die `is_active`-Eigenschaft
     @property
@@ -44,11 +46,13 @@ class User(UserMixin):
     def get_by_username(username):
         """Lädt einen Benutzer anhand seines Benutzernamens aus der DB."""
         sql = "SELECT * FROM users WHERE username = ?"
-        row = Database.query(sql, [username], one=True)
+        ticket_db = TicketDatabase()
+        row = ticket_db.query(sql, [username], one=True)
         if row:
             # Erstellt ein User-Objekt aus der Datenbankzeile
             return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                        role=row['role'], is_active=row.get('is_active', True), email=row.get('email'))
+                        role=row['role'], is_active=row.get('is_active', True), email=row.get('email'),
+                        firstname=row.get('firstname'), lastname=row.get('lastname'))
         return None
 
     @staticmethod
@@ -57,10 +61,12 @@ class User(UserMixin):
         sql = "SELECT * FROM users WHERE id = ?"
         try:
             # Stelle sicher, dass user_id ein Integer ist
-            row = Database.query(sql, [int(user_id)], one=True)
+            ticket_db = TicketDatabase()
+            row = ticket_db.query(sql, [int(user_id)], one=True)
             if row:
                 return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                            role=row['role'], is_active=row.get('is_active', True), email=row.get('email'))
+                            role=row['role'], is_active=row.get('is_active', True), email=row.get('email'),
+                            firstname=row.get('firstname'), lastname=row.get('lastname'))
         except ValueError:
             logger.error(f"Ungültige user_id empfangen: {user_id}")
             return None
@@ -70,7 +76,7 @@ class User(UserMixin):
         return None
 
     @staticmethod
-    def create(username, password, role, email=None, is_active=True):
+    def create(username, password, role, email=None, firstname=None, lastname=None, is_active=True):
         """Erstellt einen neuen Benutzer in der Datenbank."""
         if role not in ['admin', 'mitarbeiter', 'anwender']:
             raise ValueError("Ungültige Rolle angegeben.")
@@ -80,10 +86,11 @@ class User(UserMixin):
              raise ValueError(f"E-Mail '{email}' existiert bereits.")
 
         hashed_password = generate_password_hash(password)
-        sql = """INSERT INTO users (username, email, password_hash, role, is_active)
-                 VALUES (?, ?, ?, ?, ?)"""
+        sql = """INSERT INTO users (username, email, password_hash, role, firstname, lastname, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"""
         try:
-            Database.query(sql, [username, email, hashed_password, role, is_active])
+            ticket_db = TicketDatabase()
+            ticket_db.query(sql, [username, email, hashed_password, role, firstname, lastname, is_active])
             return User.get_by_username(username)
         except Exception as e:
             logger.error(f"Fehler beim Erstellen von Benutzer {username}: {e}", exc_info=True)
@@ -95,20 +102,24 @@ class User(UserMixin):
         if not email: 
             return None
         sql = "SELECT * FROM users WHERE email = ?"
-        row = Database.query(sql, [email], one=True)
+        ticket_db = TicketDatabase()
+        row = ticket_db.query(sql, [email], one=True)
         if row:
             return User(id=row['id'], username=row['username'], password_hash=row['password_hash'], 
-                        role=row['role'], is_active=row.get('is_active', True), email=row['email'])
+                        role=row['role'], is_active=row.get('is_active', True), email=row['email'],
+                        firstname=row.get('firstname'), lastname=row.get('lastname'))
         return None
 
-    # Beispiel für eine Methode zum Aktualisieren (kann erweitert werden)
     def save(self):
         """Speichert Änderungen am Benutzerobjekt in der DB."""
         sql = """UPDATE users SET 
-                 username = ?, email = ?, password_hash = ?, role = ?, is_active = ?
+                 username = ?, email = ?, password_hash = ?, role = ?, is_active = ?,
+                 firstname = ?, lastname = ?
                  WHERE id = ?"""
         try:
-            Database.query(sql, [self.username, self.email, self.password_hash, self.role, self.is_active, self.id])
+            ticket_db = TicketDatabase()
+            ticket_db.query(sql, [self.username, self.email, self.password_hash, self.role, 
+                                self.is_active, self.firstname, self.lastname, self.id])
             return True
         except Exception as e:
             logger.error(f"Fehler beim Speichern von User {self.username}: {e}", exc_info=True)

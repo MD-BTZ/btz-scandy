@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.utils.db_schema import SchemaManager
 from app.config import config
 from werkzeug.security import generate_password_hash
-from app.models.database import Database
+from app.models.ticket_db import TicketDatabase
 import logging
 
 # Logger einrichten
@@ -17,13 +17,8 @@ def setup_admin():
     schema_manager = SchemaManager(db_path)
     
     # Prüfe ob bereits ein Admin-Benutzer existiert
-    with schema_manager._get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM users')
-        user_count = cursor.fetchone()[0]
-        
-        if user_count > 0:
-            return redirect(url_for('auth.login'))
+    if is_admin_user_present():
+        return redirect(url_for('auth.login'))
     
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -39,7 +34,7 @@ def setup_admin():
         if password != password_confirm:
             return render_template('setup_admin.html', error='Die Passwörter stimmen nicht überein.')
         # Erstelle den Admin-Benutzer
-        success, message = create_admin_user(username, password)
+        success, message = create_admin_user(username, password, 'admin')
         if success:
             return redirect(url_for('setup.setup_settings'))
         else:
@@ -60,10 +55,10 @@ def setup_settings():
         
         try:
             # Speichere die Einstellungen exakt wie im Dashboard/System-Menü
-            Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name])
-            Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon])
-            Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name])
-            Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon])
+            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name])
+            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon])
+            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name])
+            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon])
             return redirect(url_for('setup.setup_optional'))
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Grundeinstellungen: {e}")
@@ -84,7 +79,7 @@ def setup_optional():
         
         try:
             # Speichere die optionalen Einstellungen
-            with Database.get_db() as conn:
+            with TicketDatabase.get_db() as conn:
                 cursor = conn.cursor()
                 # Kategorien
                 for i, category in enumerate(categories):
@@ -117,18 +112,15 @@ def setup_optional():
     
     return render_template('setup_optional.html')
 
-def create_admin_user(username, password):
-    """Erstellt den Admin-Benutzer mit frei wählbarem Namen"""
-    try:
-        with Database.get_db() as conn:
-            cursor = conn.cursor()
-            password_hash = generate_password_hash(password)
-            cursor.execute('''
-                INSERT INTO users (username, password_hash, role)
-                VALUES (?, ?, ?)
-            ''', [username, password_hash, 'admin'])
-            conn.commit()
-        return True, 'Admin-Benutzer erfolgreich erstellt.'
-    except Exception as e:
-        logger.error(f"Fehler beim Erstellen des Admin-Benutzers: {e}")
-        return False, f'Fehler beim Erstellen des Admin-Benutzers: {str(e)}' 
+def is_admin_user_present():
+    ticket_db = TicketDatabase()
+    with ticket_db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users')
+        count = cursor.fetchone()[0]
+    return count > 0
+
+def create_admin_user(username, password, role):
+    ticket_db = TicketDatabase()
+    hashed_password = generate_password_hash(password)
+    ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role]) 

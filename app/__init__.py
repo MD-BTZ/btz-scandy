@@ -23,6 +23,7 @@ from app.models.migrations import run_migrations
 from app.routes import auth, tools, consumables, workers, setup, backup
 from app.config import Config
 from app.routes import init_app
+import sqlite3
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -122,26 +123,20 @@ def initialize_and_migrate_databases():
         from app.config import config
         current_config = config['default']()
         db_path = current_config.DATABASE
+        ticket_db_path = current_config.TICKET_DATABASE
 
         # 1. SchemaManager initialisieren und Schema validieren/aktualisieren
         logger.info("Initialisiere SchemaManager und validiere/aktualisiere Schema...")
         schema_manager = SchemaManager(db_path)
-        
-        # Initialisiere das Schema
         if not schema_manager.initialize():
             raise Exception("Schema-Initialisierung fehlgeschlagen")
-        
-        # Führe Schema-Updates durch
         if schema_manager.needs_update():
             logger.info("Schema-Update erforderlich...")
             if not schema_manager.update():
                 raise Exception("Schema-Update fehlgeschlagen")
-        
-        # Validiere das Schema
         if not schema_manager.validate_schema():
             logger.error("Schema-Validierung fehlgeschlagen!")
             raise Exception("Schema-Validierung fehlgeschlagen")
-        
         logger.info(f"Schema-Version: {schema_manager.get_schema_version()}")
 
         # 2. Migrationen ausführen (für komplexere Änderungen)
@@ -150,6 +145,30 @@ def initialize_and_migrate_databases():
         # 3. Ticket-Datenbank initialisieren
         logger.info("Initialisiere Ticket-Datenbank...")
         init_ticket_db()
+
+        # 4. Automatische User-Migration von inventory.db nach tickets.db
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
+            result = cursor.fetchone()
+            if result:
+                logger.info("User-Tabelle in inventory.db gefunden. Starte automatische Migration...")
+                from app.migrations.migrate_users import migrate_users
+                migrate_users()
+                # Nach erfolgreicher Migration: Tabelle löschen
+                cursor.execute("DROP TABLE IF EXISTS users;")
+                conn.commit()
+                logger.info("User-Tabelle aus inventory.db entfernt.")
+            else:
+                logger.info("Keine User-Tabelle in inventory.db gefunden. Keine Migration notwendig.")
+        except Exception as e:
+            logger.error(f"Fehler bei der automatischen User-Migration: {e}", exc_info=True)
+        finally:
+            try:
+                conn.close()
+            except:
+                pass
 
         logger.info("Datenbanken erfolgreich initialisiert/migriert")
     except Exception as e:

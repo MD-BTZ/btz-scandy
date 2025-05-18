@@ -1,11 +1,17 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from app.models.database import Database
 from app.models.worker import Worker
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_login import current_user
+import os
+import tempfile
+from docxtpl import DocxTemplate
+from app.models.ticket_db import TicketDatabase
 
 bp = Blueprint('workers', __name__, url_prefix='/workers')
+
+ticket_db = TicketDatabase()
 
 @bp.route('/')
 @mitarbeiter_required
@@ -367,3 +373,160 @@ def search():
         return jsonify([dict(worker) for worker in workers])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@bp.route('/timesheets')
+@mitarbeiter_required
+def timesheet_list():
+    user_id = current_user.id
+    sort = request.args.get('sort', 'kw_desc')
+    
+    # Basis-Query mit Berechnung der ausgefüllten Tage
+    query = '''
+        SELECT *,
+               (CASE WHEN (montag_start != '' OR montag_end != '' OR montag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (dienstag_start != '' OR dienstag_end != '' OR dienstag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (mittwoch_start != '' OR mittwoch_end != '' OR mittwoch_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (donnerstag_start != '' OR donnerstag_end != '' OR donnerstag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (freitag_start != '' OR freitag_end != '' OR freitag_tasks != '') THEN 1 ELSE 0 END) as filled_days,
+               strftime('%d.%m.%Y', created_at) as created_at_de,
+               strftime('%d.%m.%Y', updated_at) as updated_at_de
+        FROM timesheets 
+        WHERE user_id = ?
+    '''
+    params = [user_id]
+    
+    # Sortierung
+    if sort == 'year_desc':
+        query += ' ORDER BY year DESC, kw DESC'
+    elif sort == 'year_asc':
+        query += ' ORDER BY year ASC, kw ASC'
+    elif sort == 'kw_desc':
+        query += ' ORDER BY year DESC, kw DESC'
+    elif sort == 'kw_asc':
+        query += ' ORDER BY year ASC, kw ASC'
+    elif sort == 'filled_desc':
+        query += ' ORDER BY filled_days DESC, year DESC, kw DESC'
+    elif sort == 'filled_asc':
+        query += ' ORDER BY filled_days ASC, year DESC, kw DESC'
+    elif sort == 'created_desc':
+        query += ' ORDER BY created_at DESC'
+    elif sort == 'created_asc':
+        query += ' ORDER BY created_at ASC'
+    elif sort == 'updated_desc':
+        query += ' ORDER BY updated_at DESC'
+    elif sort == 'updated_asc':
+        query += ' ORDER BY updated_at ASC'
+    
+    timesheets = ticket_db.query(query, params)
+    return render_template('workers/timesheet_list.html', timesheets=timesheets)
+
+@bp.route('/timesheet/new', methods=['GET', 'POST'])
+@mitarbeiter_required
+def timesheet_create():
+    if request.method == 'POST':
+        user_id = current_user.id
+        week = request.form.get('week')  # z.B. '2024-W20'
+        if week and '-W' in week:
+            year, week_str = week.split('-W')
+            calendar_week = int(week_str)
+            year = int(year)
+        else:
+            flash('Ungültiges Wochenformat.', 'error')
+            return redirect(url_for('workers.timesheet_create'))
+        days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+        data = {
+            'user_id': user_id,
+            'year': year,
+            'kw': calendar_week,
+        }
+        for day in days:
+            data[f'{day}_tasks'] = request.form.get(f'tasks_{day}', '')
+            data[f'{day}_start'] = request.form.get(f'start_{day}', '')
+            data[f'{day}_end'] = request.form.get(f'end_{day}', '')
+        placeholders = ', '.join(data.keys())
+        values = list(data.values())
+        qmarks = ', '.join(['?'] * len(values))
+        ticket_db.query(f'INSERT INTO timesheets ({placeholders}) VALUES ({qmarks})', values)
+        flash('Wochenplan erfolgreich gespeichert.', 'success')
+        return redirect(url_for('workers.timesheet_list'))
+    return render_template('workers/timesheet.html')
+
+@bp.route('/timesheet/<int:ts_id>/edit', methods=['GET', 'POST'])
+@mitarbeiter_required
+def timesheet_edit(ts_id):
+    user_id = current_user.id
+    ts = ticket_db.query('SELECT * FROM timesheets WHERE id = ? AND user_id = ?', [ts_id, user_id], one=True)
+    if not ts:
+        flash('Wochenplan nicht gefunden oder keine Berechtigung.', 'error')
+        return redirect(url_for('workers.timesheet_list'))
+    if request.method == 'POST':
+        week = request.form.get('week')
+        if week and '-W' in week:
+            year, week_str = week.split('-W')
+            calendar_week = int(week_str)
+            year = int(year)
+        else:
+            flash('Ungültiges Wochenformat.', 'error')
+            return redirect(url_for('workers.timesheet_edit', ts_id=ts_id))
+        days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+        updates = ['year = ?', 'kw = ?']
+        values = [year, calendar_week]
+        for day in days:
+            updates.append(f'{day}_tasks = ?')
+            values.append(request.form.get(f'tasks_{day}', ''))
+            updates.append(f'{day}_start = ?')
+            values.append(request.form.get(f'start_{day}', ''))
+            updates.append(f'{day}_end = ?')
+            values.append(request.form.get(f'end_{day}', ''))
+        values.append(ts_id)
+        values.append(user_id)
+        ticket_db.query(f'UPDATE timesheets SET {", ".join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', values)
+        flash('Wochenplan aktualisiert.', 'success')
+        return redirect(url_for('workers.timesheet_list'))
+    return render_template('workers/timesheet.html', ts=ts)
+
+@bp.route('/timesheet/<int:ts_id>/download')
+@mitarbeiter_required
+def timesheet_download(ts_id):
+    user_id = current_user.id
+    ts = ticket_db.query('SELECT * FROM timesheets WHERE id = ? AND user_id = ?', [ts_id, user_id], one=True)
+    if not ts:
+        flash('Wochenplan nicht gefunden oder keine Berechtigung.', 'error')
+        return redirect(url_for('workers.timesheet_list'))
+    # Kontext für docxtpl bauen
+    if current_user.firstname and current_user.lastname:
+        name = f"{current_user.firstname} {current_user.lastname}"
+    else:
+        name = current_user.username
+    context = {
+        'kw': ts['kw'],
+        'name': name,
+    }
+    # Korrekte Berechnung des Wochenstarts nach ISO-Kalenderwoche
+    week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
+    days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+    for i, day in enumerate(days):
+        context[f'{day}_tasks'] = ts.get(f'{day}_tasks', '')
+        context[f'{day}_datum'] = (week_start + timedelta(days=i)).strftime('%d.%m.')
+        start_time = ts.get(f'{day}_start')
+        end_time = ts.get(f'{day}_end')
+        if start_time and end_time:
+            start = datetime.strptime(start_time, '%H:%M')
+            end = datetime.strptime(end_time, '%H:%M')
+            if end < start:
+                end += timedelta(days=1)
+            hours = (end - start).total_seconds() / 3600
+            if hours > 6:
+                hours -= 0.5  # Automatisch 30 Minuten Pause abziehen
+            if hours < 0:
+                hours = 0
+            context[f'{day}_hours'] = f'{hours:.2f}'
+        else:
+            context[f'{day}_hours'] = ''
+    template_path = os.path.join('app', 'static', 'word', 'woplan.docx')
+    doc = DocxTemplate(template_path)
+    doc.render(context)
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, f'woplan_{datetime.now().strftime("%Y%m%d_%H%M%S")}.docx')
+    doc.save(output_path)
+    return send_file(output_path, as_attachment=True, download_name=f'woplan_kw{ts["kw"]}.docx')

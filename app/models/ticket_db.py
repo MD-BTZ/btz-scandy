@@ -18,7 +18,13 @@ class TicketDatabase:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         # Überprüfe und korrigiere die Berechtigungen
         self._check_and_fix_permissions()
-        self.init_schema()
+        # Initialisiere das Schema und führe Migrationen durch
+        try:
+            self.init_schema()
+            logger.info("Datenbankschema erfolgreich initialisiert")
+        except Exception as e:
+            logger.error(f"Fehler beim Initialisieren des Datenbankschemas: {str(e)}")
+            raise
         
     def _check_and_fix_permissions(self):
         """Überprüft und korrigiert die Berechtigungen der Datenbankdatei"""
@@ -77,7 +83,48 @@ class TicketDatabase:
                 )
             ''')
             
-            # Tickets Tabelle
+            # Erstelle users-Tabelle mit allen benötigten Spalten
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    email TEXT,
+                    firstname TEXT,
+                    lastname TEXT,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                )
+            ''')
+            
+            # Prüfe und ergänze fehlende Spalten in users-Tabelle
+            try:
+                columns = [row[1] for row in cursor.execute('PRAGMA table_info(users)')]
+                logger.info(f"users-Tabellenspalten vor Migration: {columns}")
+                if 'firstname' not in columns:
+                    logger.info("Füge Spalte 'firstname' zur users-Tabelle hinzu")
+                    try:
+                        cursor.execute('ALTER TABLE users ADD COLUMN firstname TEXT')
+                        logger.info("Spalte 'firstname' erfolgreich hinzugefügt")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Hinzufügen von 'firstname': {str(e)}")
+                if 'lastname' not in columns:
+                    logger.info("Füge Spalte 'lastname' zur users-Tabelle hinzu")
+                    try:
+                        cursor.execute('ALTER TABLE users ADD COLUMN lastname TEXT')
+                        logger.info("Spalte 'lastname' erfolgreich hinzugefügt")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Hinzufügen von 'lastname': {str(e)}")
+                # Nachher nochmal prüfen
+                columns_after = [row[1] for row in cursor.execute('PRAGMA table_info(users)')]
+                logger.info(f"users-Tabellenspalten nach Migration: {columns_after}")
+            except Exception as e:
+                logger.error(f"Fehler beim Hinzufügen der Spalten: {str(e)}")
+                raise
+            
+            # Rest der Tabellen-Erstellung
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS tickets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,8 +197,33 @@ class TicketDatabase:
                 )
             ''')
             
-            # Setze die Schema-Version
-            cursor.execute('INSERT OR REPLACE INTO schema_version (version) VALUES (3)')
+            # Timesheets Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS timesheets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    year INTEGER NOT NULL,
+                    kw INTEGER NOT NULL,
+                    montag_tasks TEXT,
+                    montag_start TEXT,
+                    montag_end TEXT,
+                    dienstag_tasks TEXT,
+                    dienstag_start TEXT,
+                    dienstag_end TEXT,
+                    mittwoch_tasks TEXT,
+                    mittwoch_start TEXT,
+                    mittwoch_end TEXT,
+                    donnerstag_tasks TEXT,
+                    donnerstag_start TEXT,
+                    donnerstag_end TEXT,
+                    freitag_tasks TEXT,
+                    freitag_start TEXT,
+                    freitag_end TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
             
             conn.commit()
             logger.info("Ticket-Datenbankschema erfolgreich initialisiert")
