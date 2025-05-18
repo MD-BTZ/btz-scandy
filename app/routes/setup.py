@@ -45,20 +45,30 @@ def setup_admin():
 @bp.route('/setup/settings', methods=['GET', 'POST'])
 def setup_settings():
     if request.method == 'POST':
-        label_tools_name = request.form.get('label_tools_name', '').strip() or 'Werkzeuge'
-        label_tools_icon = request.form.get('label_tools_icon', '').strip() or 'fas fa-tools'
-        label_consumables_name = request.form.get('label_consumables_name', '').strip() or 'Material'
-        label_consumables_icon = request.form.get('label_consumables_icon', '').strip() or 'fas fa-box-open'
+        label_tools_name = request.form.get('label_tools_name', '').strip()
+        label_tools_icon = request.form.get('label_tools_icon', '').strip()
+        label_consumables_name = request.form.get('label_consumables_name', '').strip()
+        label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
         
-        print("DEBUG: request.form:", dict(request.form))
         logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
         
         try:
-            # Speichere die Einstellungen exakt wie im Dashboard/System-Menü
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon])
+            ticket_db = TicketDatabase()
+            
+            # Lösche zuerst die alten Einträge
+            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?)', 
+                          ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon'])
+            
+            # Füge die neuen Einträge ein
+            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
+                          ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
+            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
+                          ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
+            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
+                          ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
+            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
+                          ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
+            
             return redirect(url_for('setup.setup_optional'))
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Grundeinstellungen: {e}")
@@ -67,8 +77,30 @@ def setup_settings():
                 label_tools_icon=label_tools_icon,
                 label_consumables_name=label_consumables_name,
                 label_consumables_icon=label_consumables_icon)
-                
-    return render_template('setup_settings.html')
+    
+    # Lade vorhandene Einstellungen für die Anzeige
+    try:
+        ticket_db = TicketDatabase()
+        settings = {}
+        
+        # Hole alle relevanten Einstellungen
+        results = ticket_db.query('''
+            SELECT key, value 
+            FROM settings 
+            WHERE key IN ('label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon')
+        ''')
+        
+        for row in results:
+            settings[row['key']] = row['value']
+        
+        return render_template('setup_settings.html',
+            label_tools_name=settings.get('label_tools_name', 'Werkzeuge'),
+            label_tools_icon=settings.get('label_tools_icon', 'fas fa-tools'),
+            label_consumables_name=settings.get('label_consumables_name', 'Verbrauchsmaterial'),
+            label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'))
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Einstellungen: {e}")
+        return render_template('setup_settings.html', error='Fehler beim Laden der Einstellungen')
 
 @bp.route('/setup/optional', methods=['GET', 'POST'])
 def setup_optional():
@@ -79,30 +111,36 @@ def setup_optional():
         
         try:
             # Speichere die optionalen Einstellungen
-            with TicketDatabase.get_db() as conn:
-                cursor = conn.cursor()
-                # Kategorien
-                for i, category in enumerate(categories):
-                    if category.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'category_{i+1}', category.strip(), 'Kategorie'))
-                # Standorte
-                for i, location in enumerate(locations):
-                    if location.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'location_{i+1}', location.strip(), 'Standort'))
-                # Abteilungen
-                for i, department in enumerate(departments):
-                    if department.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'department_{i+1}', department.strip(), 'Abteilung'))
-                conn.commit()
+            ticket_db = TicketDatabase()
+            
+            # Lösche zuerst alle bestehenden Einträge
+            ticket_db.query('DELETE FROM settings WHERE key LIKE "category_%"')
+            ticket_db.query('DELETE FROM settings WHERE key LIKE "location_%"')
+            ticket_db.query('DELETE FROM settings WHERE key LIKE "department_%"')
+            
+            # Kategorien
+            for i, category in enumerate(categories):
+                if category.strip():
+                    ticket_db.query('''
+                        INSERT INTO settings (key, value, description)
+                        VALUES (?, ?, ?)
+                    ''', (f'category_{i+1}', category.strip(), 'Kategorie'))
+            
+            # Standorte
+            for i, location in enumerate(locations):
+                if location.strip():
+                    ticket_db.query('''
+                        INSERT INTO settings (key, value, description)
+                        VALUES (?, ?, ?)
+                    ''', (f'location_{i+1}', location.strip(), 'Standort'))
+            
+            # Abteilungen
+            for i, department in enumerate(departments):
+                if department.strip():
+                    ticket_db.query('''
+                        INSERT INTO settings (key, value, description)
+                        VALUES (?, ?, ?)
+                    ''', (f'department_{i+1}', department.strip(), 'Abteilung'))
             
             flash('Einrichtung erfolgreich abgeschlossen!', 'success')
             return redirect(url_for('auth.login'))
@@ -110,7 +148,35 @@ def setup_optional():
             logger.error(f"Fehler beim Speichern der optionalen Einstellungen: {e}")
             return render_template('setup_optional.html', error='Fehler beim Speichern der Einstellungen')
     
-    return render_template('setup_optional.html')
+    # Lade vorhandene Einstellungen für die Anzeige
+    try:
+        ticket_db = TicketDatabase()
+        categories = []
+        locations = []
+        departments = []
+        
+        # Hole alle Kategorien
+        category_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "category_%" ORDER BY key')
+        for row in category_results:
+            categories.append(row['value'])
+            
+        # Hole alle Standorte
+        location_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "location_%" ORDER BY key')
+        for row in location_results:
+            locations.append(row['value'])
+            
+        # Hole alle Abteilungen
+        department_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "department_%" ORDER BY key')
+        for row in department_results:
+            departments.append(row['value'])
+            
+        return render_template('setup_optional.html', 
+                             categories=categories,
+                             locations=locations,
+                             departments=departments)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der optionalen Einstellungen: {e}")
+        return render_template('setup_optional.html', error='Fehler beim Laden der Einstellungen')
 
 def is_admin_user_present():
     ticket_db = TicketDatabase()
@@ -123,4 +189,9 @@ def is_admin_user_present():
 def create_admin_user(username, password, role):
     ticket_db = TicketDatabase()
     hashed_password = generate_password_hash(password)
-    ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role]) 
+    try:
+        ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role])
+        return True, "Admin-Benutzer erfolgreich erstellt"
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des Admin-Benutzers: {str(e)}")
+        return False, f"Fehler beim Erstellen des Admin-Benutzers: {str(e)}" 

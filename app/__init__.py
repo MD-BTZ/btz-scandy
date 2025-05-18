@@ -117,63 +117,23 @@ def cleanup_database():
         logger.error(f"Fehler bei der automatischen Datenbankbereinigung: {str(e)}")
 
 def initialize_and_migrate_databases():
-    """Initialisiert und migriert alle Datenbanken."""
-    try:
-        logger.info("Initialisiere und migriere Datenbanken...")
-        from app.config import config
-        current_config = config['default']()
-        db_path = current_config.DATABASE
-        ticket_db_path = current_config.TICKET_DATABASE
-
-        # 1. SchemaManager initialisieren und Schema validieren/aktualisieren
-        logger.info("Initialisiere SchemaManager und validiere/aktualisiere Schema...")
-        schema_manager = SchemaManager(db_path)
-        if not schema_manager.initialize():
-            raise Exception("Schema-Initialisierung fehlgeschlagen")
-        if schema_manager.needs_update():
-            logger.info("Schema-Update erforderlich...")
-            if not schema_manager.update():
-                raise Exception("Schema-Update fehlgeschlagen")
-        if not schema_manager.validate_schema():
-            logger.error("Schema-Validierung fehlgeschlagen!")
-            raise Exception("Schema-Validierung fehlgeschlagen")
-        logger.info(f"Schema-Version: {schema_manager.get_schema_version()}")
-
-        # 2. Migrationen ausführen (für komplexere Änderungen)
-        run_migrations(db_path)
-
-        # 3. Ticket-Datenbank initialisieren
-        logger.info("Initialisiere Ticket-Datenbank...")
-        init_ticket_db()
-
-        # 4. Automatische User-Migration von inventory.db nach tickets.db
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
-            result = cursor.fetchone()
-            if result:
-                logger.info("User-Tabelle in inventory.db gefunden. Starte automatische Migration...")
-                from app.migrations.migrate_users import migrate_users
-                migrate_users()
-                # Nach erfolgreicher Migration: Tabelle löschen
-                cursor.execute("DROP TABLE IF EXISTS users;")
-                conn.commit()
-                logger.info("User-Tabelle aus inventory.db entfernt.")
-            else:
-                logger.info("Keine User-Tabelle in inventory.db gefunden. Keine Migration notwendig.")
-        except Exception as e:
-            logger.error(f"Fehler bei der automatischen User-Migration: {e}", exc_info=True)
-        finally:
-            try:
-                conn.close()
-            except:
-                pass
-
-        logger.info("Datenbanken erfolgreich initialisiert/migriert")
-    except Exception as e:
-        logger.error(f"Fehler bei der Datenbankinitialisierung/-migration: {str(e)}", exc_info=True)
-        raise
+    """Initialisiert die Datenbanken nur beim ersten Start"""
+    from app.config import config
+    current_config = config['default']
+    
+    # Datenbankpfade
+    db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
+    ticket_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'tickets.db')
+    
+    # Erstelle Verzeichnisse
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    os.makedirs(os.path.dirname(ticket_db_path), exist_ok=True)
+    
+    # Initialisiere nur wenn nicht existent
+    if not os.path.exists(db_path):
+        SchemaManager(db_path).initialize()
+    if not os.path.exists(ticket_db_path):
+        SchemaManager(ticket_db_path).initialize()
 
 def create_app(test_config=None):
     """Erstellt und konfiguriert die Flask-Anwendung"""
@@ -193,14 +153,16 @@ def create_app(test_config=None):
     # Logger einrichten
     from app.utils.logger import init_app_logger
     init_app_logger(app)
-    app.logger.setLevel(logging.DEBUG)  # Setze Logging-Level auf DEBUG
+    app.logger.setLevel(logging.DEBUG)
     app.logger.info("\n=== ANWENDUNGSSTART ===")
     
     # Verzeichnisse erstellen
     ensure_directories_exist()
     
-    # Datenbanken initialisieren und migrieren
-    initialize_and_migrate_databases()
+    # Datenbanken nur einmal beim Start initialisieren
+    if not hasattr(app, '_database_initialized'):
+        initialize_and_migrate_databases()
+        app._database_initialized = True
     
     # Flask-Login initialisieren
     login_manager.init_app(app)
@@ -281,23 +243,6 @@ def create_app(test_config=None):
                 else:
                     print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
     
-    # Temporärer Code zum Setzen der DB-Version (Bitte nach dem nächsten Start entfernen!)
-    with app.app_context():
-        from .models.database import Database
-        try:
-            print("INFO: Versuche PRAGMA user_version = 2 für inventory.db zu setzen...")
-            with Database.get_db() as conn:
-                conn.execute("PRAGMA user_version = 2;")
-                conn.commit()
-                current_db_version = conn.execute("PRAGMA user_version;").fetchone()[0]
-                if current_db_version == 2:
-                    print("INFO: PRAGMA user_version erfolgreich auf 2 gesetzt.")
-                else:
-                    print(f"WARNUNG: PRAGMA user_version konnte nicht auf 2 gesetzt werden. Aktuell: {current_db_version}")
-        except Exception as e_pragma:
-            print(f"FEHLER beim Setzen von PRAGMA user_version: {e_pragma}")
-    # Ende temporärer Code
-
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():

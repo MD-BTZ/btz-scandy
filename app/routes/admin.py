@@ -1023,10 +1023,17 @@ def restore_item(type, barcode):
         }), 500
 
 def get_label_setting(key, default):
-    value = Database.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
-    return value['value'] if value and value['value'] else default
+    """Hole eine Label-Einstellung aus der tickets.db"""
+    try:
+        ticket_db = TicketDatabase()
+        value = ticket_db.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
+        return value['value'] if value and value['value'] else default
+    except Exception as e:
+        logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
+        return default
 
 def get_app_labels():
+    """Hole alle Label-Einstellungen aus der tickets.db"""
     return {
         'tools': {
             'name': get_label_setting('label_tools_name', 'Werkzeuge'),
@@ -1035,8 +1042,7 @@ def get_app_labels():
         'consumables': {
             'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
             'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
-        },
-        'custom_logo': get_label_setting('custom_logo', None)
+        }
     }
 
 def get_all_users():
@@ -1060,7 +1066,23 @@ def server_settings():
         label_consumables_name = request.form.get('label_consumables_name')
         label_consumables_icon = request.form.get('label_consumables_icon')
         try:
-            # Speichere Einstellungen in der Datenbank
+            ticket_db = TicketDatabase()
+            
+            # Speichere die neuen Label/Icons
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_tools_name', label_tools_name or 'Werkzeuge'])
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+            
+            # Speichere Server-Einstellungen in der inventory.db
             Database.query('''
                 INSERT OR REPLACE INTO settings (key, value)
                 VALUES (?, ?)
@@ -1070,48 +1092,24 @@ def server_settings():
                     INSERT OR REPLACE INTO settings (key, value)
                     VALUES (?, ?)
                 ''', ['server_url', server_url])
-            # Speichere die neuen Label/Icons
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name or 'Werkzeuge'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+            
             if mode == 'server':
                 Config.init_server()
                 flash('Server-Modus aktiviert', 'success')
             else:
                 Config.init_client(server_url)
                 flash('Client-Modus aktiviert', 'success')
-        except Exception as e:
-            flash(f'Fehler beim Speichern der Einstellungen: {str(e)}', 'error')
+                
+            flash('Einstellungen erfolgreich gespeichert', 'success')
             return redirect(url_for('admin.server_settings'))
-    try:
-        # Hole aktuelle Einstellungen
-        status = Database.query('''
-            SELECT last_sync, status, error 
-            FROM sync_status 
-            ORDER BY id DESC LIMIT 1
-        ''', one=True)
-        auto_sync = Database.query('''
-            SELECT value FROM settings
-            WHERE key = 'auto_sync'
-        ''', one=True)
-        # Labels/Icons aus Settings holen
-        app_labels = get_app_labels()
-        return render_template('admin/server_settings.html',
-                             is_server=Config.SERVER_MODE,
-                             server_url=Config.SERVER_URL,
-                             last_sync=status['last_sync'] if status else None,
-                             sync_status=status['status'] if status else 'never',
-                             sync_error=status['error'] if status else None,
-                             auto_sync=bool(int(auto_sync['value'])) if auto_sync else False,
-                             app_labels=app_labels)
-    except Exception as e:
-        flash(f'Fehler beim Laden der Einstellungen: {str(e)}', 'error')
-        return redirect(url_for('admin.dashboard'))
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der Einstellungen: {str(e)}")
+            flash('Fehler beim Speichern der Einstellungen', 'error')
+            return redirect(url_for('admin.server_settings'))
+    
+    # Lade die aktuellen Einstellungen
+    app_labels = get_app_labels()
+    return render_template('admin/system.html', app_labels=app_labels)
 
 @bp.route('/export/all')
 @mitarbeiter_required

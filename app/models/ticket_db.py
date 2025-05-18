@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 class TicketDatabase:
     """Stellt Methoden für die Interaktion mit der Ticket-Datenbank bereit."""
     
+    _initialized = False  # Klassen-Variable für Initialisierungsstatus
+    
     def __init__(self):
         current_config = config['default']()
         self.db_path = current_config.TICKET_DATABASE
@@ -18,13 +20,15 @@ class TicketDatabase:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         # Überprüfe und korrigiere die Berechtigungen
         self._check_and_fix_permissions()
-        # Initialisiere das Schema und führe Migrationen durch
-        try:
-            self.init_schema()
-            logger.info("Datenbankschema erfolgreich initialisiert")
-        except Exception as e:
-            logger.error(f"Fehler beim Initialisieren des Datenbankschemas: {str(e)}")
-            raise
+        # Initialisiere das Schema nur wenn noch nicht initialisiert
+        if not TicketDatabase._initialized:
+            try:
+                self.init_schema()
+                TicketDatabase._initialized = True
+                logger.info("Datenbankschema erfolgreich initialisiert")
+            except Exception as e:
+                logger.error(f"Fehler beim Initialisieren des Datenbankschemas: {str(e)}")
+                raise
         
     def _check_and_fix_permissions(self):
         """Überprüft und korrigiert die Berechtigungen der Datenbankdatei"""
@@ -70,12 +74,61 @@ class TicketDatabase:
                 return dict(results[0]) if results else None
             return [dict(row) for row in results]
             
+    def _insert_default_data(self):
+        """Fügt Standarddaten in die Datenbank ein"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Standard-Kategorien
+            categories = [
+                ('Werkzeuge', 'Werkzeuge und Maschinen'),
+                ('Verbrauchsmaterial', 'Verbrauchsmaterial und Zubehör'),
+                ('IT', 'IT-Ausstattung und Zubehör'),
+                ('Büro', 'Büromaterial und Ausstattung'),
+                ('Sicherheit', 'Sicherheitsausrüstung'),
+                ('Wartung', 'Wartungsmaterial und Ersatzteile')
+            ]
+            cursor.executemany('''
+                INSERT OR IGNORE INTO categories (name, description)
+                VALUES (?, ?)
+            ''', categories)
+            
+            # Standard-Standorte
+            locations = [
+                ('Lager', 'Hauptlager'),
+                ('Werkstatt', 'Werkstattbereich'),
+                ('Büro', 'Bürobereich'),
+                ('IT-Raum', 'IT-Serverraum'),
+                ('Außenbereich', 'Außenlager und -bereich')
+            ]
+            cursor.executemany('''
+                INSERT OR IGNORE INTO locations (name, description)
+                VALUES (?, ?)
+            ''', locations)
+            
+            # Standard-Abteilungen
+            departments = [
+                ('Produktion', 'Produktionsabteilung'),
+                ('Wartung', 'Wartungsabteilung'),
+                ('IT', 'IT-Abteilung'),
+                ('Büro', 'Büroabteilung'),
+                ('Lager', 'Lagerabteilung'),
+                ('Qualität', 'Qualitätssicherung')
+            ]
+            cursor.executemany('''
+                INSERT OR IGNORE INTO departments (name, description)
+                VALUES (?, ?)
+            ''', departments)
+            
+            conn.commit()
+            logger.info("Standarddaten erfolgreich eingefügt")
+
     def init_schema(self):
         """Initialisiert das Datenbankschema"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Schema Version Tabelle
+            # Schema Version Tabelle (muss zuerst erstellt werden)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS schema_version (
                     version INTEGER PRIMARY KEY,
@@ -83,7 +136,7 @@ class TicketDatabase:
                 )
             ''')
             
-            # Erstelle users-Tabelle mit allen benötigten Spalten
+            # Users Tabelle (muss vor Tickets erstellt werden wegen Foreign Keys)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,32 +152,157 @@ class TicketDatabase:
                 )
             ''')
             
-            # Prüfe und ergänze fehlende Spalten in users-Tabelle
-            try:
-                columns = [row[1] for row in cursor.execute('PRAGMA table_info(users)')]
-                logger.info(f"users-Tabellenspalten vor Migration: {columns}")
-                if 'firstname' not in columns:
-                    logger.info("Füge Spalte 'firstname' zur users-Tabelle hinzu")
-                    try:
-                        cursor.execute('ALTER TABLE users ADD COLUMN firstname TEXT')
-                        logger.info("Spalte 'firstname' erfolgreich hinzugefügt")
-                    except Exception as e:
-                        logger.error(f"Fehler beim Hinzufügen von 'firstname': {str(e)}")
-                if 'lastname' not in columns:
-                    logger.info("Füge Spalte 'lastname' zur users-Tabelle hinzu")
-                    try:
-                        cursor.execute('ALTER TABLE users ADD COLUMN lastname TEXT')
-                        logger.info("Spalte 'lastname' erfolgreich hinzugefügt")
-                    except Exception as e:
-                        logger.error(f"Fehler beim Hinzufügen von 'lastname': {str(e)}")
-                # Nachher nochmal prüfen
-                columns_after = [row[1] for row in cursor.execute('PRAGMA table_info(users)')]
-                logger.info(f"users-Tabellenspalten nach Migration: {columns_after}")
-            except Exception as e:
-                logger.error(f"Fehler beim Hinzufügen der Spalten: {str(e)}")
-                raise
+            # Settings Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    description TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
-            # Rest der Tabellen-Erstellung
+            # Categories Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Locations Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Departments Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS departments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                )
+            ''')
+            
+            # Tools Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tools (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'verfügbar',
+                    category TEXT,
+                    location TEXT,
+                    last_maintenance DATE,
+                    next_maintenance DATE,
+                    maintenance_interval INTEGER,
+                    last_checked TIMESTAMP,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Workers Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS workers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT NOT NULL UNIQUE,
+                    firstname TEXT NOT NULL,
+                    lastname TEXT NOT NULL,
+                    department TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Consumables Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS consumables (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    quantity INTEGER DEFAULT 0,
+                    min_quantity INTEGER DEFAULT 0,
+                    category TEXT,
+                    location TEXT,
+                    unit TEXT,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Lendings Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS lendings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tool_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    returned_at TIMESTAMP,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (tool_barcode) REFERENCES tools(barcode),
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
+                )
+            ''')
+            
+            # Consumable Usages Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS consumable_usages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    consumable_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
+                )
+            ''')
+            
+            # Tickets Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS tickets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,22 +310,15 @@ class TicketDatabase:
                     description TEXT NOT NULL,
                     status TEXT DEFAULT 'offen',
                     priority TEXT DEFAULT 'normal',
+                    created_by TEXT NOT NULL,
+                    assigned_to TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     resolved_at TIMESTAMP,
-                    created_by TEXT NOT NULL,
-                    assigned_to TEXT,
                     resolution_notes TEXT,
                     response TEXT,
-                    last_modified_by TEXT,
-                    last_modified_at TIMESTAMP,
-                    category TEXT,
-                    due_date TIMESTAMP,
-                    estimated_time INTEGER,
-                    actual_time INTEGER,
                     FOREIGN KEY (created_by) REFERENCES users(username),
-                    FOREIGN KEY (assigned_to) REFERENCES users(username),
-                    FOREIGN KEY (last_modified_by) REFERENCES users(username)
+                    FOREIGN KEY (assigned_to) REFERENCES users(username)
                 )
             ''')
             
@@ -157,14 +328,10 @@ class TicketDatabase:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     ticket_id INTEGER NOT NULL,
                     note TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     created_by TEXT NOT NULL,
-                    modified_at TIMESTAMP,
-                    modified_by TEXT,
-                    is_private BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                    FOREIGN KEY (created_by) REFERENCES users(username),
-                    FOREIGN KEY (modified_by) REFERENCES users(username)
+                    FOREIGN KEY (created_by) REFERENCES users(username)
                 )
             ''')
             
@@ -197,6 +364,26 @@ class TicketDatabase:
                 )
             ''')
             
+            # System Logs Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS system_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    level TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    details TEXT
+                )
+            ''')
+            
+            # Access Settings Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS access_settings (
+                    route TEXT PRIMARY KEY,
+                    is_public BOOLEAN DEFAULT 0,
+                    description TEXT
+                )
+            ''')
+            
             # Timesheets Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS timesheets (
@@ -204,29 +391,32 @@ class TicketDatabase:
                     user_id INTEGER NOT NULL,
                     year INTEGER NOT NULL,
                     kw INTEGER NOT NULL,
-                    montag_tasks TEXT,
                     montag_start TEXT,
                     montag_end TEXT,
-                    dienstag_tasks TEXT,
+                    montag_tasks TEXT,
                     dienstag_start TEXT,
                     dienstag_end TEXT,
-                    mittwoch_tasks TEXT,
+                    dienstag_tasks TEXT,
                     mittwoch_start TEXT,
                     mittwoch_end TEXT,
-                    donnerstag_tasks TEXT,
+                    mittwoch_tasks TEXT,
                     donnerstag_start TEXT,
                     donnerstag_end TEXT,
-                    freitag_tasks TEXT,
+                    donnerstag_tasks TEXT,
                     freitag_start TEXT,
                     freitag_end TEXT,
+                    freitag_tasks TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(user_id) REFERENCES users(id)
+                    FOREIGN KEY (user_id) REFERENCES users(id)
                 )
             ''')
             
             conn.commit()
-            logger.info("Ticket-Datenbankschema erfolgreich initialisiert")
+            logger.info("Datenbankschema erfolgreich initialisiert")
+            
+            # Füge Standarddaten ein
+            self._insert_default_data()
 
     def update_ticket(self, id, status, assigned_to=None, category=None, due_date=None, 
                      estimated_time=None, actual_time=None, last_modified_by=None):

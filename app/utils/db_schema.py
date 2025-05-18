@@ -6,10 +6,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SchemaManager:
+    _initialized_dbs = set()  # Klassen-Variable für alle initialisierten Datenbanken
+    
     def __init__(self, db_path):
         self.db_path = db_path
         self.current_version = self._get_current_version()
-        self.expected_version = 4  # Setze die erwartete Version auf 4
+        self.expected_version = 5
+        self._initialized = False
 
     def _get_current_version(self):
         """Hole die aktuelle Schema-Version"""
@@ -167,6 +170,8 @@ class SchemaManager:
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 email TEXT,
+                firstname TEXT,
+                lastname TEXT,
                 role TEXT NOT NULL DEFAULT 'user',
                 is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -270,10 +275,44 @@ class SchemaManager:
             )
         ''')
 
+        # Timesheets Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS timesheets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                kw INTEGER NOT NULL,
+                montag_start TEXT,
+                montag_end TEXT,
+                montag_tasks TEXT,
+                dienstag_start TEXT,
+                dienstag_end TEXT,
+                dienstag_tasks TEXT,
+                mittwoch_start TEXT,
+                mittwoch_end TEXT,
+                mittwoch_tasks TEXT,
+                donnerstag_start TEXT,
+                donnerstag_end TEXT,
+                donnerstag_tasks TEXT,
+                freitag_start TEXT,
+                freitag_end TEXT,
+                freitag_tasks TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+
     def _insert_default_data(self, conn):
-        """Fügt Standarddaten in die Datenbank ein."""
+        """Fügt Standarddaten in die Datenbank ein, wenn sie noch nicht existieren."""
         with conn:
             cursor = conn.cursor()
+            
+            # Prüfe ob bereits Einstellungen existieren
+            cursor.execute('SELECT COUNT(*) FROM settings')
+            if cursor.fetchone()[0] > 0:
+                logger.info("Einstellungen existieren bereits, überspringe Standarddaten")
+                return
             
             # Standard-Einstellungen
             default_settings = [
@@ -290,37 +329,46 @@ class SchemaManager:
                 ('default_consumable_icon', 'fas fa-box', 'Standard-Icon für Verbrauchsmaterial')
             ]
             
-            # Einstellungen einfügen
-            cursor.executemany('''
-                INSERT OR IGNORE INTO settings (key, value, description)
-                VALUES (?, ?, ?)
-            ''', default_settings)
+            # Füge alle Standardeinstellungen ein
+            for key, value, description in default_settings:
+                cursor.execute('''
+                    INSERT INTO settings (key, value, description)
+                    VALUES (?, ?, ?)
+                ''', (key, value, description))
+                logger.info(f"Standardeinstellung {key} hinzugefügt")
 
     def initialize(self):
-        """Initialisiere die Datenbank"""
+        """Initialisiere die Datenbank nur wenn sie noch nicht initialisiert wurde"""
+        # Prüfe ob diese Datenbank bereits initialisiert wurde
+        if self.db_path in SchemaManager._initialized_dbs:
+            return True
+            
         try:
             with sqlite3.connect(self.db_path) as conn:
                 # Erstelle alle Tabellen
                 self._create_tables(conn)
                 
-                # Füge Standard-Daten ein
-                self._insert_default_data(conn)
-                
-                # Initialisiere die Users-Tabelle
-                self.init_users_table()
-                
                 # Prüfe ob die Version bereits existiert
                 cursor = conn.cursor()
                 cursor.execute('SELECT version FROM schema_version WHERE version = ?', (self.expected_version,))
                 if not cursor.fetchone():
-                    # Setze die Schema-Version nur wenn sie noch nicht existiert
+                    # Füge Standard-Daten nur ein, wenn die Datenbank neu ist
+                    self._insert_default_data(conn)
+                    
+                    # Initialisiere die Users-Tabelle
+                    self.init_users_table()
+                    
+                    # Setze die Schema-Version
                     conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
                     conn.commit()
                 
-                print(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
+                # Markiere diese Datenbank als initialisiert
+                SchemaManager._initialized_dbs.add(self.db_path)
+                self._initialized = True
+                logger.info(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
                 return True
         except Exception as e:
-            print(f"Fehler beim Initialisieren der Datenbank: {str(e)}")
+            logger.error(f"Fehler beim Initialisieren der Datenbank: {str(e)}")
             return False
 
     def needs_update(self):
@@ -382,11 +430,24 @@ class SchemaManager:
                     ''')
                     cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (4)')
                 
+                if self.current_version < 5:
+                    # Füge firstname und lastname zur users Tabelle hinzu
+                    try:
+                        conn.execute('ALTER TABLE users ADD COLUMN firstname TEXT')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    try:
+                        conn.execute('ALTER TABLE users ADD COLUMN lastname TEXT')
+                    except sqlite3.OperationalError:
+                        pass  # Spalte existiert bereits
+                    cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (5)')
+                
                 conn.commit()
-                print(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
+                self._initialized = True
+                logger.info(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
                 return True
         except Exception as e:
-            print(f"Fehler beim Aktualisieren der Datenbank: {str(e)}")
+            logger.error(f"Fehler beim Aktualisieren der Datenbank: {str(e)}")
             return False
 
     def _validate_table_columns(self, conn, table_name):
@@ -630,6 +691,8 @@ class SchemaManager:
                     username TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     email TEXT,
+                    firstname TEXT,
+                    lastname TEXT,
                     role TEXT NOT NULL DEFAULT 'user',
                     is_active BOOLEAN DEFAULT 1,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
