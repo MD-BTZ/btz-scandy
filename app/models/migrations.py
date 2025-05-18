@@ -185,6 +185,10 @@ def _migrate_v3_to_v4(conn):
         logger.error(f"Fehler bei Migration v3->v4: {e}")
         return False
 
+def _column_exists(cursor, table, column):
+    cursor.execute(f"PRAGMA table_info({table})")
+    return any(row[1] == column for row in cursor.fetchall())
+
 def _migrate_ticket_db(conn):
     """Migration der Ticket-Datenbank auf Version 3."""
     logger.info("Führe Migration der Ticket-Datenbank auf Version 3 durch...")
@@ -205,23 +209,29 @@ def _migrate_ticket_db(conn):
         current_version = result[0] if result else 0
 
         if current_version < 3:
-            # Füge neue Spalten zur tickets Tabelle hinzu
-            cursor.execute("""
-                ALTER TABLE tickets ADD COLUMN last_modified_by TEXT;
-                ALTER TABLE tickets ADD COLUMN last_modified_at TIMESTAMP;
-                ALTER TABLE tickets ADD COLUMN category TEXT;
-                ALTER TABLE tickets ADD COLUMN due_date TIMESTAMP;
-                ALTER TABLE tickets ADD COLUMN estimated_time INTEGER;
-                ALTER TABLE tickets ADD COLUMN actual_time INTEGER;
-                ALTER TABLE tickets ADD COLUMN response TEXT;
-            """)
+            # Füge neue Spalten zur tickets Tabelle hinzu, nur wenn sie noch nicht existieren
+            if not _column_exists(cursor, "tickets", "last_modified_by"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN last_modified_by TEXT;")
+            if not _column_exists(cursor, "tickets", "last_modified_at"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN last_modified_at TIMESTAMP;")
+            if not _column_exists(cursor, "tickets", "category"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN category TEXT;")
+            if not _column_exists(cursor, "tickets", "due_date"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN due_date TIMESTAMP;")
+            if not _column_exists(cursor, "tickets", "estimated_time"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN estimated_time INTEGER;")
+            if not _column_exists(cursor, "tickets", "actual_time"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN actual_time INTEGER;")
+            if not _column_exists(cursor, "tickets", "response"):
+                cursor.execute("ALTER TABLE tickets ADD COLUMN response TEXT;")
 
-            # Füge neue Spalten zur ticket_notes Tabelle hinzu
-            cursor.execute("""
-                ALTER TABLE ticket_notes ADD COLUMN modified_at TIMESTAMP;
-                ALTER TABLE ticket_notes ADD COLUMN modified_by TEXT;
-                ALTER TABLE ticket_notes ADD COLUMN is_private BOOLEAN DEFAULT 0;
-            """)
+            # Füge neue Spalten zur ticket_notes Tabelle hinzu, nur wenn sie noch nicht existieren
+            if not _column_exists(cursor, "ticket_notes", "modified_at"):
+                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN modified_at TIMESTAMP;")
+            if not _column_exists(cursor, "ticket_notes", "modified_by"):
+                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN modified_by TEXT;")
+            if not _column_exists(cursor, "ticket_notes", "is_private"):
+                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN is_private BOOLEAN DEFAULT 0;")
 
             # Erstelle ticket_messages Tabelle
             cursor.execute('''
