@@ -4,6 +4,7 @@ from app.config import config
 from werkzeug.security import generate_password_hash
 from app.models.ticket_db import TicketDatabase
 import logging
+from app.models.database import Database
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -110,70 +111,66 @@ def setup_optional():
         departments = request.form.getlist('departments[]')
         
         try:
-            # Speichere die optionalen Einstellungen
-            ticket_db = TicketDatabase()
-            
-            # Lösche zuerst alle bestehenden Einträge
-            ticket_db.query('DELETE FROM settings WHERE key LIKE "category_%"')
-            ticket_db.query('DELETE FROM settings WHERE key LIKE "location_%"')
-            ticket_db.query('DELETE FROM settings WHERE key LIKE "department_%"')
-            
-            # Kategorien
-            for i, category in enumerate(categories):
-                if category.strip():
-                    ticket_db.query('''
-                        INSERT INTO settings (key, value, description)
-                        VALUES (?, ?, ?)
-                    ''', (f'category_{i+1}', category.strip(), 'Kategorie'))
-            
-            # Standorte
-            for i, location in enumerate(locations):
-                if location.strip():
-                    ticket_db.query('''
-                        INSERT INTO settings (key, value, description)
-                        VALUES (?, ?, ?)
-                    ''', (f'location_{i+1}', location.strip(), 'Standort'))
-            
-            # Abteilungen
-            for i, department in enumerate(departments):
-                if department.strip():
-                    ticket_db.query('''
-                        INSERT INTO settings (key, value, description)
-                        VALUES (?, ?, ?)
-                    ''', (f'department_{i+1}', department.strip(), 'Abteilung'))
-            
-            flash('Einrichtung erfolgreich abgeschlossen!', 'success')
-            return redirect(url_for('auth.login'))
+            with Database.get_db() as conn:
+                # Kategorien
+                for category in categories:
+                    if category.strip():
+                        conn.execute('''
+                            INSERT INTO categories (name, description)
+                            VALUES (?, ?)
+                        ''', (category.strip(), f'Kategorie: {category.strip()}'))
+                
+                # Standorte
+                for location in locations:
+                    if location.strip():
+                        conn.execute('''
+                            INSERT INTO locations (name, description)
+                            VALUES (?, ?)
+                        ''', (location.strip(), f'Standort: {location.strip()}'))
+                
+                # Abteilungen
+                for department in departments:
+                    if department.strip():
+                        conn.execute('''
+                            INSERT INTO departments (name, description)
+                            VALUES (?, ?)
+                        ''', (department.strip(), f'Abteilung: {department.strip()}'))
+                
+                conn.commit()
+                flash('Einrichtung erfolgreich abgeschlossen!', 'success')
+                return redirect(url_for('auth.login'))
         except Exception as e:
             logger.error(f"Fehler beim Speichern der optionalen Einstellungen: {e}")
             return render_template('setup_optional.html', error='Fehler beim Speichern der Einstellungen')
     
     # Lade vorhandene Einstellungen für die Anzeige
     try:
-        ticket_db = TicketDatabase()
-        categories = []
-        locations = []
-        departments = []
-        
-        # Hole alle Kategorien
-        category_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "category_%" ORDER BY key')
-        for row in category_results:
-            categories.append(row['value'])
+        with Database.get_db() as conn:
+            # Hole alle Kategorien
+            categories = conn.execute('''
+                SELECT name FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
+            ''').fetchall()
             
-        # Hole alle Standorte
-        location_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "location_%" ORDER BY key')
-        for row in location_results:
-            locations.append(row['value'])
+            # Hole alle Standorte
+            locations = conn.execute('''
+                SELECT name FROM locations 
+                WHERE deleted = 0 
+                ORDER BY name
+            ''').fetchall()
             
-        # Hole alle Abteilungen
-        department_results = ticket_db.query('SELECT value FROM settings WHERE key LIKE "department_%" ORDER BY key')
-        for row in department_results:
-            departments.append(row['value'])
+            # Hole alle Abteilungen
+            departments = conn.execute('''
+                SELECT name FROM departments 
+                WHERE deleted = 0 
+                ORDER BY name
+            ''').fetchall()
             
-        return render_template('setup_optional.html', 
-                             categories=categories,
-                             locations=locations,
-                             departments=departments)
+            return render_template('setup_optional.html', 
+                                 categories=[c['name'] for c in categories],
+                                 locations=[l['name'] for l in locations],
+                                 departments=[d['name'] for d in departments])
     except Exception as e:
         logger.error(f"Fehler beim Laden der optionalen Einstellungen: {e}")
         return render_template('setup_optional.html', error='Fehler beim Laden der Einstellungen')

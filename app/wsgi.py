@@ -1,8 +1,9 @@
 import os
 import sys
+from pathlib import Path
 
 # Füge den Projektpfad zum Python-Pfad hinzu
-project_home = '/home/pi/scandy'
+project_home = str(Path(__file__).parent.parent)
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 

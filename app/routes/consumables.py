@@ -85,25 +85,21 @@ def add():
                 flash('Dieser Barcode existiert bereits', 'error')
                 # Hole Kategorien und Standorte für das Template
                 categories = Database.query('''
-                    SELECT value FROM settings 
-                    WHERE key LIKE 'category_%' 
-                    AND value IS NOT NULL 
-                    AND value != '' 
-                    ORDER BY value
+                    SELECT name FROM categories 
+                    WHERE deleted = 0 
+                    ORDER BY name
                 ''')
                 
                 locations = Database.query('''
-                    SELECT value FROM settings 
-                    WHERE key LIKE 'location_%' 
-                    AND value IS NOT NULL 
-                    AND value != '' 
-                    ORDER BY value
+                    SELECT name FROM locations 
+                    WHERE deleted = 0 
+                    ORDER BY name
                 ''')
                 
                 # Gebe die Formulardaten zurück an das Template
                 return render_template('consumables/add.html',
-                                   categories=[c['value'] for c in categories],
-                                   locations=[l['value'] for l in locations],
+                                   categories=[c['name'] for c in categories],
+                                   locations=[l['name'] for l in locations],
                                    form_data={
                                        'name': name,
                                        'barcode': barcode,
@@ -129,25 +125,21 @@ def add():
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
             # Hole Kategorien und Standorte für das Template
             categories = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'category_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             locations = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'location_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM locations 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             # Gebe die Formulardaten zurück an das Template
             return render_template('consumables/add.html',
-                               categories=[c['value'] for c in categories],
-                               locations=[l['value'] for l in locations],
+                               categories=[c['name'] for c in categories],
+                               locations=[l['name'] for l in locations],
                                form_data={
                                    'name': name,
                                    'barcode': barcode,
@@ -161,24 +153,20 @@ def add():
     else:
         # GET: Zeige Formular
         categories = Database.query('''
-            SELECT value FROM settings 
-            WHERE key LIKE 'category_%' 
-            AND value IS NOT NULL 
-            AND value != '' 
-            ORDER BY value
+            SELECT name FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
         ''')
         
         locations = Database.query('''
-            SELECT value FROM settings 
-            WHERE key LIKE 'location_%' 
-            AND value IS NOT NULL 
-            AND value != '' 
-            ORDER BY value
+            SELECT name FROM locations 
+            WHERE deleted = 0 
+            ORDER BY name
         ''')
         
         return render_template('consumables/add.html',
-                           categories=[c['value'] for c in categories],
-                           locations=[l['value'] for l in locations])
+                           categories=[c['name'] for c in categories],
+                           locations=[l['name'] for l in locations])
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required

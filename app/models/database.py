@@ -491,15 +491,14 @@ class Database:
         try:
             departments = cls.query("""
                 SELECT 
-                    s.value as name,
+                    d.name,
+                    d.description,
                     COUNT(w.id) as worker_count
-                FROM settings s
-                LEFT JOIN workers w ON w.department = s.value AND w.deleted = 0
-                WHERE s.key LIKE 'department_%'
-                AND s.value IS NOT NULL 
-                AND s.value != ''
-                GROUP BY s.value
-                ORDER BY s.value
+                FROM departments d
+                LEFT JOIN workers w ON w.department = d.name AND w.deleted = 0
+                WHERE d.deleted = 0
+                GROUP BY d.name
+                ORDER BY d.name
             """)
             
             return [{'name': dept['name'], 'worker_count': dept['worker_count']} for dept in departments]
@@ -535,28 +534,21 @@ class Database:
     def get_categories(cls, usage=None):
         """Gibt alle Kategorien mit der Anzahl der zugeordneten Werkzeuge und Verbrauchsmaterialien zurück"""
         try:
-            # Basis-Query
-            query = """
+            categories = cls.query("""
                 SELECT 
-                    s.value as name,
-                    s.description as usage,
-                    (SELECT COUNT(*) FROM tools WHERE category = s.value AND deleted = 0) as tools_count,
-                    (SELECT COUNT(*) FROM consumables WHERE category = s.value AND deleted = 0) as consumables_count
-                FROM settings s
-                WHERE s.key LIKE 'category_%'
-                AND s.key NOT LIKE '%_tools'
-                AND s.key NOT LIKE '%_consumables'
-                AND s.value IS NOT NULL 
-                AND s.value != ''
-            """
+                    c.name,
+                    c.description,
+                    (SELECT COUNT(*) FROM tools WHERE category = c.name AND deleted = 0) as tools_count,
+                    (SELECT COUNT(*) FROM consumables WHERE category = c.name AND deleted = 0) as consumables_count
+                FROM categories c
+                WHERE c.deleted = 0
+                ORDER BY c.name
+            """)
             
-            query += " ORDER BY s.value"
-            
-            categories = cls.query(query)
             return [
                 {
                     'name': cat['name'],
-                    'usage': cat['usage'],
+                    'usage': cat['description'],
                     'tools_count': cat['tools_count'],
                     'consumables_count': cat['consumables_count']
                 }

@@ -216,6 +216,12 @@
                 </form>
                 <div class="overflow-y-auto max-h-64">
                     <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
                         <tbody id="departmentsList">
                             <!-- Dynamisch per JS -->
                         </tbody>
@@ -236,6 +242,12 @@
                 </form>
                 <div class="overflow-y-auto max-h-64">
                     <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
                         <tbody id="locationsList">
                             <!-- Dynamisch per JS -->
                         </tbody>
@@ -256,6 +268,12 @@
                 </form>
                 <div class="overflow-y-auto max-h-64">
                     <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
                         <tbody id="categoriesList">
                             <!-- Dynamisch per JS -->
                         </tbody>
@@ -355,9 +373,9 @@ const DepartmentManager = {
 
         tbody.innerHTML = departments.map(dept => `
             <tr>
-                <td>${dept}</td>
+                <td>${dept.name}</td>
                 <td class="text-right">
-                    <button onclick="DepartmentManager.deleteDepartment('${dept}')" 
+                    <button onclick="DepartmentManager.deleteDepartment('${dept.name}')" 
                             class="btn btn-error btn-xs">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -397,8 +415,12 @@ const DepartmentManager = {
         }
 
         try {
-            const response = await fetch(`/admin/departments/${encodeURIComponent(name)}`, {
-                method: 'DELETE'
+            const response = await fetch('/admin/departments/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
             });
             const data = await response.json();
             
@@ -415,22 +437,201 @@ const DepartmentManager = {
     }
 };
 
-// Toast-Nachricht anzeigen
-function showToast(type, message) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.style.cssText = 'position: fixed; top: 1rem; right: 1rem; z-index: 1000;';
-    toast.innerHTML = `
-        <div class="alert alert-${type}">
-            <span>${message}</span>
-        </div>
-    `;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
+// Standortverwaltung
+const LocationManager = {
+    init() {
+        const form = document.getElementById('addLocationForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddLocation(e));
+            this.loadLocations();
+        }
+    },
+
+    async loadLocations() {
+        const tbody = document.getElementById('locationsList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/locations');
+            const data = await response.json();
+            if (data.success) {
+                this.renderLocations(data.locations);
+            } else {
+                showToast('error', 'Fehler beim Laden der Standorte');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Standorte:', error);
+            showToast('error', 'Fehler beim Laden der Standorte');
+        }
+    },
+
+    renderLocations(locations) {
+        const tbody = document.getElementById('locationsList');
+        if (!tbody) return;
+
+        tbody.innerHTML = locations.map(loc => `
+            <tr>
+                <td>${loc.name}</td>
+                <td class="text-right">
+                    <button onclick="LocationManager.deleteLocation('${loc.name}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddLocation(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch('/admin/locations/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadLocations();
+                showToast('success', 'Standort hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        }
+    },
+
+    async deleteLocation(name) {
+        if (!confirm(`Möchten Sie den Standort "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/admin/locations/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadLocations();
+                showToast('success', 'Standort gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
+
+// Kategorieverwaltung
+const CategoryManager = {
+    init() {
+        const form = document.getElementById('addCategoryForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddCategory(e));
+            this.loadCategories();
+        }
+    },
+
+    async loadCategories() {
+        const tbody = document.getElementById('categoriesList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/categories');
+            const data = await response.json();
+            if (data.success) {
+                this.renderCategories(data.categories);
+            } else {
+                showToast('error', 'Fehler beim Laden der Kategorien');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Kategorien:', error);
+            showToast('error', 'Fehler beim Laden der Kategorien');
+        }
+    },
+
+    renderCategories(categories) {
+        const tbody = document.getElementById('categoriesList');
+        if (!tbody) return;
+
+        tbody.innerHTML = categories.map(cat => `
+            <tr>
+                <td>${cat.name}</td>
+                <td class="text-right">
+                    <button onclick="CategoryManager.deleteCategory('${cat.name}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddCategory(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch('/admin/categories/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadCategories();
+                showToast('success', 'Kategorie hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        }
+    },
+
+    async deleteCategory(name) {
+        if (!confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/admin/categories/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadCategories();
+                showToast('success', 'Kategorie gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
 
 function returnTool(barcode) {
     if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {

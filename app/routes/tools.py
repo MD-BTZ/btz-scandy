@@ -49,24 +49,18 @@ def index():
             
             # Hole vordefinierte Kategorien aus den Einstellungen
             categories = conn.execute('''
-                SELECT value 
-                FROM settings 
-                WHERE key LIKE 'category_%'
-                AND key NOT LIKE '%_tools'
-                AND key NOT LIKE '%_consumables'
-                AND value IS NOT NULL 
-                AND value != ''
-                ORDER BY value
+                SELECT name 
+                FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
             ''').fetchall()
             
             # Hole vordefinierte Standorte aus den Einstellungen
             locations = conn.execute('''
-                SELECT value 
-                FROM settings 
-                WHERE key LIKE 'location_%'
-                AND value IS NOT NULL 
-                AND value != ''
-                ORDER BY value
+                SELECT name 
+                FROM locations 
+                WHERE deleted = 0 
+                ORDER BY name
             ''').fetchall()
             
             logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
@@ -75,8 +69,8 @@ def index():
             
             return render_template('tools/index.html',
                                tools=tools,
-                               categories=[c['value'] for c in categories],
-                               locations=[l['value'] for l in locations],
+                               categories=[c['name'] for c in categories],
+                               locations=[l['name'] for l in locations],
                                is_admin=current_user.is_admin)
                                
     except Exception as e:
@@ -111,25 +105,21 @@ def add():
                 flash('Dieser Barcode existiert bereits', 'error')
                 # Hole Kategorien und Standorte für das Template
                 categories = Database.query('''
-                    SELECT value FROM settings 
-                    WHERE key LIKE 'category_%' 
-                    AND value IS NOT NULL 
-                    AND value != '' 
-                    ORDER BY value
+                    SELECT name FROM categories 
+                    WHERE deleted = 0 
+                    ORDER BY name
                 ''')
                 
                 locations = Database.query('''
-                    SELECT value FROM settings 
-                    WHERE key LIKE 'location_%' 
-                    AND value IS NOT NULL 
-                    AND value != '' 
-                    ORDER BY value
+                    SELECT name FROM locations 
+                    WHERE deleted = 0 
+                    ORDER BY name
                 ''')
                 
                 # Gebe die Formulardaten zurück an das Template
                 return render_template('tools/add.html',
-                                   categories=[c['value'] for c in categories],
-                                   locations=[l['value'] for l in locations],
+                                   categories=[c['name'] for c in categories],
+                                   locations=[l['name'] for l in locations],
                                    form_data={
                                        'name': name,
                                        'barcode': barcode,
@@ -153,25 +143,21 @@ def add():
             flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
             # Hole Kategorien und Standorte für das Template
             categories = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'category_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             locations = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'location_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM locations 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             # Gebe die Formulardaten zurück an das Template
             return render_template('tools/add.html',
-                               categories=[c['value'] for c in categories],
-                               locations=[l['value'] for l in locations],
+                               categories=[c['name'] for c in categories],
+                               locations=[l['name'] for l in locations],
                                form_data={
                                    'name': name,
                                    'barcode': barcode,
@@ -183,24 +169,20 @@ def add():
     else:
         # GET: Zeige Formular
         categories = Database.query('''
-            SELECT value FROM settings 
-            WHERE key LIKE 'category_%' 
-            AND value IS NOT NULL 
-            AND value != '' 
-            ORDER BY value
+            SELECT name FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
         ''')
         
         locations = Database.query('''
-            SELECT value FROM settings 
-            WHERE key LIKE 'location_%' 
-            AND value IS NOT NULL 
-            AND value != '' 
-            ORDER BY value
+            SELECT name FROM locations 
+            WHERE deleted = 0 
+            ORDER BY name
         ''')
         
         return render_template('tools/add.html',
-                           categories=[c['value'] for c in categories],
-                           locations=[l['value'] for l in locations])
+                           categories=[c['name'] for c in categories],
+                           locations=[l['name'] for l in locations])
 
 @bp.route('/<barcode>')
 @login_required
@@ -400,25 +382,21 @@ def edit(barcode):
                 
             # Hole vordefinierte Kategorien und Standorte
             categories = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'category_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             locations = Database.query('''
-                SELECT value FROM settings 
-                WHERE key LIKE 'location_%' 
-                AND value IS NOT NULL 
-                AND value != '' 
-                ORDER BY value
+                SELECT name FROM locations 
+                WHERE deleted = 0 
+                ORDER BY name
             ''')
             
             return render_template('tools/edit.html',
                                tool=tool,
-                               categories=[c['value'] for c in categories],
-                               locations=[l['value'] for l in locations])
+                               categories=[c['name'] for c in categories],
+                               locations=[l['name'] for l in locations])
                                
     except Exception as e:
         print(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}")

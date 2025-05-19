@@ -1385,327 +1385,352 @@ def restore_backup(filename):
         return jsonify({'status': 'error', 'message': error_msg}), 500
 
 @bp.route('/departments', methods=['GET'])
+@login_required
 @mitarbeiter_required
-def get_departments():
-    """Hole alle Abteilungen"""
+def list_departments():
+    """Listet alle Abteilungen auf"""
     try:
-        departments = Database.query('''
-            SELECT value as name
-            FROM settings
-            WHERE key LIKE 'department_%'
-            AND value IS NOT NULL
-            AND value != ''
-            ORDER BY value
-        ''')
-        return jsonify({
-            'success': True,
-            'departments': [dept['name'] for dept in departments]
-        })
+        with Database.get_db() as conn:
+            departments = conn.execute('''
+                SELECT name
+                FROM departments
+                WHERE deleted = 0
+                ORDER BY name
+            ''').fetchall()
+            
+            return jsonify({
+                'success': True,
+                'departments': [{'name': d['name']} for d in departments]
+            })
     except Exception as e:
-        print(f"Fehler beim Laden der Abteilungen: {e}")
+        logger.error(f"Fehler beim Laden der Abteilungen: {str(e)}")
         return jsonify({
             'success': False,
-            'message': str(e)
+            'message': 'Fehler beim Laden der Abteilungen'
         }), 500
 
 @bp.route('/departments/add', methods=['POST'])
+@login_required
 @mitarbeiter_required
 def add_department():
-    """Füge eine neue Abteilung hinzu"""
-    data = request.get_json()
-    name = data.get('name')
-    if not name:
-        return jsonify({'success': False, 'message': 'Kein Name angegeben'})
-    
+    """Fügt eine neue Abteilung hinzu"""
     try:
-        db = Database.get_db()
-        # Nächste freie ID finden
-        result = db.execute("""
-            SELECT MAX(CAST(SUBSTR(key, 12) AS INTEGER)) as max_id 
-            FROM settings 
-            WHERE key LIKE 'department_%'
-        """).fetchone()
-        next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
-        
-        # Neue Abteilung einfügen
-        db.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?)",
-            [f'department_{next_id}', name]
-        )
-        db.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-@bp.route('/departments/<name>', methods=['DELETE'])
-@mitarbeiter_required
-def delete_department(name):
-    """Lösche eine Abteilung, prüft vorher auf Nutzung."""
-    logger.info(f"Attempting to delete department: {name}")
-    try:
-        # Prüfen, ob die Abteilung noch verwendet wird
-        usage_count = Database.query(
-            "SELECT COUNT(*) as count FROM workers WHERE department = ? AND deleted = 0",
-            [name],
-            one=True
-        )['count']
-        
-        if usage_count > 0:
-            logger.warning(f"Cannot delete department '{name}': Still used by {usage_count} workers.")
-            return jsonify({'success': False, 'message': f'Abteilung wird noch von {usage_count} Mitarbeitern verwendet.'}), 409 # 409 Conflict
+        name = request.form.get('department', '').strip()
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein'
+            }), 400
             
-        # Abteilung löschen
-        Database.query(
-            "DELETE FROM settings WHERE key LIKE 'department_%' AND value = ?",
-            [name]
-        )
-        logger.info(f"Department '{name}' deleted successfully.")
-        return jsonify({'success': True})
+        with Database.get_db() as conn:
+            # Prüfe ob die Abteilung bereits existiert
+            existing = conn.execute('''
+                SELECT 1 FROM departments 
+                WHERE name = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if existing:
+                return jsonify({
+                    'success': False,
+                    'message': 'Diese Abteilung existiert bereits'
+                }), 400
+                
+            # Füge die neue Abteilung hinzu
+            conn.execute('''
+                INSERT INTO departments (name)
+                VALUES (?)
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Abteilung erfolgreich hinzugefügt'
+            })
     except Exception as e:
-        logger.error(f"Error deleting department '{name}': {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
-
-# Standortverwaltung
-@bp.route('/locations', methods=['GET'])
-@mitarbeiter_required
-def get_locations():
-    """Hole alle Standorte"""
-    try:
-        locations = Database.query('''
-            SELECT value as name, description
-            FROM settings
-            WHERE key LIKE 'location_%'
-            AND value IS NOT NULL
-            AND value != ''
-            ORDER BY value
-        ''')
-        return jsonify({
-            'success': True,
-            'locations': locations
-        })
-    except Exception as e:
-        print(f"Fehler beim Laden der Standorte: {e}")
+        logger.error(f"Fehler beim Hinzufügen der Abteilung: {str(e)}")
         return jsonify({
             'success': False,
-            'message': str(e)
+            'message': 'Fehler beim Hinzufügen der Abteilung'
+        }), 500
+
+@bp.route('/departments/delete', methods=['POST'])
+@login_required
+@mitarbeiter_required
+def delete_department():
+    """Löscht eine Abteilung"""
+    try:
+        name = request.form.get('department', '').strip()
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein'
+            }), 400
+            
+        with Database.get_db() as conn:
+            # Prüfe ob die Abteilung verwendet wird
+            used = conn.execute('''
+                SELECT 1 FROM workers 
+                WHERE department = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if used:
+                return jsonify({
+                    'success': False,
+                    'message': 'Diese Abteilung wird noch verwendet und kann nicht gelöscht werden'
+                }), 400
+                
+            # Markiere die Abteilung als gelöscht
+            conn.execute('''
+                UPDATE departments 
+                SET deleted = 1 
+                WHERE name = ?
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Abteilung erfolgreich gelöscht'
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Abteilung: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Löschen der Abteilung'
+        }), 500
+
+@bp.route('/locations', methods=['GET'])
+@login_required
+@mitarbeiter_required
+def list_locations():
+    """Listet alle Standorte auf"""
+    try:
+        with Database.get_db() as conn:
+            locations = conn.execute('''
+                SELECT name
+                FROM locations
+                WHERE deleted = 0
+                ORDER BY name
+            ''').fetchall()
+            
+            return jsonify({
+                'success': True,
+                'locations': [{'name': l['name']} for l in locations]
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Standorte: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Laden der Standorte'
         }), 500
 
 @bp.route('/locations/add', methods=['POST'])
-@admin_required
+@login_required
+@mitarbeiter_required
 def add_location():
-    """Füge einen neuen Standort hinzu"""
-    data = request.get_json()
-    name = data.get('name')
-    if not name:
-        return jsonify({'success': False, 'message': 'Kein Name angegeben'})
-    
+    """Fügt einen neuen Standort hinzu"""
     try:
-        db = Database.get_db()
-        # Nächste freie ID finden
-        result = db.execute("""
-            SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
-            FROM settings 
-            WHERE key LIKE 'location_%'
-            AND key NOT LIKE '%_tools'
-            AND key NOT LIKE '%_consumables'
-        """).fetchone()
-        next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
-        
-        # Neuen Standort einfügen
-        db.execute(
-            "INSERT INTO settings (key, value, description) VALUES (?, ?, ?)",
-            [f'location_{next_id}', name, 'both']
-        )
-        db.commit()
-        return jsonify({'success': True})
+        name = request.form.get('location', '').strip()
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein'
+            }), 400
+            
+        with Database.get_db() as conn:
+            # Prüfe ob der Standort bereits existiert
+            existing = conn.execute('''
+                SELECT 1 FROM locations 
+                WHERE name = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if existing:
+                return jsonify({
+                    'success': False,
+                    'message': 'Dieser Standort existiert bereits'
+                }), 400
+                
+            # Füge den neuen Standort hinzu
+            conn.execute('''
+                INSERT INTO locations (name)
+                VALUES (?)
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Standort erfolgreich hinzugefügt'
+            })
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-@bp.route('/locations/<name>', methods=['DELETE'])
-@mitarbeiter_required
-def delete_location(name):
-    """Lösche einen Standort, prüft vorher auf Nutzung."""
-    logger.info(f"Attempting to delete location: {name}")
-    try:
-        # Prüfen, ob der Standort noch verwendet wird (tools oder consumables)
-        tool_usage = Database.query("SELECT COUNT(*) as count FROM tools WHERE location = ? AND deleted = 0", [name], one=True)['count']
-        consumable_usage = Database.query("SELECT COUNT(*) as count FROM consumables WHERE location = ? AND deleted = 0", [name], one=True)['count']
-        total_usage = tool_usage + consumable_usage
-        
-        if total_usage > 0:
-            logger.warning(f"Cannot delete location '{name}': Still used by {total_usage} items ({tool_usage} tools, {consumable_usage} consumables).")
-            return jsonify({'success': False, 'message': f'Standort wird noch von {total_usage} Inventar-Items verwendet.'}), 409 # 409 Conflict
-
-        # Standort löschen
-        Database.query(
-            "DELETE FROM settings WHERE key LIKE 'location_%' AND value = ?",
-            [name]
-        )
-        logger.info(f"Location '{name}' deleted successfully.")
-        return jsonify({'success': True})
-    except Exception as e:
-        logger.error(f"Error deleting location '{name}': {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
-
-# Kategorieverwaltung
-@bp.route('/categories', methods=['GET'])
-@mitarbeiter_required
-def get_categories():
-    """Hole alle Kategorien"""
-    try:
-        categories = Database.query('''
-            SELECT value as name, description
-            FROM settings
-            WHERE key LIKE 'category_%'
-            AND value IS NOT NULL
-            AND value != ''
-            ORDER BY value
-        ''')
-        return jsonify({
-            'success': True,
-            'categories': categories
-        })
-    except Exception as e:
-        print(f"Fehler beim Laden der Kategorien: {e}")
+        logger.error(f"Fehler beim Hinzufügen des Standorts: {str(e)}")
         return jsonify({
             'success': False,
-            'message': str(e)
+            'message': 'Fehler beim Hinzufügen des Standorts'
+        }), 500
+
+@bp.route('/locations/delete', methods=['POST'])
+@login_required
+@mitarbeiter_required
+def delete_location():
+    """Löscht einen Standort"""
+    try:
+        name = request.form.get('location', '').strip()
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein'
+            }), 400
+            
+        with Database.get_db() as conn:
+            # Prüfe ob der Standort verwendet wird
+            used = conn.execute('''
+                SELECT 1 FROM (
+                    SELECT location FROM tools WHERE deleted = 0
+                    UNION ALL
+                    SELECT location FROM consumables WHERE deleted = 0
+                ) WHERE location = ?
+            ''', [name]).fetchone()
+            
+            if used:
+                return jsonify({
+                    'success': False,
+                    'message': 'Dieser Standort wird noch verwendet und kann nicht gelöscht werden'
+                }), 400
+                
+            # Markiere den Standort als gelöscht
+            conn.execute('''
+                UPDATE locations 
+                SET deleted = 1 
+                WHERE name = ?
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Standort erfolgreich gelöscht'
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Standorts: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Löschen des Standorts'
+        }), 500
+
+@bp.route('/categories', methods=['GET'])
+@login_required
+@mitarbeiter_required
+def list_categories():
+    """Listet alle Kategorien auf"""
+    try:
+        with Database.get_db() as conn:
+            categories = conn.execute('''
+                SELECT name
+                FROM categories
+                WHERE deleted = 0
+                ORDER BY name
+            ''').fetchall()
+            
+            return jsonify({
+                'success': True,
+                'categories': [{'name': c['name']} for c in categories]
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Kategorien: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Laden der Kategorien'
         }), 500
 
 @bp.route('/categories/add', methods=['POST'])
+@login_required
 @mitarbeiter_required
 def add_category():
-    """Füge eine neue Kategorie hinzu"""
-    data = request.get_json()
-    name = data.get('name')
-    if not name:
-        return jsonify({'success': False, 'message': 'Kein Name angegeben'})
-    
+    """Fügt eine neue Kategorie hinzu"""
     try:
-        db = Database.get_db()
-        # Nächste freie ID finden
-        result = db.execute("""
-            SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
-            FROM settings 
-            WHERE key LIKE 'category_%'
-            AND key NOT LIKE '%_tools'
-            AND key NOT LIKE '%_consumables'
-        """).fetchone()
-        next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
-        
-        # Neue Kategorie einfügen
-        db.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?)",
-            [f'category_{next_id}', name]
-        )
-        db.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-@bp.route('/categories/<name>', methods=['PUT'])
-@mitarbeiter_required
-def update_category(name):
-    """Aktualisiere eine Kategorie"""
-    category = request.form.get('category')
-    tools = request.form.get('tools') == 'true'
-    consumables = request.form.get('consumables') == 'true'
-    
-    if not category:
-        return jsonify({
-            'success': False,
-            'message': 'Kategoriename fehlt'
-        }), 400
-
-    try:
-        # Finde den Basis-Schlüssel für die Kategorie
-        category_key = Database.query('''
-            SELECT key FROM settings 
-            WHERE key LIKE 'category_%'
-            AND key NOT LIKE '%_tools'
-            AND key NOT LIKE '%_consumables'
-            AND value = ?
-        ''', [name], one=True)
-        
-        if not category_key:
+        name = request.form.get('category', '').strip()
+        if not name:
             return jsonify({
                 'success': False,
-                'message': 'Kategorie nicht gefunden'
-            }), 404
+                'message': 'Bitte geben Sie einen Namen ein'
+            }), 400
             
-        base_key = category_key['key']
-        
-        # Aktualisiere die Kategorie und ihre Eigenschaften
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', [category, base_key])
-        
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', ['1' if tools else '0', f'{base_key}_tools'])
-        
-        Database.query('''
-            UPDATE settings 
-            SET value = ?, modified_at = datetime('now'), sync_status = 'pending'
-            WHERE key = ?
-        ''', ['1' if consumables else '0', f'{base_key}_consumables'])
-
-        return jsonify({
-            'success': True,
-            'message': 'Kategorie erfolgreich aktualisiert'
-        })
+        with Database.get_db() as conn:
+            # Prüfe ob die Kategorie bereits existiert
+            existing = conn.execute('''
+                SELECT 1 FROM categories 
+                WHERE name = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if existing:
+                return jsonify({
+                    'success': False,
+                    'message': 'Diese Kategorie existiert bereits'
+                }), 400
+                
+            # Füge die neue Kategorie hinzu
+            conn.execute('''
+                INSERT INTO categories (name)
+                VALUES (?)
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Kategorie erfolgreich hinzugefügt'
+            })
     except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Kategorie: {str(e)}")
         return jsonify({
             'success': False,
-            'message': str(e)
+            'message': 'Fehler beim Hinzufügen der Kategorie'
         }), 500
 
-@bp.route('/categories/<name>', methods=['DELETE'])
+@bp.route('/categories/delete', methods=['POST'])
+@login_required
 @mitarbeiter_required
-def delete_category(name):
-    """Löscht eine Kategorie, prüft vorher auf Nutzung."""
-    logger.info(f"Attempting to delete category: {name}")
+def delete_category():
+    """Löscht eine Kategorie"""
     try:
-        # Prüfen, ob die Kategorie noch verwendet wird (tools oder consumables)
-        tool_usage = Database.query("SELECT COUNT(*) as count FROM tools WHERE category = ? AND deleted = 0", [name], one=True)['count']
-        consumable_usage = Database.query("SELECT COUNT(*) as count FROM consumables WHERE category = ? AND deleted = 0", [name], one=True)['count']
-        total_usage = tool_usage + consumable_usage
+        data = request.get_json()
+        name = data.get('name')
         
-        if total_usage > 0:
-            logger.warning(f"Cannot delete category '{name}': Still used by {total_usage} items ({tool_usage} tools, {consumable_usage} consumables).")
-            return jsonify({'success': False, 'message': f'Kategorie wird noch von {total_usage} Inventar-Items verwendet.'}), 409 # 409 Conflict
-
-        # Kategorie-Key finden (z.B. category_5)
-        category_key_row = Database.query(
-            "SELECT key FROM settings WHERE key LIKE 'category_%' AND value = ? AND key NOT LIKE '%_tools' AND key NOT LIKE '%_consumables'", 
-            [name], 
-            one=True
-        )
-        
-        if not category_key_row:
-            logger.warning(f"Category '{name}' not found in settings for deletion.")
-            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden.'}), 404
-        
-        base_key = category_key_row['key']
-        
-        # Alle zugehörigen Einträge löschen (Haupt-Eintrag, _tools, _consumables)
-        # Es ist sicherer, die spezifischen Keys zu löschen, falls das LIKE-Muster zu breit ist.
-        keys_to_delete = [base_key, f"{base_key}_tools", f"{base_key}_consumables"]
-        placeholders = ',' . join('?' * len(keys_to_delete))
-        sql = f"DELETE FROM settings WHERE key IN ({placeholders})"
-        
-        Database.query(sql, keys_to_delete)
-        
-        logger.info(f"Category '{name}' (keys: {keys_to_delete}) deleted successfully.")
-        return jsonify({'success': True})
-
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Kein Name angegeben'
+            }), 400
+            
+        with Database.get_db() as conn:
+            # Prüfe ob die Kategorie noch verwendet wird
+            in_use = conn.execute('''
+                SELECT COUNT(*) as count 
+                FROM tools 
+                WHERE category = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if in_use['count'] > 0:
+                return jsonify({
+                    'success': False,
+                    'message': f'Diese Kategorie wird noch von {in_use["count"]} Werkzeugen verwendet'
+                }), 409
+                
+            # Führe ein Soft-Delete durch
+            conn.execute('''
+                UPDATE categories 
+                SET deleted = 1, deleted_at = CURRENT_TIMESTAMP
+                WHERE name = ?
+            ''', [name])
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Kategorie erfolgreich gelöscht'
+            })
     except Exception as e:
-        logger.error(f"Error deleting category '{name}': {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
+        logger.error(f"Fehler beim Löschen der Kategorie: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Löschen der Kategorie'
+        }), 500
 
 @bp.route('/cleanup-database', methods=['POST'])
 @admin_required
@@ -1753,48 +1778,6 @@ def cleanup_database():
             'success': False,
             'message': f'Fehler bei der Bereinigung: {str(e)}'
         }), 500
-
-@bp.route('/departments/list')
-@mitarbeiter_required
-def list_departments():
-    """Liste alle Abteilungen auf"""
-    departments = Database.query("""
-        SELECT value as name 
-        FROM settings 
-        WHERE key LIKE 'department_%'
-        AND value IS NOT NULL 
-        AND value != ''
-        ORDER BY value
-    """)
-    return jsonify({'success': True, 'departments': [dict(dept) for dept in departments]})
-
-@bp.route('/locations/list')
-@mitarbeiter_required
-def list_locations():
-    """Liste alle Standorte auf"""
-    locations = Database.query("""
-        SELECT value as name, description as usage
-        FROM settings 
-        WHERE key LIKE 'location_%'
-        AND value IS NOT NULL 
-        AND value != ''
-        ORDER BY value
-    """)
-    return jsonify({'success': True, 'locations': [dict(loc) for loc in locations]})
-
-@bp.route('/categories/list')
-@admin_required
-def list_categories():
-    """Liste alle Kategorien auf"""
-    categories = Database.query("""
-        SELECT value as name, description as usage
-        FROM settings 
-        WHERE key LIKE 'category_%'
-        AND value IS NOT NULL 
-        AND value != ''
-        ORDER BY value
-    """)
-    return jsonify({'success': True, 'categories': [dict(cat) for cat in categories]})
 
 @bp.route('/backup/list')
 @admin_required

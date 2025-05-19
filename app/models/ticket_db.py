@@ -79,49 +79,26 @@ class TicketDatabase:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Standard-Kategorien
-            categories = [
-                ('Werkzeuge', 'Werkzeuge und Maschinen'),
-                ('Verbrauchsmaterial', 'Verbrauchsmaterial und Zubehör'),
-                ('IT', 'IT-Ausstattung und Zubehör'),
-                ('Büro', 'Büromaterial und Ausstattung'),
-                ('Sicherheit', 'Sicherheitsausrüstung'),
-                ('Wartung', 'Wartungsmaterial und Ersatzteile')
+            # Füge nur die Standardeinstellungen ein
+            settings = [
+                ('theme', 'light', 'Farbschema der Anwendung'),
+                ('language', 'de', 'Sprache der Anwendung'),
+                ('items_per_page', '25', 'Anzahl der Einträge pro Seite'),
+                ('color_primary', '#007bff', 'Primäre Farbe'),
+                ('color_secondary', '#6c757d', 'Sekundäre Farbe'),
+                ('color_success', '#28a745', 'Erfolgsfarbe'),
+                ('color_danger', '#dc3545', 'Fehlerfarbe'),
+                ('color_warning', '#ffc107', 'Warnfarbe'),
+                ('color_info', '#17a2b8', 'Infofarbe')
             ]
-            cursor.executemany('''
-                INSERT OR IGNORE INTO categories (name, description)
-                VALUES (?, ?)
-            ''', categories)
             
-            # Standard-Standorte
-            locations = [
-                ('Lager', 'Hauptlager'),
-                ('Werkstatt', 'Werkstattbereich'),
-                ('Büro', 'Bürobereich'),
-                ('IT-Raum', 'IT-Serverraum'),
-                ('Außenbereich', 'Außenlager und -bereich')
-            ]
             cursor.executemany('''
-                INSERT OR IGNORE INTO locations (name, description)
-                VALUES (?, ?)
-            ''', locations)
-            
-            # Standard-Abteilungen
-            departments = [
-                ('Produktion', 'Produktionsabteilung'),
-                ('Wartung', 'Wartungsabteilung'),
-                ('IT', 'IT-Abteilung'),
-                ('Büro', 'Büroabteilung'),
-                ('Lager', 'Lagerabteilung'),
-                ('Qualität', 'Qualitätssicherung')
-            ]
-            cursor.executemany('''
-                INSERT OR IGNORE INTO departments (name, description)
-                VALUES (?, ?)
-            ''', departments)
+                INSERT OR IGNORE INTO settings (key, value, description)
+                VALUES (?, ?, ?)
+            ''', settings)
             
             conn.commit()
-            logger.info("Standarddaten erfolgreich eingefügt")
+            logger.info("Standardeinstellungen erfolgreich eingefügt")
 
     def init_schema(self):
         """Initialisiert das Datenbankschema"""
@@ -595,4 +572,66 @@ class TicketDatabase:
                 
                 return ticket_dict
             
-            return None 
+            return None
+
+    def _create_tables(self):
+        """Erstellt die notwendigen Tabellen, falls sie nicht existieren."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Erstelle die Tabellen
+            cursor.executescript('''
+                -- Kategorien Tabelle
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                );
+
+                -- Standorte Tabelle
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                );
+
+                -- Abteilungen Tabelle
+                CREATE TABLE IF NOT EXISTS departments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                );
+
+                -- Einstellungen Tabelle
+                CREATE TABLE IF NOT EXISTS settings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT UNIQUE NOT NULL,
+                    value TEXT,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- Benutzer Tabelle
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                );
+            ''')
+            conn.commit() 

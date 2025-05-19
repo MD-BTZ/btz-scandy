@@ -130,6 +130,9 @@ class SchemaManager:
                         [self.expected_version]
                     )
 
+                # Füge Standarddaten ein, falls noch keine vorhanden sind
+                self._insert_default_data(conn)
+
                 conn.commit()
                 logger.info(f"Datenbank {self.db_path} erfolgreich initialisiert")
                 self._initialized_dbs.add(self.db_path)
@@ -270,7 +273,47 @@ class SchemaManager:
                     key TEXT PRIMARY KEY,
                     value TEXT,
                     description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Kategorien Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                )
+            ''')
+
+            # Standorte Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                )
+            ''')
+
+            # Abteilungen Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS departments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
                 )
             ''')
 
@@ -302,6 +345,31 @@ class SchemaManager:
 
         except Exception as e:
             logger.error(f"Fehler beim Erstellen der Tabellen: {str(e)}")
+            raise
+
+    def _insert_default_data(self, conn):
+        """Fügt Standarddaten in die Datenbank ein"""
+        try:
+            # Nur Grundeinstellungen werden hier eingefügt
+            default_settings = {
+                'theme': 'light',
+                'language': 'de',
+                'items_per_page': '10',
+                'primary_color': '259 94% 51%',    # Standard Blau
+                'secondary_color': '314 100% 47%',  # Standard Pink
+                'accent_color': '174 60% 51%'       # Standard Türkis
+            }
+            
+            for key, value in default_settings.items():
+                conn.execute("""
+                    INSERT OR IGNORE INTO settings (key, value)
+                    VALUES (?, ?)
+                """, (key, value))
+            
+            logger.info("Grundeinstellungen wurden erfolgreich eingefügt")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Einfügen der Grundeinstellungen: {e}")
             raise
 
     def create_admin_user(self, password):

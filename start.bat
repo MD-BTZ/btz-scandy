@@ -20,5 +20,8 @@ timeout /t 2 /nobreak > nul
 REM Aktiviere die virtuelle Umgebung
 call venv\Scripts\activate.bat
 
-REM Starte Waitress über Python
-python -m waitress --host=0.0.0.0 --port=5000 app.wsgi:application 
+REM Setze PYTHONPATH
+set PYTHONPATH=%CD%
+
+REM Starte die Anwendung direkt über Python
+python -c "from app import create_app; app = create_app(); from waitress import serve; serve(app, host='0.0.0.0', port=5000)" 

@@ -13,161 +13,230 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Lade Kategorien
     loadCategories();
+
+    // Event Listener für Formulare
+    const addDepartmentForm = document.getElementById('addDepartmentForm');
+    const addLocationForm = document.getElementById('addLocationForm');
+    const addCategoryForm = document.getElementById('addCategoryForm');
+
+    if (addDepartmentForm) {
+        addDepartmentForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/admin/departments/add', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.reset();
+                    loadDepartments();
+                    showToast('success', data.message);
+                } else {
+                    showToast('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('error', 'Fehler beim Hinzufügen der Abteilung');
+            });
+        });
+    }
+
+    if (addLocationForm) {
+        addLocationForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/admin/locations/add', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.reset();
+                    loadLocations();
+                    showToast('success', data.message);
+                } else {
+                    showToast('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('error', 'Fehler beim Hinzufügen des Standorts');
+            });
+        });
+    }
+
+    if (addCategoryForm) {
+        addCategoryForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/admin/categories/add', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.reset();
+                    loadCategories();
+                    showToast('success', data.message);
+                } else {
+                    showToast('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('error', 'Fehler beim Hinzufügen der Kategorie');
+            });
+        });
+    }
 });
 
-// Abteilungen laden
-function loadDepartments() {
-    console.log('Lade Abteilungen...');
-    fetch('/admin/departments/list')
-        .then(response => response.json())
-        .then(data => {
+// Lade Abteilungen
+async function loadDepartments() {
+    try {
+        const response = await fetch('/admin/departments');
+        const data = await response.json();
+        if (data.success) {
             const departmentsList = document.getElementById('departmentsList');
-            departmentsList.innerHTML = '';
-            if (data.departments && Array.isArray(data.departments)) {
-                data.departments.slice(0, 10).forEach(department => {
-                    const name = department.name || department;
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${name}</td>
-                        <td class="text-right">
-                            <button class="btn btn-error btn-xs delete-btn" data-name="${name}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    `;
-                    departmentsList.appendChild(row);
-                });
-                // Event-Listener für Löschen-Buttons
-                departmentsList.querySelectorAll('.delete-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        const name = this.dataset.name;
-                        deleteDepartment(name);
-                    });
-                });
-            }
-        })
-        .catch(error => console.error('Fehler beim Laden der Abteilungen:', error));
+            departmentsList.innerHTML = data.departments.map(dept => `
+                <tr>
+                    <td>${dept.name}</td>
+                    <td class="text-right">
+                        <button onclick="deleteDepartment('${dept.name}')" class="btn btn-error btn-xs">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Abteilungen:', error);
+    }
 }
 
-// Standorte laden
-function loadLocations() {
-    console.log('Lade Standorte...');
-    fetch('/admin/locations/list')
-        .then(response => response.json())
-        .then(data => {
+// Lade Standorte
+async function loadLocations() {
+    try {
+        const response = await fetch('/admin/locations');
+        const data = await response.json();
+        if (data.success) {
             const locationsList = document.getElementById('locationsList');
-            locationsList.innerHTML = '';
-            if (data.locations && Array.isArray(data.locations)) {
-                data.locations.slice(0, 10).forEach(location => {
-                    const name = location.name || location;
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${name}</td>
-                        <td class="text-right">
-                            <button class="btn btn-error btn-xs delete-btn" data-name="${name}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    `;
-                    locationsList.appendChild(row);
-                });
-                // Event-Listener für Löschen-Buttons
-                locationsList.querySelectorAll('.delete-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        const name = this.dataset.name;
-                        deleteLocation(name);
-                    });
-                });
-            }
-        })
-        .catch(error => console.error('Fehler beim Laden der Standorte:', error));
+            locationsList.innerHTML = data.locations.map(loc => `
+                <tr>
+                    <td>${loc.name}</td>
+                    <td class="text-right">
+                        <button onclick="deleteLocation('${loc.name}')" class="btn btn-error btn-xs">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Standorte:', error);
+    }
 }
 
-// Kategorien laden
-function loadCategories() {
-    console.log('Lade Kategorien...');
-    fetch('/admin/categories/list')
-        .then(response => response.json())
-        .then(data => {
+// Lade Kategorien
+async function loadCategories() {
+    try {
+        const response = await fetch('/admin/categories');
+        const data = await response.json();
+        if (data.success) {
             const categoriesList = document.getElementById('categoriesList');
-            categoriesList.innerHTML = '';
-            if (data.categories && Array.isArray(data.categories)) {
-                data.categories.slice(0, 10).forEach(category => {
-                    const name = category.name || category;
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${name}</td>
-                        <td class="text-right">
-                            <button class="btn btn-error btn-xs delete-btn" data-name="${name}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    `;
-                    categoriesList.appendChild(row);
-                });
-                // Event-Listener für Löschen-Buttons
-                categoriesList.querySelectorAll('.delete-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        const name = this.dataset.name;
-                        deleteCategory(name);
-                    });
-                });
-            }
-        })
-        .catch(error => console.error('Fehler beim Laden der Kategorien:', error));
+            categoriesList.innerHTML = data.categories.map(cat => `
+                <tr>
+                    <td>${cat.name}</td>
+                    <td class="text-right">
+                        <button onclick="deleteCategory('${cat.name}')" class="btn btn-error btn-xs">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Kategorien:', error);
+    }
 }
 
-// Abteilung löschen
-function deleteDepartment(name) {
-    if (confirm('Möchten Sie diese Abteilung wirklich löschen?')) {
-        fetch(`/admin/departments/${encodeURIComponent(name)}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
+// Löschfunktionen
+async function deleteDepartment(name) {
+    if (confirm(`Möchten Sie die Abteilung "${name}" wirklich löschen?`)) {
+        try {
+            const response = await fetch('/admin/departments/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `department=${encodeURIComponent(name)}`
+            });
+            const data = await response.json();
             if (data.success) {
                 loadDepartments();
+                showToast('success', data.message);
             } else {
-                alert('Fehler beim Löschen der Abteilung: ' + data.message);
+                showToast('error', data.message);
             }
-        })
-        .catch(error => console.error('Fehler beim Löschen der Abteilung:', error));
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('error', 'Fehler beim Löschen der Abteilung');
+        }
     }
 }
 
-// Standort löschen
-function deleteLocation(name) {
-    if (confirm('Möchten Sie diesen Standort wirklich löschen?')) {
-        fetch(`/admin/locations/${encodeURIComponent(name)}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
+async function deleteLocation(name) {
+    if (confirm(`Möchten Sie den Standort "${name}" wirklich löschen?`)) {
+        try {
+            const response = await fetch('/admin/locations/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `location=${encodeURIComponent(name)}`
+            });
+            const data = await response.json();
             if (data.success) {
                 loadLocations();
+                showToast('success', data.message);
             } else {
-                alert('Fehler beim Löschen des Standorts: ' + data.message);
+                showToast('error', data.message);
             }
-        })
-        .catch(error => console.error('Fehler beim Löschen des Standorts:', error));
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('error', 'Fehler beim Löschen des Standorts');
+        }
     }
 }
 
-// Kategorie löschen
-function deleteCategory(name) {
-    if (confirm('Möchten Sie diese Kategorie wirklich löschen?')) {
-        fetch(`/admin/categories/${encodeURIComponent(name)}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
+async function deleteCategory(name) {
+    if (confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
+        try {
+            const response = await fetch('/admin/categories/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `category=${encodeURIComponent(name)}`
+            });
+            const data = await response.json();
             if (data.success) {
                 loadCategories();
+                showToast('success', data.message);
             } else {
-                alert('Fehler beim Löschen der Kategorie: ' + data.message);
+                showToast('error', data.message);
             }
-        })
-        .catch(error => console.error('Fehler beim Löschen der Kategorie:', error));
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('error', 'Fehler beim Löschen der Kategorie');
+        }
     }
 }
 
@@ -231,99 +300,34 @@ if (consumableTable) {
 
 // Abteilungsverwaltung
 const departmentsList = document.getElementById('departmentsList');
-const addDepartmentForm = document.getElementById('addDepartmentForm');
 
 console.log('Departments List Element:', departmentsList);
-console.log('Add Department Form:', addDepartmentForm);
-
-if (addDepartmentForm) {
-    addDepartmentForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        try {
-            const response = await fetch('/admin/departments/add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.get('department')
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                loadDepartments();
-                this.reset();
-            } else {
-                alert(data.message || 'Fehler beim Hinzufügen der Abteilung');
-            }
-        } catch (error) {
-            console.error('Fehler:', error);
-            alert('Fehler beim Hinzufügen der Abteilung');
-        }
-    });
-}
 
 // Standortverwaltung
 const locationsList = document.getElementById('locationsList');
-const addLocationForm = document.getElementById('addLocationForm');
 
-if (addLocationForm) {
-    addLocationForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        try {
-            const response = await fetch('/admin/locations/add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.get('location')
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                loadLocations();
-                this.reset();
-            } else {
-                alert(data.message || 'Fehler beim Hinzufügen des Standorts');
-            }
-        } catch (error) {
-            console.error('Fehler:', error);
-            alert('Fehler beim Hinzufügen des Standorts');
-        }
-    });
-}
+console.log('Locations List Element:', locationsList);
 
 // Kategorieverwaltung
 const categoriesList = document.getElementById('categoriesList');
-const addCategoryForm = document.getElementById('addCategoryForm');
 
-if (addCategoryForm) {
-    addCategoryForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        try {
-            const response = await fetch('/admin/categories/add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.get('category')
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                loadCategories();
-                this.reset();
-            } else {
-                alert(data.message || 'Fehler beim Hinzufügen der Kategorie');
-            }
-        } catch (error) {
-            console.error('Fehler:', error);
-            alert('Fehler beim Hinzufügen der Kategorie');
-        }
-    });
+console.log('Categories List Element:', categoriesList);
+
+// Toast-Funktion
+function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} fixed top-4 right-4 z-50`;
+    toast.innerHTML = `
+        <div class="alert alert-${type} shadow-lg">
+            <div>
+                <span>${message}</span>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // Toast nach 3 Sekunden ausblenden
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
 } 
