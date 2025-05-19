@@ -83,57 +83,111 @@ def ensure_directories_exist():
             logging.info(f"Verzeichnis existiert bereits: {dir_path}")
 
 def cleanup_database():
-    """Bereinigt die Datenbank von ungültigen Einträgen"""
+    """Führt regelmäßige Wartungsaufgaben für die Datenbank durch"""
     try:
-        logger.info("Führe automatische Datenbankbereinigung durch...")
-        with Database.get_db() as db:
-            # Finde und lösche Ausleihungen für nicht existierende Werkzeuge
-            invalid_lendings = db.execute('''
-                SELECT l.*, t.barcode as tool_exists
-                FROM lendings l
-                LEFT JOIN tools t ON l.tool_barcode = t.barcode
-                WHERE t.barcode IS NULL
-                AND l.returned_at IS NULL
-            ''').fetchall()
+        # Konfiguration laden
+        from app.config import config
+        current_config = config['default']
+        
+        db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
+        
+        # Führe Bereinigungen in einer Transaktion durch
+        with sqlite3.connect(db_path) as db:
+            cursor = db.cursor()
             
-            if invalid_lendings:
-                logger.info(f"Gefundene ungültige Ausleihungen: {len(invalid_lendings)}")
-                for lending in invalid_lendings:
-                    logger.info(f"Ungültige Ausleihe gefunden: {dict(lending)}")
-                
-                db.execute('''
-                    DELETE FROM lendings
-                    WHERE id IN (
-                        SELECT l.id
-                        FROM lendings l
-                        LEFT JOIN tools t ON l.tool_barcode = t.barcode
-                        WHERE t.barcode IS NULL
-                        AND l.returned_at IS NULL
-                    )
-                ''')
-                db.commit()
-                logger.info(f"{len(invalid_lendings)} ungültige Ausleihungen wurden gelöscht")
+            # Lösche ungültige Ausleihen
+            cursor.execute('''
+                DELETE FROM lendings 
+                WHERE tool_barcode NOT IN (SELECT barcode FROM tools WHERE deleted = 0)
+                OR worker_barcode NOT IN (SELECT barcode FROM workers WHERE deleted = 0)
+            ''')
+            
+            # Lösche verwaiste Verbrauchsmaterial-Einträge
+            cursor.execute('''
+                DELETE FROM consumable_usages 
+                WHERE consumable_barcode NOT IN (SELECT barcode FROM consumables WHERE deleted = 0)
+                OR worker_barcode NOT IN (SELECT barcode FROM workers WHERE deleted = 0)
+            ''')
+            
+            # Lösche alte gelöschte Einträge
+            cursor.execute('''
+                DELETE FROM tools 
+                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
+            ''')
+            
+            cursor.execute('''
+                DELETE FROM workers 
+                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
+            ''')
+            
+            cursor.execute('''
+                DELETE FROM consumables 
+                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
+            ''')
+            
+            db.commit()
+            logger.info("Datenbankbereinigung erfolgreich durchgeführt")
+        
+        # Führe VACUUM außerhalb der Transaktion durch
+        with sqlite3.connect(db_path) as db:
+            cursor = db.cursor()
+            cursor.execute('VACUUM')
+            logger.info("Datenbank-VACUUM erfolgreich durchgeführt")
+            
     except Exception as e:
-        logger.error(f"Fehler bei der automatischen Datenbankbereinigung: {str(e)}")
+        logger.error(f"Fehler bei der Datenbankbereinigung: {str(e)}")
+        if 'db' in locals():
+            db.rollback()
 
 def initialize_and_migrate_databases():
     """Initialisiert die Datenbanken nur beim ersten Start"""
-    from app.config import config
-    current_config = config['default']
-    
-    # Datenbankpfade
-    db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
-    ticket_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'tickets.db')
-    
-    # Erstelle Verzeichnisse
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    os.makedirs(os.path.dirname(ticket_db_path), exist_ok=True)
-    
-    # Initialisiere nur wenn nicht existent
-    if not os.path.exists(db_path):
-        SchemaManager(db_path).initialize()
-    if not os.path.exists(ticket_db_path):
-        SchemaManager(ticket_db_path).initialize()
+    try:
+        # Konfiguration laden
+        from app.config import config
+        current_config = config['default']
+        
+        # Definiere Datenbankpfade
+        inventory_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
+        tickets_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'tickets.db')
+        
+        # Stelle sicher, dass die Verzeichnisse existieren
+        os.makedirs(os.path.dirname(inventory_db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(tickets_db_path), exist_ok=True)
+        
+        # Initialisiere Hauptdatenbank
+        if not os.path.exists(inventory_db_path):
+            logger.info("Initialisiere Hauptdatenbank...")
+            schema_manager = SchemaManager(inventory_db_path)
+            if not schema_manager.initialize():
+                logger.error("Fehler bei der Initialisierung der Hauptdatenbank")
+                return False
+            logger.info("Hauptdatenbank erfolgreich initialisiert")
+        else:
+            # Prüfe und aktualisiere Schema wenn nötig
+            schema_manager = SchemaManager(inventory_db_path)
+            current_version = schema_manager._get_current_version()
+            if current_version < schema_manager.expected_version:
+                logger.info(f"Aktualisiere Datenbankschema von {current_version} auf {schema_manager.expected_version}")
+                if not schema_manager.initialize():
+                    logger.error("Fehler bei der Schema-Aktualisierung")
+                    return False
+                logger.info("Datenbankschema erfolgreich aktualisiert")
+        
+        # Initialisiere Ticket-Datenbank
+        if not os.path.exists(tickets_db_path):
+            logger.info("Initialisiere Ticket-Datenbank...")
+            from app.models.init_ticket_db import init_ticket_db
+            init_ticket_db()
+            logger.info("Ticket-Datenbank erfolgreich initialisiert")
+        
+        # Führe Datenbankbereinigung durch
+        cleanup_database()
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
+        return False
 
 def create_app(test_config=None):
     """Erstellt und konfiguriert die Flask-Anwendung"""
