@@ -1023,21 +1023,18 @@ def restore_item(type, barcode):
         }), 500
 
 def get_label_setting(key, default):
-    value = Database.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
-    return value['value'] if value and value['value'] else default
+    """Holt einen Einstellungswert aus der Datenbank"""
+    try:
+        return Settings.get(key, default)
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Einstellung {key}: {e}")
+        return default
 
 def get_app_labels():
-    return {
-        'tools': {
-            'name': get_label_setting('label_tools_name', 'Werkzeuge'),
-            'icon': get_label_setting('label_tools_icon', 'fas fa-tools')
-        },
-        'consumables': {
-            'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
-            'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
-        },
-        'custom_logo': get_label_setting('custom_logo', None)
-    }
+    """Holt die Anwendungs-Labels und Icons"""
+    # Importiere die optimierte Version aus dem labels-Modul
+    from app.utils.labels import get_app_labels as get_labels
+    return get_labels()
 
 def get_all_users():
     """Hole alle aktiven Benutzer für die Ticket-Zuweisung"""
@@ -1059,35 +1056,37 @@ def server_settings():
         label_tools_icon = request.form.get('label_tools_icon')
         label_consumables_name = request.form.get('label_consumables_name')
         label_consumables_icon = request.form.get('label_consumables_icon')
+        
         try:
-            # Speichere Einstellungen in der Datenbank
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value)
-                VALUES (?, ?)
-            ''', ['server_mode', '1' if mode == 'server' else '0'])
+            from app.models.database import Database
+            
+            # Speichere die Einstellungen
+            Database.set_setting('server_mode', '1' if mode == 'server' else '0')
+            
             if mode == 'client' and server_url:
-                Database.query('''
-                    INSERT OR REPLACE INTO settings (key, value)
-                    VALUES (?, ?)
-                ''', ['server_url', server_url])
-            # Speichere die neuen Label/Icons
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name or 'Werkzeuge'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+                Database.set_setting('server_url', server_url)
+            
+            # Speichere die neuen Label/Icons mit der Database-Methode
+            Database.set_setting('label_tools_name', label_tools_name or 'Werkzeuge')
+            Database.set_setting('label_tools_icon', label_tools_icon or 'fas fa-tools')
+            Database.set_setting('label_consumables_name', label_consumables_name or 'Verbrauchsmaterial')
+            Database.set_setting('label_consumables_icon', label_consumables_icon or 'fas fa-box-open')
+            
             if mode == 'server':
                 Config.init_server()
                 flash('Server-Modus aktiviert', 'success')
             else:
                 Config.init_client(server_url)
                 flash('Client-Modus aktiviert', 'success')
+                
+            flash('Einstellungen erfolgreich gespeichert und aktualisiert', 'success')
+            return redirect(url_for('admin.server_settings'))
+            
         except Exception as e:
+            logger.error(f"Fehler beim Speichern der Einstellungen: {str(e)}")
             flash(f'Fehler beim Speichern der Einstellungen: {str(e)}', 'error')
             return redirect(url_for('admin.server_settings'))
+            
     try:
         # Hole aktuelle Einstellungen
         status = Database.query('''
@@ -2099,14 +2098,61 @@ def system():
                 else:
                     flash('Ungültiges Dateiformat. Erlaubt sind: PNG, JPG, JPEG, GIF', 'error')
             
-            flash('Einstellungen erfolgreich gespeichert', 'success')
+            # Verarbeite Label-Änderungen, wenn das Formular von der Begriffe & Icons-Sektion kommt
+            if 'label_tools_name' in request.form:
+                label_tools_name = request.form.get('label_tools_name')
+                label_tools_icon = request.form.get('label_tools_icon')
+                label_consumables_name = request.form.get('label_consumables_name')
+                label_consumables_icon = request.form.get('label_consumables_icon')
+                
+                # Direkte Datenbankabfragen verwenden
+                with Database.get_db() as db:
+                    db.execute('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                              ['label_tools_name', label_tools_name or 'Werkzeuge'])
+                    db.execute('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                              ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
+                    db.execute('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                              ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
+                    db.execute('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                              ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+                    db.commit()
+                
+                flash('Begriffe & Icons erfolgreich gespeichert', 'success')
+            
+            # Redirect zu sich selbst, um die aktualisierten Daten zu sehen
             return redirect(url_for('admin.system'))
             
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Einstellungen: {e}")
             flash('Fehler beim Speichern der Einstellungen', 'error')
+    
+    # Labels für Werkzeuge und Verbrauchsgüter aus der Datenbank laden
+    try:
+        # Hole die Labels direkt aus der Datenbank
+        with Database.get_db() as db:
+            tools_name = db.execute("SELECT value FROM settings WHERE key = 'label_tools_name'").fetchone()
+            tools_icon = db.execute("SELECT value FROM settings WHERE key = 'label_tools_icon'").fetchone()
+            consumables_name = db.execute("SELECT value FROM settings WHERE key = 'label_consumables_name'").fetchone()
+            consumables_icon = db.execute("SELECT value FROM settings WHERE key = 'label_consumables_icon'").fetchone()
             
-    return render_template('admin/system.html')
+            app_labels = {
+                'tools': {
+                    'name': tools_name['value'] if tools_name else 'Werkzeuge',
+                    'icon': tools_icon['value'] if tools_icon else 'fas fa-tools'
+                },
+                'consumables': {
+                    'name': consumables_name['value'] if consumables_name else 'Verbrauchsmaterial',
+                    'icon': consumables_icon['value'] if consumables_icon else 'fas fa-box-open'
+                }
+            }
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Labels: {e}")
+        app_labels = {
+            'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},
+            'consumables': {'name': 'Verbrauchsmaterial', 'icon': 'fas fa-box-open'}
+        }
+            
+    return render_template('admin/system.html', app_labels=app_labels)
 
 
 @bp.route('/users')
@@ -2336,7 +2382,16 @@ def delete_user(user_id):
 
 @bp.app_context_processor
 def inject_app_labels():
-    return dict(app_labels=get_app_labels())
+    """Fügt die Anwendungs-Labels zu jedem Template hinzu"""
+    try:
+        return dict(app_labels=get_app_labels())
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Labels: {e}")
+        return dict(app_labels={
+            'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},
+            'consumables': {'name': 'Verbrauchsmaterial', 'icon': 'fas fa-box-open'},
+            'custom_logo': None
+        })
 
 @bp.route('/upload-icon', methods=['POST'])
 @login_required
@@ -3092,3 +3147,25 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@bp.route('/debug/labels')
+@admin_required
+def debug_labels():
+    """Zeigt die aktuellen Label-Werte aus der Datenbank für Debugging-Zwecke"""
+    from app.models.settings import Settings
+    
+    labels = {
+        'label_tools_name': Settings.get('label_tools_name'),
+        'label_tools_icon': Settings.get('label_tools_icon'),
+        'label_consumables_name': Settings.get('label_consumables_name'),
+        'label_consumables_icon': Settings.get('label_consumables_icon'),
+    }
+    
+    # Füge auch die Werte aus der settings-Tabelle hinzu
+    settings_values = Database.query("SELECT key, value FROM settings WHERE key LIKE 'label_%'")
+    
+    return {
+        'labels': labels,
+        'raw_settings': settings_values,
+        'current_app_labels': current_app.config.get('app_labels')
+    }

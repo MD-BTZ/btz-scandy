@@ -7,6 +7,9 @@ from app.config import Config
 import json
 from pathlib import Path
 import shutil
+import stat
+from contextlib import contextmanager
+from typing import Optional, List, Dict, Any, Union
 
 # Optional requests importieren
 try:
@@ -15,13 +18,418 @@ except ImportError:
     requests = None
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class DatabaseError(Exception):
+    """Basis-Exception für Datenbankfehler"""
+    pass
+
+class ConnectionError(DatabaseError):
+    """Exception für Verbindungsfehler"""
+    pass
+
+class QueryError(DatabaseError):
+    """Exception für Abfragefehler"""
+    pass
 
 class Database:
-    """Stellt Methoden für die Interaktion mit der SQLite-Datenbank bereit.
-
-    Verwendet rohes SQL für Abfragen und Operationen. Bietet Methoden zum
-    Abrufen von Verbindungen, Ausführen von Abfragen und zur Schema-Inspektion.
-    """
+    """Zentrale Datenbankklasse für alle Datenbankoperationen"""
+    
+    _instance = None
+    _db_path = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Database, cls).__new__(cls)
+        return cls._instance
+    
+    @classmethod
+    def initialize(cls, db_path: str):
+        """Initialisiert die Datenbank mit dem angegebenen Pfad"""
+        cls._db_path = db_path
+        cls._ensure_db_dir()
+        cls._check_and_fix_permissions()
+    
+    @classmethod
+    def _ensure_db_dir(cls):
+        """Stellt sicher, dass das Datenbankverzeichnis existiert"""
+        if cls._db_path:
+            db_dir = os.path.dirname(cls._db_path)
+            if not os.path.exists(db_dir):
+                os.makedirs(db_dir)
+    
+    @classmethod
+    def _check_and_fix_permissions(cls):
+        """Überprüft und korrigiert die Berechtigungen der Datenbankdatei"""
+        if cls._db_path and os.path.exists(cls._db_path):
+            try:
+                # Setze Berechtigungen auf 644 (rw-r--r--)
+                os.chmod(cls._db_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            except Exception as e:
+                logger.error(f"Fehler beim Setzen der Berechtigungen: {e}")
+    
+    @classmethod
+    @contextmanager
+    def get_db(cls):
+        """Kontext-Manager für Datenbankverbindungen"""
+        if not cls._db_path:
+            raise ConnectionError("Datenbank nicht initialisiert")
+            
+        conn = None
+        try:
+            conn = sqlite3.connect(cls._db_path)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except sqlite3.Error as e:
+            raise ConnectionError(f"Datenbankverbindungsfehler: {e}")
+        finally:
+            if conn:
+                conn.close()
+    
+    @classmethod
+    def query(cls, query: str, params: Optional[List] = None, one: bool = False) -> Union[List[Dict], Dict, None]:
+        """Führt eine SQL-Abfrage aus und gibt die Ergebnisse zurück"""
+        logger.debug(f"SQL QUERY: {query} - PARAMS: {params}")
+        try:
+            with current_app.app_context():
+                with cls.get_db() as conn:
+                    cursor = conn.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+                        
+                    if one:
+                        result = cursor.fetchone()
+                        logger.debug(f"QUERY RESULT: {result}")
+                        return dict(result) if result else None
+                    else:
+                        result = [dict(row) for row in cursor.fetchall()]
+                        logger.debug(f"QUERY RESULT: {result}")
+                        return result
+        except sqlite3.Error as e:
+            logger.error(f"QUERY ERROR: {e}")
+            raise QueryError(f"Abfragefehler: {e}")
+    
+    @classmethod
+    def execute(cls, query: str, params: Optional[List] = None) -> int:
+        """Führt eine SQL-Anweisung aus und gibt die Anzahl der betroffenen Zeilen zurück"""
+        try:
+            with current_app.app_context():
+                with cls.get_db() as conn:
+                    cursor = conn.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+                    conn.commit()
+                    return cursor.rowcount
+        except sqlite3.Error as e:
+            raise QueryError(f"Ausführungsfehler: {e}")
+    
+    @classmethod
+    def transaction(cls, queries: List[tuple]) -> bool:
+        """Führt mehrere Abfragen in einer Transaktion aus"""
+        try:
+            with current_app.app_context():
+                with cls.get_db() as conn:
+                    cursor = conn.cursor()
+                    for query, params in queries:
+                        if params:
+                            cursor.execute(query, params)
+                        else:
+                            cursor.execute(query)
+                    conn.commit()
+                    return True
+        except sqlite3.Error as e:
+            logger.error(f"Transaktionsfehler: {e}")
+            return False
+    
+    @classmethod
+    def get_setting(cls, key: str, default: Any = None) -> Any:
+        """Holt einen Einstellungswert"""
+        try:
+            result = cls.query(
+                "SELECT value FROM settings WHERE key = ?",
+                [key],
+                one=True
+            )
+            return result['value'] if result else default
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Einstellung {key}: {e}")
+            return default
+    
+    @classmethod
+    def set_setting(cls, key: str, value: Any, description: Optional[str] = None) -> bool:
+        """Setzt einen Einstellungswert"""
+        try:
+            if description:
+                cls.query(
+                    """
+                    INSERT OR REPLACE INTO settings (key, value, description, updated_at)
+                    VALUES (?, ?, ?, datetime('now'))
+                    """,
+                    [key, str(value), description]
+                )
+            else:
+                cls.query(
+                    """
+                    INSERT OR REPLACE INTO settings (key, value, updated_at)
+                    VALUES (?, ?, datetime('now'))
+                    """,
+                    [key, str(value)]
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Setzen der Einstellung {key}: {e}")
+            return False
+    
+    @classmethod
+    def get_all_settings(cls) -> Dict[str, Any]:
+        """Holt alle Einstellungen"""
+        try:
+            settings = cls.query("SELECT key, value FROM settings")
+            return {row['key']: row['value'] for row in settings}
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen aller Einstellungen: {e}")
+            return {}
+    
+    @classmethod
+    def get_departments(cls) -> List[str]:
+        """Holt alle Abteilungen"""
+        try:
+            departments = cls.query(
+                """
+                SELECT value 
+                FROM settings 
+                WHERE key LIKE 'department_%'
+                AND value IS NOT NULL 
+                AND value != ''
+                ORDER BY value
+                """
+            )
+            return [dept['value'] for dept in departments]
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Abteilungen: {e}")
+            return []
+    
+    @classmethod
+    def add_department(cls, name: str) -> bool:
+        """Fügt eine neue Abteilung hinzu"""
+        try:
+            # Nächste freie ID finden
+            result = cls.query(
+                """
+                SELECT MAX(CAST(SUBSTR(key, 12) AS INTEGER)) as max_id 
+                FROM settings 
+                WHERE key LIKE 'department_%'
+                """,
+                one=True
+            )
+            next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
+            
+            # Neue Abteilung einfügen
+            return cls.set_setting(f'department_{next_id}', name)
+        except Exception as e:
+            logger.error(f"Fehler beim Hinzufügen der Abteilung {name}: {e}")
+            return False
+    
+    @classmethod
+    def delete_department(cls, name: str) -> bool:
+        """Löscht eine Abteilung"""
+        try:
+            cls.query(
+                "DELETE FROM settings WHERE key LIKE 'department_%' AND value = ?",
+                [name]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen der Abteilung {name}: {e}")
+            return False
+    
+    @classmethod
+    def get_locations(cls) -> List[Dict[str, str]]:
+        """Holt alle Standorte mit ihrer Verwendung"""
+        try:
+            locations = cls.query(
+                """
+                SELECT value as name, description as usage
+                FROM settings
+                WHERE key LIKE 'location_%'
+                AND value IS NOT NULL
+                AND value != ''
+                ORDER BY value
+                """
+            )
+            return [dict(loc) for loc in locations]
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Standorte: {e}")
+            return []
+    
+    @classmethod
+    def add_location(cls, name: str, usage: str = 'both') -> bool:
+        """Fügt einen neuen Standort hinzu"""
+        try:
+            # Nächste freie ID finden
+            result = cls.query(
+                """
+                SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
+                FROM settings 
+                WHERE key LIKE 'location_%'
+                AND key NOT LIKE '%_tools'
+                AND key NOT LIKE '%_consumables'
+                """,
+                one=True
+            )
+            next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
+            
+            # Neuen Standort einfügen
+            return cls.set_setting(f'location_{next_id}', name, description=usage)
+        except Exception as e:
+            logger.error(f"Fehler beim Hinzufügen des Standorts {name}: {e}")
+            return False
+    
+    @classmethod
+    def delete_location(cls, name: str) -> bool:
+        """Löscht einen Standort"""
+        try:
+            cls.query(
+                "DELETE FROM settings WHERE key LIKE 'location_%' AND value = ?",
+                [name]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen des Standorts {name}: {e}")
+            return False
+    
+    @classmethod
+    def get_categories(cls) -> List[Dict[str, str]]:
+        """Holt alle Kategorien mit ihrer Verwendung"""
+        try:
+            categories = cls.query(
+                """
+                SELECT value as name, description as usage
+                FROM settings
+                WHERE key LIKE 'category_%'
+                AND value IS NOT NULL
+                AND value != ''
+                ORDER BY value
+                """
+            )
+            return [dict(cat) for cat in categories]
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Kategorien: {e}")
+            return []
+    
+    @classmethod
+    def add_category(cls, name: str, usage: str = 'both') -> bool:
+        """Fügt eine neue Kategorie hinzu"""
+        try:
+            # Nächste freie ID finden
+            result = cls.query(
+                """
+                SELECT MAX(CAST(SUBSTR(key, 10) AS INTEGER)) as max_id 
+                FROM settings 
+                WHERE key LIKE 'category_%'
+                AND key NOT LIKE '%_tools'
+                AND key NOT LIKE '%_consumables'
+                """,
+                one=True
+            )
+            next_id = 1 if not result or result['max_id'] is None else result['max_id'] + 1
+            
+            # Neue Kategorie einfügen
+            return cls.set_setting(f'category_{next_id}', name, description=usage)
+        except Exception as e:
+            logger.error(f"Fehler beim Hinzufügen der Kategorie {name}: {e}")
+            return False
+    
+    @classmethod
+    def delete_category(cls, name: str) -> bool:
+        """Löscht eine Kategorie"""
+        try:
+            cls.query(
+                "DELETE FROM settings WHERE key LIKE 'category_%' AND value = ?",
+                [name]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen der Kategorie {name}: {e}")
+            return False
+    
+    @classmethod
+    def update_category_usage(cls, name: str, usage: str) -> bool:
+        """Aktualisiert die Verwendung einer Kategorie"""
+        try:
+            category_key = cls.query(
+                """
+                SELECT key FROM settings 
+                WHERE key LIKE 'category_%'
+                AND key NOT LIKE '%_tools'
+                AND key NOT LIKE '%_consumables'
+                AND value = ?
+                """,
+                [name],
+                one=True
+            )
+            
+            if not category_key:
+                return False
+                
+            base_key = category_key['key']
+            
+            # Aktualisiere die Kategorie und ihre Eigenschaften
+            cls.query(
+                """
+                UPDATE settings 
+                SET description = ?,
+                    updated_at = datetime('now')
+                WHERE key = ?
+                """,
+                [usage, base_key]
+            )
+            
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren der Kategorie {name}: {e}")
+            return False
+    
+    @classmethod
+    def update_location_usage(cls, name: str, usage: str) -> bool:
+        """Aktualisiert die Verwendung eines Standorts"""
+        try:
+            location_key = cls.query(
+                """
+                SELECT key FROM settings 
+                WHERE key LIKE 'location_%'
+                AND key NOT LIKE '%_tools'
+                AND key NOT LIKE '%_consumables'
+                AND value = ?
+                """,
+                [name],
+                one=True
+            )
+            
+            if not location_key:
+                return False
+                
+            base_key = location_key['key']
+            
+            # Aktualisiere den Standort und seine Eigenschaften
+            cls.query(
+                """
+                UPDATE settings 
+                SET description = ?,
+                    updated_at = datetime('now')
+                WHERE key = ?
+                """,
+                [usage, base_key]
+            )
+            
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren des Standorts {name}: {e}")
+            return False
     
     @classmethod
     def print_database_contents(cls):
@@ -237,10 +645,7 @@ class Database:
         Raises:
             sqlite3.Error: Bei Datenbankfehlern.
         """
-        logging.info("\n=== DATABASE QUERY ===")
-        logging.info(f"SQL: {sql}")
-        logging.info(f"Parameters: {params}")
-        
+        logger.debug(f"SQL QUERY: {sql} - PARAMS: {params}")
         try:
             conn = Database.get_db()
             cursor = conn.cursor()
@@ -253,7 +658,7 @@ class Database:
             # Automatisches Commit für INSERT, UPDATE, DELETE
             if sql.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
                 conn.commit()
-                logging.info("Änderungen committed")
+                logger.info("Änderungen committed")
                 
             if one:
                 result = cursor.fetchone()
@@ -282,98 +687,54 @@ class Database:
             
             # Debug-Ausgaben
             if result:
-                logging.info(f"Number of results: {len([result] if one else result)}")
-                logging.info(f"Example record: {result if one else result[0]}")
+                logger.debug(f"QUERY RESULT: {result}")
+                logger.debug(f"Number of results: {len([result] if one else result)}")
+                logger.debug(f"Example record: {result if one else result[0]}")
             else:
-                logging.info("No results returned")
+                logger.debug("No results returned")
                 
             return result
             
         except Exception as e:
-            logging.error(f"Datenbankfehler: {str(e)}")
-            logging.error(f"Query: {sql}")
-            logging.error(f"Parameters: {params}")
+            logger.error(f"QUERY ERROR: {e}")
+            logger.error(f"Query: {sql}")
+            logger.error(f"Parameters: {params}")
             raise
     
     @classmethod
-    def get_departments(cls):
-        """Gibt alle Abteilungen mit der Anzahl der zugeordneten Mitarbeiter zurück"""
+    def get_consumables_forecast(cls):
+        """Berechnet die Bestandsprognose für Verbrauchsmaterialien"""
         try:
-            departments = cls.query("""
+            return cls.query("""
+                WITH daily_usage AS (
+                    SELECT 
+                        c.barcode,
+                        c.name,
+                        c.quantity as current_amount,
+                        CAST(SUM(cu.quantity) AS FLOAT) / 30 as avg_daily_usage
+                    FROM consumables c
+                    LEFT JOIN consumable_usages cu 
+                        ON c.barcode = cu.consumable_barcode
+                        AND cu.used_at >= date('now', '-30 days')
+                    WHERE c.deleted = 0
+                    GROUP BY c.barcode, c.name, c.quantity
+                )
                 SELECT 
-                    s.value as name,
-                    COUNT(w.id) as worker_count
-                FROM settings s
-                LEFT JOIN workers w ON w.department = s.value AND w.deleted = 0
-                WHERE s.key LIKE 'department_%'
-                AND s.value IS NOT NULL 
-                AND s.value != ''
-                GROUP BY s.value
-                ORDER BY s.value
+                    name,
+                    current_amount,
+                    ROUND(avg_daily_usage, 2) as avg_daily_usage,
+                    CASE 
+                        WHEN avg_daily_usage > 0 
+                        THEN ROUND(current_amount / avg_daily_usage)
+                        ELSE 999
+                    END as days_remaining
+                FROM daily_usage
+                WHERE current_amount > 0
+                ORDER BY days_remaining ASC
+                LIMIT 10
             """)
-            
-            return [{'name': dept['name'], 'worker_count': dept['worker_count']} for dept in departments]
         except Exception as e:
-            logging.error(f"Fehler beim Laden der Abteilungen: {str(e)}")
-            return []
-    
-    @classmethod
-    def get_locations(cls):
-        """Hole alle Standorte"""
-        try:
-            with cls.get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT s.value as name,
-                           COUNT(DISTINCT t.id) as tool_count,
-                           COUNT(DISTINCT c.id) as consumable_count
-                    FROM settings s
-                    LEFT JOIN tools t ON t.location = s.value
-                    LEFT JOIN consumables c ON c.location = s.value
-                    WHERE s.key LIKE 'location_%'
-                    AND s.value IS NOT NULL
-                    AND s.value != ''
-                    GROUP BY s.value
-                    ORDER BY s.value
-                """)
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            print(f"Fehler beim Abrufen der Standorte: {e}")
-            return []
-    
-    @classmethod
-    def get_categories(cls, usage=None):
-        """Gibt alle Kategorien mit der Anzahl der zugeordneten Werkzeuge und Verbrauchsmaterialien zurück"""
-        try:
-            # Basis-Query
-            query = """
-                SELECT 
-                    s.value as name,
-                    s.description as usage,
-                    (SELECT COUNT(*) FROM tools WHERE category = s.value AND deleted = 0) as tools_count,
-                    (SELECT COUNT(*) FROM consumables WHERE category = s.value AND deleted = 0) as consumables_count
-                FROM settings s
-                WHERE s.key LIKE 'category_%'
-                AND s.key NOT LIKE '%_tools'
-                AND s.key NOT LIKE '%_consumables'
-                AND s.value IS NOT NULL 
-                AND s.value != ''
-            """
-            
-            query += " ORDER BY s.value"
-            
-            categories = cls.query(query)
-            return [
-                {
-                    'name': cat['name'],
-                    'usage': cat['usage'],
-                    'tools_count': cat['tools_count'],
-                    'consumables_count': cat['consumables_count']
-                }
-                for cat in categories
-            ]
-        except Exception as e:
-            logging.error(f"Fehler beim Laden der Kategorien: {str(e)}")
+            print(f"Fehler beim Abrufen der Bestandsprognose: {e}")
             return []
     
     @classmethod
@@ -521,6 +882,24 @@ class Database:
         except Exception as e:
             print(f"Fehler beim Abrufen der Bestandsprognose: {e}")
             return []
+
+    @staticmethod
+    def set_setting(key, value):
+        """Setzt einen Einstellungswert in der Datenbank"""
+        try:
+            with Database.get_db() as db:
+                db.execute(
+                    '''
+                    INSERT OR REPLACE INTO settings (key, value) 
+                    VALUES (?, ?)
+                    ''',
+                    [key, value]
+                )
+                db.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der Einstellung {key}: {e}")
+            return False
 
 class BaseModel:
     """Basisklasse für alle Datenbankmodelle"""

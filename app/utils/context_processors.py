@@ -4,6 +4,10 @@ from app.constants import Routes
 from app.config.version import VERSION
 import traceback
 import logging
+from datetime import datetime, timedelta
+from app.models.settings import Settings
+from flask import url_for, session, current_app
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +90,59 @@ def inject_version():
     }
 
 def register_context_processors(app):
-    """Registriert alle Context Processors"""
-    app.context_processor(inject_colors)
-    app.context_processor(inject_routes)
-    app.context_processor(inject_version)
+    """Registriert alle Context Processors für die App"""
+    
+    @app.context_processor
+    def inject_now():
+        """Inject current datetime into all templates"""
+        return {'now': datetime.now()}
+        
+    @app.context_processor
+    def inject_debug():
+        """Inject debug flag into all templates"""
+        return {'debug': app.debug}
+        
+    @app.context_processor
+    def inject_app_settings():
+        """Inject app settings into all templates"""
+        try:
+            server_mode = Settings.get('server_mode')
+            return {
+                'app_settings': {
+                    'server_mode': server_mode == '1' if server_mode is not None else False
+                }
+            }
+        except Exception as e:
+            app.logger.error(f"Fehler beim Laden der App-Einstellungen: {e}")
+            return {'app_settings': {'server_mode': False}}
+            
+    @app.context_processor
+    def inject_links():
+        """Inject all route links into templates"""
+        return {
+            'links': {
+                'index': url_for('main.index'),
+                'dashboard': url_for('dashboard.index'),
+                'tools': url_for('tools.index'),
+                'consumables': url_for('consumables.index'),
+                'workers': url_for('workers.index'),
+                'login': url_for('auth.login'),
+                'logout': url_for('auth.logout')
+            }
+        }
+    
+    @app.context_processor
+    def inject_manifest():
+        """Inject manifest into templates for assets"""
+        manifest_path = os.path.join(app.static_folder, 'manifest.json')
+        try:
+            if os.path.exists(manifest_path):
+                with open(manifest_path) as f:
+                    import json
+                    return {'manifest': json.load(f)}
+        except Exception as e:
+            app.logger.error(f"Fehler beim Laden des Manifests: {e}")
+        return {'manifest': {}}
+        
+    # Hinweis: Wir fügen keinen inject_app_labels Context Processor hier hinzu,
+    # da dieser bereits in __init__.py als inject_system_names definiert ist

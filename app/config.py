@@ -11,6 +11,6 @@ class Config:
     TICKET_DATABASE = os.path.join(basedir, 'app/database/tickets.db')
     SYSTEM_NAME = os.environ.get('SYSTEM_NAME') or 'Scandy'
     TICKET_SYSTEM_NAME = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
-    TOOL_SYSTEM_NAME = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
-    CONSUMABLE_SYSTEM_NAME = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
+    # TOOL_SYSTEM_NAME und CONSUMABLE_SYSTEM_NAME werden dynamisch aus der Datenbank geladen
+    # und daher hier nicht mehr statisch definiert
     UPLOAD_FOLDER = os.path.join(basedir, 'static', 'uploads') 

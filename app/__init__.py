@@ -19,7 +19,7 @@ from flask_login import LoginManager
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
-from app.models.migrations import run_migrations
+# from app.models.migrations import run_migrations  # Deaktiviert - keine Migrationen
 from app.routes import auth, tools, consumables, workers, setup, backup
 from app.config import Config
 from app.routes import init_app
@@ -130,17 +130,17 @@ def initialize_and_migrate_databases():
         schema_manager = SchemaManager(db_path)
         if not schema_manager.initialize():
             raise Exception("Schema-Initialisierung fehlgeschlagen")
-        if schema_manager.needs_update():
-            logger.info("Schema-Update erforderlich...")
-            if not schema_manager.update():
-                raise Exception("Schema-Update fehlgeschlagen")
+        # if schema_manager.needs_update():  # Deaktiviert - kein automatisches Schema-Update
+        #     logger.info("Schema-Update erforderlich...")
+        #     if not schema_manager.update():
+        #         raise Exception("Schema-Update fehlgeschlagen")
         if not schema_manager.validate_schema():
             logger.error("Schema-Validierung fehlgeschlagen!")
             raise Exception("Schema-Validierung fehlgeschlagen")
         logger.info(f"Schema-Version: {schema_manager.get_schema_version()}")
 
         # 2. Migrationen ausführen (für komplexere Änderungen)
-        run_migrations(db_path)
+        # run_migrations(db_path)  # Deaktiviert - keine komplexen Migrationen
 
         # 3. Ticket-Datenbank initialisieren
         logger.info("Initialisiere Ticket-Datenbank...")
@@ -154,12 +154,12 @@ def initialize_and_migrate_databases():
             result = cursor.fetchone()
             if result:
                 logger.info("User-Tabelle in inventory.db gefunden. Starte automatische Migration...")
-                from app.migrations.migrate_users import migrate_users
-                migrate_users()
+                # from app.migrations.migrate_users import migrate_users  # Deaktiviert
+                # migrate_users()  # Deaktiviert
                 # Nach erfolgreicher Migration: Tabelle löschen
-                cursor.execute("DROP TABLE IF EXISTS users;")
-                conn.commit()
-                logger.info("User-Tabelle aus inventory.db entfernt.")
+                # cursor.execute("DROP TABLE IF EXISTS users;")  # Deaktiviert
+                # conn.commit()  # Deaktiviert
+                logger.info("User-Tabelle Migration deaktiviert.")
             else:
                 logger.info("Keine User-Tabelle in inventory.db gefunden. Keine Migration notwendig.")
         except Exception as e:
@@ -187,8 +187,6 @@ def create_app(test_config=None):
     # Systemnamen direkt setzen
     app.config['SYSTEM_NAME'] = os.environ.get('SYSTEM_NAME') or 'Scandy'
     app.config['TICKET_SYSTEM_NAME'] = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
-    app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
-    app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
     
     # Logger einrichten
     from app.utils.logger import init_app_logger
@@ -215,11 +213,44 @@ def create_app(test_config=None):
     # Context Processor für Systemnamen
     @app.context_processor
     def inject_system_names():
+        # Labels für Werkzeuge und Verbrauchsgüter aus der Datenbank laden
+        try:
+            # Hole die Labels direkt aus der Datenbank ohne Zwischenspeicherung
+            with Database.get_db() as db:
+                tools_name = db.execute("SELECT value FROM settings WHERE key = 'label_tools_name'").fetchone()
+                tools_icon = db.execute("SELECT value FROM settings WHERE key = 'label_tools_icon'").fetchone()
+                consumables_name = db.execute("SELECT value FROM settings WHERE key = 'label_consumables_name'").fetchone()
+                consumables_icon = db.execute("SELECT value FROM settings WHERE key = 'label_consumables_icon'").fetchone()
+                
+                # Verwende die abgerufenen Werte oder die Standardwerte, wenn nichts gefunden wurde
+                tool_name = tools_name['value'] if tools_name else 'Werkzeuge'
+                consumable_name = consumables_name['value'] if consumables_name else 'Verbrauchsmaterial'
+                
+                app_labels = {
+                    'tools': {
+                        'name': tool_name,
+                        'icon': tools_icon['value'] if tools_icon else 'fas fa-tools'
+                    },
+                    'consumables': {
+                        'name': consumable_name,
+                        'icon': consumables_icon['value'] if consumables_icon else 'fas fa-box-open'
+                    }
+                }
+        except Exception as e:
+            app.logger.error(f"Fehler beim Laden der Labels: {e}")
+            tool_name = 'Werkzeuge'
+            consumable_name = 'Verbrauchsmaterial'
+            app_labels = {
+                'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},
+                'consumables': {'name': 'Verbrauchsmaterial', 'icon': 'fas fa-box-open'}
+            }
+            
         return {
             'system_name': app.config['SYSTEM_NAME'],
             'ticket_system_name': app.config['TICKET_SYSTEM_NAME'],
-            'tool_system_name': app.config['TOOL_SYSTEM_NAME'],
-            'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME']
+            'tool_system_name': tool_name,
+            'consumable_system_name': consumable_name,
+            'app_labels': app_labels
         }
     
     # Blueprints registrieren
@@ -281,23 +312,6 @@ def create_app(test_config=None):
                 else:
                     print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
     
-    # Temporärer Code zum Setzen der DB-Version (Bitte nach dem nächsten Start entfernen!)
-    with app.app_context():
-        from .models.database import Database
-        try:
-            print("INFO: Versuche PRAGMA user_version = 2 für inventory.db zu setzen...")
-            with Database.get_db() as conn:
-                conn.execute("PRAGMA user_version = 2;")
-                conn.commit()
-                current_db_version = conn.execute("PRAGMA user_version;").fetchone()[0]
-                if current_db_version == 2:
-                    print("INFO: PRAGMA user_version erfolgreich auf 2 gesetzt.")
-                else:
-                    print(f"WARNUNG: PRAGMA user_version konnte nicht auf 2 gesetzt werden. Aktuell: {current_db_version}")
-        except Exception as e_pragma:
-            print(f"FEHLER beim Setzen von PRAGMA user_version: {e_pragma}")
-    # Ende temporärer Code
-
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():
