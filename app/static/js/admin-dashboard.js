@@ -20,80 +20,104 @@ document.addEventListener('DOMContentLoaded', function() {
     const addCategoryForm = document.getElementById('addCategoryForm');
 
     if (addDepartmentForm) {
-        addDepartmentForm.addEventListener('submit', function(e) {
+        addDepartmentForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.innerHTML;
             
-            fetch('/admin/departments/add', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
+            try {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
+                
+                const formData = new FormData(this);
+                const response = await fetch('/admin/departments/add', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
                 if (data.success) {
                     this.reset();
-                    loadDepartments();
+                    await loadDepartments();
                     showToast('success', data.message);
                 } else {
                     showToast('error', data.message);
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Error:', error);
                 showToast('error', 'Fehler beim Hinzufügen der Abteilung');
-            });
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
+            }
         });
     }
 
     if (addLocationForm) {
-        addLocationForm.addEventListener('submit', function(e) {
+        addLocationForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.innerHTML;
             
-            fetch('/admin/locations/add', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
+            try {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
+                
+                const formData = new FormData(this);
+                const response = await fetch('/admin/locations/add', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
                 if (data.success) {
                     this.reset();
-                    loadLocations();
+                    await loadLocations();
                     showToast('success', data.message);
                 } else {
                     showToast('error', data.message);
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Error:', error);
                 showToast('error', 'Fehler beim Hinzufügen des Standorts');
-            });
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
+            }
         });
     }
 
     if (addCategoryForm) {
-        addCategoryForm.addEventListener('submit', function(e) {
+        addCategoryForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.innerHTML;
             
-            fetch('/admin/categories/add', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
+            try {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
+                
+                const formData = new FormData(this);
+                const response = await fetch('/admin/categories/add', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
                 if (data.success) {
                     this.reset();
-                    loadCategories();
+                    await loadCategories();
                     showToast('success', data.message);
                 } else {
                     showToast('error', data.message);
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Error:', error);
                 showToast('error', 'Fehler beim Hinzufügen der Kategorie');
-            });
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
+            }
         });
     }
 });
@@ -106,10 +130,11 @@ async function loadDepartments() {
         if (data.success) {
             const departmentsList = document.getElementById('departmentsList');
             departmentsList.innerHTML = data.departments.map(dept => `
-                <tr>
-                    <td>${dept.name}</td>
-                    <td class="text-right">
-                        <button onclick="deleteDepartment('${dept.name}')" class="btn btn-error btn-xs">
+                <tr class="hover:bg-base-200 transition-colors duration-200">
+                    <td class="py-3">${dept.name}</td>
+                    <td class="text-right py-3">
+                        <button onclick="deleteDepartment('${dept.name}')" 
+                                class="btn btn-error btn-xs hover:btn-error-focus transition-colors duration-200">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -118,6 +143,7 @@ async function loadDepartments() {
         }
     } catch (error) {
         console.error('Fehler beim Laden der Abteilungen:', error);
+        showToast('error', 'Fehler beim Laden der Abteilungen');
     }
 }
 
@@ -129,10 +155,11 @@ async function loadLocations() {
         if (data.success) {
             const locationsList = document.getElementById('locationsList');
             locationsList.innerHTML = data.locations.map(loc => `
-                <tr>
-                    <td>${loc.name}</td>
-                    <td class="text-right">
-                        <button onclick="deleteLocation('${loc.name}')" class="btn btn-error btn-xs">
+                <tr class="hover:bg-base-200 transition-colors duration-200">
+                    <td class="py-3">${loc.name}</td>
+                    <td class="text-right py-3">
+                        <button onclick="deleteLocation('${loc.name}')" 
+                                class="btn btn-error btn-xs hover:btn-error-focus transition-colors duration-200">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -141,6 +168,7 @@ async function loadLocations() {
         }
     } catch (error) {
         console.error('Fehler beim Laden der Standorte:', error);
+        showToast('error', 'Fehler beim Laden der Standorte');
     }
 }
 
@@ -152,10 +180,11 @@ async function loadCategories() {
         if (data.success) {
             const categoriesList = document.getElementById('categoriesList');
             categoriesList.innerHTML = data.categories.map(cat => `
-                <tr>
-                    <td>${cat.name}</td>
-                    <td class="text-right">
-                        <button onclick="deleteCategory('${cat.name}')" class="btn btn-error btn-xs">
+                <tr class="hover:bg-base-200 transition-colors duration-200">
+                    <td class="py-3">${cat.name}</td>
+                    <td class="text-right py-3">
+                        <button onclick="deleteCategory('${cat.name}')" 
+                                class="btn btn-error btn-xs hover:btn-error-focus transition-colors duration-200">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -164,6 +193,7 @@ async function loadCategories() {
         }
     } catch (error) {
         console.error('Fehler beim Laden der Kategorien:', error);
+        showToast('error', 'Fehler beim Laden der Kategorien');
     }
 }
 
@@ -316,18 +346,45 @@ console.log('Categories List Element:', categoriesList);
 // Toast-Funktion
 function showToast(type, message) {
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type} fixed top-4 right-4 z-50`;
+    toast.className = `toast toast-${type} fixed top-4 right-4 z-50 transform transition-all duration-300 ease-in-out translate-x-full opacity-0`;
+    
+    // Icon basierend auf Typ
+    let icon = '';
+    switch(type) {
+        case 'success':
+            icon = '<i class="fas fa-check-circle mr-2"></i>';
+            break;
+        case 'error':
+            icon = '<i class="fas fa-exclamation-circle mr-2"></i>';
+            break;
+        case 'warning':
+            icon = '<i class="fas fa-exclamation-triangle mr-2"></i>';
+            break;
+        default:
+            icon = '<i class="fas fa-info-circle mr-2"></i>';
+    }
+    
     toast.innerHTML = `
         <div class="alert alert-${type} shadow-lg">
-            <div>
+            <div class="flex items-center">
+                ${icon}
                 <span>${message}</span>
             </div>
         </div>
     `;
+    
     document.body.appendChild(toast);
+    
+    // Animation starten
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-x-full', 'opacity-0');
+    });
     
     // Toast nach 3 Sekunden ausblenden
     setTimeout(() => {
-        toast.remove();
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
     }, 3000);
 } 
