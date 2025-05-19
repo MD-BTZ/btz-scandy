@@ -2,6 +2,10 @@ import sqlite3
 from werkzeug.security import generate_password_hash
 from app.models.database import Database
 import logging
+import os
+import shutil
+from datetime import datetime
+import stat
 
 logger = logging.getLogger(__name__)
 
@@ -13,424 +17,320 @@ class SchemaManager:
         self.current_version = self._get_current_version()
         self.expected_version = 5
         self._initialized = False
+        self._backup_path = f"{db_path}.backup"
+
+    def _check_and_fix_permissions(self):
+        """Überprüft und korrigiert die Dateiberechtigungen"""
+        try:
+            if os.path.exists(self.db_path):
+                current_perms = stat.S_IMODE(os.lstat(self.db_path).st_mode)
+                # Setze Berechtigungen auf rw-rw-r--
+                desired_perms = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH
+                
+                if current_perms != desired_perms:
+                    logger.info(f"Korrigiere Berechtigungen für {self.db_path}")
+                    os.chmod(self.db_path, desired_perms)
+                    logger.info("Berechtigungen erfolgreich korrigiert")
+            else:
+                logger.info(f"Datenbank {self.db_path} existiert noch nicht")
+        except Exception as e:
+            logger.error(f"Fehler beim Überprüfen/Korrigieren der Berechtigungen: {str(e)}")
+
+    def _create_backup(self):
+        """Erstellt ein Backup der Datenbank vor Änderungen"""
+        if os.path.exists(self.db_path):
+            backup_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = f"{self.db_path}.{backup_time}"
+            try:
+                shutil.copy2(self.db_path, backup_path)
+                logger.info(f"Datenbank-Backup erstellt: {backup_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+                return False
+        return True
+
+    def _restore_backup(self):
+        """Stellt das letzte Backup wieder her"""
+        if os.path.exists(self._backup_path):
+            try:
+                shutil.copy2(self._backup_path, self.db_path)
+                logger.info("Datenbank aus Backup wiederhergestellt")
+                return True
+            except Exception as e:
+                logger.error(f"Fehler beim Wiederherstellen des Backups: {str(e)}")
+                return False
+        return False
 
     def _get_current_version(self):
-        """Hole die aktuelle Schema-Version"""
+        """Ermittelt die aktuelle Schema-Version"""
         try:
+            if not os.path.exists(self.db_path):
+                return 0
+                
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
                 result = cursor.fetchone()
                 return result[0] if result else 0
-        except sqlite3.OperationalError:
+        except Exception as e:
+            logger.error(f"Fehler beim Ermitteln der Schema-Version: {str(e)}")
             return 0
-
-    def _create_schema_version_table(self, conn):
-        """Erstelle die schema_version Tabelle"""
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS schema_version (
-                version INTEGER PRIMARY KEY,
-                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-    def _create_tables(self, conn):
-        """Erstelle alle Basis-Tabellen"""
-        # Schema Version Tabelle
-        self._create_schema_version_table(conn)
-            
-        # Access Settings Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS access_settings (
-                route TEXT PRIMARY KEY,
-                is_public BOOLEAN DEFAULT 0,
-                description TEXT
-            )
-        ''')
-            
-        # Tools Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS tools (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                barcode TEXT UNIQUE NOT NULL,
-                category TEXT,
-                location TEXT,
-                status TEXT DEFAULT 'verfügbar',
-                description TEXT,
-                last_maintenance DATE,
-                next_maintenance DATE,
-                maintenance_interval INTEGER,
-                last_checked TIMESTAMP,
-                supplier TEXT,
-                reorder_point INTEGER,
-                notes TEXT,
-                deleted BOOLEAN DEFAULT 0,
-                deleted_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Consumables Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS consumables (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                barcode TEXT UNIQUE NOT NULL,
-                description TEXT,
-                category TEXT,
-                location TEXT,
-                quantity INTEGER DEFAULT 0,
-                min_quantity INTEGER DEFAULT 0,
-                unit TEXT,
-                supplier TEXT,
-                reorder_point INTEGER,
-                notes TEXT,
-                deleted BOOLEAN DEFAULT 0,
-                deleted_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Workers Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS workers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                firstname TEXT NOT NULL,
-                lastname TEXT NOT NULL,
-                barcode TEXT UNIQUE NOT NULL,
-                department TEXT,
-                email TEXT,
-                phone TEXT,
-                notes TEXT,
-                deleted BOOLEAN DEFAULT 0,
-                deleted_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Lendings Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS lendings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tool_barcode TEXT NOT NULL,
-                worker_barcode TEXT NOT NULL,
-                lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                returned_at TIMESTAMP,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (tool_barcode) REFERENCES tools(barcode),
-                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
-            )
-        ''')
-        
-        # Consumable Usage Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS consumable_usages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                consumable_barcode TEXT NOT NULL,
-                worker_barcode TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT DEFAULT 'pending',
-                modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
-                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
-            )
-        ''')
-        
-        # Settings Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                description TEXT
-            )
-        ''')
-        
-        # Users Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                email TEXT,
-                firstname TEXT,
-                lastname TEXT,
-                role TEXT NOT NULL DEFAULT 'user',
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP
-            )
-        ''')
-
-        # Homepage Notices Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS homepage_notices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT,
-                content TEXT,
-                priority INTEGER,
-                is_active BOOLEAN,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Sync Status Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS sync_status (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                last_sync TIMESTAMP,
-                status TEXT,
-                error TEXT
-            )
-        ''')
-        
-        # Tickets Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS tickets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT DEFAULT 'offen',
-                priority TEXT DEFAULT 'normal',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                resolved_at TIMESTAMP,
-                created_by TEXT NOT NULL,
-                assigned_to TEXT,
-                resolution_notes TEXT,
-                response TEXT,
-                last_modified_by TEXT,
-                last_modified_at TIMESTAMP,
-                category TEXT,
-                due_date TIMESTAMP,
-                estimated_time INTEGER,
-                actual_time INTEGER,
-                FOREIGN KEY (created_by) REFERENCES users(username),
-                FOREIGN KEY (assigned_to) REFERENCES users(username),
-                FOREIGN KEY (last_modified_by) REFERENCES users(username)
-            )
-        ''')
-        
-        # Ticket Notes Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS ticket_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id INTEGER NOT NULL,
-                note TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by TEXT NOT NULL,
-                modified_at TIMESTAMP,
-                modified_by TEXT,
-                is_private BOOLEAN DEFAULT 0,
-                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                FOREIGN KEY (created_by) REFERENCES users(username),
-                FOREIGN KEY (modified_by) REFERENCES users(username)
-            )
-        ''')
-        
-        # Ticket History Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS ticket_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id INTEGER NOT NULL,
-                field_name TEXT NOT NULL,
-                old_value TEXT,
-                new_value TEXT,
-                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                changed_by TEXT NOT NULL,
-                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                FOREIGN KEY (changed_by) REFERENCES users(username)
-            )
-        ''')
-
-        # Ticket Messages Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS ticket_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id INTEGER NOT NULL,
-                message TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                is_admin BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                FOREIGN KEY (sender) REFERENCES users(username)
-            )
-        ''')
-
-        # Timesheets Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS timesheets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                year INTEGER NOT NULL,
-                kw INTEGER NOT NULL,
-                montag_start TEXT,
-                montag_end TEXT,
-                montag_tasks TEXT,
-                dienstag_start TEXT,
-                dienstag_end TEXT,
-                dienstag_tasks TEXT,
-                mittwoch_start TEXT,
-                mittwoch_end TEXT,
-                mittwoch_tasks TEXT,
-                donnerstag_start TEXT,
-                donnerstag_end TEXT,
-                donnerstag_tasks TEXT,
-                freitag_start TEXT,
-                freitag_end TEXT,
-                freitag_tasks TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-
-        # Categories Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Locations Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS locations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Consumable Lendings Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS consumable_lendings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                consumable_barcode TEXT NOT NULL,
-                worker_barcode TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                lending_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                return_time TIMESTAMP,
-                FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
-                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
-            )
-        ''')
-
-        # Tool Status Changes Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS tool_status_changes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tool_barcode TEXT NOT NULL,
-                old_status TEXT NOT NULL,
-                new_status TEXT NOT NULL,
-                reason TEXT,
-                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (tool_barcode) REFERENCES tools(barcode)
-            )
-        ''')
-
-        # History Tabelle
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action TEXT NOT NULL,
-                item_type TEXT NOT NULL,
-                item_id TEXT NOT NULL,
-                user_id INTEGER,
-                details TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-    def _insert_default_data(self, conn):
-        """Fügt Standarddaten in die Datenbank ein, wenn sie noch nicht existieren."""
-        with conn:
-            cursor = conn.cursor()
-            
-            # Prüfe ob bereits Einstellungen existieren
-            cursor.execute('SELECT COUNT(*) FROM settings')
-            if cursor.fetchone()[0] > 0:
-                logger.info("Einstellungen existieren bereits, überspringe Standarddaten")
-                return
-            
-            # Standard-Einstellungen
-            default_settings = [
-                ('label_tools_name', 'Werkzeuge', 'Anzeigename für Werkzeuge'),
-                ('label_tools_icon', 'fas fa-tools', 'Icon für Werkzeuge'),
-                ('label_consumables_name', 'Material', 'Anzeigename für Material'),
-                ('label_consumables_icon', 'fas fa-box', 'Icon für Material'),
-                ('color_primary', '#1a73e8', 'Primäre Farbe'),
-                ('color_secondary', '#5f6368', 'Sekundäre Farbe'),
-                ('color_success', '#34a853', 'Erfolgsfarbe'),
-                ('color_warning', '#fbbc04', 'Warnfarbe'),
-                ('color_error', '#ea4335', 'Fehlerfarbe'),
-                ('custom_logo', 'images/BTZ_logo.jpg', 'Benutzerdefiniertes Logo'),
-                ('default_tool_icon', 'fas fa-tools', 'Standard-Icon für Werkzeuge'),
-                ('default_consumable_icon', 'fas fa-box', 'Standard-Icon für Verbrauchsmaterial')
-            ]
-            
-            # Füge alle Standardeinstellungen ein
-            for key, value, description in default_settings:
-                cursor.execute('''
-                    INSERT INTO settings (key, value, description)
-                    VALUES (?, ?, ?)
-                ''', (key, value, description))
-                logger.info(f"Standardeinstellung {key} hinzugefügt")
 
     def initialize(self):
         """Initialisiert die Datenbank mit allen notwendigen Tabellen"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Settings Tabelle
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    description TEXT
+        if self.db_path in self._initialized_dbs:
+            logger.info(f"Datenbank {self.db_path} wurde bereits initialisiert")
+            return True
+
+        try:
+            # Erstelle Backup vor Änderungen
+            if not self._create_backup():
+                logger.error("Konnte kein Backup erstellen - Initialisierung abgebrochen")
+                return False
+
+            # Stelle sicher, dass das Verzeichnis existiert
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+
+            # Überprüfe und korrigiere Berechtigungen
+            self._check_and_fix_permissions()
+
+            with sqlite3.connect(self.db_path) as conn:
+                # Aktiviere Foreign Keys
+                conn.execute("PRAGMA foreign_keys = ON")
+                
+                # Aktiviere WAL-Modus für bessere Performance
+                conn.execute("PRAGMA journal_mode = WAL")
+                
+                # Setze Busy-Timeout
+                conn.execute("PRAGMA busy_timeout = 5000")
+                
+                # Aktiviere Synchronisierung
+                conn.execute("PRAGMA synchronous = NORMAL")
+                
+                # Setze Cache-Größe
+                conn.execute("PRAGMA cache_size = -2000")  # 2MB Cache
+
+                # Erstelle Schema-Version Tabelle
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                # Erstelle alle Tabellen
+                self._create_tables(conn)
+
+                # Setze Schema-Version
+                current_version = self._get_current_version()
+                if current_version < self.expected_version:
+                    conn.execute(
+                        "INSERT INTO schema_version (version) VALUES (?)",
+                        [self.expected_version]
+                    )
+
+                conn.commit()
+                logger.info(f"Datenbank {self.db_path} erfolgreich initialisiert")
+                self._initialized_dbs.add(self.db_path)
+                return True
+
+        except Exception as e:
+            logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
+            # Versuche Backup wiederherzustellen
+            self._restore_backup()
+            return False
+
+    def _create_tables(self, conn):
+        """Erstellt alle notwendigen Tabellen"""
+        try:
+            # Users Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    email TEXT,
+                    firstname TEXT,
+                    lastname TEXT,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
                 )
             ''')
-            
-            # Führe die Standard-Initialisierung durch
-            self._insert_default_data(conn)
-            
-            # Erstelle alle Tabellen
-            self._create_tables(conn)
-            
-            # Prüfe ob die Version bereits existiert
-            cursor.execute('SELECT version FROM schema_version WHERE version = ?', (self.expected_version,))
-            if not cursor.fetchone():
-                # Setze die Schema-Version
-                conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
-                conn.commit()
-            
-            # Markiere diese Datenbank als initialisiert
-            SchemaManager._initialized_dbs.add(self.db_path)
-            self._initialized = True
-            logger.info(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
+
+            # Tools Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tools (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    category TEXT,
+                    location TEXT,
+                    status TEXT DEFAULT 'verfügbar',
+                    last_maintenance DATE,
+                    next_maintenance DATE,
+                    maintenance_interval INTEGER,
+                    last_checked TIMESTAMP,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Workers Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS workers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT UNIQUE NOT NULL,
+                    firstname TEXT NOT NULL,
+                    lastname TEXT NOT NULL,
+                    department TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Consumables Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS consumables (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    barcode TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    quantity INTEGER DEFAULT 0,
+                    min_quantity INTEGER DEFAULT 0,
+                    category TEXT,
+                    location TEXT,
+                    unit TEXT,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Lendings Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS lendings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tool_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    returned_at TIMESTAMP,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (tool_barcode) REFERENCES tools(barcode),
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
+                )
+            ''')
+
+            # Consumable Usages Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS consumable_usages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    consumable_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
+                )
+            ''')
+
+            # Settings Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    description TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # History Tabelle
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    action TEXT NOT NULL,
+                    item_type TEXT NOT NULL,
+                    item_id TEXT NOT NULL,
+                    user_id INTEGER,
+                    details TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+
+            # Erstelle Indizes für bessere Performance
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_tools_barcode ON tools(barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_workers_barcode ON workers(barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_consumables_barcode ON consumables(barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_lendings_tool_barcode ON lendings(tool_barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_lendings_worker_barcode ON lendings(worker_barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_consumable_usages_consumable_barcode ON consumable_usages(consumable_barcode)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_consumable_usages_worker_barcode ON consumable_usages(worker_barcode)')
+
+            logger.info("Alle Tabellen und Indizes erfolgreich erstellt")
             return True
+
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen der Tabellen: {str(e)}")
+            raise
+
+    def create_admin_user(self, password):
+        """Erstellt den Admin-Benutzer mit dem angegebenen Passwort"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Prüfe ob es bereits Benutzer gibt
+                cursor.execute('SELECT COUNT(*) FROM users')
+                user_count = cursor.fetchone()[0]
+                
+                # Wenn keine Benutzer existieren, erstelle Admin-Account
+                if user_count == 0:
+                    cursor.execute('''
+                        INSERT INTO users (username, password_hash, role)
+                        VALUES (?, ?, ?)
+                    ''', [
+                        'admin',
+                        generate_password_hash(password),
+                        'admin'
+                    ])
+                    conn.commit()
+                    logger.info("Admin-Benutzer erfolgreich erstellt")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Admin-Benutzers: {str(e)}")
+            return False
 
     def needs_update(self):
         """Prüfe, ob ein Update notwendig ist"""
@@ -762,29 +662,6 @@ class SchemaManager:
             ''')
             
             conn.commit()
-
-    def create_admin_user(self, password):
-        """Erstellt den Admin-Benutzer mit dem angegebenen Passwort"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Prüfe ob es bereits Benutzer gibt
-            cursor.execute('SELECT COUNT(*) FROM users')
-            user_count = cursor.fetchone()[0]
-            
-            # Wenn keine Benutzer existieren, erstelle Admin-Account
-            if user_count == 0:
-                cursor.execute('''
-                    INSERT INTO users (username, password_hash, role)
-                    VALUES (?, ?, ?)
-                ''', [
-                    'admin',
-                    generate_password_hash(password),
-                    'admin'
-                ])
-                conn.commit()
-                return True
-            return False
 
     def _get_db_connection(self):
         """Gibt eine Datenbankverbindung zurück"""

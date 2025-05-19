@@ -7,6 +7,9 @@ from app.config import Config
 import json
 from pathlib import Path
 import shutil
+from contextlib import contextmanager
+import threading
+import time
 
 # Optional requests importieren
 try:
@@ -17,12 +20,199 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class Database:
-    """Stellt Methoden für die Interaktion mit der SQLite-Datenbank bereit.
+    _instance = None
+    _lock = threading.Lock()
+    _connection = None
+    _last_used = None
+    _timeout = 300  # 5 Minuten Timeout für Verbindungen
+    _max_retries = 3  # Maximale Anzahl von Wiederholungsversuchen
+    _retry_delay = 1  # Verzögerung zwischen Wiederholungsversuchen in Sekunden
 
-    Verwendet rohes SQL für Abfragen und Operationen. Bietet Methoden zum
-    Abrufen von Verbindungen, Ausführen von Abfragen und zur Schema-Inspektion.
-    """
-    
+    @classmethod
+    def get_instance(cls):
+        """Singleton-Pattern für die Datenbankverbindung"""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        """Initialisiert die Datenbankverbindung"""
+        self.current_config = Config.config['default']()
+        self.db_path = os.path.join(self.current_config.BASE_DIR, 'app', 'database', 'inventory.db')
+        self._ensure_connection()
+
+    def _ensure_connection(self):
+        """Stellt sicher, dass eine gültige Verbindung existiert"""
+        current_time = datetime.now()
+        
+        # Prüfe ob die Verbindung abgelaufen ist
+        if (self._last_used and 
+            (current_time - self._last_used).total_seconds() > self._timeout):
+            self.close_connection()
+        
+        # Erstelle neue Verbindung wenn nötig
+        if not self._connection:
+            for attempt in range(self._max_retries):
+                try:
+                    self._connection = sqlite3.connect(
+                        self.db_path,
+                        timeout=20.0,  # Timeout für Locks
+                        check_same_thread=False  # Erlaubt Zugriff von verschiedenen Threads
+                    )
+                    self._connection.row_factory = sqlite3.Row
+                    
+                    # Aktiviere Foreign Keys
+                    self._connection.execute("PRAGMA foreign_keys = ON")
+                    
+                    # Aktiviere WAL-Modus für bessere Performance
+                    self._connection.execute("PRAGMA journal_mode = WAL")
+                    
+                    # Setze Busy-Timeout
+                    self._connection.execute("PRAGMA busy_timeout = 5000")
+                    
+                    # Aktiviere Synchronisierung
+                    self._connection.execute("PRAGMA synchronous = NORMAL")
+                    
+                    # Setze Cache-Größe
+                    self._connection.execute("PRAGMA cache_size = -2000")  # 2MB Cache
+                    
+                    logger.info("Neue Datenbankverbindung erstellt")
+                    break
+                except Exception as e:
+                    if attempt < self._max_retries - 1:
+                        logger.warning(f"Verbindungsversuch {attempt + 1} fehlgeschlagen: {str(e)}")
+                        time.sleep(self._retry_delay)
+                    else:
+                        logger.error(f"Fehler beim Erstellen der Datenbankverbindung nach {self._max_retries} Versuchen: {str(e)}")
+                        raise
+
+    @contextmanager
+    def get_connection(self):
+        """Kontext-Manager für Datenbankverbindungen"""
+        try:
+            self._ensure_connection()
+            self._last_used = datetime.now()
+            yield self._connection
+        except Exception as e:
+            logger.error(f"Fehler bei der Datenbankoperation: {str(e)}")
+            if self._connection:
+                try:
+                    self._connection.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Fehler beim Rollback: {str(rollback_error)}")
+            raise
+        finally:
+            self._last_used = datetime.now()
+
+    def close_connection(self):
+        """Schließt die aktuelle Datenbankverbindung"""
+        if self._connection:
+            try:
+                # Führe WAL-Checkpoint durch
+                self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                self._connection.close()
+                logger.info("Datenbankverbindung geschlossen")
+            except Exception as e:
+                logger.error(f"Fehler beim Schließen der Datenbankverbindung: {str(e)}")
+            finally:
+                self._connection = None
+
+    def execute_query(self, query, params=None):
+        """Führt eine SQL-Abfrage aus"""
+        for attempt in range(self._max_retries):
+            try:
+                with self.get_connection() as conn:
+                    cursor = conn.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+                    conn.commit()
+                    return cursor.fetchall()
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < self._max_retries - 1:
+                    logger.warning(f"Datenbank gesperrt, Versuch {attempt + 1} von {self._max_retries}")
+                    time.sleep(self._retry_delay)
+                else:
+                    logger.error(f"Fehler bei der Ausführung der Abfrage: {str(e)}")
+                    raise
+            except Exception as e:
+                logger.error(f"Fehler bei der Ausführung der Abfrage: {str(e)}")
+                raise
+
+    def execute_many(self, query, params_list):
+        """Führt mehrere SQL-Abfragen aus"""
+        for attempt in range(self._max_retries):
+            try:
+                with self.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.executemany(query, params_list)
+                    conn.commit()
+                    return
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < self._max_retries - 1:
+                    logger.warning(f"Datenbank gesperrt, Versuch {attempt + 1} von {self._max_retries}")
+                    time.sleep(self._retry_delay)
+                else:
+                    logger.error(f"Fehler bei der Ausführung mehrerer Abfragen: {str(e)}")
+                    raise
+            except Exception as e:
+                logger.error(f"Fehler bei der Ausführung mehrerer Abfragen: {str(e)}")
+                raise
+
+    def backup_database(self):
+        """Erstellt ein Backup der Datenbank"""
+        backup_path = f"{self.db_path}.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        try:
+            with self.get_connection() as conn:
+                # WAL-Datei synchronisieren
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                
+                # Backup erstellen
+                with sqlite3.connect(backup_path) as backup_conn:
+                    conn.backup(backup_conn)
+                
+                logger.info(f"Datenbank-Backup erstellt: {backup_path}")
+                return backup_path
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+            raise
+
+    def vacuum(self):
+        """Führt VACUUM auf der Datenbank aus"""
+        with self.get_connection() as conn:
+            try:
+                # Führe WAL-Checkpoint durch
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                
+                # Führe VACUUM aus
+                conn.execute("VACUUM")
+                logger.info("Datenbank-VACUUM durchgeführt")
+            except Exception as e:
+                logger.error(f"Fehler beim VACUUM: {str(e)}")
+                raise
+
+    def check_integrity(self):
+        """Überprüft die Datenbankintegrität"""
+        with self.get_connection() as conn:
+            try:
+                # Führe WAL-Checkpoint durch
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                
+                # Prüfe Integrität
+                result = conn.execute("PRAGMA integrity_check").fetchone()
+                if result[0] == "ok":
+                    logger.info("Datenbankintegrität OK")
+                    return True
+                else:
+                    logger.error(f"Datenbankintegritätsprüfung fehlgeschlagen: {result[0]}")
+                    return False
+            except Exception as e:
+                logger.error(f"Fehler bei der Integritätsprüfung: {str(e)}")
+                raise
+
     @classmethod
     def print_database_contents(cls):
         """Gibt den Inhalt aller Tabellen der Hauptdatenbank (inventory.db) zu Debugging-Zwecken aus.
@@ -377,16 +567,6 @@ class Database:
             return []
     
     @classmethod
-    def close_connection(cls):
-        """Schließt die aktuelle Datenbankverbindung"""
-        if hasattr(g, 'db'):
-            try:
-                g.db.close()
-                delattr(g, 'db')
-            except Exception as e:
-                logger.error(f"Fehler beim Schließen der Datenbankverbindung: {str(e)}")
-    
-    @classmethod
     def restore_backup(cls, backup_file):
         """Stellt ein Backup wieder her"""
         try:
@@ -454,6 +634,8 @@ class Database:
         """Initialisiert die Datenbankverbindung für die Flask-App"""
         @app.teardown_appcontext
         def close_db(error):
+            if error:
+                logger.error(f"Fehler beim Beenden des Request-Kontexts: {str(error)}")
             cls.close_connection()
 
     @classmethod
