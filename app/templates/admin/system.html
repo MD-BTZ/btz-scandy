@@ -390,36 +390,44 @@ document.addEventListener('click', function(e) {
 });
 
 // Event-Listener für Logo-Upload
-document.getElementById('logoInput').addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM geladen, rufe loadAvailableLogos auf...');
+    loadAvailableLogos();
     
-    const formData = new FormData();
-    formData.append('logo', file);
-    
-    try {
-        const response = await fetch('/admin/upload-logo', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            // Aktualisiere das Logo-Bild
-            const logoImg = document.querySelector('.navbar-brand img');
-            if (logoImg) {
-                logoImg.src = data.path;
+    const logoInput = document.getElementById('logoInput');
+    if (logoInput) {
+        logoInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('logo', file);
+            
+            try {
+                const response = await fetch('/admin/upload-logo', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    // Aktualisiere das Logo-Bild
+                    const logoImg = document.querySelector('.navbar-brand img');
+                    if (logoImg) {
+                        logoImg.src = data.path;
+                    }
+                    // Zeige Erfolgsmeldung
+                    alert('Logo erfolgreich hochgeladen');
+                    // Lade die verfügbaren Logos neu
+                    loadAvailableLogos();
+                } else {
+                    alert(data.message || 'Fehler beim Hochladen des Logos');
+                }
+            } catch (error) {
+                console.error('Fehler:', error);
+                alert('Fehler beim Hochladen des Logos');
             }
-            // Zeige Erfolgsmeldung
-            alert('Logo erfolgreich hochgeladen');
-            // Lade die verfügbaren Logos neu
-            loadAvailableLogos();
-        } else {
-            alert(data.message || 'Fehler beim Hochladen des Logos');
-        }
-    } catch (error) {
-        console.error('Fehler:', error);
-        alert('Fehler beim Hochladen des Logos');
+        });
     }
 });
 

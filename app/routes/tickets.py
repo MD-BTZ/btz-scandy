@@ -100,34 +100,17 @@ def view(ticket_id):
     # Hole die Nachrichten für das Ticket
     logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
     
-    # Direkte SQL-Abfrage mit Database.get_db()
-    with Database.get_db() as db:
-        cursor = db.cursor()
-        cursor.execute(
-            """
-            SELECT id, message, sender, is_admin, created_at
-            FROM ticket_messages
-            WHERE ticket_id = ?
-            ORDER BY created_at ASC
-            """,
-            [ticket_id]
-        )
-        raw_messages = cursor.fetchall()
-        logging.info(f"SQL-Abfrage ergab {len(raw_messages)} Nachrichten")
-        
-        # Konvertiere sqlite3.Row in Dictionaries und formatiere Datum
-        messages = []
-        for msg in raw_messages:
-            message_dict = dict(msg)
-            if message_dict['created_at']:
-                try:
-                    created_at = datetime.strptime(message_dict['created_at'], '%Y-%m-%d %H:%M:%S')
-                    message_dict['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-                    logging.info(f"Nachricht {message_dict['id']} formatiert: {message_dict['created_at']}")
-                except ValueError as e:
-                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {message_dict['id']}: {str(e)}")
-            messages.append(message_dict)
-            logging.info(f"Nachricht verarbeitet: ID={message_dict['id']}, Sender={message_dict['sender']}, Text={message_dict['message']}, Datum={message_dict['created_at']}")
+    # Verwende ticket_db.get_ticket_messages statt direkter SQL-Abfrage für Konsistenz
+    messages = ticket_db.get_ticket_messages(ticket_id)
+    
+    # Formatiere die Datumsfelder für die Anzeige
+    for message in messages:
+        if message.get('created_at'):
+            try:
+                created_at = datetime.strptime(message['created_at'], '%Y-%m-%d %H:%M:%S')
+                message['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
+            except ValueError as e:
+                logging.error(f"Fehler beim Formatieren des Datums für Nachricht: {str(e)}")
     
     message_count = len(messages)
     logging.info(f"Nachrichtenanzahl: {message_count}")
@@ -135,38 +118,40 @@ def view(ticket_id):
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
     
+    # Definiere die Status-Farben (wie im Admin-Panel)
+    status_colors = {
+        'offen': 'danger',
+        'in_bearbeitung': 'warning',
+        'wartet_auf_antwort': 'info',
+        'gelöst': 'success',
+        'geschlossen': 'secondary'
+    }
+    
     return render_template('tickets/view.html',
                          ticket=ticket,
                          messages=messages,
                          notes=notes,
                          message_count=message_count,
+                         status_colors=status_colors,
                          now=datetime.now())
 
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
 @login_required
 def add_message(ticket_id):
-    """Fügt eine neue Nachricht zu einem Ticket hinzu."""
+    """Fügt eine neue Nachricht zu einem Ticket hinzu"""
     try:
-        # Ticket aus der Datenbank abrufen
-        ticket = ticket_db.query(
-            """
-            SELECT *
-            FROM tickets
-            WHERE id = ? AND created_by = ?
-            """,
-            [ticket_id, current_user.username],
-            one=True
-        )
+        # Prüfe ob das Ticket existiert
+        ticket = ticket_db.get_ticket(ticket_id)
         if not ticket:
-            logging.error(f"Ticket {ticket_id} nicht gefunden für Benutzer {current_user.username}")
+            logging.error(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
-
-        # Nachricht aus dem Request extrahieren
+        
+        # Hole die Nachricht aus dem Request
+        if not request.is_json:
+            logging.error("Ungültiges Anfrageformat (kein JSON)")
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+            
         data = request.get_json()
-        if not data or 'message' not in data:
-            logging.error("Keine Nachricht im Request gefunden")
-            return jsonify({'success': False, 'message': 'Keine Nachricht angegeben'}), 400
-
         message = data['message'].strip()
         if not message:
             logging.error("Leere Nachricht")
@@ -174,58 +159,30 @@ def add_message(ticket_id):
 
         logging.info(f"Versuche Nachricht zu speichern: Ticket {ticket_id}, Benutzer {current_user.username}, Nachricht: {message}")
 
-        # Nachricht zur Datenbank hinzufügen
-        with Database.get_db() as db:
-            cursor = db.cursor()
-            cursor.execute(
-                """
-                INSERT INTO ticket_messages (ticket_id, message, sender, is_admin, created_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                """,
-                [ticket_id, message, current_user.username, False]
-            )
-            
-            # Ticket updated_at aktualisieren
-            cursor.execute(
-                """
-                UPDATE tickets
-                SET updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                [ticket_id]
-            )
-            
-            db.commit()
-            logging.info(f"Nachricht erfolgreich gespeichert mit ID {cursor.lastrowid}")
+        # Verwende ticket_db.add_ticket_message statt direkter SQL-Abfragen
+        is_admin = current_user.is_admin if hasattr(current_user, 'is_admin') else False
+        ticket_db.add_ticket_message(
+            ticket_id=ticket_id, 
+            message=message, 
+            sender=current_user.username, 
+            is_admin=is_admin
+        )
+        
+        logging.info(f"Nachricht erfolgreich gespeichert")
 
-            # Hole die eingefügte Nachricht
-            cursor.execute(
-                """
-                SELECT id, message, sender, is_admin, created_at
-                FROM ticket_messages
-                WHERE id = ?
-                """,
-                [cursor.lastrowid]
-            )
-            new_message = cursor.fetchone()
+        # Hole die aktuelle Zeit für die Antwort
+        created_at = datetime.now()
+        formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
 
-            if not new_message:
-                logging.error("Konnte die neue Nachricht nicht abrufen")
-                return jsonify({'success': False, 'message': 'Fehler beim Abrufen der Nachricht'}), 500
-
-            # Formatiere das Datum
-            created_at = datetime.strptime(new_message['created_at'], '%Y-%m-%d %H:%M:%S')
-            formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
-
-            return jsonify({
-                'success': True,
-                'message': {
-                    'text': new_message['message'],
-                    'sender': new_message['sender'],
-                    'created_at': formatted_date,
-                    'is_admin': new_message['is_admin']
-                }
-            })
+        return jsonify({
+            'success': True,
+            'message': {
+                'text': message,
+                'sender': current_user.username,
+                'created_at': formatted_date,
+                'is_admin': is_admin
+            }
+        })
 
     except Exception as e:
         logging.error(f"Fehler beim Hinzufügen der Nachricht: {str(e)}", exc_info=True)

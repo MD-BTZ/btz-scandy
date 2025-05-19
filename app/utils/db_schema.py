@@ -279,15 +279,15 @@ class SchemaManager:
             default_settings = [
                 ('label_tools_name', 'Werkzeuge', 'Anzeigename für Werkzeuge'),
                 ('label_tools_icon', 'fas fa-tools', 'Icon für Werkzeuge'),
-                ('label_consumables_name', 'Material', 'Anzeigename für Material'),
-                ('label_consumables_icon', 'fas fa-box', 'Icon für Material'),
+                ('label_consumables_name', 'Verbrauchsmaterial', 'Anzeigename für Material'),
+                ('label_consumables_icon', 'fas fa-box-open', 'Icon für Material'),
                 ('color_primary', '#1a73e8', 'Primäre Farbe'),
                 ('color_secondary', '#5f6368', 'Sekundäre Farbe'),
                 ('color_success', '#34a853', 'Erfolgsfarbe'),
                 ('color_warning', '#fbbc04', 'Warnfarbe'),
                 ('color_error', '#ea4335', 'Fehlerfarbe'),
                 ('default_tool_icon', 'fas fa-tools', 'Standard-Icon für Werkzeuge'),
-                ('default_consumable_icon', 'fas fa-box', 'Standard-Icon für Verbrauchsmaterial')
+                ('default_consumable_icon', 'fas fa-box-open', 'Standard-Icon für Verbrauchsmaterial')
             ]
             
             # Einstellungen einfügen

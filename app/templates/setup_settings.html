@@ -35,7 +35,7 @@
                                 </label>
                                 <input type="hidden" name="label_tools_icon" id="tools-icon-input" value="{{ label_tools_icon|default('fas fa-tools') }}">
                                 <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tools')">
-                                    <span><i id="tools-icon-preview" class="fas fa-tools text-xl"></i></span>
+                                    <span><i id="tools-icon-preview" class="{{ label_tools_icon|default('fas fa-tools') }} text-xl"></i></span>
                                     <span class="ml-2">Icon wählen</span>
                                     <i class="fas fa-chevron-down ml-auto"></i>
                                 </button>
@@ -60,9 +60,9 @@
                                 <label class="label flex items-center gap-2">
                                     <span class="label-text">Icon</span>
                                 </label>
-                                <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ label_consumables_icon|default('fas fa-box') }}">
+                                <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ label_consumables_icon|default('fas fa-box-open') }}">
                                 <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('consumables')">
-                                    <span><i id="consumables-icon-preview" class="fas fa-box text-xl"></i></span>
+                                    <span><i id="consumables-icon-preview" class="{{ label_consumables_icon|default('fas fa-box-open') }} text-xl"></i></span>
                                     <span class="ml-2">Icon wählen</span>
                                     <i class="fas fa-chevron-down ml-auto"></i>
                                 </button>

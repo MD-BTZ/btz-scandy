@@ -2,6 +2,7 @@ import os
 import sqlite3
 import shutil
 from datetime import datetime
+from flask import current_app
 
 def migrate_database():
     # Pfade definieren

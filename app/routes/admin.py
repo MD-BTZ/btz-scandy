@@ -1784,7 +1784,7 @@ def list_locations():
     return jsonify({'success': True, 'locations': [dict(loc) for loc in locations]})
 
 @bp.route('/categories/list')
-@admin_required
+@mitarbeiter_required
 def list_categories():
     """Liste alle Kategorien auf"""
     categories = Database.query("""
@@ -2029,7 +2029,7 @@ def delete_notice(id):
 
 @bp.route('/tickets')
 @login_required
-@admin_required
+@mitarbeiter_required
 def tickets():
     from app.models.ticket_db import TicketDatabase
     ticket_db = TicketDatabase()
@@ -2557,9 +2557,9 @@ def delete_worker_permanent(barcode):
 
 @bp.route('/tickets/<int:ticket_id>')
 @login_required
-@admin_required
+@mitarbeiter_required
 def ticket_detail(ticket_id):
-    """Zeigt die Details eines Tickets für Administratoren."""
+    """Zeigt die Details eines Tickets für Administratoren und Mitarbeiter."""
     print(f"DEBUG: Ticket-Detail-Ansicht für Ticket {ticket_id} wird geladen")
     
     # Hole das Ticket
@@ -2627,16 +2627,12 @@ def ticket_detail(ticket_id):
 
 @bp.route('/tickets/<int:ticket_id>/message', methods=['POST'])
 @login_required
-@admin_required
+@mitarbeiter_required
 def add_ticket_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu."""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = ticket_db.query(
-            "SELECT * FROM tickets WHERE id = ?",
-            [ticket_id],
-            one=True
-        )
+        ticket = ticket_db.get_ticket(ticket_id)
         
         if not ticket:
             return jsonify({
@@ -2667,10 +2663,19 @@ def add_ticket_message(ticket_id):
             sender=current_user.username,
             is_admin=True
         )
+        
+        # Bereite die Antwort vor, formatiert wie der Client sie erwartet
+        created_at = datetime.now()
+        formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
 
         return jsonify({
             'success': True,
-            'message': message  # Sende die Nachricht zurück
+            'message': {
+                'text': message,
+                'sender': current_user.username,
+                'created_at': formatted_date,
+                'is_admin': True
+            }
         })
 
     except Exception as e:
@@ -2682,7 +2687,7 @@ def add_ticket_message(ticket_id):
 
 @bp.route('/tickets/<int:ticket_id>/note', methods=['POST'])
 @login_required
-@admin_required
+@mitarbeiter_required
 def add_ticket_note(ticket_id):
     """Fügt eine neue Notiz zu einem Ticket hinzu (immer öffentlich, keine Unterscheidung mehr)."""
     try:
@@ -2791,7 +2796,7 @@ def add_ticket_note(ticket_id):
 
 @bp.route('/tickets/<int:ticket_id>/update', methods=['POST'])
 @login_required
-@admin_required
+@mitarbeiter_required
 def update_ticket(ticket_id):
     """Aktualisiert ein Ticket."""
     try:

@@ -3,6 +3,7 @@ from app.utils.db_schema import SchemaManager
 from app.config import config
 from werkzeug.security import generate_password_hash
 from app.models.ticket_db import TicketDatabase
+from app.models.settings import Settings
 import logging
 
 # Logger einrichten
@@ -47,18 +48,19 @@ def setup_settings():
     if request.method == 'POST':
         label_tools_name = request.form.get('label_tools_name', '').strip() or 'Werkzeuge'
         label_tools_icon = request.form.get('label_tools_icon', '').strip() or 'fas fa-tools'
-        label_consumables_name = request.form.get('label_consumables_name', '').strip() or 'Material'
+        label_consumables_name = request.form.get('label_consumables_name', '').strip() or 'Verbrauchsmaterial'
         label_consumables_icon = request.form.get('label_consumables_icon', '').strip() or 'fas fa-box-open'
         
         print("DEBUG: request.form:", dict(request.form))
         logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
         
         try:
-            # Speichere die Einstellungen exakt wie im Dashboard/System-Menü
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_name', label_tools_name])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_tools_icon', label_tools_icon])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_name', label_consumables_name])
-            TicketDatabase.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['label_consumables_icon', label_consumables_icon])
+            # Verwende die Settings-Klasse für konsistente Datenbankoperationen
+            Settings.set('label_tools_name', label_tools_name)
+            Settings.set('label_tools_icon', label_tools_icon)
+            Settings.set('label_consumables_name', label_consumables_name)
+            Settings.set('label_consumables_icon', label_consumables_icon)
+            
             return redirect(url_for('setup.setup_optional'))
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Grundeinstellungen: {e}")
@@ -78,31 +80,23 @@ def setup_optional():
         departments = request.form.getlist('departments[]')
         
         try:
-            # Speichere die optionalen Einstellungen
-            with TicketDatabase.get_db() as conn:
-                cursor = conn.cursor()
-                # Kategorien
-                for i, category in enumerate(categories):
-                    if category.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'category_{i+1}', category.strip(), 'Kategorie'))
-                # Standorte
-                for i, location in enumerate(locations):
-                    if location.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'location_{i+1}', location.strip(), 'Standort'))
-                # Abteilungen
-                for i, department in enumerate(departments):
-                    if department.strip():
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO settings (key, value, description)
-                            VALUES (?, ?, ?)
-                        ''', (f'department_{i+1}', department.strip(), 'Abteilung'))
-                conn.commit()
+            # Verwende die Settings-Klasse für konsistente Datenbankoperationen
+            from app.models.settings import Settings
+            
+            # Kategorien
+            for i, category in enumerate(categories):
+                if category.strip():
+                    Settings.set(f'category_{i+1}', category.strip(), description='Kategorie')
+                    
+            # Standorte
+            for i, location in enumerate(locations):
+                if location.strip():
+                    Settings.set(f'location_{i+1}', location.strip(), description='Standort')
+                    
+            # Abteilungen
+            for i, department in enumerate(departments):
+                if department.strip():
+                    Settings.set(f'department_{i+1}', department.strip(), description='Abteilung')
             
             flash('Einrichtung erfolgreich abgeschlossen!', 'success')
             return redirect(url_for('auth.login'))
@@ -121,6 +115,11 @@ def is_admin_user_present():
     return count > 0
 
 def create_admin_user(username, password, role):
-    ticket_db = TicketDatabase()
-    hashed_password = generate_password_hash(password)
-    ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role]) 
+    try:
+        ticket_db = TicketDatabase()
+        hashed_password = generate_password_hash(password)
+        ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role])
+        return True, "Admin-Benutzer erfolgreich erstellt"
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des Admin-Benutzers: {e}")
+        return False, "Fehler beim Erstellen des Admin-Benutzers" 

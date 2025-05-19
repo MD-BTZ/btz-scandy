@@ -251,23 +251,13 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
             const newMessage = document.createElement('div');
             newMessage.className = 'chat chat-end';
             
-            // Aktuelles Datum formatieren
-            const now = new Date();
-            const formattedDate = now.toLocaleString('de-DE', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            
             newMessage.innerHTML = `
                 <div class="chat-header">
-                    {{ current_user.username }}
-                    <time class="text-xs opacity-50">${formattedDate}</time>
+                    ${data.message.sender}
+                    <time class="text-xs opacity-50">${data.message.created_at}</time>
                 </div>
                 <div class="chat-bubble chat-bubble-primary">
-                    ${data.message}
+                    ${data.message.text}
                 </div>
             `;
             
