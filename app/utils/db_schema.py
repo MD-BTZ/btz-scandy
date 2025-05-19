@@ -158,8 +158,7 @@ class SchemaManager:
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
-                description TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                description TEXT
             )
         ''')
         
@@ -303,6 +302,68 @@ class SchemaManager:
             )
         ''')
 
+        # Categories Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Locations Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS locations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Consumable Lendings Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS consumable_lendings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                consumable_barcode TEXT NOT NULL,
+                worker_barcode TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                lending_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                return_time TIMESTAMP,
+                FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode),
+                FOREIGN KEY (worker_barcode) REFERENCES workers(barcode)
+            )
+        ''')
+
+        # Tool Status Changes Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS tool_status_changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool_barcode TEXT NOT NULL,
+                old_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                reason TEXT,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (tool_barcode) REFERENCES tools(barcode)
+            )
+        ''')
+
+        # History Tabelle
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                user_id INTEGER,
+                details TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
     def _insert_default_data(self, conn):
         """Fügt Standarddaten in die Datenbank ein, wenn sie noch nicht existieren."""
         with conn:
@@ -325,6 +386,7 @@ class SchemaManager:
                 ('color_success', '#34a853', 'Erfolgsfarbe'),
                 ('color_warning', '#fbbc04', 'Warnfarbe'),
                 ('color_error', '#ea4335', 'Fehlerfarbe'),
+                ('custom_logo', 'images/BTZ_logo.jpg', 'Benutzerdefiniertes Logo'),
                 ('default_tool_icon', 'fas fa-tools', 'Standard-Icon für Werkzeuge'),
                 ('default_consumable_icon', 'fas fa-box', 'Standard-Icon für Verbrauchsmaterial')
             ]
@@ -338,38 +400,37 @@ class SchemaManager:
                 logger.info(f"Standardeinstellung {key} hinzugefügt")
 
     def initialize(self):
-        """Initialisiere die Datenbank nur wenn sie noch nicht initialisiert wurde"""
-        # Prüfe ob diese Datenbank bereits initialisiert wurde
-        if self.db_path in SchemaManager._initialized_dbs:
-            return True
+        """Initialisiert die Datenbank mit allen notwendigen Tabellen"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
             
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Erstelle alle Tabellen
-                self._create_tables(conn)
-                
-                # Prüfe ob die Version bereits existiert
-                cursor = conn.cursor()
-                cursor.execute('SELECT version FROM schema_version WHERE version = ?', (self.expected_version,))
-                if not cursor.fetchone():
-                    # Füge Standard-Daten nur ein, wenn die Datenbank neu ist
-                    self._insert_default_data(conn)
-                    
-                    # Initialisiere die Users-Tabelle
-                    self.init_users_table()
-                    
-                    # Setze die Schema-Version
-                    conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
-                    conn.commit()
-                
-                # Markiere diese Datenbank als initialisiert
-                SchemaManager._initialized_dbs.add(self.db_path)
-                self._initialized = True
-                logger.info(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
-                return True
-        except Exception as e:
-            logger.error(f"Fehler beim Initialisieren der Datenbank: {str(e)}")
-            return False
+            # Settings Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    description TEXT
+                )
+            ''')
+            
+            # Führe die Standard-Initialisierung durch
+            self._insert_default_data(conn)
+            
+            # Erstelle alle Tabellen
+            self._create_tables(conn)
+            
+            # Prüfe ob die Version bereits existiert
+            cursor.execute('SELECT version FROM schema_version WHERE version = ?', (self.expected_version,))
+            if not cursor.fetchone():
+                # Setze die Schema-Version
+                conn.execute('INSERT INTO schema_version (version) VALUES (?)', (self.expected_version,))
+                conn.commit()
+            
+            # Markiere diese Datenbank als initialisiert
+            SchemaManager._initialized_dbs.add(self.db_path)
+            self._initialized = True
+            logger.info(f"Datenbankschema auf Version {self.expected_version} aktualisiert")
+            return True
 
     def needs_update(self):
         """Prüfe, ob ein Update notwendig ist"""
