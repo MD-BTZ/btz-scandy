@@ -252,9 +252,9 @@ async function deleteCategory(name) {
             const response = await fetch('/admin/categories/delete', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Type': 'application/json',
                 },
-                body: `category=${encodeURIComponent(name)}`
+                body: JSON.stringify({ name: name })
             });
             const data = await response.json();
             if (data.success) {
