@@ -513,17 +513,13 @@ class Database:
             with cls.get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT s.value as name,
-                           COUNT(DISTINCT t.id) as tool_count,
-                           COUNT(DISTINCT c.id) as consumable_count
-                    FROM settings s
-                    LEFT JOIN tools t ON t.location = s.value
-                    LEFT JOIN consumables c ON c.location = s.value
-                    WHERE s.key LIKE 'location_%'
-                    AND s.value IS NOT NULL
-                    AND s.value != ''
-                    GROUP BY s.value
-                    ORDER BY s.value
+                    SELECT name,
+                           description,
+                           (SELECT COUNT(*) FROM tools WHERE location = l.name AND deleted = 0) as tool_count,
+                           (SELECT COUNT(*) FROM consumables WHERE location = l.name AND deleted = 0) as consumable_count
+                    FROM locations l
+                    WHERE deleted = 0
+                    ORDER BY name
                 """)
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:

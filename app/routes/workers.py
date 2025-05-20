@@ -38,14 +38,12 @@ def index():
         if workers:
             print("Erster Datensatz:", dict(workers[0]))
         
-        # Hole alle Abteilungen aus den Settings
+        # Hole alle Abteilungen aus der departments Tabelle
         departments = Database.query('''
-            SELECT value as name
-            FROM settings 
-            WHERE key LIKE 'department_%'
-            AND value IS NOT NULL
-            AND value != ''
-            ORDER BY value
+            SELECT name
+            FROM departments 
+            WHERE deleted = 0
+            ORDER BY name
         ''')
         
         print(f"Gefundene Abteilungen: {[d['name'] for d in departments]}")
@@ -65,14 +63,12 @@ def index():
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
 def add():
-    # Lade Abteilungen aus Settings
+    # Lade Abteilungen aus der departments Tabelle
     departments = Database.query('''
-        SELECT value as name
-        FROM settings 
-        WHERE key LIKE 'department_%'
-        AND value IS NOT NULL
-        AND value != ''
-        ORDER BY value
+        SELECT name
+        FROM departments 
+        WHERE deleted = 0
+        ORDER BY name
     ''')
     departments = [d['name'] for d in departments]
     
@@ -138,12 +134,10 @@ def details(original_barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
         departments = Database.query('''
-            SELECT value as name
-            FROM settings 
-            WHERE key LIKE 'department_%'
-            AND value IS NOT NULL
-            AND value != ''
-            ORDER BY value
+            SELECT name
+            FROM departments 
+            WHERE deleted = 0
+            ORDER BY name
         ''')
         departments = [d['name'] for d in departments]
         

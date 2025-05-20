@@ -89,7 +89,11 @@ class TicketDatabase:
                 ('color_success', '#28a745', 'Erfolgsfarbe'),
                 ('color_danger', '#dc3545', 'Fehlerfarbe'),
                 ('color_warning', '#ffc107', 'Warnfarbe'),
-                ('color_info', '#17a2b8', 'Infofarbe')
+                ('color_info', '#17a2b8', 'Infofarbe'),
+                ('label_tools_name', 'Werkzeuge', 'Anzeigename für Werkzeuge'),
+                ('label_tools_icon', 'fas fa-tools', 'Icon für Werkzeuge'),
+                ('label_consumables_name', 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'),
+                ('label_consumables_icon', 'fas fa-box-open', 'Icon für Verbrauchsmaterial')
             ]
             
             cursor.executemany('''

@@ -1,18 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}{{ tool.name }}{% endblock %}
+{% block title %}{{ tool.name }} - Details{% endblock %}
 
-{% block content %}
+{% block page_content %}
+<div class="mb-4">
+    <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+        <i class="fas fa-arrow-left mr-2"></i>
+        Zurück zur Übersicht
+    </a>
+</div>
 <div class="container mx-auto px-4 py-8">
     <div class="max-w-4xl mx-auto">
         <!-- Header -->
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold">{{ tool.name }}</h1>
             <div class="flex gap-2">
-                <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Zurück
-                </a>
                 <button class="btn btn-primary" onclick="editTool()">
                     <i class="fas fa-edit mr-2"></i>
                     Bearbeiten

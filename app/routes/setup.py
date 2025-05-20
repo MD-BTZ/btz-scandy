@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash
 from app.models.ticket_db import TicketDatabase
 import logging
 from app.models.database import Database
+from flask_login import login_required
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -44,64 +45,59 @@ def setup_admin():
     return render_template('setup_admin.html')
 
 @bp.route('/setup/settings', methods=['GET', 'POST'])
-def setup_settings():
+@login_required
+def settings():
+    """Systemeinstellungen"""
+    ticket_db = TicketDatabase()
     if request.method == 'POST':
-        label_tools_name = request.form.get('label_tools_name', '').strip()
-        label_tools_icon = request.form.get('label_tools_icon', '').strip()
-        label_consumables_name = request.form.get('label_consumables_name', '').strip()
-        label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
-        
-        logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
-        
         try:
-            ticket_db = TicketDatabase()
+            # Hole Formulardaten
+            label_tools_name = request.form.get('label_tools_name', '').strip()
+            label_tools_icon = request.form.get('label_tools_icon', '').strip()
+            label_consumables_name = request.form.get('label_consumables_name', '').strip()
+            label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
             
-            # Lösche zuerst die alten Einträge
-            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?)', 
-                          ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon'])
+            logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
             
-            # Füge die neuen Einträge ein
-            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
-                          ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
-            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
-                          ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
-            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
-                          ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
-            ticket_db.query('''INSERT INTO settings (key, value, description) VALUES (?, ?, ?)''', 
-                          ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
+            # Lösche alte Einstellungen
+            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?)',
+                ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon'])
             
-            return redirect(url_for('setup.setup_optional'))
+            # Füge neue Einstellungen hinzu
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
+            
+            flash('Einstellungen erfolgreich gespeichert', 'success')
+            return redirect(url_for('setup.settings'))
+            
         except Exception as e:
-            logger.error(f"Fehler beim Speichern der Grundeinstellungen: {e}")
-            return render_template('setup_settings.html', error='Fehler beim Speichern der Einstellungen',
-                label_tools_name=label_tools_name,
-                label_tools_icon=label_tools_icon,
-                label_consumables_name=label_consumables_name,
-                label_consumables_icon=label_consumables_icon)
+            logger.error(f"Fehler beim Speichern der Einstellungen: {str(e)}")
+            flash('Fehler beim Speichern der Einstellungen', 'error')
+            return redirect(url_for('setup.settings'))
     
-    # Lade vorhandene Einstellungen für die Anzeige
+    # GET: Zeige Einstellungen
     try:
-        ticket_db = TicketDatabase()
         settings = {}
-        
-        # Hole alle relevanten Einstellungen
-        results = ticket_db.query('''
-            SELECT key, value 
-            FROM settings 
-            WHERE key IN ('label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon')
-        ''')
-        
-        for row in results:
+        rows = ticket_db.query('SELECT key, value FROM settings')
+        for row in rows:
             settings[row['key']] = row['value']
-        
+            
         return render_template('setup_settings.html',
             label_tools_name=settings.get('label_tools_name', 'Werkzeuge'),
             label_tools_icon=settings.get('label_tools_icon', 'fas fa-tools'),
             label_consumables_name=settings.get('label_consumables_name', 'Verbrauchsmaterial'),
             label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'))
+            
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Einstellungen: {e}")
-        return render_template('setup_settings.html', error='Fehler beim Laden der Einstellungen')
+        logger.error(f"Fehler beim Laden der Einstellungen: {str(e)}")
+        flash('Fehler beim Laden der Einstellungen', 'error')
+        return redirect(url_for('main.index'))
 
 @bp.route('/setup/optional', methods=['GET', 'POST'])
 def setup_optional():

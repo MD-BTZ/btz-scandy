@@ -166,6 +166,10 @@ INSERT INTO new.lendings SELECT * FROM lendings;
 INSERT INTO new.consumable_usages SELECT * FROM consumable_usages;
 
 -- Settings
+-- Entferne nicht mehr verwendete Farbeinstellungen
+DELETE FROM settings WHERE key LIKE 'color_%';
+
+-- Kopiere die restlichen Einstellungen
 INSERT INTO new.settings SELECT * FROM settings;
 
 -- Tickets

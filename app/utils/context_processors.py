@@ -85,8 +85,28 @@ def inject_version():
         'version': VERSION
     }
 
+def inject_app_labels():
+    """Fügt die App-Labels in alle Templates ein"""
+    try:
+        with Database.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'label_%'")
+            rows = cursor.fetchall()
+            
+            label_dict = {}
+            for row in rows:
+                key = row['key'].replace('label_', '')
+                value = row['value']
+                label_dict[key] = value
+            
+            return {'app_labels': label_dict}
+    except Exception as e:
+        print(f"Fehler beim Laden der App-Labels: {str(e)}")
+        return {'app_labels': {}}
+
 def register_context_processors(app):
     """Registriert alle Context Processors"""
     app.context_processor(inject_colors)
     app.context_processor(inject_routes)
     app.context_processor(inject_version)
+    app.context_processor(inject_app_labels)

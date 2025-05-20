@@ -83,23 +83,24 @@ def index():
 def add():
     """Fügt ein neues Werkzeug hinzu"""
     if request.method == 'POST':
-        name = request.form.get('name')
-        barcode = request.form.get('barcode')
-        description = request.form.get('description')
-        category = request.form.get('category')
-        location = request.form.get('location')
-        
         try:
+            name = request.form.get('name')
+            barcode = request.form.get('barcode')
+            description = request.form.get('description')
+            category = request.form.get('category')
+            location = request.form.get('location')
+            status = request.form.get('status', 'verfügbar')  # Status aus dem Formular holen
+            
+            if not name or not barcode:
+                flash('Name und Barcode sind erforderlich', 'error')
+                return redirect(url_for('tools.add'))
+            
             # Prüfe ob der Barcode bereits existiert
             exists_count = Database.query('''
-                SELECT COUNT(*) as count FROM (
-                    SELECT barcode FROM tools WHERE barcode = ? AND deleted = 0
-                    UNION ALL 
-                    SELECT barcode FROM consumables WHERE barcode = ? AND deleted = 0
-                    UNION ALL
-                    SELECT barcode FROM workers WHERE barcode = ? AND deleted = 0
-                )
-            ''', [barcode, barcode, barcode], one=True)['count']
+                SELECT COUNT(*) as count 
+                FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode], one=True)['count']
             
             if exists_count > 0:
                 flash('Dieser Barcode existiert bereits', 'error')
@@ -125,15 +126,16 @@ def add():
                                        'barcode': barcode,
                                        'description': description,
                                        'category': category,
-                                       'location': location
+                                       'location': location,
+                                       'status': status
                                    })
             
             # Wenn Barcode eindeutig ist, füge das Werkzeug hinzu
             Database.query('''
                 INSERT INTO tools 
                 (name, barcode, description, category, location, status)
-                VALUES (?, ?, ?, ?, ?, 'verfügbar')
-            ''', [name, barcode, description, category, location])
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', [name, barcode, description, category, location, status])
             
             flash('Werkzeug erfolgreich hinzugefügt', 'success')
             return redirect(url_for('tools.index'))
@@ -163,7 +165,8 @@ def add():
                                    'barcode': barcode,
                                    'description': description,
                                    'category': category,
-                                   'location': location
+                                   'location': location,
+                                   'status': status
                                })
             
     else:
@@ -242,99 +245,6 @@ def detail(barcode):
                          locations=[l['name'] for l in locations],
                          history=history)
 
-@bp.route('/<int:id>/update', methods=['GET', 'POST'])
-@mitarbeiter_required
-def update(id):
-    """Aktualisiert ein Werkzeug"""
-    try:
-        if request.method == 'GET':
-            # Hole Werkzeug für das Formular
-            tool = Database.query('''
-                SELECT * FROM tools 
-                WHERE id = ? AND deleted = 0
-            ''', [id], one=True)
-            
-            if tool is None:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-                
-            return render_template('tools/edit.html', tool=tool)
-            
-        # POST-Anfrage
-        data = request.form
-        
-        Database.query('''
-            UPDATE tools 
-            SET name = ?,
-                barcode = ?,
-                category = ?,
-                location = ?,
-                description = ?,
-                modified_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', [
-            data.get('name'),
-            data.get('barcode'),
-            data.get('category'),
-            data.get('location'),
-            data.get('description'),
-            id
-        ])
-        
-        flash('Werkzeug erfolgreich aktualisiert', 'success')
-        return redirect(url_for('tools.detail', barcode=data.get('barcode')))
-        
-    except Exception as e:
-        print(f"Fehler beim Aktualisieren des Werkzeugs: {str(e)}")
-        flash(f'Fehler beim Aktualisieren: {str(e)}', 'error')
-        return redirect(url_for('tools.index'))
-
-@bp.route('/<string:barcode>/status', methods=['POST'])
-@login_required
-def change_status(barcode):
-    """Ändert den Status eines Werkzeugs"""
-    try:
-        new_status = request.form.get('status')
-        if not new_status:
-            flash('Kein Status angegeben', 'error')
-            return redirect(url_for('tools.detail', barcode=barcode))
-            
-        with Database.get_db() as conn:
-            # Prüfe ob das Werkzeug existiert
-            tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            if not tool:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-                
-            # Aktualisiere den Status
-            conn.execute('''
-                UPDATE tools 
-                SET status = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [new_status, barcode])
-            
-            # Protokolliere die Änderung
-            conn.execute('''
-                INSERT INTO tool_status_changes 
-                (tool_barcode, old_status, new_status, changed_by, changed_at)
-                VALUES (?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
-            ''', [barcode, tool['status'], new_status, session.get('username', 'unknown')])
-            
-            conn.commit()
-            
-            flash('Status erfolgreich aktualisiert', 'success')
-            return redirect(url_for('tools.detail', barcode=barcode))
-            
-    except Exception as e:
-        print(f"Fehler beim Status-Update: {str(e)}")
-        flash('Fehler beim Aktualisieren des Status', 'error')
-        return redirect(url_for('tools.detail', barcode=barcode))
-
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
 @mitarbeiter_required
 def edit(barcode):
@@ -346,9 +256,35 @@ def edit(barcode):
             category = request.form.get('category')
             location = request.form.get('location')
             new_barcode = request.form.get('barcode')  # Neuer Barcode aus dem Formular
+            new_status = request.form.get('status')  # Neuer Status aus dem Formular
             
             if not name:
                 flash('Name ist erforderlich', 'error')
+                return redirect(url_for('tools.edit', barcode=barcode))
+            
+            # Validiere den Status
+            if new_status not in ['verfügbar', 'defekt']:
+                flash('Ungültiger Status', 'error')
+                return redirect(url_for('tools.edit', barcode=barcode))
+            
+            # Hole den aktuellen Status des Werkzeugs
+            current_tool = Database.query('''
+                SELECT status, 
+                       EXISTS (
+                           SELECT 1 FROM lendings 
+                           WHERE tool_barcode = ? AND returned_at IS NULL
+                       ) as is_borrowed
+                FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode, barcode], one=True)
+            
+            if not current_tool:
+                flash('Werkzeug nicht gefunden', 'error')
+                return redirect(url_for('tools.index'))
+            
+            # Wenn das Werkzeug ausgeliehen ist, darf der Status nicht geändert werden
+            if current_tool['is_borrowed'] and new_status != current_tool['status']:
+                flash('Der Status kann nicht geändert werden, solange das Werkzeug ausgeliehen ist', 'error')
                 return redirect(url_for('tools.edit', barcode=barcode))
                 
             with Database.get_db() as conn:
@@ -360,14 +296,15 @@ def edit(barcode):
                         category = ?,
                         location = ?,
                         barcode = ?,
+                        status = ?,
                         sync_status = 'pending'
                     WHERE barcode = ?
-                ''', [name, description, category, location, new_barcode, barcode])
+                ''', [name, description, category, location, new_barcode, new_status, barcode])
                 
                 conn.commit()
                 
                 flash('Werkzeug erfolgreich aktualisiert', 'success')
-                return redirect(url_for('tools.detail', barcode=new_barcode))  # Weiterleitung mit neuem Barcode
+                return redirect(url_for('tools.detail', barcode=new_barcode))
                 
         else:
             # GET: Zeige Bearbeitungsformular
@@ -401,6 +338,45 @@ def edit(barcode):
     except Exception as e:
         print(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}")
         flash('Fehler beim Bearbeiten des Werkzeugs', 'error')
+        return redirect(url_for('tools.detail', barcode=barcode))
+
+@bp.route('/<string:barcode>/status', methods=['POST'])
+@login_required
+def change_status(barcode):
+    """Ändert den Status eines Werkzeugs"""
+    try:
+        new_status = request.form.get('status')
+        if not new_status:
+            flash('Kein Status angegeben', 'error')
+            return redirect(url_for('tools.detail', barcode=barcode))
+            
+        with Database.get_db() as conn:
+            # Prüfe ob das Werkzeug existiert
+            tool = conn.execute('''
+                SELECT * FROM tools 
+                WHERE barcode = ? AND deleted = 0
+            ''', [barcode]).fetchone()
+            
+            if not tool:
+                flash('Werkzeug nicht gefunden', 'error')
+                return redirect(url_for('tools.index'))
+                
+            # Aktualisiere den Status
+            conn.execute('''
+                UPDATE tools 
+                SET status = ?,
+                    sync_status = 'pending'
+                WHERE barcode = ?
+            ''', [new_status, barcode])
+            
+            conn.commit()
+            
+            flash('Status erfolgreich aktualisiert', 'success')
+            return redirect(url_for('tools.detail', barcode=barcode))
+            
+    except Exception as e:
+        print(f"Fehler beim Status-Update: {str(e)}")
+        flash('Fehler beim Aktualisieren des Status', 'error')
         return redirect(url_for('tools.detail', barcode=barcode))
 
 # Weitere Tool-Routen...

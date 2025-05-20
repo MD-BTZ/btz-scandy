@@ -2,11 +2,17 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
+    <div class="mb-4">
+        <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zur Übersicht
+        </a>
+    </div>
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
             <h2 class="card-title mb-4">Werkzeug bearbeiten</h2>
             
-            <form method="POST" action="{{ url_for('tools.update', id=tool.id) }}">
+            <form method="POST" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
                 <div class="form-control mb-4">
                     <label class="label">
                         <span class="label-text">Name (max. 50 Zeichen)</span>
@@ -25,14 +31,38 @@
                     <label class="label">
                         <span class="label-text">Kategorie</span>
                     </label>
-                    <input type="text" name="category" value="{{ tool.category }}" class="input input-bordered">
+                    <select name="category" class="select select-bordered">
+                        <option value="">Keine Kategorie</option>
+                        {% for category in categories %}
+                        <option value="{{ category }}" {% if category == tool.category %}selected{% endif %}>
+                            {{ category }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
                 
                 <div class="form-control mb-4">
                     <label class="label">
                         <span class="label-text">Standort</span>
                     </label>
-                    <input type="text" name="location" value="{{ tool.location }}" class="input input-bordered">
+                    <select name="location" class="select select-bordered">
+                        <option value="">Kein Standort</option>
+                        {% for location in locations %}
+                        <option value="{{ location }}" {% if location == tool.location %}selected{% endif %}>
+                            {{ location }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Status</span>
+                    </label>
+                    <select name="status" class="select select-bordered">
+                        <option value="verfügbar" {% if tool.status == 'verfügbar' %}selected{% endif %}>Verfügbar</option>
+                        <option value="defekt" {% if tool.status == 'defekt' %}selected{% endif %}>Defekt</option>
+                    </select>
                 </div>
                 
                 <div class="form-control mb-4">

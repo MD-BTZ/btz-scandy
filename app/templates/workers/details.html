@@ -3,6 +3,12 @@
 {% block title %}{{ worker.firstname }} {{ worker.lastname }}{% endblock %}
 
 {% block page_content %}
+<div class="mb-4">
+    <a href="{{ url_for('workers.index') }}" class="btn btn-ghost">
+        <i class="fas fa-arrow-left mr-2"></i>
+        Zurück zur Übersicht
+    </a>
+</div>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Mitarbeiter-Details -->
     <div class="card bg-base-100 shadow-xl">

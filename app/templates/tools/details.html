@@ -97,7 +97,7 @@
 <dialog id="editModal" class="modal">
     <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">{{ app_labels.tools.name }} bearbeiten</h3>
-        <form id="editForm" method="POST" action="{{ url_for('tools.update', id=tool.id) }}">
+        <form id="editForm" method="POST" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Name</span>
@@ -142,6 +142,16 @@
             
             <div class="form-control">
                 <label class="label">
+                    <span class="label-text">Status</span>
+                </label>
+                <select name="status" class="select select-bordered">
+                    <option value="verfügbar" {{ 'selected' if tool.status == 'verfügbar' }}>Verfügbar</option>
+                    <option value="defekt" {{ 'selected' if tool.status == 'defekt' }}>Defekt</option>
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
                     <span class="label-text">Beschreibung</span>
                 </label>
                 <textarea name="description" class="textarea textarea-bordered" rows="3">{{ tool.description or '' }}</textarea>
@@ -164,7 +174,6 @@ function closeEditModal() {
     document.getElementById('editModal').close();
 }
 
-// Formular-Handling
 document.getElementById('editForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
