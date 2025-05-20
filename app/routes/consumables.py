@@ -342,9 +342,9 @@ def delete(id):
 def adjust_stock(barcode):
     """Passt den Bestand eines Verbrauchsmaterials an"""
     try:
-        quantity = request.form.get('quantity', type=int)
+        quantity_change = request.form.get('quantity', type=int)
         
-        if quantity is None:
+        if quantity_change is None:
             return jsonify({'success': False, 'message': 'Menge muss angegeben werden'}), 400
             
         with Database.get_db() as conn:
@@ -357,19 +357,26 @@ def adjust_stock(barcode):
             if not current:
                 return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
             
-            # Bestand aktualisieren (OHNE modified_at)
+            # Neuen Bestand berechnen (aktueller Bestand + Änderung)
+            new_quantity = current['quantity'] + quantity_change
+            
+            # Sicherstellen, dass der Bestand nicht negativ wird
+            if new_quantity < 0:
+                return jsonify({'success': False, 'message': 'Der Bestand kann nicht negativ werden'}), 400
+            
+            # Bestand aktualisieren
             conn.execute('''
                 UPDATE consumables 
                 SET quantity = ?
                 WHERE barcode = ?
-            ''', [quantity, barcode])
+            ''', [new_quantity, barcode])
             
             # Änderung protokollieren
             conn.execute('''
                 INSERT INTO consumable_usages 
                 (consumable_barcode, worker_barcode, quantity, used_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            ''', [barcode, 'admin', quantity - current['quantity']])
+            ''', [barcode, 'admin', quantity_change])
             
             conn.commit()
             

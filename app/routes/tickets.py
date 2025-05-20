@@ -25,8 +25,20 @@ def index():
         """,
         [current_user.username]
     )
+    
+    # Konvertiere Datumsfelder
+    for ticket in my_tickets:
+        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                try:
+                    if isinstance(ticket[field], str):
+                        ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError) as e:
+                    logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket['id']}: {str(e)}")
+                    ticket[field] = None
             
-    return render_template('tickets/index.html', tickets=my_tickets)
+    return render_template('tickets/index.html', tickets=my_tickets, now=datetime.now())
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -34,34 +46,96 @@ def create():
     """Erstellt ein neues Ticket."""
     if request.method == 'POST':
         try:
-            title = request.form.get('title')
-            description = request.form.get('description')
-            priority = request.form.get('priority', 'normal')
+            # Prüfe ob die Daten als JSON oder Formular gesendet wurden
+            if request.is_json:
+                data = request.get_json()
+                title = data.get('title')
+                description = data.get('description')
+                priority = data.get('priority', 'normal')
+                category = data.get('category', '').strip()
+                due_date = data.get('due_date')
+                estimated_time = data.get('estimated_time')
+            else:
+                title = request.form.get('title')
+                description = request.form.get('description')
+                priority = request.form.get('priority', 'normal')
+                category = request.form.get('category', '').strip()
+                due_date = request.form.get('due_date')
+                estimated_time = request.form.get('estimated_time', type=int)
+
+            # Validiere die erforderlichen Felder
+            if not title:
+                raise ValueError("Titel ist erforderlich")
+            if not description:
+                raise ValueError("Beschreibung ist erforderlich")
             
             # Erstelle das Ticket mit der korrekten Datenbankverbindung
             with ticket_db.get_connection() as conn:
                 cursor = conn.cursor()
+                
+                # Prüfe ob die Kategorie bereits existiert
+                cursor.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM tickets 
+                    WHERE category = ?
+                """, [category])
+                category_exists = cursor.fetchone()['count'] > 0
+                
+                # Wenn es eine neue Kategorie ist, füge sie zur Kategorieliste hinzu
+                if not category_exists and category:  # Nur wenn Kategorie nicht leer ist
+                    cursor.execute("""
+                        INSERT INTO categories (name, created_at)
+                        VALUES (?, datetime('now'))
+                    """, [category])
+                
+                # Erstelle das Ticket
                 cursor.execute("""
                     INSERT INTO tickets 
-                    (title, description, status, priority, created_by, created_at, updated_at)
-                    VALUES (?, ?, 'offen', ?, ?, datetime('now'), datetime('now'))
-                """, [title, description, priority, current_user.username])
+                    (title, description, status, priority, category, due_date, estimated_time, created_by, created_at, updated_at)
+                    VALUES (?, ?, 'offen', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """, [title, description, priority, category, due_date, estimated_time, current_user.username])
                 
                 ticket_id = cursor.lastrowid
                 conn.commit()
             
+            if request.is_json:
+                return jsonify({
+                    'success': True,
+                    'message': 'Ticket wurde erfolgreich erstellt',
+                    'ticket_id': ticket_id
+                })
+            
             flash('Ticket wurde erfolgreich erstellt', 'success')
             return redirect(url_for('tickets.create'))
             
-        except Exception as e:
-            logging.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
+        except ValueError as e:
+            error_message = str(e)
+            logging.error(f"Validierungsfehler beim Erstellen des Tickets: {error_message}")
             if request.is_json:
                 return jsonify({
                     'success': False,
-                    'message': f'Fehler beim Erstellen des Tickets: {str(e)}'
-                }), 500
-            flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
+                    'message': error_message
+                }), 400
+            flash(error_message, 'error')
             return redirect(url_for('tickets.create'))
+        except Exception as e:
+            error_message = f"Fehler beim Erstellen des Tickets: {str(e)}"
+            logging.error(error_message)
+            if request.is_json:
+                return jsonify({
+                    'success': False,
+                    'message': error_message
+                }), 500
+            flash(error_message, 'error')
+            return redirect(url_for('tickets.create'))
+    
+    # Hole die Kategorien für das Dropdown
+    categories = ticket_db.query("""
+        SELECT DISTINCT category 
+        FROM tickets 
+        WHERE category IS NOT NULL 
+        ORDER BY category
+    """)
     
     # Hole die eigenen Tickets für die Anzeige
     my_tickets = ticket_db.query(
@@ -75,8 +149,23 @@ def create():
         """,
         [current_user.username]
     )
+    
+    # Konvertiere Datumsfelder
+    for ticket in my_tickets:
+        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                try:
+                    if isinstance(ticket[field], str):
+                        ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError) as e:
+                    logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket['id']}: {str(e)}")
+                    ticket[field] = None
             
-    return render_template('tickets/create.html', my_tickets=my_tickets)
+    return render_template('tickets/create.html', 
+                         my_tickets=my_tickets,
+                         categories=[c['category'] for c in categories],
+                         now=datetime.now())
 
 @bp.route('/view/<int:ticket_id>')
 @login_required

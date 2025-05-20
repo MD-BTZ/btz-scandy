@@ -54,14 +54,50 @@ window.deleteTicket = function(ticketId) {
     });
 };
 
+function createTicket() {
+    const form = document.getElementById('ticketForm');
+    const formData = new FormData(form);
+    
+    // Konvertiere FormData zu JSON
+    const data = {};
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+    
+    // Sende POST-Request
+    fetch('/tickets/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            // Formular zurücksetzen
+            form.reset();
+            // Weiterleitung zur Create-Seite
+            window.location.href = '/tickets/create';
+        } else {
+            showToast('error', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+}
+
 // Event Listener für DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOMContentLoaded Event');
     
     // Filter-Formular
-    const form = document.getElementById('filterForm');
-    if (form) {
-        const inputs = form.querySelectorAll('select, input');
+    const filterForm = document.getElementById('filterForm');
+    if (filterForm) {
+        const inputs = filterForm.querySelectorAll('select, input');
         
         inputs.forEach(input => {
             input.addEventListener('change', function() {
@@ -98,11 +134,10 @@ document.addEventListener('DOMContentLoaded', function() {
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichern...';
             
             const formData = new FormData(this);
-            const data = {
-                title: formData.get('title'),
-                description: formData.get('description'),
-                priority: formData.get('priority')
-            };
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+            });
             
             fetch(this.action, {
                 method: 'POST',
@@ -116,9 +151,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     showToast('success', 'Ticket erfolgreich erstellt');
-                    setTimeout(() => {
-                        window.location.href = data.redirect_url || '/tickets';
-                    }, 1000);
+                    // Formular zurücksetzen
+                    this.reset();
+                    // Weiterleitung zur Create-Seite
+                    window.location.href = '/tickets/create';
                 } else {
                     throw new Error(data.message || 'Fehler beim Erstellen des Tickets');
                 }

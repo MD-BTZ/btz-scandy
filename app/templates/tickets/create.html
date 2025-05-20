@@ -10,7 +10,7 @@
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <h2 class="card-title mb-4">Neuen Auftrag erstellen</h2>
-                    <form method="POST" action="{{ url_for('tickets.create') }}">
+                    <form method="POST" action="{{ url_for('tickets.create') }}" id="createForm">
                         <div class="form-control mb-4">
                             <label class="label">
                                 <span class="label-text">Titel</span>
@@ -27,6 +27,23 @@
                         
                         <div class="form-control mb-4">
                             <label class="label">
+                                <span class="label-text">Kategorie</span>
+                            </label>
+                            <select name="category" id="categorySelect" class="select select-bordered w-full" required>
+                                <option value="" disabled selected hidden>Kategorie auswählen</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                                <option value="__new__">Neue Kategorie anlegen…</option>
+                            </select>
+                            <input type="text" name="new_category" id="newCategoryInput" class="input input-bordered mt-2 w-full" placeholder="Neue Kategorie eingeben" style="display:none;" autocomplete="off">
+                            <label class="label">
+                                <span class="label-text-alt">Wählen Sie eine bestehende Kategorie oder legen Sie eine neue an</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
                                 <span class="label-text">Priorität</span>
                             </label>
                             <select name="priority" class="select select-bordered">
@@ -37,7 +54,21 @@
                             </select>
                         </div>
                         
-                        <button type="submit" class="btn btn-primary w-full">
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Fälligkeitsdatum</span>
+                            </label>
+                            <input type="datetime-local" name="due_date" class="input input-bordered" required>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Geschätzte Zeit (in Minuten)</span>
+                            </label>
+                            <input type="number" name="estimated_time" class="input input-bordered" min="0" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full" id="submitBtn">
                             <i class="fas fa-plus mr-2"></i>
                             Auftrag erstellen
                         </button>
@@ -61,7 +92,9 @@
                                         <th>Titel</th>
                                         <th>Status</th>
                                         <th>Priorität</th>
-                                        <th>Erstellt am</th>
+                                        <th>Kategorie</th>
+                                        <th>Fällig am</th>
+                                        <th>Geschätzte Zeit</th>
                                         <th>Nachrichten</th>
                                         <th>Aktionen</th>
                                     </tr>
@@ -85,7 +118,9 @@
                                                 {{ ticket.priority }}
                                             </span>
                                         </td>
-                                        <td>{{ ticket.created_at }}</td>
+                                        <td>{{ ticket.category or '-' }}</td>
+                                        <td>{{ ticket.due_date or '-' }}</td>
+                                        <td>{{ ticket.estimated_time or '-' }} Min.</td>
                                         <td>
                                             {% if ticket.message_count > 0 %}
                                             <span class="badge badge-primary">{{ ticket.message_count }}</span>
@@ -117,20 +152,36 @@
 {% block scripts %}
 {{ super() }}
 <script>
+document.getElementById('categorySelect').addEventListener('change', function() {
+    const newCategoryInput = document.getElementById('newCategoryInput');
+    if (this.value === '__new__') {
+        newCategoryInput.style.display = '';
+        newCategoryInput.required = true;
+    } else {
+        newCategoryInput.style.display = 'none';
+        newCategoryInput.required = false;
+        newCategoryInput.value = '';
+    }
+});
+
 document.getElementById('createForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Erstelle...';
-    
     const formData = new FormData(this);
+    let category = formData.get('category');
+    if (category === '__new__') {
+        category = formData.get('new_category');
+    }
     const data = {
         title: formData.get('title'),
         description: formData.get('description'),
-        priority: formData.get('priority')
+        category: category,
+        priority: formData.get('priority'),
+        due_date: formData.get('due_date'),
+        estimated_time: formData.get('estimated_time')
     };
-    
     try {
         const response = await fetch(this.action, {
             method: 'POST',
@@ -140,23 +191,15 @@ document.getElementById('createForm').addEventListener('submit', async function(
             },
             body: JSON.stringify(data)
         });
-        
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
         }
-        
         const result = await response.json();
-        
         if (result.success) {
             showToast('success', 'Ticket erfolgreich erstellt');
             setTimeout(() => {
-                // Weiterleitung basierend auf Login-Status
-                {% if session.get('username') %}
-                window.location.href = "{{ url_for('tickets.index') }}";
-                {% else %}
-                window.location.href = "{{ url_for('main.index') }}";
-                {% endif %}
+                window.location.href = "{{ url_for('tickets.create') }}";
             }, 1000);
         } else {
             throw new Error(result.message || 'Ein Fehler ist aufgetreten');
