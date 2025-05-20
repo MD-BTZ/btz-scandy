@@ -56,9 +56,7 @@ def create():
             auftragsdetails_keys = [
                 'bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 'kontakt',
                 'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 'leistungskategorie',
-                'material', 'material_menge', 'material_einzelpreis', 'material_gesamtpreis', 'summe_material',
-                'uebertrag', 'arbeitspauschale', 'zwischensumme', 'mehrwertsteuer_7', 'fertigstellungstermin',
-                'gesamtsumme', 'genehmigung_bt', 'genehmigung_bl', 'genehmigung_geschaeftsfuehrung', 'unterschrift'
+                'fertigstellungstermin'
             ]
             auftragsdetails = {k: request.form.get(k) for k in auftragsdetails_keys}
             # Checkboxen korrekt als Boolean speichern
@@ -297,6 +295,8 @@ def update(id):
 
         # Hole die Formulardaten
         data = request.get_json()
+        
+        # Basis-Ticket-Daten
         status = data.get('status')
         assigned_to = data.get('assigned_to')
         resolution_notes = data.get('resolution_notes')
@@ -330,25 +330,49 @@ def update(id):
             [status, assigned_to, priority, due_date, response, author_name, id]
         )
 
-        # Füge eine Notiz hinzu, wenn vorhanden
-        if resolution_notes:
-            ticket_db.query(
-                """
-                INSERT INTO ticket_notes (ticket_id, note, created_by, is_private, created_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                """,
-                [id, resolution_notes, author_name, is_private]
-            )
+        # Verarbeite Auftragsdetails
+        auftrag_details = {
+            'bereich': data.get('bereich', ''),
+            'auftraggeber_intern': data.get('auftraggeber_intern', False),
+            'auftraggeber_extern': data.get('auftraggeber_extern', False),
+            'auftraggeber_name': data.get('auftraggeber_name', ''),
+            'kontakt': data.get('kontakt', ''),
+            'auftragsbeschreibung': data.get('auftragsbeschreibung', ''),
+            'ausgefuehrte_arbeiten': data.get('ausgefuehrte_arbeiten', ''),
+            'arbeitsstunden': data.get('arbeitsstunden', ''),
+            'leistungskategorie': data.get('leistungskategorie', ''),
+            'fertigstellungstermin': data.get('fertigstellungstermin', '')
+        }
+        
+        # Lösche alte Materialeinträge
+        ticket_db.query("DELETE FROM auftrag_material WHERE ticket_id = ?", [id])
+        
+        # Speichere neue Materialliste
+        if 'material_list' in data:
+            for material in data['material_list']:
+                ticket_db.add_auftrag_material(
+                    ticket_id=id,
+                    material=material['material'],
+                    menge=material['menge'],
+                    einzelpreis=material['einzelpreis']
+                )
+        
+        # Aktualisiere oder erstelle Auftragsdetails
+        existing_details = ticket_db.get_auftrag_details(id)
+        if existing_details:
+            ticket_db.update_auftrag_details(ticket_id=id, **auftrag_details)
+        else:
+            ticket_db.add_auftrag_details(ticket_id=id, **auftrag_details)
 
         return jsonify({
             'success': True,
-            'message': 'Ticket erfolgreich aktualisiert'
+            'message': 'Ticket wurde erfolgreich aktualisiert'
         })
-
     except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren des Tickets: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'Fehler: {str(e)}'
+            'message': f'Fehler beim Aktualisieren des Tickets: {str(e)}'
         }), 500
 
 @bp.route('/<int:id>/delete', methods=['POST'])

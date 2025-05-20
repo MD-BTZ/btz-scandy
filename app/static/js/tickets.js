@@ -169,4 +169,158 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-}); 
+
+    // Auftragsdetails-Formular
+    const auftragDetailsForm = document.getElementById('auftragDetailsForm');
+    if (auftragDetailsForm) {
+        auftragDetailsForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = this.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichern...';
+            
+            const details = collectAuftragDetails();
+            
+            fetch(this.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(details)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('success', 'Auftragsdetails erfolgreich gespeichert');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    throw new Error(data.message || 'Ein Fehler ist aufgetreten');
+                }
+            })
+            .catch(error => {
+                console.error('Fehler:', error);
+                showToast('error', error.message || 'Ein Fehler ist aufgetreten');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Speichern';
+            });
+        });
+    }
+
+    // Initialisiere die Summen beim Laden
+    updateGesamtsumme();
+});
+
+// Funktion zum Sammeln der Materialliste
+function collectMaterialList() {
+    const rows = document.querySelectorAll('#materialRows tr');
+    const materialList = [];
+    
+    rows.forEach(row => {
+        const material = row.querySelector('input[name="material"]').value;
+        const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+        
+        if (material && (menge > 0 || einzelpreis > 0)) {
+            materialList.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis,
+                gesamtpreis: menge * einzelpreis
+            });
+        }
+    });
+    
+    return materialList;
+}
+
+// Funktion zum Sammeln der Auftragsdetails
+function collectAuftragDetails() {
+    const form = document.getElementById('auftragDetailsForm');
+    const formData = new FormData(form);
+    const data = {};
+    
+    // Sammle alle Formularfelder
+    formData.forEach((value, key) => {
+        // Spezielle Behandlung für Checkboxen
+        if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
+            data[key] = value === 'on' || value === 'true' || value === '1';
+        } else {
+            data[key] = value;
+        }
+    });
+    
+    // Sammle Materialliste
+    const materialList = [];
+    const materialRows = document.querySelectorAll('.material-row');
+    materialRows.forEach(row => {
+        const material = row.querySelector('.material-input').value;
+        const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+        
+        if (material) {
+            materialList.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis
+            });
+        }
+    });
+    
+    data.material_list = materialList;
+    
+    console.log('Gesammelte Auftragsdetails:', data);
+    return data;
+}
+
+// Funktion zum Aktualisieren der Materialsumme
+function updateSumme(input) {
+    const row = input.closest('tr');
+    const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+    const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    
+    row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
+    updateGesamtsumme();
+}
+
+// Funktion zum Aktualisieren der Gesamtsumme
+function updateGesamtsumme() {
+    const rows = document.querySelectorAll('#materialRows tr');
+    let summe = 0;
+    
+    rows.forEach(row => {
+        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        summe += gesamtpreis;
+    });
+    
+    document.getElementById('summeMaterial').textContent = summe.toFixed(2) + ' €';
+}
+
+// Funktion zum Hinzufügen einer neuen Materialzeile
+function addMaterialRow() {
+    const tbody = document.getElementById('materialRows');
+    const newRow = document.createElement('tr');
+    
+    newRow.innerHTML = `
+        <td><input type="text" name="material" class="input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    
+    tbody.appendChild(newRow);
+}
+
+// Funktion zum Entfernen einer Materialzeile
+function removeMaterialRow(button) {
+    const row = button.closest('tr');
+    row.remove();
+    updateGesamtsumme();
+} 
