@@ -1054,6 +1054,22 @@ def get_all_users():
         ORDER BY username
     ''')
 
+def get_categories():
+    """Lädt alle verfügbaren Kategorien aus der Datenbank."""
+    try:
+        categories = ticket_db.query(
+            """
+            SELECT DISTINCT category 
+            FROM tickets 
+            WHERE category IS NOT NULL AND category != ''
+            ORDER BY category
+            """
+        )
+        return [cat['category'] for cat in categories]
+    except Exception as e:
+        print(f"DEBUG: Fehler beim Laden der Kategorien: {e}")
+        return []
+
 @bp.route('/server-settings', methods=['GET', 'POST'])
 @admin_required
 def server_settings():
@@ -2530,8 +2546,8 @@ def ticket_detail(ticket_id):
     # Hole alle Benutzer für die Zuweisung
     users = get_all_users()
     
-    # Definiere die Kategorien
-    categories = ['Hardware', 'Software', 'Netzwerk', 'Drucker', 'Sonstiges']
+    # Hole die Kategorien aus der Datenbank
+    categories = get_categories()
     
     # Definiere die Status-Farben
     status_colors = {
@@ -2722,12 +2738,15 @@ def update_ticket(ticket_id):
     """Aktualisiert ein Ticket."""
     try:
         print(f"DEBUG: Update-Ticket-Anfrage für Ticket {ticket_id} erhalten")
-        status = request.form.get('status')
-        assigned_to = request.form.get('assigned_to')
-        category = request.form.get('category')
-        due_date = request.form.get('due_date')
-        estimated_time = request.form.get('estimated_time')
-        actual_time = request.form.get('actual_time')
+        
+        # Hole die Daten aus dem JSON-Request
+        data = request.get_json()
+        status = data.get('status')
+        assigned_to = data.get('assigned_to')
+        category = data.get('category')
+        due_date = data.get('due_date')
+        estimated_time = data.get('estimated_time')
+        actual_time = data.get('actual_time')
         
         print(f"DEBUG: Empfangene Daten: status={status}, assigned_to={assigned_to}, category={category}, due_date={due_date}, estimated_time={estimated_time}, actual_time={actual_time}")
         
@@ -2770,7 +2789,10 @@ def update_ticket(ticket_id):
             old_ticket = cursor.fetchone()
             
             if not old_ticket:
-                raise ValueError("Ticket nicht gefunden")
+                return jsonify({
+                    'success': False,
+                    'message': 'Ticket nicht gefunden'
+                }), 404
             
             # Aktualisiere das Ticket
             cursor.execute("""
@@ -2818,12 +2840,16 @@ def update_ticket(ticket_id):
             conn.commit()
         
         print(f"DEBUG: Ticket {ticket_id} erfolgreich aktualisiert")
-        flash('Ticket wurde erfolgreich aktualisiert', 'success')
+        return jsonify({
+            'success': True,
+            'message': 'Ticket wurde erfolgreich aktualisiert'
+        })
     except Exception as e:
         print(f"DEBUG: Fehler beim Aktualisieren des Tickets: {e}")
-        flash(f'Fehler beim Aktualisieren des Tickets: {str(e)}', 'error')
-    
-    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Aktualisieren des Tickets: {str(e)}'
+        }), 500
 
 @bp.route('/tools/add', methods=['POST'])
 @mitarbeiter_required

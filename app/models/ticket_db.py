@@ -401,6 +401,36 @@ class TicketDatabase:
                 )
             ''')
             
+            # Auftrag Details Tabelle (verschlankt)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auftrag_details (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    auftrag_an TEXT,
+                    bereich TEXT,
+                    auftraggeber_intern BOOLEAN DEFAULT 1,
+                    auftraggeber_extern BOOLEAN DEFAULT 0,
+                    auftraggeber_name TEXT,
+                    kontakt TEXT,
+                    auftragsbeschreibung TEXT,
+                    fertigstellungstermin TEXT,
+                    erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Auftrag Material Tabelle (dynamische Positionen)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auftrag_material (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    material TEXT,
+                    menge REAL,
+                    einzelpreis REAL,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+                )
+            ''')
+            
             conn.commit()
             logger.info("Datenbankschema erfolgreich initialisiert")
             
@@ -647,3 +677,59 @@ class TicketDatabase:
                 );
             ''')
             conn.commit() 
+
+    def add_auftrag_details(self, ticket_id, **kwargs):
+        """Fügt einen neuen Auftrag-Details-Datensatz für ein Ticket hinzu."""
+        felder = [
+            'bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 'kontakt',
+            'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 'leistungskategorie',
+            'material', 'material_menge', 'material_einzelpreis', 'material_gesamtpreis', 'summe_material',
+            'uebertrag', 'arbeitspauschale', 'zwischensumme', 'mehrwertsteuer_7', 'fertigstellungstermin',
+            'gesamtsumme', 'genehmigung_bt', 'genehmigung_bl', 'genehmigung_geschaeftsfuehrung', 'unterschrift'
+        ]
+        werte = [kwargs.get(f) for f in felder]
+        sql = f"""
+            INSERT INTO auftrag_details (
+                ticket_id, {', '.join(felder)}
+            ) VALUES (
+                ?, {', '.join(['?']*len(felder))}
+            )
+        """
+        self.query(sql, [ticket_id] + werte)
+
+    def get_auftrag_details(self, ticket_id):
+        """Gibt die Auftrag-Details für ein Ticket zurück (oder None)."""
+        sql = "SELECT * FROM auftrag_details WHERE ticket_id = ?"
+        return self.query(sql, [ticket_id], one=True)
+
+    def update_auftrag_details(self, ticket_id, **kwargs):
+        """Aktualisiert die Auftrag-Details für ein Ticket."""
+        felder = [
+            'bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 'kontakt',
+            'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 'leistungskategorie',
+            'material', 'material_menge', 'material_einzelpreis', 'material_gesamtpreis', 'summe_material',
+            'uebertrag', 'arbeitspauschale', 'zwischensumme', 'mehrwertsteuer_7', 'fertigstellungstermin',
+            'gesamtsumme', 'genehmigung_bt', 'genehmigung_bl', 'genehmigung_geschaeftsfuehrung', 'unterschrift'
+        ]
+        set_clause = ', '.join([f"{f} = ?" for f in felder])
+        werte = [kwargs.get(f) for f in felder]
+        sql = f"UPDATE auftrag_details SET {set_clause} WHERE ticket_id = ?"
+        self.query(sql, werte + [ticket_id])
+
+    def add_auftrag_material(self, ticket_id, material, menge, einzelpreis):
+        """Fügt eine Materialposition zu einem Ticket hinzu."""
+        sql = """
+            INSERT INTO auftrag_material (ticket_id, material, menge, einzelpreis)
+            VALUES (?, ?, ?, ?)
+        """
+        self.query(sql, [ticket_id, material, menge, einzelpreis])
+
+    def get_auftrag_material(self, ticket_id):
+        """Gibt alle Materialpositionen für ein Ticket zurück."""
+        sql = "SELECT * FROM auftrag_material WHERE ticket_id = ?"
+        return self.query(sql, [ticket_id])
+
+    def delete_auftrag_material(self, material_id):
+        """Löscht eine Materialposition anhand ihrer ID."""
+        sql = "DELETE FROM auftrag_material WHERE id = ?"
+        self.query(sql, [material_id]) 

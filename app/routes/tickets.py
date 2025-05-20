@@ -25,20 +25,8 @@ def index():
         """,
         [current_user.username]
     )
-    
-    # Konvertiere Datumsfelder
-    for ticket in my_tickets:
-        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-        for field in date_fields:
-            if ticket.get(field):
-                try:
-                    if isinstance(ticket[field], str):
-                        ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-                except (ValueError, TypeError) as e:
-                    logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket['id']}: {str(e)}")
-                    ticket[field] = None
             
-    return render_template('tickets/index.html', tickets=my_tickets, now=datetime.now())
+    return render_template('tickets/index.html', tickets=my_tickets)
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -46,96 +34,45 @@ def create():
     """Erstellt ein neues Ticket."""
     if request.method == 'POST':
         try:
-            # Prüfe ob die Daten als JSON oder Formular gesendet wurden
-            if request.is_json:
-                data = request.get_json()
-                title = data.get('title')
-                description = data.get('description')
-                priority = data.get('priority', 'normal')
-                category = data.get('category', '').strip()
-                due_date = data.get('due_date')
-                estimated_time = data.get('estimated_time')
-            else:
-                title = request.form.get('title')
-                description = request.form.get('description')
-                priority = request.form.get('priority', 'normal')
-                category = request.form.get('category', '').strip()
-                due_date = request.form.get('due_date')
-                estimated_time = request.form.get('estimated_time', type=int)
+            title = request.form.get('title')
+            description = request.form.get('description')
+            priority = request.form.get('priority', 'normal')
+            category = request.form.get('category')
+            due_date = request.form.get('due_date')
+            estimated_time = request.form.get('estimated_time')
 
-            # Validiere die erforderlichen Felder
-            if not title:
-                raise ValueError("Titel ist erforderlich")
-            if not description:
-                raise ValueError("Beschreibung ist erforderlich")
-            
             # Erstelle das Ticket mit der korrekten Datenbankverbindung
-            with ticket_db.get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Prüfe ob die Kategorie bereits existiert
-                cursor.execute("""
-                    SELECT COUNT(*) as count 
-                    FROM tickets 
-                    WHERE category = ?
-                """, [category])
-                category_exists = cursor.fetchone()['count'] > 0
-                
-                # Wenn es eine neue Kategorie ist, füge sie zur Kategorieliste hinzu
-                if not category_exists and category:  # Nur wenn Kategorie nicht leer ist
-                    cursor.execute("""
-                        INSERT INTO categories (name, created_at)
-                        VALUES (?, datetime('now'))
-                    """, [category])
-                
-                # Erstelle das Ticket
-                cursor.execute("""
-                    INSERT INTO tickets 
-                    (title, description, status, priority, category, due_date, estimated_time, created_by, created_at, updated_at)
-                    VALUES (?, ?, 'offen', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-                """, [title, description, priority, category, due_date, estimated_time, current_user.username])
-                
-                ticket_id = cursor.lastrowid
-                conn.commit()
-            
-            if request.is_json:
-                return jsonify({
-                    'success': True,
-                    'message': 'Ticket wurde erfolgreich erstellt',
-                    'ticket_id': ticket_id
-                })
-            
-            flash('Ticket wurde erfolgreich erstellt', 'success')
-            return redirect(url_for('tickets.create'))
-            
-        except ValueError as e:
-            error_message = str(e)
-            logging.error(f"Validierungsfehler beim Erstellen des Tickets: {error_message}")
-            if request.is_json:
-                return jsonify({
-                    'success': False,
-                    'message': error_message
-                }), 400
-            flash(error_message, 'error')
+            ticket_id = ticket_db.create_ticket(
+                title=title,
+                description=description,
+                priority=priority,
+                created_by=current_user.username,
+                category=category,
+                due_date=due_date,
+                estimated_time=estimated_time
+            )
+
+            # Auftragsdetails auslesen und speichern, falls mindestens ein Feld ausgefüllt ist
+            auftragsdetails_keys = [
+                'bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 'kontakt',
+                'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 'leistungskategorie',
+                'material', 'material_menge', 'material_einzelpreis', 'material_gesamtpreis', 'summe_material',
+                'uebertrag', 'arbeitspauschale', 'zwischensumme', 'mehrwertsteuer_7', 'fertigstellungstermin',
+                'gesamtsumme', 'genehmigung_bt', 'genehmigung_bl', 'genehmigung_geschaeftsfuehrung', 'unterschrift'
+            ]
+            auftragsdetails = {k: request.form.get(k) for k in auftragsdetails_keys}
+            # Checkboxen korrekt als Boolean speichern
+            auftragsdetails['auftraggeber_intern'] = 1 if request.form.get('auftraggeber_intern') else 0
+            auftragsdetails['auftraggeber_extern'] = 1 if request.form.get('auftraggeber_extern') else 0
+            # Prüfen, ob mindestens ein Feld ausgefüllt ist (außer Checkboxen)
+            if any(auftragsdetails[k] for k in auftragsdetails_keys if k not in ['auftraggeber_intern','auftraggeber_extern']):
+                ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
+
+            flash('Ticket wurde erfolgreich erstellt.', 'success')
             return redirect(url_for('tickets.create'))
         except Exception as e:
-            error_message = f"Fehler beim Erstellen des Tickets: {str(e)}"
-            logging.error(error_message)
-            if request.is_json:
-                return jsonify({
-                    'success': False,
-                    'message': error_message
-                }), 500
-            flash(error_message, 'error')
+            flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
             return redirect(url_for('tickets.create'))
-    
-    # Hole die Kategorien für das Dropdown
-    categories = ticket_db.query("""
-        SELECT DISTINCT category 
-        FROM tickets 
-        WHERE category IS NOT NULL 
-        ORDER BY category
-    """)
     
     # Hole die eigenen Tickets für die Anzeige
     my_tickets = ticket_db.query(
@@ -149,74 +86,82 @@ def create():
         """,
         [current_user.username]
     )
-    
-    # Konvertiere Datumsfelder
-    for ticket in my_tickets:
-        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-        for field in date_fields:
-            if ticket.get(field):
-                try:
-                    if isinstance(ticket[field], str):
-                        ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-                except (ValueError, TypeError) as e:
-                    logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket['id']}: {str(e)}")
-                    ticket[field] = None
+
+    # Hole die zugewiesenen Tickets
+    assigned_tickets = ticket_db.query(
+        """
+        SELECT t.*, COUNT(tm.id) as message_count
+        FROM tickets t
+        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
+        WHERE t.assigned_to = ?
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
+        """,
+        [current_user.username]
+    )
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
-                         categories=[c['category'] for c in categories],
-                         now=datetime.now())
+                         assigned_tickets=assigned_tickets,
+                         status_colors={
+                             'offen': 'info',
+                             'in_bearbeitung': 'warning',
+                             'wartet_auf_antwort': 'warning',
+                             'gelöst': 'success',
+                             'geschlossen': 'ghost'
+                         },
+                         priority_colors={
+                             'niedrig': 'secondary',
+                             'normal': 'primary',
+                             'hoch': 'error',
+                             'dringend': 'error'
+                         })
 
 @bp.route('/view/<int:ticket_id>')
 @login_required
 def view(ticket_id):
-    """Zeigt die Details eines Tickets an."""
+    """Zeigt die Details eines Tickets für den Benutzer."""
     logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
     
-    # Hole das Ticket
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ? AND created_by = ?
-        """,
-        [ticket_id, current_user.username],
-        one=True
-    )
+    ticket = ticket_db.get_ticket(ticket_id)
     
     if not ticket:
-        abort(404)
+        logging.error(f"Ticket {ticket_id} nicht gefunden")
+        flash('Ticket nicht gefunden.', 'error')
+        return redirect(url_for('tickets.create'))
+        
+    # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
+    if ticket['created_by'] != current_user.username and not current_user.is_admin:
+        logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
+        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
+        return redirect(url_for('tickets.create'))
     
-    logging.info("Hole Nachrichten für Ticket {ticket_id}")
+    # Hole die Nachrichten für das Ticket
+    logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
     
-    # Hole die Nachrichten mit der richtigen Datenbankverbindung
-    messages = ticket_db.get_ticket_messages(ticket_id)
-    
-    # Formatiere die Datumsangaben
-    for message in messages:
-        if message['created_at']:
-            try:
-                created_at = datetime.strptime(message['created_at'], '%Y-%m-%d %H:%M:%S')
-                message['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-            except ValueError as e:
-                logging.error(f"Fehler beim Formatieren des Datums für Nachricht {message['id']}: {str(e)}")
+    try:
+        # Verwende ticket_db für die Nachrichtenabfrage
+        messages = ticket_db.get_ticket_messages(ticket_id)
+        logging.info(f"Nachrichtenabfrage ergab {len(messages)} Nachrichten")
+        
+        # Formatiere Datum für jede Nachricht
+        for msg in messages:
+            if msg['created_at']:
+                try:
+                    created_at = datetime.strptime(msg['created_at'], '%Y-%m-%d %H:%M:%S')
+                    msg['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
+                    logging.info(f"Nachricht {msg['id']} formatiert: {msg['created_at']}")
+                except ValueError as e:
+                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {msg['id']}: {str(e)}")
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Nachrichten: {str(e)}")
+        messages = []
     
     message_count = len(messages)
     logging.info(f"Nachrichtenanzahl: {message_count}")
     
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
-    
-    # Konvertiere Datumsfelder des Tickets
-    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-    for field in date_fields:
-        if ticket.get(field):
-            try:
-                if isinstance(ticket[field], str):
-                    ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError) as e:
-                logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket_id}: {str(e)}")
-                ticket[field] = None
     
     return render_template('tickets/view.html',
                          ticket=ticket,
@@ -228,28 +173,20 @@ def view(ticket_id):
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
 @login_required
 def add_message(ticket_id):
-    """Fügt eine neue Nachricht zu einem Ticket hinzu."""
+    """Fügt eine neue Nachricht zu einem Ticket hinzu"""
     try:
-        # Ticket aus der Datenbank abrufen
-        ticket = ticket_db.query(
-            """
-            SELECT *
-            FROM tickets
-            WHERE id = ? AND created_by = ?
-            """,
-            [ticket_id, current_user.username],
-            one=True
-        )
+        # Prüfe ob das Ticket existiert
+        ticket = ticket_db.get_ticket(ticket_id)
         if not ticket:
-            logging.error(f"Ticket {ticket_id} nicht gefunden für Benutzer {current_user.username}")
+            logging.error(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
-
-        # Nachricht aus dem Request extrahieren
+        
+        # Hole die Nachricht aus dem Request
+        if not request.is_json:
+            logging.error("Ungültiges Anfrageformat (kein JSON)")
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+            
         data = request.get_json()
-        if not data or 'message' not in data:
-            logging.error("Keine Nachricht im Request gefunden")
-            return jsonify({'success': False, 'message': 'Keine Nachricht angegeben'}), 400
-
         message = data['message'].strip()
         if not message:
             logging.error("Leere Nachricht")
@@ -257,58 +194,30 @@ def add_message(ticket_id):
 
         logging.info(f"Versuche Nachricht zu speichern: Ticket {ticket_id}, Benutzer {current_user.username}, Nachricht: {message}")
 
-        # Nachricht zur Datenbank hinzufügen
-        with ticket_db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO ticket_messages (ticket_id, message, sender, is_admin, created_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                """,
-                [ticket_id, message, current_user.username, False]
-            )
-            
-            # Ticket updated_at aktualisieren
-            cursor.execute(
-                """
-                UPDATE tickets
-                SET updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                [ticket_id]
-            )
-            
-            conn.commit()
-            logging.info(f"Nachricht erfolgreich gespeichert mit ID {cursor.lastrowid}")
+        # Verwende ticket_db.add_ticket_message statt direkter SQL-Abfragen
+        is_admin = current_user.is_admin if hasattr(current_user, 'is_admin') else False
+        ticket_db.add_ticket_message(
+            ticket_id=ticket_id, 
+            message=message, 
+            sender=current_user.username, 
+            is_admin=is_admin
+        )
+        
+        logging.info(f"Nachricht erfolgreich gespeichert")
 
-            # Hole die eingefügte Nachricht
-            cursor.execute(
-                """
-                SELECT id, message, sender, is_admin, created_at
-                FROM ticket_messages
-                WHERE id = ?
-                """,
-                [cursor.lastrowid]
-            )
-            new_message = cursor.fetchone()
+        # Hole die aktuelle Zeit für die Antwort
+        created_at = datetime.now()
+        formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
 
-            if not new_message:
-                logging.error("Konnte die neue Nachricht nicht abrufen")
-                return jsonify({'success': False, 'message': 'Fehler beim Abrufen der Nachricht'}), 500
-
-            # Formatiere das Datum
-            created_at = datetime.strptime(new_message['created_at'], '%Y-%m-%d %H:%M:%S')
-            formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
-
-            return jsonify({
-                'success': True,
-                'message': {
-                    'text': new_message['message'],
-                    'sender': new_message['sender'],
-                    'created_at': formatted_date,
-                    'is_admin': new_message['is_admin']
-                }
-            })
+        return jsonify({
+            'success': True,
+            'message': {
+                'text': message,
+                'sender': current_user.username,
+                'created_at': formatted_date,
+                'is_admin': is_admin
+            }
+        })
 
     except Exception as e:
         logging.error(f"Fehler beim Hinzufügen der Nachricht: {str(e)}", exc_info=True)

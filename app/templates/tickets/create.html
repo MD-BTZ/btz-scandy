@@ -67,7 +67,37 @@
                             </label>
                             <input type="number" name="estimated_time" class="input input-bordered" min="0" required>
                         </div>
-                        
+
+                        <!-- Auftragsdetails Abschnitt (nur relevante Felder) -->
+                        <div class="divider mt-8 mb-4">Auftragsdetails</div>
+                        <div class="form-control mb-4">
+                            <label class="label"><span class="label-text">Bereich</span></label>
+                            <input type="text" name="bereich" class="input input-bordered">
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label"><span class="label-text">Auftraggeber</span></label>
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="auftraggeber_intern" value="1" class="checkbox">
+                                <span class="ml-2">Intern</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="auftraggeber_extern" value="1" class="checkbox">
+                                <span class="ml-2">Extern</span>
+                            </label>
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label"><span class="label-text">Name Auftraggeber</span></label>
+                            <input type="text" name="auftraggeber_name" class="input input-bordered">
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label"><span class="label-text">Kontakt</span></label>
+                            <input type="text" name="kontakt" class="input input-bordered">
+                        </div>
+                        <div class="form-control mb-4">
+                            <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
+                            <textarea name="auftragsbeschreibung" class="textarea textarea-bordered h-24"></textarea>
+                        </div>
+
                         <button type="submit" class="btn btn-primary w-full" id="submitBtn">
                             <i class="fas fa-plus mr-2"></i>
                             Auftrag erstellen
@@ -141,6 +171,73 @@
                         </div>
                     {% else %}
                         <p class="text-base-content/60">Sie haben noch keine Aufträge erstellt.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Zugewiesene Aufträge -->
+            <div class="card bg-base-100 shadow-xl mt-6">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Mir zugewiesene Aufträge</h2>
+                    
+                    {% if assigned_tickets %}
+                        <div class="overflow-x-auto">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Titel</th>
+                                        <th>Status</th>
+                                        <th>Priorität</th>
+                                        <th>Kategorie</th>
+                                        <th>Fällig am</th>
+                                        <th>Geschätzte Zeit</th>
+                                        <th>Nachrichten</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ticket in assigned_tickets %}
+                                    <tr>
+                                        <td>{{ ticket.id }}</td>
+                                        <td>
+                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
+                                                {{ ticket.title }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-{{ status_colors[ticket.status] }}">
+                                                {{ ticket.status }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-{{ priority_colors[ticket.priority] }}">
+                                                {{ ticket.priority }}
+                                            </span>
+                                        </td>
+                                        <td>{{ ticket.category or '-' }}</td>
+                                        <td>{{ ticket.due_date or '-' }}</td>
+                                        <td>{{ ticket.estimated_time or '-' }} Min.</td>
+                                        <td>
+                                            {% if ticket.message_count > 0 %}
+                                            <span class="badge badge-primary">{{ ticket.message_count }}</span>
+                                            {% else %}
+                                            <span class="text-base-content/60">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" 
+                                               class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-base-content/60">Es sind keine Aufträge an Sie zugewiesen.</p>
                     {% endif %}
                 </div>
             </div>

@@ -110,6 +110,94 @@
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Auftragsdetails und Materialliste -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <h3 class="font-bold mb-4">
+                        <i class="fas fa-clipboard-list text-primary mr-2"></i>
+                        Auftragsdetails
+                    </h3>
+                    <form method="POST" action="{{ url_for('tickets.update', id=ticket.id) }}" id="auftragDetailsForm">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label"><span class="label-text">Bereich</span></label>
+                                <input type="text" name="bereich" class="input input-bordered w-full" value="{{ auftrag_details.bereich if auftrag_details else '' }}">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
+                                <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ auftrag_details.fertigstellungstermin if auftrag_details else '' }}">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Auftraggeber</span></label>
+                                <label class="cursor-pointer mr-4">
+                                    <input type="checkbox" name="auftraggeber_intern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_intern %}checked{% endif %}>
+                                    <span class="ml-2">Intern</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="auftraggeber_extern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_extern %}checked{% endif %}>
+                                    <span class="ml-2">Extern</span>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Name Auftraggeber</span></label>
+                                <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ auftrag_details.auftraggeber_name if auftrag_details else '' }}">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="label"><span class="label-text">Kontakt</span></label>
+                                <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ auftrag_details.kontakt if auftrag_details else '' }}">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
+                                <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.auftragsbeschreibung if auftrag_details else '' }}</textarea>
+                            </div>
+                        </div>
+                        <div class="divider my-6">Materialliste</div>
+                        <div id="materialList">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Material</th>
+                                        <th>Menge</th>
+                                        <th>Einzelpreis (€)</th>
+                                        <th>Gesamtpreis (€)</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="materialRows">
+                                    {% if material_list %}
+                                        {% for mat in material_list %}
+                                        <tr>
+                                            <td><input type="text" name="material" class="input input-bordered w-full" value="{{ mat.material }}"></td>
+                                            <td><input type="number" name="menge" class="input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
+                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td><input type="text" name="material" class="input input-bordered w-full"></td>
+                                            <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                        </div>
+                        <div class="flex justify-end mt-4">
+                            <div class="font-bold mr-4">Summe Material:</div>
+                            <div id="summeMaterial" class="font-bold">0,00 €</div>
+                        </div>
+                        <div class="flex justify-end mt-2">
+                            <button type="submit" class="btn btn-primary">Speichern</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
 
         <!-- Meta Informationen -->
@@ -290,10 +378,6 @@
     </div>
 </dialog>
 
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
 <script>
 function deleteTicket(id) {
     if (confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
@@ -440,5 +524,43 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
         alert('Ein Fehler ist aufgetreten');
     });
 });
+
+function updateSumme(el) {
+    const row = el.closest('tr');
+    const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+    const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+    const gesamt = menge * einzelpreis;
+    row.querySelector('input[name="gesamtpreis"]').value = gesamt.toFixed(2);
+    updateSummeMaterial();
+}
+function updateSummeMaterial() {
+    let summe = 0;
+    document.querySelectorAll('#materialRows tr').forEach(row => {
+        const gesamt = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        summe += gesamt;
+    });
+    document.getElementById('summeMaterial').innerText = summe.toFixed(2) + ' €';
+}
+function addMaterialRow() {
+    const tbody = document.getElementById('materialRows');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" name="material" class="input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+}
+function removeMaterialRow(btn) {
+    btn.closest('tr').remove();
+    updateSummeMaterial();
+}
+document.addEventListener('DOMContentLoaded', updateSummeMaterial);
+document.querySelectorAll('input[name="menge"], input[name="einzelpreis"]').forEach(input => {
+    input.addEventListener('input', function() { updateSumme(this); });
+});
 </script>
+
 {% endblock %} 

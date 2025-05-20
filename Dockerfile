@@ -20,7 +20,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/backups /app/venv
+RUN mkdir -p /app/backups /app/venv /app/tmp
+
+# Erstelle die needs_restart-Datei
+RUN touch /app/tmp/needs_restart
 
 # Setze Umgebungsvariablen
 ENV FLASK_APP=app.wsgi:application
@@ -31,4 +34,4 @@ ENV DATABASE_URL=sqlite:////app/database/inventory.db
 EXPOSE 5000
 
 # Starte die Anwendung mit Gunicorn und aktiviere Reload bei Trigger-Datei
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reload", "--reload-extra-file", "tmp/needs_restart", "app.wsgi:application"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reload", "--reload-extra-file", "/app/tmp/needs_restart", "app.wsgi:application"] 

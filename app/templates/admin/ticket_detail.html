@@ -158,14 +158,19 @@
                             <label class="label">
                                 <span class="label-text">Kategorie</span>
                             </label>
-                            <select class="select select-bordered w-full" name="category">
-                                <option value="">Keine Kategorie</option>
+                            <select class="select select-bordered w-full" name="category" id="categorySelect">
+                                <option value="" disabled selected hidden>Kategorie auswählen</option>
                                 {% for category in categories %}
                                 <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
                                     {{ category }}
                                 </option>
                                 {% endfor %}
+                                <option value="__new__">Neue Kategorie anlegen…</option>
                             </select>
+                            <input type="text" name="new_category" id="newCategoryInput" class="input input-bordered mt-2 w-full" placeholder="Neue Kategorie eingeben" style="display:none;" autocomplete="off">
+                            <label class="label">
+                                <span class="label-text-alt">Wählen Sie eine bestehende Kategorie oder legen Sie eine neue an</span>
+                            </label>
                         </div>
                         <div class="form-control mb-4">
                             <label class="label">
@@ -334,6 +339,65 @@ document.getElementById('noteForm').addEventListener('submit', async function(e)
         console.error('Fehler:', error);
         alert('Ein Fehler ist aufgetreten');
     }
+});
+
+// Kategorie-Auswahl-Funktionalität
+document.getElementById('categorySelect').addEventListener('change', function() {
+    const newCategoryInput = document.getElementById('newCategoryInput');
+    if (this.value === '__new__') {
+        newCategoryInput.style.display = '';
+        newCategoryInput.required = true;
+    } else {
+        newCategoryInput.style.display = 'none';
+        newCategoryInput.required = false;
+        newCategoryInput.value = '';
+    }
+});
+
+// Formular-Submit-Handler anpassen
+document.querySelector('form[action="{{ url_for("admin.update_ticket", ticket_id=ticket.id) }}"]').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    let category = formData.get('category');
+    if (category === '__new__') {
+        category = formData.get('new_category');
+    }
+    
+    // Alle Formulardaten sammeln
+    const data = {
+        status: formData.get('status'),
+        assigned_to: formData.get('assigned_to'),
+        category: category,
+        due_date: formData.get('due_date'),
+        estimated_time: formData.get('estimated_time'),
+        actual_time: formData.get('actual_time')
+    };
+    
+    // AJAX-Anfrage senden
+    fetch(this.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Ticket erfolgreich aktualisiert');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Ein Fehler ist aufgetreten');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', error.message || 'Ein Fehler ist aufgetreten');
+    });
 });
 </script>
 {% endblock %} 
