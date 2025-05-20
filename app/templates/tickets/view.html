@@ -35,7 +35,17 @@
                             <p class="text-sm opacity-70">Kategorie</p>
                             <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
+                            <p>
+                                {% if ticket.due_date %}
+                                    {% if ticket.due_date is string %}
+                                        {{ ticket.due_date }}
+                                    {% else %}
+                                        {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                                    {% endif %}
+                                {% else %}
+                                    Nicht gesetzt
+                                {% endif %}
+                            </p>
                             <p class="text-sm opacity-70 mt-2">Geschätzte Zeit</p>
                             <p>{{ ticket.estimated_time or 'Nicht gesetzt' }} Stunden</p>
                         </div>

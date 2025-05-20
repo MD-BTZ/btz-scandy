@@ -61,8 +61,10 @@ CREATE TABLE IF NOT EXISTS ticket_notes (
     ticket_id INTEGER NOT NULL,
     note TEXT NOT NULL,
     created_by TEXT NOT NULL,
+    is_private BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE
+    FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users (username)
 );
 
 -- Ticket-Kommunikation Tabelle

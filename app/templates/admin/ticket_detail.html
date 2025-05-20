@@ -297,7 +297,7 @@ document.getElementById('noteForm').addEventListener('submit', async function(e)
     const note = formData.get('note');
     
     try {
-        const response = await fetch(`/admin/tickets/{{ ticket.id }}/note`, {
+        const response = await fetch("{{ url_for('admin.add_ticket_note', ticket_id=ticket.id) }}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

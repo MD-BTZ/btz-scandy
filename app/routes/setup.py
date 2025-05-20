@@ -38,14 +38,13 @@ def setup_admin():
         # Erstelle den Admin-Benutzer
         success, message = create_admin_user(username, password, 'admin')
         if success:
-            return redirect(url_for('setup.setup_settings'))
+            return redirect(url_for('setup.settings'))
         else:
             return render_template('setup_admin.html', error=message)
                 
     return render_template('setup_admin.html')
 
 @bp.route('/setup/settings', methods=['GET', 'POST'])
-@login_required
 def settings():
     """Systemeinstellungen"""
     ticket_db = TicketDatabase()
@@ -74,7 +73,7 @@ def settings():
                 ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
             
             flash('Einstellungen erfolgreich gespeichert', 'success')
-            return redirect(url_for('setup.settings'))
+            return redirect(url_for('setup.setup_optional'))
             
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Einstellungen: {str(e)}")
@@ -142,31 +141,59 @@ def setup_optional():
     # Lade vorhandene Einstellungen für die Anzeige
     try:
         with Database.get_db() as conn:
+            # Erstelle homepage_notices Tabelle falls nicht vorhanden
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS homepage_notices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    priority INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Hole alle Kategorien
-            categories = conn.execute('''
+            categories = [row['name'] for row in conn.execute('''
                 SELECT name FROM categories 
                 WHERE deleted = 0 
                 ORDER BY name
-            ''').fetchall()
+            ''').fetchall()]
             
             # Hole alle Standorte
-            locations = conn.execute('''
+            locations = [row['name'] for row in conn.execute('''
                 SELECT name FROM locations 
                 WHERE deleted = 0 
                 ORDER BY name
-            ''').fetchall()
+            ''').fetchall()]
             
             # Hole alle Abteilungen
-            departments = conn.execute('''
+            departments = [row['name'] for row in conn.execute('''
                 SELECT name FROM departments 
                 WHERE deleted = 0 
                 ORDER BY name
-            ''').fetchall()
+            ''').fetchall()]
+            
+            # Hole App-Labels aus den Einstellungen
+            ticket_db = TicketDatabase()
+            settings = {}
+            rows = ticket_db.query('SELECT key, value FROM settings')
+            for row in rows:
+                settings[row['key']] = row['value']
+            
+            # Initialisiere app_labels mit Standardwerten
+            app_labels = {
+                'tools': settings.get('label_tools_name', 'Werkzeuge'),
+                'consumables': settings.get('label_consumables_name', 'Verbrauchsmaterial')
+            }
+            
+            logger.info(f"App Labels: {app_labels}")  # Debug-Logging
             
             return render_template('setup_optional.html', 
-                                 categories=[c['name'] for c in categories],
-                                 locations=[l['name'] for l in locations],
-                                 departments=[d['name'] for d in departments])
+                                 categories=categories,
+                                 locations=locations,
+                                 departments=departments,
+                                 app_labels=app_labels)
     except Exception as e:
         logger.error(f"Fehler beim Laden der optionalen Einstellungen: {e}")
         return render_template('setup_optional.html', error='Fehler beim Laden der Einstellungen')

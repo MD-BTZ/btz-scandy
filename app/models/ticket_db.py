@@ -293,13 +293,20 @@ class TicketDatabase:
                     priority TEXT DEFAULT 'normal',
                     created_by TEXT NOT NULL,
                     assigned_to TEXT,
+                    category TEXT,
+                    due_date TIMESTAMP,
+                    estimated_time INTEGER,
+                    actual_time INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     resolved_at TIMESTAMP,
                     resolution_notes TEXT,
                     response TEXT,
+                    last_modified_by TEXT,
+                    last_modified_at TIMESTAMP,
                     FOREIGN KEY (created_by) REFERENCES users(username),
-                    FOREIGN KEY (assigned_to) REFERENCES users(username)
+                    FOREIGN KEY (assigned_to) REFERENCES users(username),
+                    FOREIGN KEY (last_modified_by) REFERENCES users(username)
                 )
             ''')
             
@@ -310,6 +317,7 @@ class TicketDatabase:
                     ticket_id INTEGER NOT NULL,
                     note TEXT NOT NULL,
                     created_by TEXT NOT NULL,
+                    is_private BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
                     FOREIGN KEY (created_by) REFERENCES users(username)
@@ -568,7 +576,7 @@ class TicketDatabase:
                 # Konvertiere Datumsfelder
                 date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
                 for field in date_fields:
-                    if ticket_dict[field]:
+                    if field in ticket_dict and ticket_dict[field]:
                         try:
                             ticket_dict[field] = datetime.strptime(ticket_dict[field], '%Y-%m-%d %H:%M:%S')
                         except (ValueError, TypeError):

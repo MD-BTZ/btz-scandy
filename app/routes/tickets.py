@@ -81,59 +81,53 @@ def create():
 @bp.route('/view/<int:ticket_id>')
 @login_required
 def view(ticket_id):
-    """Zeigt die Details eines Tickets für den Benutzer."""
+    """Zeigt die Details eines Tickets an."""
     logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
     
-    ticket = ticket_db.get_ticket(ticket_id)
+    # Hole das Ticket
+    ticket = ticket_db.query(
+        """
+        SELECT *
+        FROM tickets
+        WHERE id = ? AND created_by = ?
+        """,
+        [ticket_id, current_user.username],
+        one=True
+    )
     
     if not ticket:
-        logging.error(f"Ticket {ticket_id} nicht gefunden")
-        flash('Ticket nicht gefunden.', 'error')
-        return redirect(url_for('tickets.create'))
-        
-    # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
-    if ticket['created_by'] != current_user.username and not current_user.is_admin:
-        logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
-        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-        return redirect(url_for('tickets.create'))
+        abort(404)
     
-    # Hole die Nachrichten für das Ticket
-    logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
+    logging.info("Hole Nachrichten für Ticket {ticket_id}")
     
-    # Direkte SQL-Abfrage mit Database.get_db()
-    with Database.get_db() as db:
-        cursor = db.cursor()
-        cursor.execute(
-            """
-            SELECT id, message, sender, is_admin, created_at
-            FROM ticket_messages
-            WHERE ticket_id = ?
-            ORDER BY created_at ASC
-            """,
-            [ticket_id]
-        )
-        raw_messages = cursor.fetchall()
-        logging.info(f"SQL-Abfrage ergab {len(raw_messages)} Nachrichten")
-        
-        # Konvertiere sqlite3.Row in Dictionaries und formatiere Datum
-        messages = []
-        for msg in raw_messages:
-            message_dict = dict(msg)
-            if message_dict['created_at']:
-                try:
-                    created_at = datetime.strptime(message_dict['created_at'], '%Y-%m-%d %H:%M:%S')
-                    message_dict['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-                    logging.info(f"Nachricht {message_dict['id']} formatiert: {message_dict['created_at']}")
-                except ValueError as e:
-                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {message_dict['id']}: {str(e)}")
-            messages.append(message_dict)
-            logging.info(f"Nachricht verarbeitet: ID={message_dict['id']}, Sender={message_dict['sender']}, Text={message_dict['message']}, Datum={message_dict['created_at']}")
+    # Hole die Nachrichten mit der richtigen Datenbankverbindung
+    messages = ticket_db.get_ticket_messages(ticket_id)
+    
+    # Formatiere die Datumsangaben
+    for message in messages:
+        if message['created_at']:
+            try:
+                created_at = datetime.strptime(message['created_at'], '%Y-%m-%d %H:%M:%S')
+                message['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
+            except ValueError as e:
+                logging.error(f"Fehler beim Formatieren des Datums für Nachricht {message['id']}: {str(e)}")
     
     message_count = len(messages)
     logging.info(f"Nachrichtenanzahl: {message_count}")
     
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
+    
+    # Konvertiere Datumsfelder des Tickets
+    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+    for field in date_fields:
+        if ticket.get(field):
+            try:
+                if isinstance(ticket[field], str):
+                    ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError) as e:
+                logging.error(f"Fehler beim Konvertieren des Datums {field} für Ticket {ticket_id}: {str(e)}")
+                ticket[field] = None
     
     return render_template('tickets/view.html',
                          ticket=ticket,
@@ -175,8 +169,8 @@ def add_message(ticket_id):
         logging.info(f"Versuche Nachricht zu speichern: Ticket {ticket_id}, Benutzer {current_user.username}, Nachricht: {message}")
 
         # Nachricht zur Datenbank hinzufügen
-        with Database.get_db() as db:
-            cursor = db.cursor()
+        with ticket_db.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO ticket_messages (ticket_id, message, sender, is_admin, created_at)
@@ -195,7 +189,7 @@ def add_message(ticket_id):
                 [ticket_id]
             )
             
-            db.commit()
+            conn.commit()
             logging.info(f"Nachricht erfolgreich gespeichert mit ID {cursor.lastrowid}")
 
             # Hole die eingefügte Nachricht
