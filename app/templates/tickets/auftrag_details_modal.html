@@ -1,5 +1,5 @@
 <!-- Modal für Auftragsdetails und Materialliste -->
-<dialog id="auftragDetailsModal" class="modal">
+<dialog id="auftragDetailsModal" class="modal" data-ticket-id="{{ ticket.id }}">
     <div class="modal-box" style="width:70vw; height:90vh; max-width:none; max-height:none; overflow:auto;">
         <h3 class="font-bold text-lg mb-4">
             <i class="fas fa-clipboard-list text-primary mr-2"></i>
@@ -56,45 +56,65 @@
                             {% for mat in material_list %}
                             <tr class="material-row">
                                 <td><input type="text" name="material" class="material-input input input-bordered w-full" value="{{ mat.material }}"></td>
-                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any" onchange="updateSumme(this)"></td>
-                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any"></td>
+                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any"></td>
                                 <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
-                                <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr class="material-row">
                                 <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
-                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
                                 <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-                                <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
                             </tr>
                         {% endif %}
                     </tbody>
                 </table>
-                <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>
             </div>
             <div class="flex justify-end mt-4">
                 <div class="font-bold mr-4">Summe Material:</div>
                 <div id="summeMaterial" class="font-bold">0,00 €</div>
             </div>
-            <div class="divider my-6">Weitere Auftragsdetails</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="label"><span class="label-text">Ausgeführte Arbeiten</span></label>
-                    <textarea name="ausgefuehrte_arbeiten" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.ausgefuehrte_arbeiten if auftrag_details else '' }}</textarea>
-                </div>
-                <div>
-                    <label class="label"><span class="label-text">Arbeitsstunden</span></label>
-                    <input type="number" name="arbeitsstunden" class="input input-bordered w-full" min="0" step="any" value="{{ auftrag_details.arbeitsstunden if auftrag_details else '' }}">
-                </div>
-                <div>
-                    <label class="label"><span class="label-text">Leistungskategorie</span></label>
-                    <input type="text" name="leistungskategorie" class="input input-bordered w-full" value="{{ auftrag_details.leistungskategorie if auftrag_details else '' }}">
-                </div>
+            <div class="divider my-6">Ausgeführte Arbeiten</div>
+            <div id="arbeitenList">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>Arbeit</th>
+                            <th>Arbeitsstunden</th>
+                            <th>Leistungskategorie</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="arbeitenRows">
+                        {% if auftrag_details and auftrag_details.ausgefuehrte_arbeiten %}
+                            {% for arbeit in auftrag_details.ausgefuehrte_arbeiten.split('\n') %}
+                                {% if arbeit %}
+                                    {% set parts = arbeit.split('|') %}
+                                    <tr class="arbeit-row">
+                                        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" value="{{ parts[0] if parts|length > 0 else '' }}"></td>
+                                        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-24" min="0" step="any" value="{{ parts[1] if parts|length > 1 else '' }}"></td>
+                                        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" value="{{ parts[2] if parts|length > 2 else '' }}"></td>
+                                        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                                    </tr>
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                        <tr class="arbeit-row">
+                            <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+                            <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-24" min="0" step="any"></td>
+                            <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+                            <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button type="button" class="btn btn-secondary mt-2" id="addArbeitBtn"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
             </div>
-            <div class="flex justify-end mt-2">
+            <div class="flex justify-end mt-4">
                 <button type="submit" class="btn btn-primary">Speichern</button>
                 <button type="button" class="btn ml-2" onclick="document.getElementById('auftragDetailsModal').close()">Abbrechen</button>
             </div>
@@ -103,52 +123,20 @@
 </dialog>
 
 <script>
+// Setze die Ticket-ID für die JavaScript-Funktionen
+const ticketId = {{ ticket.id }};
+
+// Initialisiere das Modal nach dem Laden
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialisiere die Summen beim Laden
-    updateSummeMaterial();
-    
-    // Event-Listener für Material-Inputs
-    document.querySelectorAll('.menge-input, .einzelpreis-input').forEach(input => {
-        input.addEventListener('input', function() {
-            updateSumme(this);
-        });
-    });
+    const modal = document.getElementById('auftragDetailsModal');
+    if (modal) {
+        console.log('Modal gefunden, initialisiere...');
+        // Lade das Script dynamisch nur wenn das Modal existiert
+        const script = document.createElement('script');
+        script.src = "{{ url_for('static', filename='js/tickets.js') }}";
+        document.body.appendChild(script);
+    } else {
+        console.log('Modal nicht gefunden');
+    }
 });
-
-function updateSumme(el) {
-    const row = el.closest('tr');
-    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-    const gesamt = menge * einzelpreis;
-    row.querySelector('input[name="gesamtpreis"]').value = gesamt.toFixed(2);
-    updateSummeMaterial();
-}
-
-function updateSummeMaterial() {
-    let summe = 0;
-    document.querySelectorAll('#materialRows tr').forEach(row => {
-        const gesamt = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
-        summe += gesamt;
-    });
-    document.getElementById('summeMaterial').innerText = summe.toFixed(2) + ' €';
-}
-
-function addMaterialRow() {
-    const tbody = document.getElementById('materialRows');
-    const tr = document.createElement('tr');
-    tr.className = 'material-row';
-    tr.innerHTML = `
-        <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
-        <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-        <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
-    `;
-    tbody.appendChild(tr);
-}
-
-function removeMaterialRow(btn) {
-    btn.closest('tr').remove();
-    updateSummeMaterial();
-}
 </script> 

@@ -359,40 +359,43 @@ def detail(id):
 def update(id):
     """Aktualisiert ein Ticket"""
     try:
-        ticket = ticket_db.get_ticket(id)
-        if not ticket:
-            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
-
-        # JSON-Daten aus dem Request holen
         data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'message': 'Keine Daten empfangen'}), 400
-
-        # Auftragsdetails aktualisieren
+        logging.info(f"Empfangene Daten für Ticket {id}: {data}")
+        
+        # Verarbeite ausgeführte Arbeiten
+        ausgefuehrte_arbeiten = data.get('ausgefuehrte_arbeiten', '')
+        logging.info(f"Empfangene ausgeführte Arbeiten: {ausgefuehrte_arbeiten}")
+        
+        # Bereite die Auftragsdetails vor
         auftrag_details = {
             'bereich': data.get('bereich', ''),
-            'auftraggeber_intern': data.get('auftraggeber_intern', False),
-            'auftraggeber_extern': data.get('auftraggeber_extern', False),
+            'auftraggeber_intern': bool(data.get('auftraggeber_intern', False)),
+            'auftraggeber_extern': bool(data.get('auftraggeber_extern', False)),
             'auftraggeber_name': data.get('auftraggeber_name', ''),
             'kontakt': data.get('kontakt', ''),
             'auftragsbeschreibung': data.get('auftragsbeschreibung', ''),
-            'ausgefuehrte_arbeiten': data.get('ausgefuehrte_arbeiten', ''),
+            'ausgefuehrte_arbeiten': ausgefuehrte_arbeiten,
             'arbeitsstunden': data.get('arbeitsstunden', ''),
             'leistungskategorie': data.get('leistungskategorie', ''),
             'fertigstellungstermin': data.get('fertigstellungstermin', '')
         }
         
-        ticket_db.update_auftrag_details(ticket_id=id, **auftrag_details)
-
-        # Materialliste aktualisieren
+        logging.info(f"Verarbeitete ausgeführte Arbeiten: {auftrag_details['ausgefuehrte_arbeiten']}")
+        
+        # Aktualisiere die Auftragsdetails
+        if not ticket_db.update_auftrag_details(id, **auftrag_details):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Auftragsdetails'})
+        
+        # Aktualisiere die Materialliste
         material_list = data.get('material_list', [])
-        ticket_db.update_auftrag_material(ticket_id=id, material_list=material_list)
-
-        return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
-
+        if not ticket_db.update_auftrag_material(id, material_list):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Materialliste'})
+        
+        return jsonify({'success': True})
+        
     except Exception as e:
-        logging.error(f"Fehler beim Aktualisieren des Tickets: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logging.error(f"Fehler beim Aktualisieren des Tickets {id}: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 @admin_required
@@ -560,14 +563,14 @@ def update_details(id):
             except ValueError:
                 due_date = None
 
-        # Aktualisiere die Ticket-Details
+        # Aktualisiere die Ticket-Details, behalte bestehende Werte bei wenn nicht im Request
         ticket_db.update_ticket(
             id=id,
             status=ticket['status'],  # Behalte den aktuellen Status bei
             assigned_to=ticket['assigned_to'],  # Behalte die aktuelle Zuweisung bei
-            category=data.get('category'),
-            due_date=due_date,
-            estimated_time=data.get('estimated_time'),
+            category=data.get('category', ticket['category']),  # Behalte bestehende Kategorie wenn nicht im Request
+            due_date=due_date if due_date else ticket['due_date'],  # Behalte bestehendes Datum wenn nicht im Request
+            estimated_time=data.get('estimated_time', ticket['estimated_time']),  # Behalte bestehende Zeit wenn nicht im Request
             last_modified_by=current_user.username
         )
 
@@ -740,4 +743,18 @@ def get_unassigned_ticket_count():
 @bp.app_context_processor
 def inject_unread_tickets_count():
     count = get_unassigned_ticket_count()
-    return dict(unread_tickets_count=count) 
+    return dict(unread_tickets_count=count)
+
+@bp.route('/debug-auftrag-details/<int:ticket_id>')
+@login_required
+def debug_auftrag_details(ticket_id):
+    """Temporäre Debug-Route zum Anzeigen der Auftragsdetails"""
+    auftrag_details = ticket_db.get_auftrag_details(ticket_id)
+    return jsonify({
+        'auftrag_details': auftrag_details,
+        'raw_data': ticket_db.query(
+            "SELECT * FROM auftrag_details WHERE ticket_id = ?",
+            [ticket_id],
+            one=True
+        )
+    }) 

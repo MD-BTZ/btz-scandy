@@ -28,71 +28,71 @@ const QuickScan = {
         console.log('QuickScan initialisiert');
     },
 
-        setupEventListeners() {
+    setupEventListeners() {
         // Event-Listener für Item-Scan
-            const itemInput = document.getElementById('itemScanInput');
-            if (itemInput) {
+        const itemInput = document.getElementById('itemScanInput');
+        const confirmItemBtnElement = document.getElementById('confirmItemBtn');
+        const undoItemBtnElement = document.getElementById('undoItemBtn');
+        const workerInput = document.getElementById('workerScanInput');
+        const confirmWorkerBtnElement = document.getElementById('confirmWorkerButton');
+        const undoWorkerBtnElement = document.getElementById('undoWorkerButton');
+        const modal = document.getElementById('quickScanModal');
+        const activeInput = document.getElementById('quickScanActiveInput');
+
+        // Prüfe ob wir uns auf einer QuickScan-Seite befinden
+        if (!modal) {
+            console.log('QuickScan-Modal nicht gefunden - Event-Listener werden nicht initialisiert');
+            return;
+        }
+
+        // Event-Listener für Item-Scan
+        if (itemInput) {
             itemInput.addEventListener('keydown', (e) => {
                 this.handleKeyInput(e, itemInput);
             });
 
-            // Event-Listener für Bestätigungs-Button (manuelle Bestätigung via Klick)
-            // Die IDs müssen mit denen im HTML übereinstimmen!
-            const confirmItemBtnElement = document.getElementById('confirmItemBtn');
             if (confirmItemBtnElement) {
                 confirmItemBtnElement.addEventListener('click', () => {
-                    this.confirmItem(); // Ruft handleScannerInput mit keyBuffer, falls vorhanden
+                    this.confirmItem();
                 });
             }
 
-            // Event-Listener für Rückgängig-Button
-            const undoItemBtnElement = document.getElementById('undoItemBtn');
             if (undoItemBtnElement) {
                 undoItemBtnElement.addEventListener('click', () => {
                     this.undoLastInput('item');
                 });
             }
 
-            // Minimaler Input-Listener, um den Buffer zu leeren, falls der Scanner ohne Enter sendet
-            // Die Hauptlogik ist in handleKeyInput
             itemInput.addEventListener('input', (e) => {
                 if (e.target.value && e.target.value.length > this.keyBuffer.length && e.target.value.includes(this.keyBuffer)) {
-                    // Wenn der Input-Wert den Buffer enthält und länger ist (typisch für schnelles Scannen ohne explizites Enter)
-                    // dann nehmen wir an, dass der Scanner fertig ist und leiten den vollen Wert weiter.
-                    // Dies ist ein Versuch, Scanner abzufangen, die kein Enter senden.
                     console.log(`[DEBUG] itemInput 'input' event, potenzieller Scanner-Input ohne Enter: ${e.target.value}`);
-                    this.handleScannerInput(e.target.value, itemInput); 
-                    e.target.value = ''; // Input leeren
-                    this.keyBuffer = ''; // Buffer auch leeren
+                    this.handleScannerInput(e.target.value, itemInput);
+                    e.target.value = '';
+                    this.keyBuffer = '';
                 } else if (!e.target.value) {
-                     // Wenn das Feld geleert wird (z.B. durch Backspace), Buffer auch leeren.
                     this.keyBuffer = '';
                 }
             });
 
-            // Fokus wiederherstellen bei Klick außerhalb
             itemInput.addEventListener('blur', () => {
                 if (this.currentStep === 1) {
-                    // setTimeout(() => this.focusCurrentInput(), 100); // Testweise deaktiviert, um zu sehen ob es hilft
+                    // setTimeout(() => this.focusCurrentInput(), 100);
                 }
             });
-            }
+        }
 
         // Event-Listener für Worker-Scan
-        const workerInput = document.getElementById('workerScanInput');
         if (workerInput) {
             workerInput.addEventListener('keydown', (e) => {
                 this.handleKeyInput(e, workerInput);
             });
 
-            const confirmWorkerBtnElement = document.getElementById('confirmWorkerButton');
             if (confirmWorkerBtnElement) {
                 confirmWorkerBtnElement.addEventListener('click', () => {
                     this.confirmWorker();
                 });
             }
 
-            const undoWorkerBtnElement = document.getElementById('undoWorkerButton');
             if (undoWorkerBtnElement) {
                 undoWorkerBtnElement.addEventListener('click', () => {
                     this.undoLastInput('worker');
@@ -110,16 +110,14 @@ const QuickScan = {
                 }
             });
 
-            // Fokus wiederherstellen bei Klick außerhalb
             workerInput.addEventListener('blur', () => {
                 if (this.currentStep === 2) {
-                    // setTimeout(() => this.focusCurrentInput(), 100); // Testweise deaktiviert
+                    // setTimeout(() => this.focusCurrentInput(), 100);
                 }
             });
         }
 
         // Event-Listener für Modal-Schließen
-        const modal = document.getElementById('quickScanModal');
         if (modal) {
             modal.addEventListener('close', () => {
                 this.reset();
@@ -141,7 +139,6 @@ const QuickScan = {
         });
 
         // Event-Listener für das neue sichtbare Eingabefeld
-        const activeInput = document.getElementById('quickScanActiveInput');
         if (activeInput) {
             activeInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -945,27 +942,22 @@ const QuickScan = {
 
 // QuickScan initialisieren wenn Modal geöffnet wird
 document.addEventListener('DOMContentLoaded', () => {
-    // console.log("QuickScan DOMContentLoaded"); 
     const modal = document.getElementById('quickScanModal');
     const trigger = document.getElementById('quickScanTrigger'); 
 
     if (modal) {
         // Listener für das 'close'-Event des Modals
         modal.addEventListener('close', () => {
-            // console.log("QuickScan modal closed, resetting and reloading."); 
             QuickScan.reset();
             // WORKAROUND: Seite neu laden...
             // TODO: Ursache finden...
             window.location.reload(); 
         });
-    } else {
-        console.error("QuickScan Modal not found!");
     }
 
     // Event Listener für den Trigger Button hinzufügen
     if (trigger) {
         trigger.addEventListener('click', () => {
-            // console.log("QuickScan trigger clicked"); 
             if (modal) {
                 modal.showModal(); 
                 QuickScan.init(); 
@@ -973,15 +965,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Cannot open QuickScan modal - modal not found!");
             }
         });
-    } else {
-        console.error("QuickScan trigger button not found!");
     }
 
     // Event listener to open the modal when the trigger is clicked
     const quickScanTrigger = document.getElementById('quickScanTrigger');
     if (quickScanTrigger) {
         quickScanTrigger.addEventListener('click', () => {
-            QuickScan.openModal();
+            if (modal) {
+                QuickScan.openModal();
+            }
         });
     }
 });

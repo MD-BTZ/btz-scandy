@@ -1,19 +1,19 @@
+// Hilfsfunktion für formatierte Debug-Ausgaben
+function debug(area, message, data = null) {
+    const timestamp = new Date().toISOString().split('T')[1];  // Nur die Uhrzeit
+    const baseMsg = `[${timestamp}] [${area}] ${message}`;
+    if (data) {
+        console.log(baseMsg, data);
+    } else {
+        console.log(baseMsg);
+    }
+}
+
 // Sofort ausgeführte Funktion mit Debug-Logging
 (function() {
     console.log('=== LENDING SERVICE INITIALIZATION START ===');
     console.log('Script location:', document.currentScript?.src || 'Unknown location');
     
-    // Hilfsfunktion für formatierte Debug-Ausgaben
-    function debug(area, message, data = null) {
-        const timestamp = new Date().toISOString().split('T')[1];  // Nur die Uhrzeit
-        const baseMsg = `[${timestamp}] [${area}] ${message}`;
-        if (data) {
-            console.log(baseMsg, data);
-        } else {
-            console.log(baseMsg);
-        }
-    }
-
     debug('INIT', 'Starting LendingService initialization');
 
     // Debug-Namespace
@@ -469,21 +469,86 @@ function processReturn(barcode) {
     });
 } 
 
-// Event-Listener für Rückgabe-Buttons
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initialisiere Rückgabe-Buttons');
-    const returnButtons = document.querySelectorAll('[data-barcode]');
-    returnButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const barcode = button.getAttribute('data-barcode');
-            console.log('Rückgabe-Button geklickt für Barcode:', barcode);
-            if (barcode) {
-                window.LendingService.returnItem(barcode);
-            } else {
-                console.error('Kein Barcode gefunden für Button:', button);
+// Funktion zum Behandeln der Rückgabe
+function handleReturn(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const button = e.currentTarget;
+    const barcode = button.dataset.barcode;
+    
+    if (!barcode) {
+        console.error('Kein Barcode gefunden für Button:', button);
+        return;
+    }
+    
+    console.log('Rückgabe-Button geklickt für Barcode:', barcode);
+    
+    if (confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+        window.LendingService.returnItem(barcode)
+            .then(success => {
+                if (success) {
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Fehler bei der Rückgabe:', error);
+                showToast('error', `Fehler bei der Rückgabe: ${error.message}`);
+            });
+    }
+}
+
+// Funktion zum Initialisieren der Rückgabe-Buttons
+function initializeReturnButtons() {
+    console.log('Initialisiere Event-Listener');
+    
+    // Warte auf DOM-Änderungen
+    const observer = new MutationObserver((mutations) => {
+        // Erweiterte Button-Selektoren
+        const returnButtons = document.querySelectorAll(
+            'button[data-barcode], .btn-error[data-barcode], [data-barcode], .return-btn'
+        );
+        console.log('Gefundene Rückgabe-Buttons:', returnButtons.length);
+        
+        if (returnButtons.length > 0) {
+            returnButtons.forEach(button => {
+                if (!button.hasAttribute('data-initialized')) {
+                    console.log('Initialisiere Button mit Barcode:', button.dataset.barcode);
+                    button.setAttribute('data-initialized', 'true');
+                    button.addEventListener('click', handleReturn);
+                }
+            });
+            observer.disconnect(); // Stoppe den Observer, wenn Buttons gefunden wurden
+        }
+    });
+
+    // Starte Beobachtung des gesamten Dokuments
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    // Initiale Prüfung
+    const returnButtons = document.querySelectorAll(
+        'button[data-barcode], .btn-error[data-barcode], [data-barcode], .return-btn'
+    );
+    if (returnButtons.length > 0) {
+        returnButtons.forEach(button => {
+            if (!button.hasAttribute('data-initialized')) {
+                console.log('Initialisiere Button mit Barcode:', button.dataset.barcode);
+                button.setAttribute('data-initialized', 'true');
+                button.addEventListener('click', handleReturn);
             }
         });
-    });
-}); 
+        observer.disconnect();
+    } else {
+        console.log('Keine Rückgabe-Buttons gefunden, warte auf DOM-Änderungen...');
+    }
+}
+
+// Warte auf DOM-Content-Loaded und initialisiere dann die Buttons
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeReturnButtons);
+} else {
+    initializeReturnButtons();
+} 
