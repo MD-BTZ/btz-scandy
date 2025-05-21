@@ -43,16 +43,27 @@ def create():
                 title = data.get('title')
                 description = data.get('description')
                 priority = data.get('priority', 'normal')
+                # Kategorie-Logik
                 category = data.get('category')
-                due_date = data.get('due_date')
-                estimated_time = data.get('estimated_time')
+                new_category = data.get('new_category')
             else:
                 title = request.form.get('title')
                 description = request.form.get('description')
                 priority = request.form.get('priority', 'normal')
                 category = request.form.get('category')
-                due_date = request.form.get('due_date')
-                estimated_time = request.form.get('estimated_time')
+                new_category = request.form.get('new_category')
+
+            # Wenn eine neue Kategorie eingegeben wurde, prüfe und füge sie ggf. hinzu
+            if new_category:
+                with Database.get_db() as db:
+                    exists = db.execute("SELECT 1 FROM categories WHERE name = ?", (new_category,)).fetchone()
+                    if not exists:
+                        db.execute("INSERT INTO categories (name) VALUES (?)", (new_category,))
+                        db.commit()
+                category = new_category
+
+            due_date = data.get('due_date') if request.is_json else request.form.get('due_date')
+            estimated_time = data.get('estimated_time') if request.is_json else request.form.get('estimated_time')
 
             # Formatiere das Fälligkeitsdatum
             if due_date:
@@ -78,28 +89,6 @@ def create():
                 due_date=due_date,
                 estimated_time=estimated_time
             )
-
-            # Auftragsdetails auslesen und speichern
-            auftragsdetails = {
-                'bereich': data.get('bereich', '') if request.is_json else request.form.get('bereich', ''),
-                'auftraggeber_intern': data.get('auftraggeber_intern', False) if request.is_json else bool(request.form.get('auftraggeber_intern')),
-                'auftraggeber_extern': data.get('auftraggeber_extern', False) if request.is_json else bool(request.form.get('auftraggeber_extern')),
-                'auftraggeber_name': data.get('auftraggeber_name', '') if request.is_json else request.form.get('auftraggeber_name', ''),
-                'kontakt': data.get('kontakt', '') if request.is_json else request.form.get('kontakt', ''),
-                'auftragsbeschreibung': description,  # Verwende die Hauptbeschreibung
-                'ausgefuehrte_arbeiten': data.get('ausgefuehrte_arbeiten', '') if request.is_json else request.form.get('ausgefuehrte_arbeiten', ''),
-                'arbeitsstunden': data.get('arbeitsstunden', '') if request.is_json else request.form.get('arbeitsstunden', ''),
-                'leistungskategorie': data.get('leistungskategorie', '') if request.is_json else request.form.get('leistungskategorie', ''),
-                'fertigstellungstermin': data.get('fertigstellungstermin', '') if request.is_json else request.form.get('fertigstellungstermin', '')
-            }
-
-            # Speichere die Auftragsdetails
-            ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
-
-            # Speichere die Materialliste
-            material_list = data.get('material_list', []) if request.is_json else request.form.getlist('material_list')
-            if material_list:
-                ticket_db.update_auftrag_material(ticket_id, material_list)
 
             if request.is_json:
                 return jsonify({
@@ -156,11 +145,20 @@ def create():
         ORDER BY t.created_at DESC
         """
     )
+    
+    # Hole alle Kategorien aus der Tabelle 'categories'
+    categories = ticket_db.query(
+        """
+        SELECT name FROM categories ORDER BY name
+        """
+    )
+    categories = [c['name'] for c in categories]
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
                          assigned_tickets=assigned_tickets,
                          open_tickets=open_tickets,
+                         categories=categories,
                          status_colors={
                              'offen': 'info',
                              'in_bearbeitung': 'warning',
@@ -688,12 +686,12 @@ def export_ticket(id):
     doc.save(output_path)
     return send_file(output_path, as_attachment=True, download_name=f"auftrag_{id}.docx")
 
-@bp.route('/auftrag/neu', methods=['GET', 'POST'])
+@bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
     # Kategorien aus der Tabelle 'categories' laden
     categories = ticket_db.query(
         """
-        SELECT name FROM categories WHERE deleted = 0 ORDER BY name
+        SELECT name FROM categories ORDER BY name
         """
     )
     categories = [c['name'] for c in categories]

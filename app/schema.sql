@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS categories (
     deleted_at TIMESTAMP
 );
 
+-- Füge Standard-Kategorie 'Sonstiges' ein, falls die Tabelle leer ist
+INSERT OR IGNORE INTO categories (name) VALUES ('Sonstiges');
+
 -- Standorte
 CREATE TABLE IF NOT EXISTS locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
