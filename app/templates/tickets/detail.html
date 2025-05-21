@@ -595,6 +595,75 @@ document.addEventListener('DOMContentLoaded', updateSummeMaterial);
 document.querySelectorAll('input[name="menge"], input[name="einzelpreis"]').forEach(input => {
     input.addEventListener('input', function() { updateSumme(this); });
 });
+
+// Formular für Auftragsdetails
+document.getElementById('auftragDetailsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        status: formData.get('status'),
+        priority: formData.get('priority'),
+        assigned_to: formData.get('assigned_to'),
+        due_date: formData.get('due_date'),
+        // Auftragsdetails
+        bereich: formData.get('bereich'),
+        auftraggeber_intern: formData.get('auftraggeber_intern') === '1',
+        auftraggeber_extern: formData.get('auftraggeber_extern') === '1',
+        auftraggeber_name: formData.get('auftraggeber_name'),
+        kontakt: formData.get('kontakt'),
+        auftragsbeschreibung: formData.get('auftragsbeschreibung'),
+        ausgefuehrte_arbeiten: formData.get('ausgefuehrte_arbeiten'),
+        arbeitsstunden: formData.get('arbeitsstunden'),
+        leistungskategorie: formData.get('leistungskategorie'),
+        fertigstellungstermin: formData.get('fertigstellungstermin'),
+        // Materialliste
+        material_list: []
+    };
+    
+    // Sammle Materialdaten
+    document.querySelectorAll('#materialRows tr').forEach(row => {
+        const material = row.querySelector('input[name="material"]').value;
+        const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+        
+        if (material && menge > 0 && einzelpreis > 0) {
+            data.material_list.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis
+            });
+        }
+    });
+    
+    fetch(this.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Speichern der Änderungen');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert(error.message || 'Ein Fehler ist aufgetreten');
+    });
+});
 </script>
 
 {% endblock %} 

@@ -1,10 +1,13 @@
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string
 from app.models.ticket_db import TicketDatabase
 from app.models.database import Database
 from app.utils.decorators import login_required, admin_required
 import logging
 from datetime import datetime
 from flask_login import current_user
+from docxtpl import DocxTemplate
+import os
+from app.models.user import User
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 ticket_db = TicketDatabase()
@@ -13,13 +16,13 @@ ticket_db = TicketDatabase()
 @login_required
 def index():
     """Zeigt die Ticket-Übersicht für den Benutzer."""
-    # Hole die eigenen Tickets für die Anzeige
+    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
     my_tickets = ticket_db.query(
         """
         SELECT t.*, COUNT(tm.id) as message_count
         FROM tickets t
         LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.created_by = ?
+        WHERE t.created_by = ? AND t.status != 'geschlossen'
         GROUP BY t.id
         ORDER BY t.created_at DESC
         """,
@@ -34,12 +37,36 @@ def create():
     """Erstellt ein neues Ticket."""
     if request.method == 'POST':
         try:
-            title = request.form.get('title')
-            description = request.form.get('description')
-            priority = request.form.get('priority', 'normal')
-            category = request.form.get('category')
-            due_date = request.form.get('due_date')
-            estimated_time = request.form.get('estimated_time')
+            # Prüfe ob die Anfrage JSON enthält
+            if request.is_json:
+                data = request.get_json()
+                title = data.get('title')
+                description = data.get('description')
+                priority = data.get('priority', 'normal')
+                category = data.get('category')
+                due_date = data.get('due_date')
+                estimated_time = data.get('estimated_time')
+            else:
+                title = request.form.get('title')
+                description = request.form.get('description')
+                priority = request.form.get('priority', 'normal')
+                category = request.form.get('category')
+                due_date = request.form.get('due_date')
+                estimated_time = request.form.get('estimated_time')
+
+            # Formatiere das Fälligkeitsdatum
+            if due_date:
+                try:
+                    due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
+                    due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    due_date = None
+
+            if not title:
+                if request.is_json:
+                    return jsonify({'success': False, 'message': 'Titel ist erforderlich'}), 400
+                flash('Titel ist erforderlich.', 'error')
+                return redirect(url_for('tickets.create'))
 
             # Erstelle das Ticket mit der korrekten Datenbankverbindung
             ticket_id = ticket_db.create_ticket(
@@ -52,55 +79,88 @@ def create():
                 estimated_time=estimated_time
             )
 
-            # Auftragsdetails auslesen und speichern, falls mindestens ein Feld ausgefüllt ist
-            auftragsdetails_keys = [
-                'bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 'kontakt',
-                'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 'leistungskategorie',
-                'fertigstellungstermin'
-            ]
-            auftragsdetails = {k: request.form.get(k) for k in auftragsdetails_keys}
-            # Checkboxen korrekt als Boolean speichern
-            auftragsdetails['auftraggeber_intern'] = 1 if request.form.get('auftraggeber_intern') else 0
-            auftragsdetails['auftraggeber_extern'] = 1 if request.form.get('auftraggeber_extern') else 0
-            # Prüfen, ob mindestens ein Feld ausgefüllt ist (außer Checkboxen)
-            if any(auftragsdetails[k] for k in auftragsdetails_keys if k not in ['auftraggeber_intern','auftraggeber_extern']):
-                ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
+            # Auftragsdetails auslesen und speichern
+            auftragsdetails = {
+                'bereich': data.get('bereich', '') if request.is_json else request.form.get('bereich', ''),
+                'auftraggeber_intern': data.get('auftraggeber_intern', False) if request.is_json else bool(request.form.get('auftraggeber_intern')),
+                'auftraggeber_extern': data.get('auftraggeber_extern', False) if request.is_json else bool(request.form.get('auftraggeber_extern')),
+                'auftraggeber_name': data.get('auftraggeber_name', '') if request.is_json else request.form.get('auftraggeber_name', ''),
+                'kontakt': data.get('kontakt', '') if request.is_json else request.form.get('kontakt', ''),
+                'auftragsbeschreibung': description,  # Verwende die Hauptbeschreibung
+                'ausgefuehrte_arbeiten': data.get('ausgefuehrte_arbeiten', '') if request.is_json else request.form.get('ausgefuehrte_arbeiten', ''),
+                'arbeitsstunden': data.get('arbeitsstunden', '') if request.is_json else request.form.get('arbeitsstunden', ''),
+                'leistungskategorie': data.get('leistungskategorie', '') if request.is_json else request.form.get('leistungskategorie', ''),
+                'fertigstellungstermin': data.get('fertigstellungstermin', '') if request.is_json else request.form.get('fertigstellungstermin', '')
+            }
 
+            # Speichere die Auftragsdetails
+            ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
+
+            # Speichere die Materialliste
+            material_list = data.get('material_list', []) if request.is_json else request.form.getlist('material_list')
+            if material_list:
+                ticket_db.update_auftrag_material(ticket_id, material_list)
+
+            if request.is_json:
+                return jsonify({
+                    'success': True,
+                    'message': 'Ticket wurde erfolgreich erstellt',
+                    'ticket_id': ticket_id
+                })
+            
             flash('Ticket wurde erfolgreich erstellt.', 'success')
             return redirect(url_for('tickets.create'))
         except Exception as e:
+            if request.is_json:
+                return jsonify({
+                    'success': False,
+                    'message': f'Fehler beim Erstellen des Tickets: {str(e)}'
+                }), 500
             flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
             return redirect(url_for('tickets.create'))
     
-    # Hole die eigenen Tickets für die Anzeige
+    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
     my_tickets = ticket_db.query(
         """
         SELECT t.*, COUNT(tm.id) as message_count
         FROM tickets t
         LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.created_by = ?
+        WHERE t.created_by = ? AND t.status != 'geschlossen'
         GROUP BY t.id
         ORDER BY t.created_at DESC
         """,
         [current_user.username]
     )
 
-    # Hole die zugewiesenen Tickets
+    # Hole die zugewiesenen Tickets (nur nicht geschlossene)
     assigned_tickets = ticket_db.query(
         """
         SELECT t.*, COUNT(tm.id) as message_count
         FROM tickets t
         LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.assigned_to = ?
+        WHERE t.assigned_to = ? AND t.status != 'geschlossen'
         GROUP BY t.id
         ORDER BY t.created_at DESC
         """,
         [current_user.username]
     )
+
+    # Hole offene Tickets (nur nicht geschlossene)
+    open_tickets = ticket_db.query(
+        """
+        SELECT t.*, COUNT(tm.id) as message_count
+        FROM tickets t
+        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
+        WHERE (t.assigned_to IS NULL OR t.assigned_to = '') AND t.status != 'geschlossen'
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
+        """
+    )
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
                          assigned_tickets=assigned_tickets,
+                         open_tickets=open_tickets,
                          status_colors={
                              'offen': 'info',
                              'in_bearbeitung': 'warning',
@@ -160,12 +220,28 @@ def view(ticket_id):
     
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
-    
+
+    # Hole die Liste der verfügbaren Mitarbeiter
+    try:
+        workers = ticket_db.query(
+            """
+            SELECT username, username as name
+            FROM users
+            WHERE is_active = 1
+            ORDER BY username
+            """
+        )
+        logging.info(f"Gefundene Mitarbeiter: {workers}")
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}")
+        workers = []
+
     return render_template('tickets/view.html',
                          ticket=ticket,
                          messages=messages,
                          notes=notes,
                          message_count=message_count,
+                         workers=workers,
                          now=datetime.now())
 
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
@@ -253,6 +329,13 @@ def detail(id):
     # Hole die Nachrichten für das Ticket
     messages = ticket_db.get_ticket_messages(id)
 
+    # Hole die Auftragsdetails
+    auftrag_details = ticket_db.get_auftrag_details(id)
+    logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
+    
+    # Hole die Materialliste
+    material_list = ticket_db.get_auftrag_material(id)
+
     # Hole alle Mitarbeiter aus der Hauptdatenbank
     with Database.get_db() as db:
         workers = db.execute(
@@ -263,12 +346,14 @@ def detail(id):
             ORDER BY username
             """
         ).fetchall()
-    
+
     return render_template('tickets/detail.html', 
                          ticket=ticket, 
                          notes=notes,
                          messages=messages,
                          workers=workers,
+                         auftrag_details=auftrag_details,
+                         material_list=material_list,
                          now=datetime.now())
 
 @bp.route('/<int:id>/update', methods=['POST'])
@@ -276,61 +361,16 @@ def detail(id):
 def update(id):
     """Aktualisiert ein Ticket"""
     try:
-        # Hole das Ticket
-        ticket = ticket_db.query(
-            """
-            SELECT *
-            FROM tickets
-            WHERE id = ?
-            """,
-            [id],
-            one=True
-        )
-        
+        ticket = ticket_db.get_ticket(id)
         if not ticket:
-            return jsonify({
-                'success': False,
-                'message': 'Ticket nicht gefunden'
-            }), 404
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
-        # Hole die Formulardaten
+        # JSON-Daten aus dem Request holen
         data = request.get_json()
-        
-        # Basis-Ticket-Daten
-        status = data.get('status')
-        assigned_to = data.get('assigned_to')
-        resolution_notes = data.get('resolution_notes')
-        response = data.get('response')
-        author_name = current_user.username
-        priority = data.get('priority')
-        due_date = data.get('due_date')
-        is_private = data.get('is_private', False)
+        if not data:
+            return jsonify({'success': False, 'message': 'Keine Daten empfangen'}), 400
 
-        # Konvertiere due_date zu SQLite-Format
-        if due_date:
-            try:
-                due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
-                due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                due_date = None
-
-        # Aktualisiere das Ticket
-        ticket_db.query(
-            """
-            UPDATE tickets
-            SET status = ?,
-                assigned_to = ?,
-                priority = ?,
-                due_date = ?,
-                response = ?,
-                last_modified_by = ?,
-                updated_at = datetime('now')
-            WHERE id = ?
-            """,
-            [status, assigned_to, priority, due_date, response, author_name, id]
-        )
-
-        # Verarbeite Auftragsdetails
+        # Auftragsdetails aktualisieren
         auftrag_details = {
             'bereich': data.get('bereich', ''),
             'auftraggeber_intern': data.get('auftraggeber_intern', False),
@@ -344,36 +384,17 @@ def update(id):
             'fertigstellungstermin': data.get('fertigstellungstermin', '')
         }
         
-        # Lösche alte Materialeinträge
-        ticket_db.query("DELETE FROM auftrag_material WHERE ticket_id = ?", [id])
-        
-        # Speichere neue Materialliste
-        if 'material_list' in data:
-            for material in data['material_list']:
-                ticket_db.add_auftrag_material(
-                    ticket_id=id,
-                    material=material['material'],
-                    menge=material['menge'],
-                    einzelpreis=material['einzelpreis']
-                )
-        
-        # Aktualisiere oder erstelle Auftragsdetails
-        existing_details = ticket_db.get_auftrag_details(id)
-        if existing_details:
-            ticket_db.update_auftrag_details(ticket_id=id, **auftrag_details)
-        else:
-            ticket_db.add_auftrag_details(ticket_id=id, **auftrag_details)
+        ticket_db.update_auftrag_details(ticket_id=id, **auftrag_details)
 
-        return jsonify({
-            'success': True,
-            'message': 'Ticket wurde erfolgreich aktualisiert'
-        })
+        # Materialliste aktualisieren
+        material_list = data.get('material_list', [])
+        ticket_db.update_auftrag_material(ticket_id=id, material_list=material_list)
+
+        return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
+
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren des Tickets: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Aktualisieren des Tickets: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 @admin_required
@@ -413,4 +434,312 @@ def delete(id):
         return jsonify({
             'success': False,
             'message': 'Fehler beim Löschen des Tickets'
-        }), 500 
+        }), 500
+
+@bp.route('/<int:id>/auftrag-details-modal')
+@login_required
+def auftrag_details_modal(id):
+    ticket = ticket_db.query(
+        """
+        SELECT *
+        FROM tickets
+        WHERE id = ?
+        """,
+        [id],
+        one=True
+    )
+    
+    if not ticket:
+        return render_template('404.html'), 404
+        
+    # Konvertiere alle Datumsfelder zu datetime-Objekten
+    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+    for field in date_fields:
+        if ticket.get(field):
+            try:
+                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                ticket[field] = None
+        
+    # Hole die Notizen für das Ticket
+    notes = ticket_db.get_ticket_notes(id)
+
+    # Hole die Nachrichten für das Ticket
+    messages = ticket_db.get_ticket_messages(id)
+
+    # Hole die Auftragsdetails
+    auftrag_details = ticket_db.get_auftrag_details(id)
+    logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
+    
+    # Hole die Materialliste
+    material_list = ticket_db.get_auftrag_material(id)
+
+    return render_template('tickets/auftrag_details_modal.html', 
+                         ticket=ticket, 
+                         notes=notes,
+                         messages=messages,
+                         auftrag_details=auftrag_details,
+                         material_list=material_list)
+
+@bp.route('/<int:id>/update-status', methods=['POST'])
+@login_required
+def update_status(id):
+    """Aktualisiert den Status eines Tickets"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if not new_status:
+            return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
+
+        # Aktualisiere den Status
+        ticket_db.update_ticket(
+            id=id,
+            status=new_status,
+            last_modified_by=current_user.username
+        )
+
+        return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/<int:id>/update-assignment', methods=['POST'])
+@login_required
+def update_assignment(id):
+    """Aktualisiert die Zuweisung eines Tickets"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        assigned_to = data.get('assigned_to')
+        
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.get_ticket(id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Aktualisiere die Zuweisung
+        ticket_db.update_ticket(
+            id=id,
+            status=ticket['status'],  # Behalte den aktuellen Status bei
+            assigned_to=assigned_to,
+            last_modified_by=current_user.username
+        )
+
+        return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/<int:id>/update-details', methods=['POST'])
+@login_required
+def update_details(id):
+    """Aktualisiert die Details eines Tickets (Kategorie, Fälligkeitsdatum, geschätzte Zeit)"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.get_ticket(id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Formatiere das Fälligkeitsdatum
+        due_date = data.get('due_date')
+        if due_date:
+            try:
+                due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
+                due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                due_date = None
+
+        # Aktualisiere die Ticket-Details
+        ticket_db.update_ticket(
+            id=id,
+            status=ticket['status'],  # Behalte den aktuellen Status bei
+            assigned_to=ticket['assigned_to'],  # Behalte die aktuelle Zuweisung bei
+            category=data.get('category'),
+            due_date=due_date,
+            estimated_time=data.get('estimated_time'),
+            last_modified_by=current_user.username
+        )
+
+        return jsonify({'success': True, 'message': 'Ticket-Details erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren der Ticket-Details: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/<int:id>/export')
+@login_required
+def export_ticket(id):
+    """Exportiert das Ticket als ausgefülltes Word-Dokument."""
+    ticket = ticket_db.get_ticket(id)
+    if not ticket:
+        return abort(404)
+    auftrag_details = ticket_db.get_auftrag_details(id) or {}
+    material_list = ticket_db.get_auftrag_material(id) or []
+
+    # --- Auftragnehmer (Vorname Nachname) ---
+    auftragnehmer_user = None
+    if ticket.get('assigned_to'):
+        auftragnehmer_user = User.get_by_username(ticket['assigned_to'])
+    if auftragnehmer_user:
+        auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+    else:
+        auftragnehmer_name = ''
+
+    # --- Checkboxen für Auftraggeber intern/extern ---
+    intern_checkbox = '✓' if auftrag_details.get('auftraggeber_intern') else '☐'
+    extern_checkbox = '✓' if auftrag_details.get('auftraggeber_extern') else '☐'
+
+    # --- Ausgeführte Arbeiten (bis zu 5) ---
+    arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
+    # Annahme: Arbeiten werden als Zeilenumbruch-getrennte Einträge gespeichert, ggf. mit | getrennt für Stunden/Kategorie
+    arbeiten_zeilen = []
+    if arbeiten_liste:
+        for zeile in arbeiten_liste.split('\n'):
+            teile = [t.strip() for t in zeile.split('|')]
+            # [Arbeit, Stunden, Kategorie]
+            eintrag = {
+                'arbeiten': teile[0] if len(teile) > 0 else '',
+                'arbeitsstunden': teile[1] if len(teile) > 1 else '',
+                'leistungskategorie': teile[2] if len(teile) > 2 else ''
+            }
+            arbeiten_zeilen.append(eintrag)
+    # Fülle auf 5 Zeilen auf
+    while len(arbeiten_zeilen) < 5:
+        arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
+
+    # Materialdaten aufbereiten (wie gehabt)
+    material_rows = []
+    summe_material = 0
+    for m in material_list:
+        menge = m.get('menge') or 0
+        einzelpreis = m.get('einzelpreis') or 0
+        gesamtpreis = menge * einzelpreis
+        summe_material += gesamtpreis
+        material_rows.append({
+            'material': m.get('material', '') or '',
+            'materialmenge': menge or '',
+            'materialpreis': einzelpreis or '',
+            'materialpreisges': f"{gesamtpreis:.2f}" if gesamtpreis else ''
+        })
+    while len(material_rows) < 5:
+        material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
+
+    arbeitspausch = 0
+    ubertrag = 0
+    zwischensumme = summe_material + arbeitspausch + ubertrag
+    mwst = zwischensumme * 0.07
+    gesamtsumme = zwischensumme + mwst
+
+    def safe(val):
+        return val if val is not None else ''
+
+    context = {
+        'auftragnehmer': auftragnehmer_name,
+        'auftragnummer': safe(ticket.get('id', '')),
+        'datum': safe(ticket.get('created_at', '')),
+        'bereich': safe(auftrag_details.get('bereich', '')),
+        'auftraggebername': safe(auftrag_details.get('auftraggeber_name', '')),
+        'auftraggebermail': safe(auftrag_details.get('kontakt', '')),
+        'auftragsbeschreibung': safe(auftrag_details.get('auftragsbeschreibung', ticket.get('description', ''))),
+        'summematerial': f"{summe_material:.2f}" if summe_material else '',
+        'ubertrag': f"{ubertrag:.2f}" if ubertrag else '',
+        'arbeitspausch': f"{arbeitspausch:.2f}" if arbeitspausch else '',
+        'zwischensumme': f"{zwischensumme:.2f}" if zwischensumme else '',
+        'mwst': f"{mwst:.2f}" if mwst else '',
+        'gesamtsumme': f"{gesamtsumme:.2f}" if gesamtsumme else '',
+        'duedate': safe(auftrag_details.get('fertigstellungstermin', '')),
+        'intern_checkbox': intern_checkbox,
+        'extern_checkbox': extern_checkbox
+    }
+    # Arbeiten (arbeiten1, arbeitsstunden1, leistungskategorie1, ...)
+    for i in range(1, 6):
+        context[f'arbeiten{i}'] = arbeiten_zeilen[i-1]['arbeiten']
+        context[f'arbeitsstunden{i}'] = arbeiten_zeilen[i-1]['arbeitsstunden']
+        context[f'leistungskategorie{i}'] = arbeiten_zeilen[i-1]['leistungskategorie']
+    # Material (material1, ...)
+    for i in range(1, 6):
+        context[f'material{i}'] = material_rows[i-1]['material']
+        context[f'materialmenge{i}'] = material_rows[i-1]['materialmenge']
+        context[f'materialpreis{i}'] = material_rows[i-1]['materialpreis']
+        context[f'materialpreisges{i}'] = material_rows[i-1]['materialpreisges']
+    # Für Kompatibilität: erste Zeile auch als 'material', ...
+    context['material'] = material_rows[0]['material']
+    context['materialmenge'] = material_rows[0]['materialmenge']
+    context['materialpreis'] = material_rows[0]['materialpreis']
+    context['materialpreisges'] = material_rows[0]['materialpreisges']
+
+    template_path = os.path.join('app', 'static', 'word', 'btzauftrag.docx')
+    doc = DocxTemplate(template_path)
+    doc.render(context)
+    output_path = f"/tmp/auftrag_{id}.docx"
+    doc.save(output_path)
+    return send_file(output_path, as_attachment=True, download_name=f"auftrag_{id}.docx")
+
+@bp.route('/auftrag/neu', methods=['GET', 'POST'])
+def public_create_order():
+    # Kategorien aus der Tabelle 'categories' laden
+    categories = ticket_db.query(
+        """
+        SELECT name FROM categories WHERE deleted = 0 ORDER BY name
+        """
+    )
+    categories = [c['name'] for c in categories]
+    if request.method == 'POST':
+        title = request.form.get('title')
+        description = request.form.get('description')
+        name = request.form.get('name')
+        kontakt = request.form.get('kontakt')
+        bereich = request.form.get('bereich')
+        kategorie = request.form.get('kategorie')
+        auftraggeber_typ = request.form.get('auftraggeber_typ')
+        if not title or not description or not name or not kontakt or not auftraggeber_typ:
+            return render_template('auftrag_public.html', error='Bitte alle Pflichtfelder ausfüllen!', categories=categories)
+        # Ticket anlegen (ohne Zuweisung, Status offen)
+        ticket_id = ticket_db.create_ticket(
+            title=title,
+            description=description,
+            priority='normal',
+            created_by=name,
+            category=kategorie,
+            due_date=None,
+            estimated_time=None
+        )
+        # Auftragsdetails speichern
+        auftragsdetails = {
+            'bereich': bereich,
+            'auftraggeber_intern': auftraggeber_typ == 'intern',
+            'auftraggeber_extern': auftraggeber_typ == 'extern',
+            'auftraggeber_name': name,
+            'kontakt': kontakt,
+            'auftragsbeschreibung': description,
+            'ausgefuehrte_arbeiten': '',
+            'arbeitsstunden': '',
+            'leistungskategorie': '',
+            'fertigstellungstermin': ''
+        }
+        ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
+        return render_template('auftrag_public_success.html')
+    return render_template('auftrag_public.html', categories=categories)
+
+def get_unassigned_ticket_count():
+    result = ticket_db.query("SELECT COUNT(*) as cnt FROM tickets WHERE assigned_to IS NULL OR assigned_to = ''")
+    return result[0]['cnt'] if result and len(result) > 0 else 0
+
+# Kontextprozessor für alle Templates
+@bp.app_context_processor
+def inject_unread_tickets_count():
+    count = get_unassigned_ticket_count()
+    return dict(unread_tickets_count=count) 

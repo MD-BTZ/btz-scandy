@@ -740,43 +740,41 @@ class TicketDatabase:
             raise
 
     def update_auftrag_details(self, ticket_id, **kwargs):
-        """Aktualisiert die Auftrag-Details für ein Ticket."""
+        """Aktualisiert nur die übergebenen Felder der Auftrag-Details für ein Ticket."""
         try:
-            # Validiere und bereite die Daten vor
-            data = {
-                'bereich': str(kwargs.get('bereich', '')).strip(),
-                'auftraggeber_intern': 1 if kwargs.get('auftraggeber_intern') in [True, 1, '1', 'true', 'True'] else 0,
-                'auftraggeber_extern': 1 if kwargs.get('auftraggeber_extern') in [True, 1, '1', 'true', 'True'] else 0,
-                'auftraggeber_name': str(kwargs.get('auftraggeber_name', '')).strip(),
-                'kontakt': str(kwargs.get('kontakt', '')).strip(),
-                'auftragsbeschreibung': str(kwargs.get('auftragsbeschreibung', '')).strip(),
-                'ausgefuehrte_arbeiten': str(kwargs.get('ausgefuehrte_arbeiten', '')).strip(),
-                'arbeitsstunden': str(kwargs.get('arbeitsstunden', '')).strip(),
-                'leistungskategorie': str(kwargs.get('leistungskategorie', '')).strip(),
-                'fertigstellungstermin': str(kwargs.get('fertigstellungstermin', '')).strip()
-            }
-            
-            logger.info(f"Vorbereitete Daten für Update Ticket {ticket_id}: {data}")
-            
-            # Prüfe ob ein Eintrag existiert
+            # Hole bestehende Werte
             existing = self.get_auftrag_details(ticket_id)
             if not existing:
                 logger.warning(f"Keine Auftragsdetails für Ticket {ticket_id} gefunden. Erstelle neuen Eintrag.")
-                self.add_auftrag_details(ticket_id, **data)
+                self.add_auftrag_details(ticket_id, **kwargs)
                 return
 
-            # Erstelle das UPDATE Statement
+            # Nur die Felder überschreiben, die im kwargs enthalten sind
+            data = existing.copy()
+            for key, value in kwargs.items():
+                if value is not None:
+                    data[key] = value
+
+            # Validiere und bereite die Daten vor
+            data = {
+                'bereich': str(data.get('bereich', '')).strip(),
+                'auftraggeber_intern': 1 if data.get('auftraggeber_intern') in [True, 1, '1', 'true', 'True'] else 0,
+                'auftraggeber_extern': 1 if data.get('auftraggeber_extern') in [True, 1, '1', 'true', 'True'] else 0,
+                'auftraggeber_name': str(data.get('auftraggeber_name', '')).strip(),
+                'kontakt': str(data.get('kontakt', '')).strip(),
+                'auftragsbeschreibung': str(data.get('auftragsbeschreibung', '')).strip(),
+                'ausgefuehrte_arbeiten': str(data.get('ausgefuehrte_arbeiten', '')).strip(),
+                'arbeitsstunden': str(data.get('arbeitsstunden', '')).strip(),
+                'leistungskategorie': str(data.get('leistungskategorie', '')).strip(),
+                'fertigstellungstermin': str(data.get('fertigstellungstermin', '')).strip()
+            }
+
             set_clause = ', '.join([f"{f} = ?" for f in data.keys()])
             werte = list(data.values())
-            logger.info(f"update_auftrag_details: ticket_id={ticket_id}, werte={werte}")
+            logger.info(f"update_auftrag_details (nur Felder aus kwargs): ticket_id={ticket_id}, werte={werte}")
             sql = f"UPDATE auftrag_details SET {set_clause} WHERE ticket_id = ?"
             self.query(sql, werte + [ticket_id])
-            
-            # Überprüfe nach dem Update
-            updated = self.get_auftrag_details(ticket_id)
-            logger.info(f"Überprüfung nach Update - Neue Daten: {updated}")
-            
-            logger.info(f"Auftragsdetails für Ticket {ticket_id} erfolgreich aktualisiert")
+            logger.info(f"Auftragsdetails für Ticket {ticket_id} erfolgreich aktualisiert (nur geänderte Felder)")
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren der Auftragsdetails: {str(e)}")
             raise
@@ -847,4 +845,25 @@ class TicketDatabase:
     def delete_auftrag_material(self, material_id):
         """Löscht eine Materialposition anhand ihrer ID."""
         sql = "DELETE FROM auftrag_material WHERE id = ?"
-        self.query(sql, [material_id]) 
+        self.query(sql, [material_id])
+
+    def update_auftrag_material(self, ticket_id, material_list):
+        """Aktualisiert die Materialliste für ein Ticket"""
+        try:
+            # Lösche alte Materialeinträge
+            self.query("DELETE FROM auftrag_material WHERE ticket_id = ?", [ticket_id])
+            
+            # Füge neue Materialeinträge hinzu
+            for material in material_list:
+                if material.get('material') and material.get('menge') and material.get('einzelpreis'):
+                    self.add_auftrag_material(
+                        ticket_id=ticket_id,
+                        material=material['material'],
+                        menge=float(material['menge']),
+                        einzelpreis=float(material['einzelpreis'])
+                    )
+            
+            return True
+        except Exception as e:
+            logging.error(f"Fehler beim Aktualisieren der Materialliste: {str(e)}")
+            raise e 

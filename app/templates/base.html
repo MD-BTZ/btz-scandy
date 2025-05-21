@@ -96,8 +96,11 @@
             </a>
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
                      <i class="fas fa-ticket-alt text-xl"></i>
+                     {% if unread_tickets_count and unread_tickets_count > 0 %}
+                     <span class="badge badge-error badge-sm absolute top-0 right-0" style="transform: translate(50%,-50%);">{{ unread_tickets_count }}</span>
+                     {% endif %}
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftrag</span>
             </a>

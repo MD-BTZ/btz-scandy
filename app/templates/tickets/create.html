@@ -107,138 +107,29 @@
             </div>
         </div>
 
-        <!-- Rechte Spalte: Meine Aufträge -->
+        <!-- Rechte Spalte: Tabbed Table für alle Aufträge -->
         <div class="lg:col-span-2">
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h2 class="card-title mb-4">Meine Aufträge</h2>
-                    
-                    {% if my_tickets %}
-                        <div class="overflow-x-auto">
-                            <table class="table w-full">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Titel</th>
-                                        <th>Status</th>
-                                        <th>Priorität</th>
-                                        <th>Kategorie</th>
-                                        <th>Fällig am</th>
-                                        <th>Geschätzte Zeit</th>
-                                        <th>Nachrichten</th>
-                                        <th>Aktionen</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for ticket in my_tickets %}
-                                    <tr>
-                                        <td>{{ ticket.id }}</td>
-                                        <td>
-                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
-                                                {{ ticket.title }}
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <span class="badge badge-{{ status_colors[ticket.status] }}">
-                                                {{ ticket.status }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge badge-{{ priority_colors[ticket.priority] }}">
-                                                {{ ticket.priority }}
-                                            </span>
-                                        </td>
-                                        <td>{{ ticket.category or '-' }}</td>
-                                        <td>{{ ticket.due_date or '-' }}</td>
-                                        <td>{{ ticket.estimated_time or '-' }} Min.</td>
-                                        <td>
-                                            {% if ticket.message_count > 0 %}
-                                            <span class="badge badge-primary">{{ ticket.message_count }}</span>
-                                            {% else %}
-                                            <span class="text-base-content/60">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" 
-                                               class="btn btn-sm btn-primary">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-base-content/60">Sie haben noch keine Aufträge erstellt.</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Zugewiesene Aufträge -->
-            <div class="card bg-base-100 shadow-xl mt-6">
-                <div class="card-body">
-                    <h2 class="card-title mb-4">Mir zugewiesene Aufträge</h2>
-                    
-                    {% if assigned_tickets %}
-                        <div class="overflow-x-auto">
-                            <table class="table w-full">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Titel</th>
-                                        <th>Status</th>
-                                        <th>Priorität</th>
-                                        <th>Kategorie</th>
-                                        <th>Fällig am</th>
-                                        <th>Geschätzte Zeit</th>
-                                        <th>Nachrichten</th>
-                                        <th>Aktionen</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for ticket in assigned_tickets %}
-                                    <tr>
-                                        <td>{{ ticket.id }}</td>
-                                        <td>
-                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
-                                                {{ ticket.title }}
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <span class="badge badge-{{ status_colors[ticket.status] }}">
-                                                {{ ticket.status }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge badge-{{ priority_colors[ticket.priority] }}">
-                                                {{ ticket.priority }}
-                                            </span>
-                                        </td>
-                                        <td>{{ ticket.category or '-' }}</td>
-                                        <td>{{ ticket.due_date or '-' }}</td>
-                                        <td>{{ ticket.estimated_time or '-' }} Min.</td>
-                                        <td>
-                                            {% if ticket.message_count > 0 %}
-                                            <span class="badge badge-primary">{{ ticket.message_count }}</span>
-                                            {% else %}
-                                            <span class="text-base-content/60">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" 
-                                               class="btn btn-sm btn-primary">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-base-content/60">Es sind keine Aufträge an Sie zugewiesen.</p>
-                    {% endif %}
+                    <div role="tablist" class="tabs tabs-boxed mb-4">
+                        <a role="tab" class="tab tab-active" id="tab-open" onclick="showTab('open')">
+                            Offene Aufträge
+                            {% if unread_tickets_count and unread_tickets_count > 0 %}
+                            <span class="badge badge-error badge-sm ml-2 align-middle">{{ unread_tickets_count }}</span>
+                            {% endif %}
+                        </a>
+                        <a role="tab" class="tab" id="tab-assigned" onclick="showTab('assigned')">Zugewiesene Aufträge</a>
+                        <a role="tab" class="tab" id="tab-mine" onclick="showTab('mine')">Meine Aufträge</a>
+                    </div>
+                    <div id="table-open">
+                        {% include 'tickets/_ticket_table_open.html' with context %}
+                    </div>
+                    <div id="table-assigned" style="display:none;">
+                        {% include 'tickets/_ticket_table_assigned.html' with context %}
+                    </div>
+                    <div id="table-mine" style="display:none;">
+                        {% include 'tickets/_ticket_table.html' with context %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -308,6 +199,18 @@ document.getElementById('createForm').addEventListener('submit', async function(
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Ticket erstellen';
     }
+});
+
+function showTab(tab) {
+    document.getElementById('table-open').style.display = (tab === 'open') ? '' : 'none';
+    document.getElementById('table-assigned').style.display = (tab === 'assigned') ? '' : 'none';
+    document.getElementById('table-mine').style.display = (tab === 'mine') ? '' : 'none';
+    document.getElementById('tab-open').classList.toggle('tab-active', tab === 'open');
+    document.getElementById('tab-assigned').classList.toggle('tab-active', tab === 'assigned');
+    document.getElementById('tab-mine').classList.toggle('tab-active', tab === 'mine');
+}
+document.addEventListener('DOMContentLoaded', function() {
+    showTab('open');
 });
 </script>
 {% endblock %} 

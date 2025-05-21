@@ -33,21 +33,24 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
+                            <input type="text" id="categoryInput" class="input input-bordered w-full" 
+                                   value="{{ ticket.category or '' }}" 
+                                   onchange="updateTicketCategory(this.value)"
+                                   placeholder="Kategorie eingeben">
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            <p>
-                                {% if ticket.due_date %}
-                                    {% if ticket.due_date is string %}
-                                        {{ ticket.due_date }}
-                                    {% else %}
-                                        {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
-                                    {% endif %}
-                                {% else %}
-                                    Nicht gesetzt
-                                {% endif %}
-                            </p>
-                            <p class="text-sm opacity-70 mt-2">Geschätzte Zeit</p>
-                            <p>{{ ticket.estimated_time or 'Nicht gesetzt' }} Stunden</p>
+                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
+                                   value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
+                                   onchange="updateTicketDueDate(this.value)">
+                            <div>
+                                <p class="text-sm opacity-70">Geschätzte Zeit</p>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
+                                           value="{{ ticket.estimated_time or '' }}"
+                                           onchange="updateTicketEstimatedTime(this.value)"
+                                           min="0" step="0.5">
+                                    <span class="text-sm opacity-70">Stunden</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="divider"></div>
@@ -55,6 +58,44 @@
                         <h3 class="font-bold mb-2">Beschreibung:</h3>
                         <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
                     </div>
+                    {% if auftrag_details %}
+                    <div class="divider"></div>
+                    <div>
+                        <h3 class="font-bold mb-2">Auftragsdetails:</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm opacity-70">Bereich</p>
+                                <p>{{ auftrag_details.bereich or 'Nicht angegeben' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Auftraggeber</p>
+                                <p>
+                                    {% if auftrag_details.auftraggeber_intern %}
+                                        Intern
+                                    {% elif auftrag_details.auftraggeber_extern %}
+                                        Extern: {{ auftrag_details.auftraggeber_name }}
+                                    {% else %}
+                                        Nicht angegeben
+                                    {% endif %}
+                                </p>
+                                <p class="text-sm opacity-70 mt-2">Kontakt</p>
+                                <p>{{ auftrag_details.kontakt or 'Nicht angegeben' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm opacity-70">Fertigstellungstermin</p>
+                                <p>{{ auftrag_details.fertigstellungstermin or 'Nicht gesetzt' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden</p>
+                                <p>{{ auftrag_details.arbeitsstunden or 'Nicht angegeben' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Leistungskategorie</p>
+                                <p>{{ auftrag_details.leistungskategorie or 'Nicht angegeben' }}</p>
+                            </div>
+                        </div>
+                        {% if auftrag_details.ausgefuehrte_arbeiten %}
+                        <div class="mt-4">
+                            <p class="text-sm opacity-70">Ausgeführte Arbeiten</p>
+                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -105,11 +146,24 @@
                     <div class="space-y-4">
                         <div>
                             <p class="text-sm opacity-70">Status</p>
-                            <p class="font-medium">{{ ticket.status }}</p>
+                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
+                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                            </select>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <p class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
+                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
+                                <option value="">Nicht zugewiesen</option>
+                                {% for worker in workers %}
+                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
+                                    {{ worker.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -125,118 +179,26 @@
                 </div>
             </div>
 
+            <!-- Export-Button für Word-Dokument -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="btn btn-accent w-full" target="_blank">
+                        <i class="fas fa-file-word mr-2"></i> Auftrag als Word exportieren
+                    </a>
+                </div>
+            </div>
+
             <!-- Button zum Öffnen des Modals für Auftragsdetails -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <button class="btn btn-primary w-full" onclick="document.getElementById('auftragDetailsModal').showModal()">
+                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
                         <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
                     </button>
                 </div>
             </div>
 
-            <!-- Modal für Auftragsdetails und Materialliste (Bearbeitungsformular) -->
-            <dialog id="auftragDetailsModal" class="modal">
-                <div class="modal-box" style="width:70vw; height:90vh; max-width:none; max-height:none; overflow:auto;">
-                    <h3 class="font-bold text-lg mb-4">
-                        <i class="fas fa-clipboard-list text-primary mr-2"></i>
-                        Auftragsdetails bearbeiten
-                    </h3>
-                    <form method="POST" action="{{ url_for('tickets.update', id=ticket.id) }}" id="auftragDetailsForm">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="label"><span class="label-text">Bereich</span></label>
-                                <input type="text" name="bereich" class="input input-bordered w-full" value="{{ auftrag_details.bereich if auftrag_details else '' }}">
-                            </div>
-                            <div>
-                                <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
-                                <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ auftrag_details.fertigstellungstermin if auftrag_details else '' }}">
-                            </div>
-                            <div>
-                                <label class="label"><span class="label-text">Auftraggeber</span></label>
-                                <label class="cursor-pointer mr-4">
-                                    <input type="checkbox" name="auftraggeber_intern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_intern %}checked{% endif %}>
-                                    <span class="ml-2">Intern</span>
-                                </label>
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="auftraggeber_extern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_extern %}checked{% endif %}>
-                                    <span class="ml-2">Extern</span>
-                                </label>
-                            </div>
-                            <div>
-                                <label class="label"><span class="label-text">Name Auftraggeber</span></label>
-                                <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ auftrag_details.auftraggeber_name if auftrag_details else '' }}">
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="label"><span class="label-text">Kontakt</span></label>
-                                <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ auftrag_details.kontakt if auftrag_details else '' }}">
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
-                                <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.auftragsbeschreibung if auftrag_details else '' }}</textarea>
-                            </div>
-                        </div>
-                        <div class="divider my-6">Materialliste</div>
-                        <div id="materialList">
-                            <table class="table w-full">
-                                <thead>
-                                    <tr>
-                                        <th>Material</th>
-                                        <th>Menge</th>
-                                        <th>Einzelpreis (€)</th>
-                                        <th>Gesamtpreis (€)</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="materialRows">
-                                    {% if material_list %}
-                                        {% for mat in material_list %}
-                                        <tr>
-                                            <td><input type="text" name="material" class="input input-bordered w-full" value="{{ mat.material }}"></td>
-                                            <td><input type="number" name="menge" class="input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any" onchange="updateSumme(this)"></td>
-                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any" onchange="updateSumme(this)"></td>
-                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
-                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td><input type="text" name="material" class="input input-bordered w-full"></td>
-                                            <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                            <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
-                        </div>
-                        <div class="flex justify-end mt-4">
-                            <div class="font-bold mr-4">Summe Material:</div>
-                            <div id="summeMaterial" class="font-bold">0,00 €</div>
-                        </div>
-                        <div class="divider my-6">Weitere Auftragsdetails</div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="label"><span class="label-text">Ausgeführte Arbeiten</span></label>
-                                <textarea name="ausgefuehrte_arbeiten" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.ausgefuehrte_arbeiten if auftrag_details else '' }}</textarea>
-                            </div>
-                            <div>
-                                <label class="label"><span class="label-text">Arbeitsstunden</span></label>
-                                <input type="number" name="arbeitsstunden" class="input input-bordered w-full" min="0" step="any" value="{{ auftrag_details.arbeitsstunden if auftrag_details else '' }}">
-                            </div>
-                            <div>
-                                <label class="label"><span class="label-text">Leistungskategorie</span></label>
-                                <input type="text" name="leistungskategorie" class="input input-bordered w-full" value="{{ auftrag_details.leistungskategorie if auftrag_details else '' }}">
-                            </div>
-                        </div>
-                        <div class="flex justify-end mt-2">
-                            <button type="submit" class="btn btn-primary">Speichern</button>
-                            <button type="button" class="btn ml-2" onclick="document.getElementById('auftragDetailsModal').close()">Abbrechen</button>
-                        </div>
-                    </form>
-                </div>
-            </dialog>
+            <!-- Modal Container -->
+            <div id="auftragDetailsModalContainer"></div>
         </div>
     </div>
 </div>
@@ -299,5 +261,205 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
         alert('Ein Fehler ist aufgetreten');
     });
 });
+
+function loadAuftragDetailsModal() {
+    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
+            const modal = document.getElementById('auftragDetailsModal');
+            modal.showModal();
+            
+            // Event-Listener für das Formular
+            const form = document.getElementById('auftragDetailsForm');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Formulardaten sammeln
+                const formData = new FormData(form);
+                const jsonData = {};
+                
+                // Basis-Formulardaten
+                for (let [key, value] of formData.entries()) {
+                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
+                        jsonData[key] = value === '1';
+                    } else {
+                        jsonData[key] = value;
+                    }
+                }
+                
+                // Materialliste sammeln
+                const materialList = [];
+                document.querySelectorAll('.material-row').forEach(row => {
+                    const material = row.querySelector('.material-input').value;
+                    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
+                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+                    
+                    if (material || menge || einzelpreis) {
+                        materialList.push({
+                            material: material,
+                            menge: menge,
+                            einzelpreis: einzelpreis
+                        });
+                    }
+                });
+                
+                jsonData.material_list = materialList;
+                
+                // AJAX-Request senden
+                fetch(`/tickets/{{ ticket.id }}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(jsonData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        modal.close();
+                        // Optional: Seite neu laden oder UI aktualisieren
+                        window.location.reload();
+                    } else {
+                        alert('Fehler beim Speichern: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Fehler:', error);
+                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden des Modals:', error);
+            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
+        });
+}
+
+function updateTicketStatus(newStatus) {
+    fetch(`/tickets/{{ ticket.id }}/update-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren des Status: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
+    });
+}
+
+function updateTicketAssignment(newAssignee) {
+    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            assigned_to: newAssignee
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+    });
+}
+
+function updateTicketCategory(newCategory) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            category: newCategory
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren der Kategorie: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie.');
+    });
+}
+
+function updateTicketDueDate(newDueDate) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            due_date: newDueDate
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren des Fälligkeitsdatums: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Fälligkeitsdatums.');
+    });
+}
+
+function updateTicketEstimatedTime(newEstimatedTime) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            estimated_time: newEstimatedTime
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren der geschätzten Zeit.');
+    });
+}
 </script>
 {% endblock %} 
