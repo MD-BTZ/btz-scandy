@@ -552,3 +552,240 @@ if (document.readyState === 'loading') {
 } else {
     initializeReturnButtons();
 } 
+
+function addMaterialRow() {
+    console.log('Füge neue Materialzeile hinzu');
+    const materialList = document.getElementById('materialList');
+    if (!materialList) {
+        console.error('Materialliste-Container nicht gefunden');
+        return;
+    }
+
+    const newRow = document.createElement('div');
+    newRow.className = 'material-row grid grid-cols-4 gap-2 items-center mb-2';
+    newRow.innerHTML = `
+        <input type="text" class="material-input input input-bordered" placeholder="Material">
+        <input type="number" class="menge-input input input-bordered" placeholder="Menge" min="0" step="0.01">
+        <input type="number" class="einzelpreis-input input input-bordered" placeholder="Einzelpreis" min="0" step="0.01">
+        <button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    materialList.appendChild(newRow);
+}
+
+function removeMaterialRow(button) {
+    console.log('Entferne Materialzeile');
+    const row = button.closest('.material-row');
+    if (row) {
+        row.remove();
+    }
+}
+
+function addArbeitRow() {
+    console.log('Füge neue Arbeitszeile hinzu');
+    const arbeitList = document.getElementById('arbeitList');
+    if (!arbeitList) {
+        console.error('Arbeitsliste-Container nicht gefunden');
+        return;
+    }
+    
+    const newRow = document.createElement('div');
+    newRow.className = 'arbeit-row grid grid-cols-4 gap-2 items-center mb-2';
+    newRow.innerHTML = `
+        <div class="form-control">
+            <input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" placeholder="Arbeit">
+        </div>
+        <div class="form-control">
+            <input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" placeholder="Stunden" min="0" step="0.5">
+        </div>
+        <div class="form-control">
+            <input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" placeholder="Leistungskategorie">
+        </div>
+        <div class="form-control">
+            <button type="button" class="btn btn-error btn-sm" onclick="removeArbeitRow(this)">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    arbeitList.appendChild(newRow);
+}
+
+function removeArbeitRow(button) {
+    console.log('Entferne Arbeitszeile');
+    const row = button.closest('.arbeit-row');
+    if (row) {
+        row.remove();
+    }
+}
+
+function loadAuftragDetailsModal() {
+    console.log('Lade Auftragsdetails-Modal...');
+    
+    // Extrahiere die Ticket-ID aus der URL
+    const urlParts = window.location.pathname.split('/');
+    const ticketId = urlParts[urlParts.length - 1];
+    
+    if (!ticketId) {
+        console.error('Keine Ticket-ID gefunden in der URL');
+        return;
+    }
+    
+    console.log('Verwende Ticket-ID:', ticketId);
+    
+    fetch(`/tickets/${ticketId}/auftrag-details-modal`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            console.log('Modal HTML empfangen');
+            const container = document.getElementById('auftragDetailsModalContainer');
+            if (!container) {
+                console.error('Modal Container nicht gefunden!');
+                return;
+            }
+            
+            container.innerHTML = html;
+            const modal = document.getElementById('auftragDetailsModal');
+            if (!modal) {
+                console.error('Modal Element nicht gefunden!');
+                return;
+            }
+            
+            console.log('Öffne Modal...');
+            modal.showModal();
+            
+            // Event-Listener für das Formular
+            const form = document.getElementById('auftragDetailsForm');
+            if (!form) {
+                console.error('Formular nicht gefunden!');
+                return;
+            }
+            
+            // Event-Listener für Material- und Arbeitszeilen
+            const addMaterialBtn = document.getElementById('addMaterialBtn');
+            if (addMaterialBtn) {
+                addMaterialBtn.addEventListener('click', addMaterialRow);
+            }
+            
+            const addArbeitBtn = document.getElementById('addArbeitBtn');
+            if (addArbeitBtn) {
+                addArbeitBtn.addEventListener('click', addArbeitRow);
+            }
+            
+            // Initialisiere bestehende Zeilen
+            const materialList = document.getElementById('materialList');
+            if (materialList) {
+                materialList.querySelectorAll('.material-row').forEach(row => {
+                    const deleteBtn = row.querySelector('.btn-error');
+                    if (deleteBtn) {
+                        deleteBtn.addEventListener('click', () => removeMaterialRow(deleteBtn));
+                    }
+                });
+            }
+            
+            const arbeitList = document.getElementById('arbeitList');
+            if (arbeitList) {
+                arbeitList.querySelectorAll('.arbeit-row').forEach(row => {
+                    const deleteBtn = row.querySelector('.btn-error');
+                    if (deleteBtn) {
+                        deleteBtn.addEventListener('click', () => removeArbeitRow(deleteBtn));
+                    }
+                });
+            }
+            
+            console.log('Initialisiere Formular-Event-Listener');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                console.log('Formular abgesendet');
+                
+                // Formulardaten sammeln
+                const formData = new FormData(form);
+                const jsonData = {};
+                
+                // Basis-Formulardaten
+                for (let [key, value] of formData.entries()) {
+                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
+                        jsonData[key] = value === '1';
+                    } else if (key.endsWith('[]')) {
+                        // Array-Felder
+                        const baseKey = key.slice(0, -2);
+                        if (!jsonData[baseKey]) {
+                            jsonData[baseKey] = [];
+                        }
+                        jsonData[baseKey].push(value);
+                    } else {
+                        jsonData[key] = value;
+                    }
+                }
+                
+                // Materialliste sammeln
+                const materialList = [];
+                document.querySelectorAll('.material-row').forEach(row => {
+                    const material = row.querySelector('.material-input')?.value;
+                    const menge = parseFloat(row.querySelector('.menge-input')?.value) || 0;
+                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input')?.value) || 0;
+                    
+                    if (material || menge || einzelpreis) {
+                        materialList.push({
+                            material: material,
+                            menge: menge,
+                            einzelpreis: einzelpreis
+                        });
+                    }
+                });
+                
+                // Arbeitsliste sammeln
+                const arbeitList = [];
+                document.querySelectorAll('.arbeit-row').forEach(row => {
+                    const arbeit = row.querySelector('.arbeit-input')?.value;
+                    const arbeitsstunden = parseFloat(row.querySelector('.arbeitsstunden-input')?.value) || 0;
+                    const leistungskategorie = row.querySelector('.leistungskategorie-input')?.value;
+                    
+                    if (arbeit && (arbeitsstunden > 0 || leistungskategorie)) {
+                        arbeitList.push({
+                            arbeit: arbeit,
+                            arbeitsstunden: arbeitsstunden,
+                            leistungskategorie: leistungskategorie
+                        });
+                    }
+                });
+                
+                jsonData.material_list = materialList;
+                jsonData.arbeit_list = arbeitList;
+                
+                console.log('Sende Daten:', jsonData);
+                
+                // AJAX-Request senden
+                fetch(`/tickets/${ticketId}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(jsonData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Antwort erhalten:', data);
+                    if (data.success) {
+                        modal.close();
+                        window.location.reload();
+                    } else {
+                        alert('Fehler beim Speichern: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Fehler beim Speichern:', error);
+                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden des Modals:', error);
+            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
+        });
+} 

@@ -363,8 +363,12 @@ def update(id):
         logging.info(f"Empfangene Daten für Ticket {id}: {data}")
         
         # Verarbeite ausgeführte Arbeiten
-        ausgefuehrte_arbeiten = data.get('ausgefuehrte_arbeiten', '')
-        logging.info(f"Empfangene ausgeführte Arbeiten: {ausgefuehrte_arbeiten}")
+        arbeit_list = data.get('arbeit_list', [])
+        ausgefuehrte_arbeiten = '\n'.join([
+            f"{arbeit['arbeit']}|{arbeit['arbeitsstunden']}|{arbeit['leistungskategorie']}"
+            for arbeit in arbeit_list
+        ])
+        logging.info(f"Verarbeitete ausgeführte Arbeiten: {ausgefuehrte_arbeiten}")
         
         # Bereite die Auftragsdetails vor
         auftrag_details = {
@@ -379,8 +383,6 @@ def update(id):
             'leistungskategorie': data.get('leistungskategorie', ''),
             'fertigstellungstermin': data.get('fertigstellungstermin', '')
         }
-        
-        logging.info(f"Verarbeitete ausgeführte Arbeiten: {auftrag_details['ausgefuehrte_arbeiten']}")
         
         # Aktualisiere die Auftragsdetails
         if not ticket_db.update_auftrag_details(id, **auftrag_details):

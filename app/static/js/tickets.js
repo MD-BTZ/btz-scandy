@@ -244,28 +244,20 @@ function collectAuftragDetails() {
     });
     
     // Sammle Arbeitsdaten
-    const arbeitRows = document.querySelectorAll('#arbeitRows tbody tr');
+    const arbeitRows = document.querySelectorAll('.arbeit-row');
     arbeitRows.forEach(row => {
-        const arbeit = row.querySelector('input[name="arbeit"]').value;
-        const stunden = parseFloat(row.querySelector('input[name="stunden"]').value) || 0;
-        const stundensatz = parseFloat(row.querySelector('input[name="stundensatz"]').value) || 0;
-        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        const arbeit = row.querySelector('.arbeit-input')?.value;
+        const arbeitsstunden = parseFloat(row.querySelector('.arbeitsstunden-input')?.value) || 0;
+        const leistungskategorie = row.querySelector('.leistungskategorie-input')?.value;
         
-        if (arbeit && (stunden > 0 || stundensatz > 0)) {
+        if (arbeit && (arbeitsstunden > 0 || leistungskategorie)) {
             data.arbeitList.push({
                 arbeit: arbeit,
-                stunden: stunden,
-                stundensatz: stundensatz,
-                gesamtpreis: gesamtpreis
+                arbeitsstunden: arbeitsstunden,
+                leistungskategorie: leistungskategorie
             });
         }
     });
-    
-    // Hole die Ticket-ID aus dem Modal
-    const modal = document.getElementById('auftragDetailsModal');
-    if (modal) {
-        data.ticketId = modal.dataset.ticketId;
-    }
     
     return data;
 }
