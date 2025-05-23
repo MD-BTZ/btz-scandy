@@ -431,6 +431,7 @@ class TicketDatabase:
                     arbeitsstunden REAL,
                     leistungskategorie TEXT,
                     fertigstellungstermin TEXT,
+                    gesamtsumme REAL,
                     erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
                 )
@@ -709,7 +710,8 @@ class TicketDatabase:
                 'ausgefuehrte_arbeiten': str(kwargs.get('ausgefuehrte_arbeiten', '')).strip(),
                 'arbeitsstunden': str(kwargs.get('arbeitsstunden', '')).strip(),
                 'leistungskategorie': str(kwargs.get('leistungskategorie', '')).strip(),
-                'fertigstellungstermin': str(kwargs.get('fertigstellungstermin', '')).strip()
+                'fertigstellungstermin': str(kwargs.get('fertigstellungstermin', '')).strip(),
+                'gesamtsumme': float(kwargs.get('gesamtsumme', 0))
             }
             
             logger.info(f"Vorbereitete Daten für Ticket {ticket_id}: {data}")
@@ -749,10 +751,9 @@ class TicketDatabase:
             update_values = []
             for key in ['bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name', 
                        'kontakt', 'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden', 
-                       'leistungskategorie', 'fertigstellungstermin']:
+                       'leistungskategorie', 'fertigstellungstermin', 'gesamtsumme']:
                 if key in kwargs:
                     value = kwargs[key]
-                    # Konvertiere Boolean-Werte zu 0/1 für SQLite
                     if isinstance(value, bool):
                         value = 1 if value else 0
                     update_values.append(value)
@@ -776,7 +777,8 @@ class TicketDatabase:
                     ausgefuehrte_arbeiten = ?, 
                     arbeitsstunden = ?, 
                     leistungskategorie = ?, 
-                    fertigstellungstermin = ? 
+                    fertigstellungstermin = ?,
+                    gesamtsumme = ?
                 WHERE ticket_id = ?
             """
             
@@ -811,6 +813,7 @@ class TicketDatabase:
                     COALESCE(arbeitsstunden, '') as arbeitsstunden,
                     COALESCE(leistungskategorie, '') as leistungskategorie,
                     COALESCE(fertigstellungstermin, '') as fertigstellungstermin,
+                    COALESCE(gesamtsumme, 0) as gesamtsumme,
                     erstellt_am
                 FROM auftrag_details 
                 WHERE ticket_id = ?

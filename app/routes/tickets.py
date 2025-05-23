@@ -381,7 +381,8 @@ def update(id):
             'ausgefuehrte_arbeiten': ausgefuehrte_arbeiten,
             'arbeitsstunden': data.get('arbeitsstunden', ''),
             'leistungskategorie': data.get('leistungskategorie', ''),
-            'fertigstellungstermin': data.get('fertigstellungstermin', '')
+            'fertigstellungstermin': data.get('fertigstellungstermin', ''),
+            'gesamtsumme': data.get('gesamtsumme', 0)
         }
         
         # Aktualisiere die Auftragsdetails
@@ -731,7 +732,8 @@ def public_create_order():
             'ausgefuehrte_arbeiten': '',
             'arbeitsstunden': '',
             'leistungskategorie': '',
-            'fertigstellungstermin': ''
+            'fertigstellungstermin': '',
+            'gesamtsumme': 0
         }
         ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
         return render_template('auftrag_public_success.html')
