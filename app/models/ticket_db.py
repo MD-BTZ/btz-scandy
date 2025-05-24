@@ -742,7 +742,7 @@ class TicketDatabase:
             raise
 
     def update_auftrag_details(self, ticket_id, **kwargs):
-        """Aktualisiert nur die übergebenen Felder der Auftrag-Details für ein Ticket."""
+        """Aktualisiert nur die übergebenen Felder der Auftrag-Details für ein Ticket. Legt einen neuen Eintrag an, falls keiner existiert."""
         try:
             # Hole aktuelle Auftragsdetails
             current_details = self.get_auftrag_details(ticket_id)
@@ -781,11 +781,26 @@ class TicketDatabase:
                     gesamtsumme = ?
                 WHERE ticket_id = ?
             """
+            affected = self.query(query, update_values)
+            logging.info(f"Auftragsdetails für Ticket {ticket_id} erfolgreich aktualisiert, betroffene Zeilen: {affected}")
             
-            self.query(query, update_values)
-            logging.info(f"Auftragsdetails für Ticket {ticket_id} erfolgreich aktualisiert")
+            # Wenn kein Eintrag aktualisiert wurde, lege einen neuen an
+            if affected == 0:
+                logger.info(f"Kein Eintrag für ticket_id={ticket_id} vorhanden, lege neuen Eintrag an.")
+                felder = ['bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name',
+                          'kontakt', 'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden',
+                          'leistungskategorie', 'fertigstellungstermin', 'gesamtsumme']
+                werte = [kwargs.get(f, current_details.get(f, '')) for f in felder]
+                sql = f"""
+                    INSERT INTO auftrag_details (
+                        ticket_id, {', '.join(felder)}
+                    ) VALUES (
+                        ?, {', '.join(['?']*len(felder))}
+                    )
+                """
+                self.query(sql, [ticket_id] + werte)
+                logger.info(f"Neuer Eintrag in auftrag_details für ticket_id={ticket_id} angelegt.")
             return True
-            
         except Exception as e:
             logging.error(f"Fehler beim Aktualisieren der Auftragsdetails für Ticket {ticket_id}: {str(e)}")
             return False
