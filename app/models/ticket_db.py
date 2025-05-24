@@ -324,6 +324,40 @@ class TicketDatabase:
                 )
             ''')
             
+            # Auftrag Details Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auftrag_details (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    auftrag_an TEXT,
+                    bereich TEXT,
+                    auftraggeber_intern BOOLEAN DEFAULT 1,
+                    auftraggeber_extern BOOLEAN DEFAULT 0,
+                    auftraggeber_name TEXT,
+                    kontakt TEXT,
+                    auftragsbeschreibung TEXT,
+                    ausgefuehrte_arbeiten TEXT,
+                    arbeitsstunden REAL,
+                    leistungskategorie TEXT,
+                    fertigstellungstermin TEXT,
+                    gesamtsumme REAL DEFAULT 0,
+                    erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Auftrag Material Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auftrag_material (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    material TEXT,
+                    menge REAL,
+                    einzelpreis REAL,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+                )
+            ''')
+            
             # Ticket Notes Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS ticket_notes (
@@ -412,40 +446,6 @@ class TicketDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            ''')
-            
-            # Auftrag Details Tabelle
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS auftrag_details (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ticket_id INTEGER NOT NULL,
-                    auftrag_an TEXT,
-                    bereich TEXT,
-                    auftraggeber_intern BOOLEAN DEFAULT 1,
-                    auftraggeber_extern BOOLEAN DEFAULT 0,
-                    auftraggeber_name TEXT,
-                    kontakt TEXT,
-                    auftragsbeschreibung TEXT,
-                    ausgefuehrte_arbeiten TEXT,
-                    arbeitsstunden REAL,
-                    leistungskategorie TEXT,
-                    fertigstellungstermin TEXT,
-                    gesamtsumme REAL DEFAULT 0,
-                    erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Auftrag Material Tabelle (dynamische Positionen)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS auftrag_material (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ticket_id INTEGER NOT NULL,
-                    material TEXT,
-                    menge REAL,
-                    einzelpreis REAL,
-                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
                 )
             ''')
             

@@ -2,7 +2,6 @@ import logging
 import os
 from app.models.ticket_db import TicketDatabase
 from app.config.config import Config
-from app.models.migrations import run_ticket_db_migrations
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +25,6 @@ def init_ticket_db():
             # Initialisiere das Schema nur für neue Datenbanken
             ticket_db.init_schema()
             logger.info("Neue Ticket-Datenbank erfolgreich initialisiert")
-        else:
-            # Führe Migrationen nur für existierende Datenbanken durch
-            run_ticket_db_migrations(ticket_db_path)
-            logger.info("Existierende Ticket-Datenbank erfolgreich migriert")
         
         return True
         
