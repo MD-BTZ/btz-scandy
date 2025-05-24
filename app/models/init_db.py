@@ -172,6 +172,21 @@ def init_db():
             )
         ''')
         
+        # Homepage Notices Tabelle
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS homepage_notices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                priority INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        ''')
+        
         conn.commit()
         logger.info("Basis-Datenbank-Tabellen wurden erstellt (falls nicht vorhanden)")
         
