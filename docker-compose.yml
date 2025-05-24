@@ -20,7 +20,24 @@ services:
       TIMEOUT: 120
     networks:
       - scandy_network
-    command: "gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 2 --timeout 120 --access-logfile - --error-logfile - --capture-output --log-level info app:create_app()"
+    command:
+      - gunicorn
+      - --bind
+      - 0.0.0.0:5000
+      - --workers
+      - "4"
+      - --threads
+      - "2"
+      - --timeout
+      - "120"
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+      - --capture-output
+      - --log-level
+      - info
+      - app:create_app()
 
 networks:
   scandy_network:
