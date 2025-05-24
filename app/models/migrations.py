@@ -19,19 +19,16 @@ def get_db_schema_version(conn):
     """Liest die Schema-Version aus der settings-Tabelle."""
     try:
         cursor = conn.cursor()
-        
         # Zuerst prüfen wir die schema_version Tabelle
         cursor.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
         result = cursor.fetchone()
-        if result:
+        if result and str(result[0]).strip().isdigit():
             return int(result[0])
-            
         # Wenn keine schema_version Tabelle existiert, prüfen wir die settings Tabelle
         cursor.execute("SELECT value FROM settings WHERE key = 'schema_version'")
         result = cursor.fetchone()
-        if result:
+        if result and str(result[0]).strip().isdigit():
             return int(result[0])
-            
         # Wenn kein Eintrag existiert, prüfen wir, ob die users-Tabelle existiert
         try:
             cursor.execute("SELECT 1 FROM users LIMIT 1")
@@ -40,7 +37,6 @@ def get_db_schema_version(conn):
         except sqlite3.OperationalError:
             logger.warning("Kein Schema-Versionseintrag und keine 'users'-Tabelle gefunden. Nehme Version 1 an.")
             return 1
-            
     except Exception as e:
         logger.error(f"Fehler beim Lesen der Schema-Version: {e}. Nehme Version 1 an.")
         return 1
