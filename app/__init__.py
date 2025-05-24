@@ -19,7 +19,6 @@ from flask_login import LoginManager
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
-from app.models.migrations import run_migrations
 from app.routes import auth, tools, consumables, workers, setup, backup
 from app.config import Config
 from app.routes import init_app
