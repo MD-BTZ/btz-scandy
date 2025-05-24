@@ -1057,17 +1057,16 @@ def get_all_users():
 def get_categories():
     """Lädt alle verfügbaren Kategorien aus der Datenbank."""
     try:
-        categories = ticket_db.query(
-            """
-            SELECT DISTINCT category 
-            FROM tickets 
-            WHERE category IS NOT NULL AND category != ''
-            ORDER BY category
-            """
-        )
-        return [cat['category'] for cat in categories]
+        with Database.get_db() as conn:
+            categories = conn.execute('''
+                SELECT name 
+                FROM categories 
+                WHERE deleted = 0 
+                ORDER BY name
+            ''').fetchall()
+            return [cat['name'] for cat in categories]
     except Exception as e:
-        print(f"DEBUG: Fehler beim Laden der Kategorien: {e}")
+        logger.error(f"Fehler beim Laden der Kategorien: {e}")
         return []
 
 @bp.route('/server-settings', methods=['GET', 'POST'])

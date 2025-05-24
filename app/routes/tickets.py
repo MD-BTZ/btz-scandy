@@ -147,12 +147,14 @@ def create():
     )
     
     # Hole alle Kategorien aus der Tabelle 'categories'
-    categories = ticket_db.query(
-        """
-        SELECT name FROM categories ORDER BY name
-        """
-    )
-    categories = [c['name'] for c in categories]
+    with Database.get_db() as conn:
+        categories = conn.execute('''
+            SELECT name 
+            FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
+        ''').fetchall()
+        categories = [c['name'] for c in categories]
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
@@ -730,12 +732,15 @@ def export_ticket(id):
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
     # Kategorien aus der Tabelle 'categories' laden
-    categories = ticket_db.query(
-        """
-        SELECT name FROM categories ORDER BY name
-        """
-    )
-    categories = [c['name'] for c in categories]
+    with Database.get_db() as conn:
+        categories = conn.execute('''
+            SELECT name 
+            FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
+        ''').fetchall()
+        categories = [c['name'] for c in categories]
+
     if request.method == 'POST':
         title = request.form.get('title')
         description = request.form.get('description')
