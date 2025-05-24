@@ -1,6 +1,9 @@
 # Verwende Python 3.9 als Basis-Image
 FROM python:3.9-slim
 
+# Git installieren für Update-Funktion
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Setze Arbeitsverzeichnis
 WORKDIR /app
 
