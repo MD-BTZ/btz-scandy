@@ -790,7 +790,10 @@ class TicketDatabase:
                 felder = ['bereich', 'auftraggeber_intern', 'auftraggeber_extern', 'auftraggeber_name',
                           'kontakt', 'auftragsbeschreibung', 'ausgefuehrte_arbeiten', 'arbeitsstunden',
                           'leistungskategorie', 'fertigstellungstermin', 'gesamtsumme']
-                werte = [kwargs.get(f, current_details.get(f, '')) for f in felder]
+                if current_details:
+                    werte = [kwargs.get(f, current_details.get(f, '')) for f in felder]
+                else:
+                    werte = [kwargs.get(f, '') for f in felder]
                 sql = f"""
                     INSERT INTO auftrag_details (
                         ticket_id, {', '.join(felder)}
