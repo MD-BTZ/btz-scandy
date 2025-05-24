@@ -14,10 +14,25 @@ services:
     environment:
       - FLASK_APP=app.wsgi:application
       - FLASK_ENV=production
+      - FLASK_CONFIG=production
       - DATABASE_URL=sqlite:////app/database/inventory.db
-      - SECRET_KEY=${SECRET_KEY}
+      - SECRET_KEY=${SECRET_KEY:-$(openssl rand -hex 32)}
+      - WORKERS=4
+      - THREADS=2
+      - TIMEOUT=120
     networks:
       - scandy_network
+    command: >
+      gunicorn 
+      --bind 0.0.0.0:5000 
+      --workers ${WORKERS:-4} 
+      --threads ${THREADS:-2} 
+      --timeout ${TIMEOUT:-120} 
+      --access-logfile - 
+      --error-logfile - 
+      --capture-output 
+      --log-level info 
+      app:create_app()
 
 networks:
   scandy_network:

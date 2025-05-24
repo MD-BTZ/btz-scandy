@@ -25,29 +25,53 @@ class Config:
     # Flask-Session
     SESSION_TYPE = 'filesystem'
     SESSION_FILE_DIR = os.path.join(BASE_DIR, 'app', 'database', 'flask_session')
+    SESSION_PERMANENT = True
+    PERMANENT_SESSION_LIFETIME = 86400  # 24 Stunden
     
     # Sicherheit
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev')
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY muss in der Produktion gesetzt sein!")
     
     # Server-Einstellungen
     HOST = '0.0.0.0'
     PORT = 5000
+    
+    # Sicherheitseinstellungen
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
 
 class DevelopmentConfig(Config):
     """Entwicklungs-Konfiguration"""
     DEBUG = True
     TESTING = False
+    SECRET_KEY = 'dev-key-not-for-production'
+    SESSION_COOKIE_SECURE = False
+    REMEMBER_COOKIE_SECURE = False
 
 class TestingConfig(Config):
     """Test-Konfiguration"""
     DEBUG = True
     TESTING = True
     DATABASE = ':memory:'
+    SECRET_KEY = 'test-key-not-for-production'
+    SESSION_COOKIE_SECURE = False
+    REMEMBER_COOKIE_SECURE = False
 
 class ProductionConfig(Config):
     """Produktions-Konfiguration"""
     DEBUG = False
     TESTING = False
+    
+    @classmethod
+    def init_app(cls, app):
+        # Produktionsspezifische Initialisierung
+        if not app.config['SECRET_KEY']:
+            raise ValueError("SECRET_KEY muss in der Produktion gesetzt sein!")
 
 # Konfigurationen
 config = {
