@@ -12,14 +12,14 @@ services:
       - ./backups:/app/backups
       - ./logs:/app/logs
     environment:
-      - FLASK_APP=app.wsgi:application
-      - FLASK_ENV=production
-      - FLASK_CONFIG=production
-      - DATABASE_URL=sqlite:////app/database/inventory.db
-      - SECRET_KEY=3f8d7a2b4c1e4e2b9a7e8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2
-      - WORKERS=4
-      - THREADS=2
-      - TIMEOUT=120
+      FLASK_APP: app.wsgi:application
+      FLASK_ENV: production
+      FLASK_CONFIG: production
+      DATABASE_URL: sqlite:////app/database/inventory.db
+      SECRET_KEY: 3f8d7a2b4c1e4e2b9a7e8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2
+      WORKERS: 4
+      THREADS: 2
+      TIMEOUT: 120
     networks:
       - scandy_network
     command: >
