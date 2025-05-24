@@ -205,6 +205,14 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+                        <li>
+                            <a href="{{ url_for('admin.updates') }}" class="nav-link">
+                                <i class="fas fa-sync-alt mr-2"></i>
+                                System-Updates
+                            </a>
+                        </li>
+                        {% endif %}
                     </ul>
                 </div>
                 <a href="{{ url_for('admin.trash') }}" 

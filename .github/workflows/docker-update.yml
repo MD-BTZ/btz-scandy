@@ -1,0 +1,23 @@
+name: Docker Update
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Ermöglicht manuelles Auslösen
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH und Update
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/app
+            git pull origin main
+            docker-compose down
+            docker-compose pull
+            docker-compose up -d --build 

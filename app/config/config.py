@@ -3,6 +3,7 @@ Konfigurationsmodul für Scandy
 """
 import os
 from pathlib import Path
+import secrets
 
 class Config:
     """Basis-Konfigurationsklasse"""
@@ -29,9 +30,7 @@ class Config:
     PERMANENT_SESSION_LIFETIME = 86400  # 24 Stunden
     
     # Sicherheit
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    if not SECRET_KEY:
-        raise ValueError("SECRET_KEY muss in der Produktion gesetzt sein!")
+    SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_hex(32))
     
     # Server-Einstellungen
     HOST = '0.0.0.0'
@@ -71,7 +70,7 @@ class ProductionConfig(Config):
     def init_app(cls, app):
         # Produktionsspezifische Initialisierung
         if not app.config['SECRET_KEY']:
-            raise ValueError("SECRET_KEY muss in der Produktion gesetzt sein!")
+            app.config['SECRET_KEY'] = secrets.token_hex(32)
 
 # Konfigurationen
 config = {

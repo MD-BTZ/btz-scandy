@@ -23,6 +23,7 @@ from PIL import Image
 import io
 from app.config.config import Config
 from app.models.ticket_db import TicketDatabase
+import subprocess
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -3098,3 +3099,82 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@bp.route('/updates')
+@login_required
+@admin_required
+def updates():
+    """Zeigt die Update-Seite an"""
+    return render_template('admin/updates.html')
+
+@bp.route('/updates/check', methods=['POST'])
+@login_required
+@admin_required
+def check_updates():
+    """Prüft auf verfügbare Updates"""
+    try:
+        # Git Status prüfen
+        result = subprocess.run(['git', 'fetch', 'origin'], 
+                              capture_output=True, 
+                              text=True, 
+                              cwd=current_app.root_path)
+        
+        # Prüfen ob Updates verfügbar sind
+        result = subprocess.run(['git', 'rev-list', 'HEAD..origin/main', '--count'],
+                              capture_output=True,
+                              text=True,
+                              cwd=current_app.root_path)
+        
+        commits_behind = int(result.stdout.strip())
+        
+        if commits_behind > 0:
+            return jsonify({
+                'status': 'success',
+                'updates_available': True,
+                'commits_behind': commits_behind
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'updates_available': False
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/updates/apply', methods=['POST'])
+@login_required
+@admin_required
+def apply_updates():
+    """Führt das Update durch"""
+    try:
+        # Backup erstellen
+        from app.models.backup import DatabaseBackup
+        backup = DatabaseBackup()
+        backup.create_backup()
+        
+        # Update durchführen
+        update_script = Path(current_app.root_path) / 'update.sh'
+        result = subprocess.run(['bash', str(update_script)],
+                              capture_output=True,
+                              text=True)
+        
+        if result.returncode == 0:
+            return jsonify({
+                'status': 'success',
+                'message': 'Update erfolgreich durchgeführt'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result.stderr
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
