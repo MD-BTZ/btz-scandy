@@ -553,6 +553,18 @@ if (document.readyState === 'loading') {
     initializeReturnButtons();
 } 
 
+function updateRowSum(row) {
+    const menge = parseFloat(row.querySelector('.menge-input')?.value) || 0;
+    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input')?.value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+    if (gesamtpreisInput) {
+        gesamtpreisInput.value = gesamtpreis.toFixed(2);
+    }
+    updateSummeMaterial();
+    updateGesamtsumme();
+}
+
 function addMaterialRow() {
     console.log('Füge neue Materialzeile hinzu');
     const materialRows = document.getElementById('materialRows');
@@ -570,20 +582,15 @@ function addMaterialRow() {
         <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
     `;
     materialRows.appendChild(newRow);
+    
     // Event-Listener für die neuen Inputs
     const mengeInput = newRow.querySelector('.menge-input');
     const einzelpreisInput = newRow.querySelector('.einzelpreis-input');
-    const gesamtpreisInput = newRow.querySelector('input[name="gesamtpreis"]');
-    function updateRowSum() {
-        const menge = parseFloat(mengeInput.value) || 0;
-        const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
-        const gesamtpreis = menge * einzelpreis;
-        gesamtpreisInput.value = gesamtpreis.toFixed(2);
-        updateSummeMaterial();
-        updateGesamtsumme();
-    }
-    mengeInput.addEventListener('input', updateRowSum);
-    einzelpreisInput.addEventListener('input', updateRowSum);
+    
+    // Event-Listener für Änderungen
+    mengeInput.addEventListener('input', () => updateRowSum(newRow));
+    einzelpreisInput.addEventListener('input', () => updateRowSum(newRow));
+    
     // Event-Listener für den Lösch-Button
     const deleteBtn = newRow.querySelector('.delete-material-btn');
     if (deleteBtn) {
@@ -599,13 +606,7 @@ function updateSummeMaterial() {
     const rows = document.querySelectorAll('#materialRows tr');
     let summe = 0;
     rows.forEach(row => {
-        const menge = parseFloat(row.querySelector('.menge-input')?.value) || 0;
-        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input')?.value) || 0;
-        const gesamtpreis = menge * einzelpreis;
-        const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
-        if (gesamtpreisInput) {
-            gesamtpreisInput.value = gesamtpreis.toFixed(2);
-        }
+        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]')?.value) || 0;
         summe += gesamtpreis;
     });
     const summeMaterial = document.getElementById('summeMaterial');
@@ -614,11 +615,33 @@ function updateSummeMaterial() {
     }
 }
 
+function updateGesamtsumme() {
+    const summeMaterial = document.getElementById('summeMaterial');
+    const summeArbeit = document.getElementById('summeArbeit');
+    let material = 0;
+    let arbeit = 0;
+    
+    if (summeMaterial) {
+        material = parseFloat(summeMaterial.textContent.replace('€','').replace(',','.').trim()) || 0;
+    }
+    if (summeArbeit) {
+        arbeit = parseFloat(summeArbeit.textContent.replace('h','').replace(',','.').trim()) || 0;
+    }
+    
+    const gesamtsumme = material + arbeit;
+    const gesamtsummeElem = document.getElementById('gesamtsumme');
+    if (gesamtsummeElem) {
+        gesamtsummeElem.textContent = gesamtsumme.toFixed(2) + ' €';
+    }
+}
+
 function removeMaterialRow(button) {
     console.log('Entferne Materialzeile');
     const row = button.closest('.material-row');
     if (row) {
         row.remove();
+        updateSummeMaterial();
+        updateGesamtsumme();
     }
 }
 
@@ -670,30 +693,33 @@ function updateSummeArbeit() {
     }
 }
 
-function updateGesamtsumme() {
-    const summeMaterial = document.getElementById('summeMaterial');
-    const summeArbeit = document.getElementById('summeArbeit');
-    let material = 0;
-    let arbeit = 0;
-    if (summeMaterial) {
-        material = parseFloat(summeMaterial.textContent.replace('€','').replace(',','.')) || 0;
-    }
-    if (summeArbeit) {
-        arbeit = parseFloat(summeArbeit.textContent.replace('h','').replace(',','.')) || 0;
-    }
-    const gesamtsumme = material + arbeit;
-    const gesamtsummeElem = document.getElementById('gesamtsumme');
-    if (gesamtsummeElem) {
-        gesamtsummeElem.textContent = gesamtsumme.toFixed(2) + ' €';
-    }
-}
-
 function removeArbeitRow(button) {
     console.log('Entferne Arbeitszeile');
     const row = button.closest('.arbeit-row');
     if (row) {
         row.remove();
     }
+}
+
+function initializeMaterialRowEvents(row) {
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    const deleteBtn = row.querySelector('.delete-material-btn');
+    
+    if (mengeInput) {
+        mengeInput.addEventListener('input', () => updateRowSum(row));
+    }
+    if (einzelpreisInput) {
+        einzelpreisInput.addEventListener('input', () => updateRowSum(row));
+    }
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            removeMaterialRow(this);
+        });
+    }
+    
+    // Initiale Berechnung für die Zeile
+    updateRowSum(row);
 }
 
 function loadAuftragDetailsModal() {
@@ -753,26 +779,24 @@ function loadAuftragDetailsModal() {
                 addArbeitBtn.addEventListener('click', addArbeitRow);
             }
             
-            // Initialisiere bestehende Zeilen
-            const materialList = document.getElementById('materialList');
-            if (materialList) {
-                materialList.querySelectorAll('.material-row').forEach(row => {
-                    const deleteBtn = row.querySelector('.btn-error');
-                    if (deleteBtn) {
-                        deleteBtn.addEventListener('click', () => removeMaterialRow(deleteBtn));
-                    }
-                });
-            }
+            // Initialisiere bestehende Materialzeilen
+            const materialRows = document.querySelectorAll('.material-row');
+            materialRows.forEach(row => {
+                initializeMaterialRowEvents(row);
+            });
             
-            const arbeitList = document.getElementById('arbeitenList');
-            if (arbeitList) {
-                arbeitList.querySelectorAll('.arbeit-row').forEach(row => {
-                    const deleteBtn = row.querySelector('.btn-error');
-                    if (deleteBtn) {
-                        deleteBtn.addEventListener('click', () => removeArbeitRow(deleteBtn));
-                    }
-                });
-            }
+            // Initialisiere bestehende Arbeitszeilen
+            const arbeitRows = document.querySelectorAll('.arbeit-row');
+            arbeitRows.forEach(row => {
+                const deleteBtn = row.querySelector('.delete-arbeit-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', () => removeArbeitRow(deleteBtn));
+                }
+            });
+            
+            // Aktualisiere die Gesamtsummen
+            updateSummeMaterial();
+            updateGesamtsumme();
             
             console.log('Initialisiere Formular-Event-Listener');
             form.addEventListener('submit', function(e) {

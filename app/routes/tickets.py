@@ -603,17 +603,17 @@ def export_ticket(id):
         auftragnehmer_name = ''
 
     # --- Checkboxen für Auftraggeber intern/extern ---
-    intern_checkbox = '✓' if auftrag_details.get('auftraggeber_intern') else '☐'
-    extern_checkbox = '✓' if auftrag_details.get('auftraggeber_extern') else '☐'
+    intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
+    extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
 
     # --- Ausgeführte Arbeiten (bis zu 5) ---
     arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
-    # Annahme: Arbeiten werden als Zeilenumbruch-getrennte Einträge gespeichert, ggf. mit | getrennt für Stunden/Kategorie
     arbeiten_zeilen = []
     if arbeiten_liste:
         for zeile in arbeiten_liste.split('\n'):
+            if not zeile.strip():
+                continue
             teile = [t.strip() for t in zeile.split('|')]
-            # [Arbeit, Stunden, Kategorie]
             eintrag = {
                 'arbeiten': teile[0] if len(teile) > 0 else '',
                 'arbeitsstunden': teile[1] if len(teile) > 1 else '',
@@ -624,19 +624,19 @@ def export_ticket(id):
     while len(arbeiten_zeilen) < 5:
         arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
 
-    # Materialdaten aufbereiten (wie gehabt)
+    # Materialdaten aufbereiten
     material_rows = []
     summe_material = 0
     for m in material_list:
-        menge = m.get('menge') or 0
-        einzelpreis = m.get('einzelpreis') or 0
+        menge = float(m.get('menge') or 0)
+        einzelpreis = float(m.get('einzelpreis') or 0)
         gesamtpreis = menge * einzelpreis
         summe_material += gesamtpreis
         material_rows.append({
             'material': m.get('material', '') or '',
-            'materialmenge': menge or '',
-            'materialpreis': einzelpreis or '',
-            'materialpreisges': f"{gesamtpreis:.2f}" if gesamtpreis else ''
+            'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
+            'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
+            'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
         })
     while len(material_rows) < 5:
         material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
@@ -650,45 +650,80 @@ def export_ticket(id):
     def safe(val):
         return val if val is not None else ''
 
+    # Formatiere das Datum
+    def format_date(date_val):
+        if not date_val:
+            return ''
+        if isinstance(date_val, datetime):
+            return date_val.strftime('%d.%m.%Y')
+        if isinstance(date_val, str):
+            # Versuche verschiedene Formate
+            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+                try:
+                    return datetime.strptime(date_val, fmt).strftime('%d.%m.%Y')
+                except ValueError:
+                    continue
+            return date_val  # Fallback: gib den String zurück
+        return str(date_val)
+
     context = {
         'auftragnehmer': auftragnehmer_name,
         'auftragnummer': safe(ticket.get('id', '')),
-        'datum': safe(ticket.get('created_at', '')),
+        'datum': format_date(ticket.get('created_at', '')),
         'bereich': safe(auftrag_details.get('bereich', '')),
         'auftraggebername': safe(auftrag_details.get('auftraggeber_name', '')),
         'auftraggebermail': safe(auftrag_details.get('kontakt', '')),
         'auftragsbeschreibung': safe(auftrag_details.get('auftragsbeschreibung', ticket.get('description', ''))),
-        'summematerial': f"{summe_material:.2f}" if summe_material else '',
-        'ubertrag': f"{ubertrag:.2f}" if ubertrag else '',
-        'arbeitspausch': f"{arbeitspausch:.2f}" if arbeitspausch else '',
-        'zwischensumme': f"{zwischensumme:.2f}" if zwischensumme else '',
-        'mwst': f"{mwst:.2f}" if mwst else '',
-        'gesamtsumme': f"{gesamtsumme:.2f}" if gesamtsumme else '',
-        'duedate': safe(auftrag_details.get('fertigstellungstermin', '')),
-        'intern_checkbox': intern_checkbox,
-        'extern_checkbox': extern_checkbox
+        'summematerial': f"{summe_material:.2f}".replace('.', ',') if summe_material else '',
+        'ubertrag': f"{ubertrag:.2f}".replace('.', ',') if ubertrag else '',
+        'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ',') if arbeitspausch else '',
+        'zwischensumme': f"{zwischensumme:.2f}".replace('.', ',') if zwischensumme else '',
+        'mwst': f"{mwst:.2f}".replace('.', ',') if mwst else '',
+        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',') if gesamtsumme else '',
+        'duedate': format_date(auftrag_details.get('fertigstellungstermin', '')),
+        'internchk': intern_checkbox,
+        'externchk': extern_checkbox
     }
-    # Arbeiten (arbeiten1, arbeitsstunden1, leistungskategorie1, ...)
-    for i in range(1, 6):
-        context[f'arbeiten{i}'] = arbeiten_zeilen[i-1]['arbeiten']
-        context[f'arbeitsstunden{i}'] = arbeiten_zeilen[i-1]['arbeitsstunden']
-        context[f'leistungskategorie{i}'] = arbeiten_zeilen[i-1]['leistungskategorie']
-    # Material (material1, ...)
-    for i in range(1, 6):
-        context[f'material{i}'] = material_rows[i-1]['material']
-        context[f'materialmenge{i}'] = material_rows[i-1]['materialmenge']
-        context[f'materialpreis{i}'] = material_rows[i-1]['materialpreis']
-        context[f'materialpreisges{i}'] = material_rows[i-1]['materialpreisges']
-    # Für Kompatibilität: erste Zeile auch als 'material', ...
-    context['material'] = material_rows[0]['material']
-    context['materialmenge'] = material_rows[0]['materialmenge']
-    context['materialpreis'] = material_rows[0]['materialpreis']
-    context['materialpreisges'] = material_rows[0]['materialpreisges']
+    # Arbeiten (ausgefarbeiten1, arst1, lstkat1, ...)
+    for i in range(1, 9):
+        context[f'ausgefarbeiten{i}'] = arbeiten_zeilen[i-1]['arbeiten'] if i-1 < len(arbeiten_zeilen) else ''
+        context[f'arst{i}'] = arbeiten_zeilen[i-1]['arbeitsstunden'] if i-1 < len(arbeiten_zeilen) else ''
+        context[f'lstkat{i}'] = arbeiten_zeilen[i-1]['leistungskategorie'] if i-1 < len(arbeiten_zeilen) else ''
+
+    # Material (material1, mmeng1, mpreis1, mgesp1, ...)
+    for i in range(1, 9):
+        context[f'material{i}'] = material_rows[i-1]['material'] if i-1 < len(material_rows) else ''
+        context[f'mmeng{i}'] = material_rows[i-1]['materialmenge'] if i-1 < len(material_rows) else ''
+        context[f'mpreis{i}'] = material_rows[i-1]['materialpreis'] if i-1 < len(material_rows) else ''
+        context[f'mgesp{i}'] = material_rows[i-1]['materialpreisges'] if i-1 < len(material_rows) else ''
+
+    # Summen
+    context['matsum'] = f"{summe_material:.2f}".replace('.', ',') if summe_material else ''
+    context['utrag'] = f"{ubertrag:.2f}".replace('.', ',') if ubertrag else ''
+    context['arpausch'] = f"{arbeitspausch:.2f}".replace('.', ',') if arbeitspausch else ''
+    context['zwsum'] = f"{zwischensumme:.2f}".replace('.', ',') if zwischensumme else ''
+    context['mwst'] = f"{mwst:.2f}".replace('.', ',') if mwst else ''
+    context['gesamtsumme'] = f"{gesamtsumme:.2f}".replace('.', ',') if gesamtsumme else ''
+
+    # Arbeiten-Block
+    context['arbeitenblock'] = '\n'.join([a['arbeiten'] for a in arbeiten_zeilen])
+    context['stundenblock'] = '\n'.join([a['arbeitsstunden'] for a in arbeiten_zeilen])
+    context['kategorieblock'] = '\n'.join([a['leistungskategorie'] for a in arbeiten_zeilen])
+
+    # Material-Block
+    context['materialblock'] = '\n'.join([m['material'] for m in material_rows])
+    context['mengenblock'] = '\n'.join([m['materialmenge'] for m in material_rows])
+    context['preisblock'] = '\n'.join([m['materialpreis'] for m in material_rows])
+    context['gesamtblock'] = '\n'.join([m['materialpreisges'] for m in material_rows])
 
     template_path = os.path.join('app', 'static', 'word', 'btzauftrag.docx')
     doc = DocxTemplate(template_path)
     doc.render(context)
-    output_path = f"/tmp/auftrag_{id}.docx"
+    
+    # Verwende tempfile für plattformunabhängige temporäre Dateien
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, f'auftrag_{id}.docx')
     doc.save(output_path)
     return send_file(output_path, as_attachment=True, download_name=f"auftrag_{id}.docx")
 

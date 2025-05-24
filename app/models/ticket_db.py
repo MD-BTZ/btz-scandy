@@ -415,7 +415,7 @@ class TicketDatabase:
                 )
             ''')
             
-            # Auftrag Details Tabelle (verschlankt)
+            # Auftrag Details Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS auftrag_details (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -431,7 +431,7 @@ class TicketDatabase:
                     arbeitsstunden REAL,
                     leistungskategorie TEXT,
                     fertigstellungstermin TEXT,
-                    gesamtsumme REAL,
+                    gesamtsumme REAL DEFAULT 0,
                     erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
                 )
