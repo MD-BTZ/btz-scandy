@@ -56,9 +56,9 @@ def create():
             # Wenn eine neue Kategorie eingegeben wurde, prüfe und füge sie ggf. hinzu
             if new_category:
                 with Database.get_db() as db:
-                    exists = db.execute("SELECT 1 FROM categories WHERE name = ?", (new_category,)).fetchone()
+                    exists = db.execute("SELECT 1 FROM ticket_categories WHERE name = ?", (new_category,)).fetchone()
                     if not exists:
-                        db.execute("INSERT INTO categories (name) VALUES (?)", (new_category,))
+                        db.execute("INSERT INTO ticket_categories (name) VALUES (?)", (new_category,))
                         db.commit()
                 category = new_category
 
@@ -146,12 +146,11 @@ def create():
         """
     )
     
-    # Hole alle Kategorien aus der Tabelle 'categories'
+    # Hole alle Kategorien aus der Tabelle 'ticket_categories'
     with Database.get_db() as conn:
         categories = conn.execute('''
             SELECT name 
-            FROM categories 
-            WHERE deleted = 0 
+            FROM ticket_categories 
             ORDER BY name
         ''').fetchall()
         categories = [c['name'] for c in categories]
@@ -731,12 +730,11 @@ def export_ticket(id):
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
-    # Kategorien aus der Tabelle 'categories' laden
+    # Kategorien aus der Tabelle 'ticket_categories' laden
     with Database.get_db() as conn:
         categories = conn.execute('''
             SELECT name 
-            FROM categories 
-            WHERE deleted = 0 
+            FROM ticket_categories 
             ORDER BY name
         ''').fetchall()
         categories = [c['name'] for c in categories]

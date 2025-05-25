@@ -168,6 +168,14 @@ class TicketDatabase:
                 )
             ''')
             
+            # Ticket-Kategorien Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+            ''')
+            
             # Locations Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS locations (

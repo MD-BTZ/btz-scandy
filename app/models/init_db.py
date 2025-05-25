@@ -6,6 +6,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+DATABASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'database', 'inventory.db'))
+
 def init_db():
     """Initialisiert die Hauptdatenbank (inventory.db) - Basis-Tabellen."""
     try:
