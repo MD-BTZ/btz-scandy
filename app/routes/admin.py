@@ -1294,8 +1294,8 @@ def import_all_data():
                         min_quantity_val = row_data.get('min_quantity')
 
                         if barcode and name and quantity_val is not None and min_quantity_val is not None:
-                            quantity = int(quantity_val)
-                            min_quantity = int(min_quantity_val)
+                            quantity = int(quantity_val) if str(quantity_val).strip().isdigit() else 0
+                            min_quantity = int(min_quantity_val) if str(min_quantity_val).strip().isdigit() else 0
                             desc = row_data.get('description', '')
                             cat = row_data.get('category')
                             loc = row_data.get('location')
@@ -1961,7 +1961,8 @@ def create_notice():
         try:
             title = request.form['title']
             content = request.form['content']
-            priority = int(request.form.get('priority', 0))
+            priority_str = request.form.get('priority', '0')
+            priority = int(priority_str) if str(priority_str).strip().isdigit() else 0
             is_active = 'is_active' in request.form
             
             with Database.get_db() as db:
@@ -1993,7 +1994,8 @@ def edit_notice(id):
             try:
                 title = request.form['title']
                 content = request.form['content']
-                priority = int(request.form.get('priority', 0))
+                priority_str = request.form.get('priority', '0')
+                priority = int(priority_str) if str(priority_str).strip().isdigit() else 0
                 is_active = 'is_active' in request.form
                 
                 db.execute('''
