@@ -52,6 +52,9 @@ fi
 
 deactivate
 
+# Update-Skript ausführbar machen
+chmod +x app/update.sh
+
 echo "------------------------------------"
 echo "Scandy Installation abgeschlossen!"
 echo ""
