@@ -39,6 +39,14 @@ fi
 # Datenverzeichnis erstellen
 mkdir -p "$DATA_DIR"
 
+echo -e "${GREEN}Initialisiere die Datenbank ...${NC}"
+# Datenbank initialisieren (temporärer Container)
+docker run --rm \
+  -v "$PWD/scandy2:/app" \
+  -v "$PWD/$DATA_DIR:/app/data" \
+  python:3.9-slim \
+  bash -c "cd /app && pip install -r requirements.txt && python -c 'from app.models.init_db import init_db; init_db()'"
+
 echo -e "${GREEN}Starte den Container '$CONTAINER_NAME' auf Port $PORT ...${NC}"
 echo -e "${GREEN}Daten werden gespeichert in: $DATA_DIR${NC}"
 
@@ -49,7 +57,7 @@ if docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}\$"; then
   docker rm "$CONTAINER_NAME" >/dev/null 2>&1
 fi
 
-# Container starten und Repo als Volume mounten
+# App-Container starten (jetzt mit mehreren Workern)
 docker run -d \
   --name "$CONTAINER_NAME" \
   -p "$PORT:5000" \
