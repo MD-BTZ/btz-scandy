@@ -60,7 +60,9 @@ docker run -d \
     apt-get update && apt-get install -y git build-essential libsqlite3-dev && \
     cd /app && \
     pip install -r requirements.txt && \
-    python app.py
+    export FLASK_DEBUG=1 && \
+    export FLASK_ENV=development && \
+    gunicorn -w 4 -b 0.0.0.0:5000 --reload --reload-extra-file tmp/needs_restart --log-level debug app.wsgi:application
   "
 
 echo -e "${GREEN}----------------------------------------${NC}"
