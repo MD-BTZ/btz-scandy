@@ -9,6 +9,7 @@ services:
       - ./database:/app/database
       - ./backups:/app/backups
       - ./logs:/app/logs
+      - ./.git:/app/.git
     environment:
       FLASK_APP: app.wsgi:application
       FLASK_ENV: production

@@ -4,6 +4,9 @@ FROM python:3.9-slim
 # Git installieren für Update-Funktion
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
+# Git-Konfiguration
+RUN git config --global --add safe.directory /app
+
 # Setze Arbeitsverzeichnis
 WORKDIR /app
 
@@ -27,6 +30,9 @@ RUN mkdir -p /app/backups /app/venv /app/tmp
 
 # Erstelle die needs_restart-Datei
 RUN touch /app/tmp/needs_restart
+
+# Setze Berechtigungen
+RUN chown -R nobody:nogroup /app
 
 # Setze Umgebungsvariablen
 ENV FLASK_APP=app.wsgi:application
