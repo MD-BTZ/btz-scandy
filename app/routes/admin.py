@@ -3155,7 +3155,11 @@ def apply_updates():
     try:
         # Backup erstellen
         from app.models.backup import DatabaseBackup
-        backup = DatabaseBackup()
+        backup = DatabaseBackup(
+            base_dir=current_app.root_path,
+            db_path=os.path.join(current_app.root_path, 'database', 'inventory.db'),
+            backup_dir=os.path.join(current_app.root_path, 'backups')
+        )
         backup.create_backup()
         
         # Update durchführen

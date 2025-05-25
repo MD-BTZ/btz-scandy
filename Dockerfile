@@ -26,13 +26,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/backups /app/venv /app/tmp
+RUN mkdir -p /app/backups /app/database /app/logs /app/tmp
 
 # Erstelle die needs_restart-Datei
 RUN touch /app/tmp/needs_restart
 
 # Setze Berechtigungen
-RUN chown -R nobody:nogroup /app
+RUN chown -R nobody:nogroup /app && \
+    chmod -R 755 /app && \
+    chmod -R 777 /app/backups /app/database /app/logs /app/tmp
 
 # Setze Umgebungsvariablen
 ENV FLASK_APP=app.wsgi:application
