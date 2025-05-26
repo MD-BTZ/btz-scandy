@@ -13,9 +13,9 @@ class TicketDatabase:
     
     _initialized = False  # Klassen-Variable für Initialisierungsstatus
     
-    def __init__(self):
-        current_config = config['default']()
-        self.db_path = current_config.TICKET_DATABASE
+    def __init__(self, db_path=None):
+        self.db_path = db_path or 'app/database/tickets.db'
+        self.migrate_schema()  # Migration immer beim Initialisieren prüfen
         logger.info(f"Verwendeter Ticket-Datenbankpfad: {os.path.abspath(self.db_path)}")
         # Stelle sicher, dass das Verzeichnis existiert
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -25,10 +25,11 @@ class TicketDatabase:
         if not TicketDatabase._initialized:
             try:
                 self.init_schema()
+                self.migrate_schema()
                 TicketDatabase._initialized = True
-                logger.info("Datenbankschema erfolgreich initialisiert")
+                logger.info("Datenbankschema erfolgreich initialisiert und migriert")
             except Exception as e:
-                logger.error(f"Fehler beim Initialisieren des Datenbankschemas: {str(e)}")
+                logger.error(f"Fehler beim Initialisieren/Migrieren des Datenbankschemas: {str(e)}")
                 raise
         
     def _check_and_fix_permissions(self):
@@ -904,4 +905,14 @@ class TicketDatabase:
             return True
         except Exception as e:
             logging.error(f"Fehler beim Aktualisieren der Materialliste: {str(e)}")
-            raise e 
+            raise e
+
+    def migrate_schema(self):
+        """Führt einfache Migrationen durch (legt fehlende Tabellen an)."""
+        # Importiere das neue Migrationsskript und führe es aus
+        try:
+            from migrate_full_schema import migrate_full_schema, TICKETS_SCHEMA
+            migrate_full_schema(self.db_path, TICKETS_SCHEMA)
+        except Exception as e:
+            print(f"Migration konnte nicht ausgeführt werden: {e}")
+        # ... bisheriger Code ... 

@@ -198,6 +198,14 @@ def init_db():
     finally:
         conn.close()
 
+def migrate_schema(self):
+    # Importiere das neue Migrationsskript und führe es aus
+    try:
+        from migrate_full_schema import migrate_full_schema, INVENTORY_SCHEMA
+        migrate_full_schema(self.db_path, INVENTORY_SCHEMA)
+    except Exception as e:
+        print(f"Migration konnte nicht ausgeführt werden: {e}")
+
 if __name__ == '__main__':
     logger.warning("init_db.py direkt ausgeführt - Initialisiere nur Basis-DB.")
     init_db()
