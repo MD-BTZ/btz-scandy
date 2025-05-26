@@ -13,9 +13,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Prüfe ob docker-compose installiert ist
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}docker-compose ist nicht installiert!${NC}"
+# Prüfe ob docker compose installiert ist
+if ! docker compose version &> /dev/null; then
+    echo -e "${RED}docker compose ist nicht installiert!${NC}"
     exit 1
 fi
 
@@ -25,18 +25,24 @@ git pull origin main
 
 # Stoppe die Container
 echo -e "${GREEN}Stopping containers...${NC}"
-docker-compose down
+docker compose down
+docker compose -f docker-compose.test.yml down
 
 # Baue die Container neu
 echo -e "${GREEN}Building new containers...${NC}"
-docker-compose build --no-cache
+docker compose build --no-cache
+docker compose -f docker-compose.test.yml build --no-cache
 
 # Starte die Container neu
 echo -e "${GREEN}Starting containers...${NC}"
-docker-compose up -d
+docker compose up -d
+docker compose -f docker-compose.test.yml up -d
 
 # Prüfe ob alles läuft
 echo -e "${GREEN}Checking container status...${NC}"
-docker-compose ps
+echo -e "${GREEN}Main instance:${NC}"
+docker compose ps
+echo -e "${GREEN}Test instance:${NC}"
+docker compose -f docker-compose.test.yml ps
 
 echo -e "${GREEN}Update completed!${NC}" 
