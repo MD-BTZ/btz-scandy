@@ -3115,31 +3115,34 @@ def updates():
 def check_updates():
     """Prüft auf verfügbare Updates"""
     try:
-        # Git Status prüfen
-        result = subprocess.run(['git', 'fetch', 'origin'], 
-                              capture_output=True, 
-                              text=True, 
-                              cwd=current_app.root_path)
+        # Hole die aktuelle Version aus der Konfiguration
+        from app.config.version import VERSION
+        current_version = VERSION
         
-        # Prüfen ob Updates verfügbar sind
-        result = subprocess.run(['git', 'rev-list', 'HEAD..origin/main', '--count'],
-                              capture_output=True,
-                              text=True,
-                              cwd=current_app.root_path)
+        # Hole die neueste Version von GitHub
+        import requests
+        response = requests.get('https://raw.githubusercontent.com/Woschj/Scandy2/main/app/config/version.py')
+        if response.status_code == 200:
+            # Extrahiere die Version aus der Datei
+            import re
+            version_match = re.search(r'VERSION\s*=\s*"([^"]+)"', response.text)
+            if version_match:
+                latest_version = version_match.group(1)
+                
+                # Vergleiche die Versionen
+                if latest_version != current_version:
+                    return jsonify({
+                        'status': 'success',
+                        'updates_available': True,
+                        'current_version': current_version,
+                        'latest_version': latest_version
+                    })
         
-        commits_behind = int(result.stdout.strip())
-        
-        if commits_behind > 0:
-            return jsonify({
-                'status': 'success',
-                'updates_available': True,
-                'commits_behind': commits_behind
-            })
-        else:
-            return jsonify({
-                'status': 'success',
-                'updates_available': False
-            })
+        return jsonify({
+            'status': 'success',
+            'updates_available': False,
+            'current_version': current_version
+        })
             
     except Exception as e:
         return jsonify({
@@ -3162,22 +3165,14 @@ def apply_updates():
         )
         backup.create_backup()
         
-        # Update durchführen
-        update_script = Path(current_app.root_path) / 'update.sh'
-        result = subprocess.run(['bash', str(update_script)],
-                              capture_output=True,
-                              text=True)
+        # Erstelle eine Datei, die dem Host-System signalisiert, dass ein Update durchgeführt werden soll
+        update_trigger = Path(current_app.root_path) / 'tmp' / 'needs_update'
+        update_trigger.touch()
         
-        if result.returncode == 0:
-            return jsonify({
-                'status': 'success',
-                'message': 'Update erfolgreich durchgeführt'
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': result.stderr
-            }), 500
+        return jsonify({
+            'status': 'success',
+            'message': 'Update-Trigger gesetzt. Der Container wird neu gestartet.'
+        })
             
     except Exception as e:
         return jsonify({
