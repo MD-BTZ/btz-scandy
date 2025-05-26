@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  scandy_test:
+    build: .
+    ports:
+      - "5002:5000"
+    environment:
+      - DATABASE_URL=sqlite:////app/database/inventory.db
+      - TICKETS_DATABASE_URL=sqlite:////app/database/tickets.db
+      - SYSTEM_NAME=Scandy Test
+      - TICKET_SYSTEM_NAME=Aufgaben Test
+      - TOOL_SYSTEM_NAME=Werkzeuge Test
+      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter Test
+    volumes:
+      - ./uploads_test:/app/uploads
+      - ./backups_test:/app/backups
+    depends_on:
+      - scandy_db_test
+    restart: unless-stopped
+
+  scandy_db_test:
+    build: .
+    command: >
+      bash -c "mkdir -p /app/database && 
+               touch /app/database/inventory.db /app/database/tickets.db && 
+               chmod 666 /app/database/inventory.db /app/database/tickets.db && 
+               tail -f /dev/null"
+    restart: unless-stopped
+
+networks:
+  scandy_test_network:
+    driver: bridge 

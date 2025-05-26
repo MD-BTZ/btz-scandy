@@ -1,48 +1,28 @@
-# Verwende Python 3.9 als Basis-Image
-FROM python:3.9-slim
+# Verwende Python 3.11 als Basis-Image
+FROM python:3.11-slim
 
-# Git installieren für Update-Funktion
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-# Git-Konfiguration
-RUN git config --global --add safe.directory /app
-
-# Setze Arbeitsverzeichnis
-WORKDIR /app
-
-# Installiere Systemabhängigkeiten
+# Installiere Git und andere benötigte Pakete
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libsqlite3-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Kopiere Requirements-Datei
-COPY requirements.txt .
+# Setze das Arbeitsverzeichnis
+WORKDIR /app
 
-# Installiere Python-Abhängigkeiten
+# Klone das Repository
+RUN git clone https://github.com/woschj/scandy2.git /app
+
+# Installiere die Python-Abhängigkeiten
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopiere Anwendungsdateien
-COPY . .
-
 # Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/backups /app/database /app/logs /app/tmp
-
-# Erstelle die needs_restart-Datei
-RUN touch /app/tmp/needs_restart
+RUN mkdir -p /app/database /app/uploads /app/backups
 
 # Setze Berechtigungen
-RUN chown -R nobody:nogroup /app && \
-    chmod -R 755 /app && \
-    chmod -R 777 /app/backups /app/database /app/logs /app/tmp
+RUN chmod -R 777 /app/database /app/uploads /app/backups
 
-# Setze Umgebungsvariablen
-ENV FLASK_APP=app.wsgi:application
-ENV FLASK_ENV=production
-ENV DATABASE_URL=sqlite:////app/database/inventory.db
-
-# Exponiere Port 5000
+# Exponiere den Port
 EXPOSE 5000
 
-# Starte die Anwendung mit Gunicorn und aktiviere Reload bei Trigger-Datei
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reload", "--reload-extra-file", "/app/tmp/needs_restart", "app.wsgi:application"] 
+# Starte die Anwendung
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"] 
