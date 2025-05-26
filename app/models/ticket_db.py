@@ -14,7 +14,12 @@ class TicketDatabase:
     _initialized = False  # Klassen-Variable für Initialisierungsstatus
     
     def __init__(self, db_path=None):
-        self.db_path = db_path or 'app/database/tickets.db'
+        """Initialisiert die Ticket-Datenbank"""
+        if db_path is None:
+            from app.config import Config
+            self.db_path = os.path.join(Config.BASE_DIR, 'app', 'database', 'tickets.db')
+        else:
+            self.db_path = db_path
         self.migrate_schema()  # Migration immer beim Initialisieren prüfen
         logger.info(f"Verwendeter Ticket-Datenbankpfad: {os.path.abspath(self.db_path)}")
         # Stelle sicher, dass das Verzeichnis existiert
@@ -51,10 +56,8 @@ class TicketDatabase:
             logger.error(f"Fehler beim Überprüfen/Korrigieren der Berechtigungen: {str(e)}")
         
     def get_connection(self):
-        """Erstellt eine neue Verbindung zur Ticket-Datenbank."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        """Gibt eine Datenbankverbindung zurück"""
+        return sqlite3.connect(self.db_path)
         
     def query(self, sql, params=None, one=False):
         """Führt eine SQL-Abfrage aus und gibt die Ergebnisse als Dictionary zurück"""
@@ -76,10 +79,16 @@ class TicketDatabase:
                 # Für SELECT Operationen
                 results = cursor.fetchall()
                 if one:
-                    result = dict(results[0]) if results else None
+                    if not results:
+                        return None
+                    # Für COUNT-Abfragen
+                    if sql.strip().upper().startswith('SELECT COUNT'):
+                        return {'cnt': results[0][0]}
+                    result = dict(zip([col[0] for col in cursor.description], results[0]))
                     logging.info(f"SELECT Ergebnis (one=True): {result}")
                     return result
-                results = [dict(row) for row in results]
+                # Für normale SELECT-Abfragen
+                results = [dict(zip([col[0] for col in cursor.description], row)) for row in results]
                 logging.info(f"SELECT Ergebnisse: {results}")
                 return results
         except Exception as e:
@@ -89,36 +98,6 @@ class TicketDatabase:
                 logging.error(f"Parameter: {params}")
             raise
             
-    def _insert_default_data(self):
-        """Fügt Standarddaten in die Datenbank ein"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Füge nur die Standardeinstellungen ein
-            settings = [
-                ('theme', 'light', 'Farbschema der Anwendung'),
-                ('language', 'de', 'Sprache der Anwendung'),
-                ('items_per_page', '25', 'Anzahl der Einträge pro Seite'),
-                ('color_primary', '#007bff', 'Primäre Farbe'),
-                ('color_secondary', '#6c757d', 'Sekundäre Farbe'),
-                ('color_success', '#28a745', 'Erfolgsfarbe'),
-                ('color_danger', '#dc3545', 'Fehlerfarbe'),
-                ('color_warning', '#ffc107', 'Warnfarbe'),
-                ('color_info', '#17a2b8', 'Infofarbe'),
-                ('label_tools_name', 'Werkzeuge', 'Anzeigename für Werkzeuge'),
-                ('label_tools_icon', 'fas fa-tools', 'Icon für Werkzeuge'),
-                ('label_consumables_name', 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'),
-                ('label_consumables_icon', 'fas fa-box-open', 'Icon für Verbrauchsmaterial')
-            ]
-            
-            cursor.executemany('''
-                INSERT OR IGNORE INTO settings (key, value, description)
-                VALUES (?, ?, ?)
-            ''', settings)
-            
-            conn.commit()
-            logger.info("Standardeinstellungen erfolgreich eingefügt")
-
     def init_schema(self):
         """Initialisiert das Datenbankschema"""
         with self.get_connection() as conn:
@@ -460,9 +439,6 @@ class TicketDatabase:
             
             conn.commit()
             logger.info("Datenbankschema erfolgreich initialisiert")
-            
-            # Füge Standarddaten ein
-            self._insert_default_data()
 
     def update_ticket(self, id, status, assigned_to=None, category=None, due_date=None, 
                      estimated_time=None, actual_time=None, last_modified_by=None):

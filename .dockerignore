@@ -52,4 +52,13 @@ docker-compose.yml
 
 # Backup files
 *.bak
-*.backup 
+*.backup
+
+# Database
+database/
+database_test/
+**/database/
+**/database_test/
+*.db
+*.sqlite
+*.sqlite3 

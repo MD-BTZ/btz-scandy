@@ -154,33 +154,18 @@ def initialize_and_migrate_databases():
         os.makedirs(os.path.dirname(tickets_db_path), exist_ok=True)
         
         # Initialisiere Hauptdatenbank
-        if not os.path.exists(inventory_db_path):
-            logger.info("Initialisiere Hauptdatenbank...")
-            schema_manager = SchemaManager(inventory_db_path)
-            if not schema_manager.initialize():
-                logger.error("Fehler bei der Initialisierung der Hauptdatenbank")
-                return False
-            logger.info("Hauptdatenbank erfolgreich initialisiert")
-        else:
-            # Prüfe und aktualisiere Schema wenn nötig
-            schema_manager = SchemaManager(inventory_db_path)
-            current_version = schema_manager._get_current_version()
-            if current_version < schema_manager.expected_version:
-                logger.info(f"Aktualisiere Datenbankschema von {current_version} auf {schema_manager.expected_version}")
-                if not schema_manager.initialize():
-                    logger.error("Fehler bei der Schema-Aktualisierung")
-                    return False
-                logger.info("Datenbankschema erfolgreich aktualisiert")
+        logger.info("Initialisiere Hauptdatenbank...")
+        schema_manager = SchemaManager(inventory_db_path)
+        if not schema_manager.initialize():
+            logger.error("Fehler bei der Initialisierung der Hauptdatenbank")
+            return False
+        logger.info("Hauptdatenbank erfolgreich initialisiert")
         
         # Initialisiere Ticket-Datenbank
-        if not os.path.exists(tickets_db_path):
-            logger.info("Initialisiere Ticket-Datenbank...")
-            from app.models.init_ticket_db import init_ticket_db
-            init_ticket_db()
-            logger.info("Ticket-Datenbank erfolgreich initialisiert")
-        
-        # Führe Datenbankbereinigung durch
-        cleanup_database()
+        logger.info("Initialisiere Ticket-Datenbank...")
+        from app.models.init_ticket_db import init_ticket_db
+        init_ticket_db()
+        logger.info("Ticket-Datenbank erfolgreich initialisiert")
         
         return True
         
