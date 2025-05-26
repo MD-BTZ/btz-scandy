@@ -1,9 +1,11 @@
 # Verwende Python 3.11 als Basis-Image
 FROM python:3.11-slim
 
-# Installiere Git und andere benötigte Pakete
+# Installiere Git, Node.js, npm und andere benötigte Pakete
 RUN apt-get update && apt-get install -y \
     git \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Setze das Arbeitsverzeichnis
@@ -14,6 +16,9 @@ RUN git clone https://github.com/woschj/scandy2.git /app
 
 # Installiere die Python-Abhängigkeiten
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Installiere Node.js-Abhängigkeiten und kompiliere Tailwind CSS
+RUN npm install && npm run build:css
 
 # Erstelle notwendige Verzeichnisse
 RUN mkdir -p /app/database /app/uploads /app/backups
