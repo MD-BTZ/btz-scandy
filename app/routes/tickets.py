@@ -146,8 +146,9 @@ def create():
         """
     )
     
-    # Hole alle Kategorien aus der Tabelle 'ticket_categories'
-    with Database.get_db() as conn:
+    # Hole alle Kategorien aus der Tabelle 'ticket_categories' aus der tickets.db
+    with ticket_db.get_connection() as conn:
+        print('DEBUG: Verwende Ticket-Datenbankdatei:', getattr(conn, 'database', getattr(conn, 'db', 'unbekannt')))
         categories = conn.execute('''
             SELECT name 
             FROM ticket_categories 
