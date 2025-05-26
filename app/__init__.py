@@ -23,6 +23,7 @@ from app.routes import auth, tools, consumables, workers, setup, backup
 from app.config import Config
 from app.routes import init_app
 import sqlite3
+from app.utils.schema_validator import validate_and_migrate_databases
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -201,6 +202,12 @@ def create_app(test_config=None):
     if not hasattr(app, '_database_initialized'):
         initialize_and_migrate_databases()
         app._database_initialized = True
+    
+    # Validiere und migriere Datenbanken beim Start
+    if not validate_and_migrate_databases():
+        logging.error("Datenbankvalidierung und -migration fehlgeschlagen. Bitte überprüfen Sie die Datenbankstruktur.")
+        # Hier könnten wir auch die App beenden, aber das wäre zu drastisch
+        # sys.exit(1)
     
     # Flask-Login initialisieren
     login_manager.init_app(app)

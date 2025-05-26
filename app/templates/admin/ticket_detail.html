@@ -35,7 +35,7 @@
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
                             <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
                             <p class="text-sm opacity-70 mt-2">Geschätzte Zeit</p>
-                            <p>{{ ticket.estimated_time or 'Nicht gesetzt' }} Stunden</p>
+                            <p>{{ (ticket.estimated_time * 60)|round|int if ticket.estimated_time else 'Nicht gesetzt' }} Minuten</p>
                         </div>
                     </div>
                     <div class="divider"></div>
