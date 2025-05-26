@@ -145,15 +145,15 @@ def create():
         """
     )
     
-    # Hole alle Kategorien aus der Tabelle 'ticket_categories' aus der tickets.db
-    with ticket_db.get_connection() as conn:
-        print('DEBUG: Verwende Ticket-Datenbankdatei:', getattr(conn, 'database', getattr(conn, 'db', 'unbekannt')))
+    # Hole alle Kategorien aus der Tabelle 'categories'
+    with Database.get_db() as conn:
         categories = conn.execute('''
             SELECT name 
-            FROM ticket_categories 
+            FROM categories 
+            WHERE deleted = 0 
             ORDER BY name
         ''').fetchall()
-        categories = [c['name'] for c in categories]
+        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,

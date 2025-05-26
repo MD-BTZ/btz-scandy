@@ -592,7 +592,7 @@ class TicketDatabase:
             raise
 
     def get_ticket(self, ticket_id):
-        """Holt ein einzelnes Ticket aus der Datenbank."""
+        """Gibt ein Ticket anhand seiner ID zurück."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -604,7 +604,7 @@ class TicketDatabase:
             
             if ticket:
                 # Konvertiere das Row-Objekt in ein Dictionary
-                ticket_dict = dict(ticket)
+                ticket_dict = dict(zip([col[0] for col in cursor.description], ticket))
                 
                 # Konvertiere Datumsfelder
                 date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
