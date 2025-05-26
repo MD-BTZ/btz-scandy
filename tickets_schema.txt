@@ -1,0 +1,416 @@
+Datenbank: app/database/tickets.db
+Analysezeitpunkt: 2025-05-26 13:22:12
+================================================================================
+
+Tabelle: schema_version
+----------------------------------------
+
+Spalten:
+  - version (INTEGER) PRIMARY KEY
+  - applied_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+================================================================================
+
+Tabelle: users
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - username (TEXT) NOT NULL
+  - password_hash (TEXT) NOT NULL
+  - email (TEXT)
+  - firstname (TEXT)
+  - lastname (TEXT)
+  - role (TEXT) NOT NULL DEFAULT 'user'
+  - is_active (BOOLEAN) DEFAULT 1
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - last_login (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_users_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: sqlite_sequence
+----------------------------------------
+
+Spalten:
+  - name ()
+  - seq ()
+
+================================================================================
+
+Tabelle: settings
+----------------------------------------
+
+Spalten:
+  - key (TEXT) PRIMARY KEY
+  - value (TEXT) NOT NULL
+  - description (TEXT)
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_settings_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: categories
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_categories_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: ticket_categories
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+
+Indizes:
+  - sqlite_autoindex_ticket_categories_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: locations
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_locations_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: departments
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - deleted (INTEGER) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_departments_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: tools
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - status (TEXT) DEFAULT 'verfügbar'
+  - category (TEXT)
+  - location (TEXT)
+  - last_maintenance (DATE)
+  - next_maintenance (DATE)
+  - maintenance_interval (INTEGER)
+  - last_checked (TIMESTAMP)
+  - supplier (TEXT)
+  - reorder_point (INTEGER)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_tools_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: workers
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - firstname (TEXT) NOT NULL
+  - lastname (TEXT) NOT NULL
+  - department (TEXT)
+  - email (TEXT)
+  - phone (TEXT)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_workers_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: consumables
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - quantity (INTEGER) DEFAULT 0
+  - min_quantity (INTEGER) DEFAULT 0
+  - category (TEXT)
+  - location (TEXT)
+  - unit (TEXT)
+  - supplier (TEXT)
+  - reorder_point (INTEGER)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_consumables_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: lendings
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - tool_barcode (TEXT) NOT NULL
+  - worker_barcode (TEXT) NOT NULL
+  - lent_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - returned_at (TIMESTAMP)
+  - notes (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - worker_barcode -> workers.barcode
+  - tool_barcode -> tools.barcode
+
+================================================================================
+
+Tabelle: consumable_usages
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - consumable_barcode (TEXT) NOT NULL
+  - worker_barcode (TEXT) NOT NULL
+  - quantity (INTEGER) NOT NULL
+  - used_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - worker_barcode -> workers.barcode
+  - consumable_barcode -> consumables.barcode
+
+================================================================================
+
+Tabelle: tickets
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - title (TEXT) NOT NULL
+  - description (TEXT) NOT NULL
+  - status (TEXT) DEFAULT 'offen'
+  - priority (TEXT) DEFAULT 'normal'
+  - created_by (TEXT) NOT NULL
+  - assigned_to (TEXT)
+  - category (TEXT)
+  - due_date (TIMESTAMP)
+  - estimated_time (INTEGER)
+  - actual_time (INTEGER)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - resolved_at (TIMESTAMP)
+  - resolution_notes (TEXT)
+  - response (TEXT)
+  - last_modified_by (TEXT)
+  - last_modified_at (TIMESTAMP)
+
+Foreign Keys:
+  - last_modified_by -> users.username
+  - assigned_to -> users.username
+  - created_by -> users.username
+
+================================================================================
+
+Tabelle: auftrag_details
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - ticket_id (INTEGER) NOT NULL
+  - auftrag_an (TEXT)
+  - bereich (TEXT)
+  - auftraggeber_intern (BOOLEAN) DEFAULT 1
+  - auftraggeber_extern (BOOLEAN) DEFAULT 0
+  - auftraggeber_name (TEXT)
+  - kontakt (TEXT)
+  - auftragsbeschreibung (TEXT)
+  - ausgefuehrte_arbeiten (TEXT)
+  - arbeitsstunden (REAL)
+  - leistungskategorie (TEXT)
+  - fertigstellungstermin (TEXT)
+  - gesamtsumme (REAL) DEFAULT 0
+  - erstellt_am (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - ticket_id -> tickets.id
+
+================================================================================
+
+Tabelle: auftrag_material
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - ticket_id (INTEGER) NOT NULL
+  - material (TEXT)
+  - menge (REAL)
+  - einzelpreis (REAL)
+
+Foreign Keys:
+  - ticket_id -> tickets.id
+
+================================================================================
+
+Tabelle: ticket_notes
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - ticket_id (INTEGER) NOT NULL
+  - note (TEXT) NOT NULL
+  - created_by (TEXT) NOT NULL
+  - is_private (BOOLEAN) DEFAULT 0
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - created_by -> users.username
+  - ticket_id -> tickets.id
+
+================================================================================
+
+Tabelle: ticket_messages
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - ticket_id (INTEGER) NOT NULL
+  - message (TEXT) NOT NULL
+  - sender (TEXT) NOT NULL
+  - is_admin (BOOLEAN) DEFAULT 0
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - sender -> users.username
+  - ticket_id -> tickets.id
+
+================================================================================
+
+Tabelle: ticket_history
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - ticket_id (INTEGER) NOT NULL
+  - field_name (TEXT) NOT NULL
+  - old_value (TEXT)
+  - new_value (TEXT)
+  - changed_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - changed_by (TEXT) NOT NULL
+
+Foreign Keys:
+  - changed_by -> users.username
+  - ticket_id -> tickets.id
+
+================================================================================
+
+Tabelle: system_logs
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - timestamp (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - level (TEXT) NOT NULL
+  - message (TEXT) NOT NULL
+  - details (TEXT)
+
+================================================================================
+
+Tabelle: access_settings
+----------------------------------------
+
+Spalten:
+  - route (TEXT) PRIMARY KEY
+  - is_public (BOOLEAN) DEFAULT 0
+  - description (TEXT)
+
+Indizes:
+  - sqlite_autoindex_access_settings_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: timesheets
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - user_id (INTEGER) NOT NULL
+  - year (INTEGER) NOT NULL
+  - kw (INTEGER) NOT NULL
+  - montag_start (TEXT)
+  - montag_end (TEXT)
+  - montag_tasks (TEXT)
+  - dienstag_start (TEXT)
+  - dienstag_end (TEXT)
+  - dienstag_tasks (TEXT)
+  - mittwoch_start (TEXT)
+  - mittwoch_end (TEXT)
+  - mittwoch_tasks (TEXT)
+  - donnerstag_start (TEXT)
+  - donnerstag_end (TEXT)
+  - donnerstag_tasks (TEXT)
+  - freitag_start (TEXT)
+  - freitag_end (TEXT)
+  - freitag_tasks (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - user_id -> users.id
+
+================================================================================
+

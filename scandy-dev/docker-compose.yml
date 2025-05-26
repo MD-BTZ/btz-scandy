@@ -1,0 +1,14 @@
+services:
+  scandy-dev:
+    build: .
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./database:/app/database
+      - ./uploads:/app/uploads
+      - ./backups:/app/backups
+    environment:
+      - FLASK_APP=app
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    container_name: scandy-dev

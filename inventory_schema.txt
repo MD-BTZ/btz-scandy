@@ -1,0 +1,258 @@
+Datenbank: app/database/inventory.db
+Analysezeitpunkt: 2025-05-26 13:22:12
+================================================================================
+
+Tabelle: schema_version
+----------------------------------------
+
+Spalten:
+  - version (INTEGER) PRIMARY KEY
+  - applied_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+================================================================================
+
+Tabelle: users
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - username (TEXT) NOT NULL
+  - password_hash (TEXT) NOT NULL
+  - email (TEXT)
+  - firstname (TEXT)
+  - lastname (TEXT)
+  - role (TEXT) NOT NULL DEFAULT 'user'
+  - is_active (BOOLEAN) DEFAULT 1
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - last_login (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_users_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: sqlite_sequence
+----------------------------------------
+
+Spalten:
+  - name ()
+  - seq ()
+
+================================================================================
+
+Tabelle: tools
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - category (TEXT)
+  - location (TEXT)
+  - status (TEXT) DEFAULT 'verfügbar'
+  - last_maintenance (DATE)
+  - next_maintenance (DATE)
+  - maintenance_interval (INTEGER)
+  - last_checked (TIMESTAMP)
+  - supplier (TEXT)
+  - reorder_point (INTEGER)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - idx_tools_barcode 
+  - sqlite_autoindex_tools_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: workers
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - firstname (TEXT) NOT NULL
+  - lastname (TEXT) NOT NULL
+  - department (TEXT)
+  - email (TEXT)
+  - phone (TEXT)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - idx_workers_barcode 
+  - sqlite_autoindex_workers_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: consumables
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - barcode (TEXT) NOT NULL
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - quantity (INTEGER) DEFAULT 0
+  - min_quantity (INTEGER) DEFAULT 0
+  - category (TEXT)
+  - location (TEXT)
+  - unit (TEXT)
+  - supplier (TEXT)
+  - reorder_point (INTEGER)
+  - notes (TEXT)
+  - deleted (BOOLEAN) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - idx_consumables_barcode 
+  - sqlite_autoindex_consumables_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: lendings
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - tool_barcode (TEXT) NOT NULL
+  - worker_barcode (TEXT) NOT NULL
+  - lent_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - returned_at (TIMESTAMP)
+  - notes (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - idx_lendings_worker_barcode 
+  - idx_lendings_tool_barcode 
+
+Foreign Keys:
+  - worker_barcode -> workers.barcode
+  - tool_barcode -> tools.barcode
+
+================================================================================
+
+Tabelle: consumable_usages
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - consumable_barcode (TEXT) NOT NULL
+  - worker_barcode (TEXT) NOT NULL
+  - quantity (INTEGER) NOT NULL
+  - used_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - sync_status (TEXT) DEFAULT 'pending'
+  - modified_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - idx_consumable_usages_worker_barcode 
+  - idx_consumable_usages_consumable_barcode 
+
+Foreign Keys:
+  - worker_barcode -> workers.barcode
+  - consumable_barcode -> consumables.barcode
+
+================================================================================
+
+Tabelle: settings
+----------------------------------------
+
+Spalten:
+  - key (TEXT) PRIMARY KEY
+  - value (TEXT)
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Indizes:
+  - sqlite_autoindex_settings_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: categories
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - deleted (INTEGER) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_categories_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: locations
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - deleted (INTEGER) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_locations_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: departments
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - description (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - deleted (INTEGER) DEFAULT 0
+  - deleted_at (TIMESTAMP)
+
+Indizes:
+  - sqlite_autoindex_departments_1 (UNIQUE)
+
+================================================================================
+
+Tabelle: history
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - action (TEXT) NOT NULL
+  - item_type (TEXT) NOT NULL
+  - item_id (TEXT) NOT NULL
+  - user_id (INTEGER)
+  - details (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - user_id -> users.id
+
+================================================================================
+

@@ -730,52 +730,61 @@ def export_ticket(id):
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
-    # Kategorien aus der Tabelle 'ticket_categories' laden
-    with ticket_db.get_connection() as conn:
-        categories = conn.execute('''
-            SELECT name 
-            FROM ticket_categories 
-            ORDER BY name
-        ''').fetchall()
-        categories = [c['name'] for c in categories]
-
+    """Öffentliche Auftragserstellung ohne Login."""
     if request.method == 'POST':
-        title = request.form.get('title')
-        description = request.form.get('description')
-        name = request.form.get('name')
-        kontakt = request.form.get('kontakt')
-        bereich = request.form.get('bereich')
-        kategorie = request.form.get('kategorie')
-        auftraggeber_typ = request.form.get('auftraggeber_typ')
-        if not title or not description or not name or not kontakt or not auftraggeber_typ:
-            return render_template('auftrag_public.html', error='Bitte alle Pflichtfelder ausfüllen!', categories=categories)
-        # Ticket anlegen (ohne Zuweisung, Status offen)
-        ticket_id = ticket_db.create_ticket(
-            title=title,
-            description=description,
-            priority='normal',
-            created_by=name,
-            category=kategorie,
-            due_date=None,
-            estimated_time=None
-        )
-        # Auftragsdetails speichern
-        auftragsdetails = {
-            'bereich': bereich,
-            'auftraggeber_intern': auftraggeber_typ == 'intern',
-            'auftraggeber_extern': auftraggeber_typ == 'extern',
-            'auftraggeber_name': name,
-            'kontakt': kontakt,
-            'auftragsbeschreibung': description,
-            'ausgefuehrte_arbeiten': '',
-            'arbeitsstunden': '',
-            'leistungskategorie': '',
-            'fertigstellungstermin': '',
-            'gesamtsumme': 0
-        }
-        ticket_db.add_auftrag_details(ticket_id, **auftragsdetails)
-        return render_template('auftrag_public_success.html')
-    return render_template('auftrag_public.html', categories=categories)
+        try:
+            # Hole die Formulardaten
+            title = request.form.get('title')
+            description = request.form.get('description')
+            category = request.form.get('category')
+            priority = request.form.get('priority', 'normal')
+            due_date = request.form.get('due_date')
+            estimated_time = request.form.get('estimated_time')
+            
+            # Validiere die Pflichtfelder
+            if not title:
+                flash('Titel ist erforderlich.', 'error')
+                return redirect(url_for('tickets.public_create_order'))
+                
+            if not description:
+                flash('Beschreibung ist erforderlich.', 'error')
+                return redirect(url_for('tickets.public_create_order'))
+                
+            if not category:
+                flash('Kategorie ist erforderlich.', 'error')
+                return redirect(url_for('tickets.public_create_order'))
+            
+            # Erstelle das Ticket
+            ticket_id = ticket_db.create_ticket(
+                title=title,
+                description=description,
+                priority=priority,
+                created_by='Gast',  # Öffentliche Tickets werden als "Gast" erstellt
+                category=category,
+                due_date=due_date,
+                estimated_time=estimated_time
+            )
+            
+            flash('Ihr Auftrag wurde erfolgreich erstellt. Wir werden uns schnellstmöglich bei Ihnen melden.', 'success')
+            return redirect(url_for('tickets.public_create_order'))
+            
+        except Exception as e:
+            logging.error(f"Fehler bei der öffentlichen Auftragserstellung: {str(e)}", exc_info=True)
+            flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
+            return redirect(url_for('tickets.public_create_order'))
+    
+    # Hole die Kategorien für das Formular
+    categories = ticket_db.query("SELECT name FROM categories")
+    categories = [c[0] for c in categories]  # Extrahiere nur die Namen aus den Tupeln
+    
+    return render_template('auftrag_public.html', 
+                         categories=categories,
+                         priority_colors={
+                             'niedrig': 'secondary',
+                             'normal': 'primary',
+                             'hoch': 'error',
+                             'dringend': 'error'
+                         })
 
 def get_unassigned_ticket_count():
     result = ticket_db.query("SELECT COUNT(*) as cnt FROM tickets WHERE assigned_to IS NULL OR assigned_to = ''")
