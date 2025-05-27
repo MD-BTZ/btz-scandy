@@ -530,11 +530,14 @@ def update_assignment(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
-        # Aktualisiere die Zuweisung
+        # Aktualisiere die Zuweisung und behalte die anderen Werte bei
         ticket_db.update_ticket(
             id=id,
             status=ticket['status'],  # Behalte den aktuellen Status bei
             assigned_to=assigned_to,
+            category=ticket['category'],  # Behalte die aktuelle Kategorie bei
+            due_date=ticket['due_date'],  # Behalte das aktuelle Fälligkeitsdatum bei
+            estimated_time=ticket['estimated_time'],  # Behalte die aktuelle geschätzte Zeit bei
             last_modified_by=current_user.username
         )
 

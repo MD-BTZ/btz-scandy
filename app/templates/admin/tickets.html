@@ -4,9 +4,9 @@
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold">Aufträge Übersicht</h1>
-        <div class="flex gap-4">
-            <div class="form-control">
-                <select id="statusFilter" class="select select-bordered">
+        <div class="flex flex-wrap gap-4 items-center">
+            <div class="form-control w-auto">
+                <select id="statusFilter" class="select select-bordered w-full">
                     <option value="">Alle Status</option>
                     <option value="offen">Offen</option>
                     <option value="in_bearbeitung">In Bearbeitung</option>
@@ -15,8 +15,8 @@
                     <option value="geschlossen">Geschlossen</option>
                 </select>
             </div>
-            <div class="form-control">
-                <select id="priorityFilter" class="select select-bordered">
+            <div class="form-control w-auto">
+                <select id="priorityFilter" class="select select-bordered w-full">
                     <option value="">Alle Prioritäten</option>
                     <option value="niedrig">Niedrig</option>
                     <option value="normal">Normal</option>
@@ -24,8 +24,8 @@
                     <option value="dringend">Dringend</option>
                 </select>
             </div>
-            <div class="form-control">
-                <input type="text" id="searchInput" placeholder="Suchen..." class="input input-bordered">
+            <div class="form-control w-auto">
+                <input type="text" id="searchInput" placeholder="Suchen..." class="input input-bordered w-full">
             </div>
         </div>
     </div>
@@ -46,7 +46,12 @@
             </thead>
             <tbody>
                 {% for ticket in tickets %}
-                <tr>
+                <tr class="ticket-row" 
+                    data-status="{{ ticket.status }}"
+                    data-priority="{{ ticket.priority }}"
+                    data-title="{{ ticket.title }}"
+                    data-created-by="{{ ticket.created_by }}"
+                    data-assigned-to="{{ ticket.assigned_to or 'Nicht zugewiesen' }}">
                     <td>{{ ticket.id }}</td>
                     <td>
                         <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover">
@@ -93,7 +98,7 @@
 const statusFilter = document.getElementById('statusFilter');
 const priorityFilter = document.getElementById('priorityFilter');
 const searchInput = document.getElementById('searchInput');
-const tableRows = document.querySelectorAll('tbody tr');
+const tableRows = document.querySelectorAll('.ticket-row');
 
 function applyFilters() {
     const statusValue = statusFilter.value.toLowerCase();
@@ -101,14 +106,14 @@ function applyFilters() {
     const searchValue = searchInput.value.toLowerCase();
 
     tableRows.forEach(row => {
-        const status = row.querySelector('td:nth-child(3)').textContent.toLowerCase();
-        const priority = row.querySelector('td:nth-child(4)').textContent.toLowerCase();
-        const title = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
-        const createdBy = row.querySelector('td:nth-child(5)').textContent.toLowerCase();
-        const assignedTo = row.querySelector('td:nth-child(6)').textContent.toLowerCase();
+        const status = row.dataset.status.toLowerCase();
+        const priority = row.dataset.priority.toLowerCase();
+        const title = row.dataset.title.toLowerCase();
+        const createdBy = row.dataset.createdBy.toLowerCase();
+        const assignedTo = row.dataset.assignedTo.toLowerCase();
 
-        const statusMatch = !statusValue || status.includes(statusValue);
-        const priorityMatch = !priorityValue || priority.includes(priorityValue);
+        const statusMatch = !statusValue || status === statusValue;
+        const priorityMatch = !priorityValue || priority === priorityValue;
         const searchMatch = !searchValue || 
             title.includes(searchValue) || 
             createdBy.includes(searchValue) || 
@@ -118,9 +123,13 @@ function applyFilters() {
     });
 }
 
+// Event-Listener für Filter
 statusFilter.addEventListener('change', applyFilters);
 priorityFilter.addEventListener('change', applyFilters);
 searchInput.addEventListener('input', applyFilters);
+
+// Initial Filter anwenden
+applyFilters();
 
 // Lösch-Funktionalität
 function deleteTicket(ticketId) {
@@ -135,7 +144,7 @@ function deleteTicket(ticketId) {
         .then(data => {
             if (data.success) {
                 // Entferne die Zeile aus der Tabelle
-                const row = document.querySelector(`tr:has(button[onclick="deleteTicket(${ticketId})"])`);
+                const row = document.querySelector(`tr[data-ticket-id="${ticketId}"]`);
                 if (row) {
                     row.remove();
                 }

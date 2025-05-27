@@ -6,7 +6,7 @@
 <div class="container mx-auto px-4 py-8">
     <!-- Zurück Button -->
     <div class="mb-6">
-        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
+        <a href="{{ url_for('tickets.create') if not is_admin else url_for('admin.tickets') }}" class="btn btn-outline">
             <i class="fas fa-arrow-left mr-2"></i>
             Zurück zur Übersicht
         </a>
@@ -33,26 +33,38 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <input type="text" id="categoryInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.category or '' }}" 
-                                   onchange="updateTicketCategory(this.value)"
-                                   placeholder="Kategorie eingeben">
+                            {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
+                                <input type="text" id="categoryInput" class="input input-bordered w-full" 
+                                       value="{{ ticket.category or '' }}" 
+                                       onchange="updateTicketCategory(this.value)"
+                                       placeholder="Kategorie eingeben">
+                            {% else %}
+                                <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
+                            {% endif %}
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
-                                   onchange="updateTicketDueDate(this.value)">
+                            {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
+                                <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
+                                       value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
+                                       onchange="updateTicketDueDate(this.value)">
+                            {% else %}
+                                <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
+                            {% endif %}
                             <div>
                                 <p class="text-sm opacity-70">Geschätzte Zeit</p>
-                                <div class="flex items-center gap-2">
-                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                           value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
-                                           onchange="updateTicketEstimatedTime(this.value)"
-                                           min="0" step="1">
-                                    <span class="text-sm opacity-70">Minuten</span>
-                                </div>
-                                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
-                                    <i class="fas fa-save mr-2"></i>Speichern
-                                </button>
+                                {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
+                                               value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
+                                               onchange="updateTicketEstimatedTime(this.value)"
+                                               min="0" step="1">
+                                        <span class="text-sm opacity-70">Minuten</span>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
+                                        <i class="fas fa-save mr-2"></i>Speichern
+                                    </button>
+                                {% else %}
+                                    <p>{{ (ticket.estimated_time * 60)|round|int if ticket.estimated_time else 'Nicht gesetzt' }} Minuten</p>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -102,6 +114,111 @@
                 </div>
             </div>
 
+            <!-- Auftragsdetails und Materialliste (Bearbeitungsformular) -->
+            {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <h3 class="font-bold mb-4">
+                        <i class="fas fa-clipboard-list text-primary mr-2"></i>
+                        Auftragsdetails bearbeiten
+                    </h3>
+                    <form method="POST" action="{{ url_for('admin.update_ticket', ticket_id=ticket.id) }}" id="auftragDetailsForm">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label"><span class="label-text">Bereich</span></label>
+                                <input type="text" name="bereich" class="input input-bordered w-full" value="{{ auftrag_details.bereich if auftrag_details else '' }}">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
+                                <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ auftrag_details.fertigstellungstermin if auftrag_details else '' }}">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Auftraggeber</span></label>
+                                <label class="cursor-pointer mr-4">
+                                    <input type="checkbox" name="auftraggeber_intern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_intern %}checked{% endif %}>
+                                    <span class="ml-2">Intern</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="auftraggeber_extern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_extern %}checked{% endif %}>
+                                    <span class="ml-2">Extern</span>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Name Auftraggeber</span></label>
+                                <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ auftrag_details.auftraggeber_name if auftrag_details else '' }}">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="label"><span class="label-text">Kontakt</span></label>
+                                <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ auftrag_details.kontakt if auftrag_details else '' }}">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
+                                <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.auftragsbeschreibung if auftrag_details else '' }}</textarea>
+                            </div>
+                        </div>
+                        <div class="divider my-6">Materialliste</div>
+                        <div id="materialList">
+                            <table class="table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Material</th>
+                                        <th>Menge</th>
+                                        <th>Einzelpreis (€)</th>
+                                        <th>Gesamtpreis (€)</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="materialRows">
+                                    {% if material_list %}
+                                        {% for mat in material_list %}
+                                        <tr>
+                                            <td><input type="text" name="material" class="input input-bordered w-full" value="{{ mat.material }}"></td>
+                                            <td><input type="number" name="menge" class="input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
+                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td><input type="text" name="material" class="input input-bordered w-full"></td>
+                                            <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                        </div>
+                        <div class="flex justify-end mt-4">
+                            <div class="font-bold mr-4">Summe Material:</div>
+                            <div id="summeMaterial" class="font-bold">0,00 €</div>
+                        </div>
+                        <div class="divider my-6">Weitere Auftragsdetails</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label"><span class="label-text">Ausgeführte Arbeiten</span></label>
+                                <textarea name="ausgefuehrte_arbeiten" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.ausgefuehrte_arbeiten if auftrag_details else '' }}</textarea>
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Arbeitsstunden</span></label>
+                                <input type="number" name="arbeitsstunden" class="input input-bordered w-full" min="0" step="any" value="{{ auftrag_details.arbeitsstunden if auftrag_details else '' }}">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Leistungskategorie</span></label>
+                                <input type="text" name="leistungskategorie" class="input input-bordered w-full" value="{{ auftrag_details.leistungskategorie if auftrag_details else '' }}">
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-2">
+                            <button type="submit" class="btn btn-primary">Speichern</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Kommunikation -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
@@ -149,24 +266,32 @@
                     <div class="space-y-4">
                         <div>
                             <p class="text-sm opacity-70">Status</p>
-                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
-                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
-                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
-                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
-                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
-                            </select>
+                            {% if is_admin or is_mitarbeiter %}
+                                <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
+                                    <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                    <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                    <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                    <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                    <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                                </select>
+                            {% else %}
+                                <p>{{ ticket.status }}</p>
+                            {% endif %}
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                <option value="">Nicht zugewiesen</option>
-                                {% for worker in workers %}
-                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
-                                    {{ worker.username }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            {% if is_admin or is_mitarbeiter %}
+                                <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
+                                    <option value="">Nicht zugewiesen</option>
+                                    {% for worker in workers %}
+                                    <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
+                                        {{ worker.username }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
+                            {% endif %}
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -182,6 +307,7 @@
                 </div>
             </div>
 
+            {% if is_admin %}
             <!-- Export-Button für Word-Dokument -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
@@ -190,18 +316,47 @@
                     </a>
                 </div>
             </div>
+            {% endif %}
 
-            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
-            <div class="card bg-base-100 shadow-xl mb-6">
+            {% if is_admin or is_mitarbeiter %}
+            <!-- Notizen -->
+            <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
-                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
-                    </button>
+                    <h3 class="card-title mb-4">Notizen</h3>
+                    <form id="noteForm" class="mb-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Notiz</span>
+                            </label>
+                            <textarea name="note" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Notiz hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-sticky-note mr-2"></i>
+                            Notiz hinzufügen
+                        </button>
+                    </form>
+                    
+                    <div class="notes-container mt-4">
+                        {% if notes %}
+                            {% for note in notes %}
+                            <div class="chat chat-start">
+                                <div class="chat-header">
+                                    {{ note.created_by }}
+                                    <time class="text-xs opacity-50">{{ note.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble chat-bubble-info">
+                                    {{ note.note }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Notizen vorhanden.</p>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-
-            <!-- Modal Container -->
-            <div id="auftragDetailsModalContainer"></div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -210,6 +365,44 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Filter-Funktionalität
+const statusFilter = document.getElementById('statusFilter');
+const priorityFilter = document.getElementById('priorityFilter');
+const searchInput = document.getElementById('searchInput');
+const tableRows = document.querySelectorAll('.ticket-row');
+
+function applyFilters() {
+    const statusValue = statusFilter.value.toLowerCase();
+    const priorityValue = priorityFilter.value.toLowerCase();
+    const searchValue = searchInput.value.toLowerCase();
+
+    tableRows.forEach(row => {
+        const status = row.dataset.status.toLowerCase();
+        const priority = row.dataset.priority.toLowerCase();
+        const title = row.dataset.title.toLowerCase();
+        const createdBy = row.dataset.createdBy.toLowerCase();
+        const assignedTo = row.dataset.assignedTo.toLowerCase();
+
+        const statusMatch = !statusValue || status === statusValue;
+        const priorityMatch = !priorityValue || priority === priorityValue;
+        const searchMatch = !searchValue || 
+            title.includes(searchValue) || 
+            createdBy.includes(searchValue) || 
+            assignedTo.includes(searchValue);
+
+        row.style.display = statusMatch && priorityMatch && searchMatch ? '' : 'none';
+    });
+}
+
+// Event-Listener für Filter
+if (statusFilter) statusFilter.addEventListener('change', applyFilters);
+if (priorityFilter) priorityFilter.addEventListener('change', applyFilters);
+if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+// Initial Filter anwenden
+if (tableRows.length > 0) applyFilters();
+
+// Nachrichten-Funktionalität
 document.getElementById('messageForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -256,7 +449,7 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
             messagesContainer.appendChild(newMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         } else {
-            alert(data.message || 'Fehler beim Senden der Nachricht');
+            alert('Fehler beim Senden der Nachricht: ' + data.message);
         }
     })
     .catch(error => {
@@ -265,255 +458,230 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
     });
 });
 
-function loadAuftragDetailsModal() {
-    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
-            const modal = document.getElementById('auftragDetailsModal');
-            modal.showModal();
-            
-            // Event-Listener für das Formular
-            const form = document.getElementById('auftragDetailsForm');
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
+// Notizen-Funktionalität
+const noteForm = document.getElementById('noteForm');
+if (noteForm) {
+    noteForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = {
+            note: formData.get('note')
+        };
+        
+        fetch(`/admin/tickets/{{ ticket.id }}/note`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Notiz erfolgreich hinzugefügt
+                const noteInput = this.querySelector('textarea[name="note"]');
+                noteInput.value = ''; // Formular leeren
                 
-                // Formulardaten sammeln
-                const formData = new FormData(form);
-                const jsonData = {};
+                // Neue Notiz zur UI hinzufügen
+                const notesContainer = document.querySelector('.notes-container');
+                const newNote = document.createElement('div');
+                newNote.className = 'chat chat-start';
                 
-                // Basis-Formulardaten
-                for (let [key, value] of formData.entries()) {
-                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
-                        jsonData[key] = value === '1';
-                    } else {
-                        jsonData[key] = value;
-                    }
+                newNote.innerHTML = `
+                    <div class="chat-header">
+                        ${data.note.created_by}
+                        <time class="text-xs opacity-50">${data.note.created_at}</time>
+                    </div>
+                    <div class="chat-bubble chat-bubble-info">
+                        ${data.note.note}
+                    </div>
+                `;
+                
+                // Wenn keine Notizen vorhanden sind, entferne die "Keine Notizen" Meldung
+                const noNotes = notesContainer.querySelector('.text-base-content\\/60');
+                if (noNotes) {
+                    noNotes.remove();
                 }
                 
-                // Materialliste sammeln
-                const materialList = [];
-                document.querySelectorAll('.material-row').forEach(row => {
-                    const material = row.querySelector('.material-input').value;
-                    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-                    
-                    if (material || menge || einzelpreis) {
-                        materialList.push({
-                            material: material,
-                            menge: menge,
-                            einzelpreis: einzelpreis
-                        });
-                    }
-                });
-                
-                jsonData.material_list = materialList;
-                
-                // AJAX-Request senden
-                fetch(`/tickets/{{ ticket.id }}/update`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify(jsonData)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        modal.close();
-                        // Optional: Seite neu laden oder UI aktualisieren
-                        window.location.reload();
-                    } else {
-                        alert('Fehler beim Speichern: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Fehler:', error);
-                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
-                });
-            });
+                notesContainer.appendChild(newNote);
+                notesContainer.scrollTop = notesContainer.scrollHeight;
+            } else {
+                alert('Fehler beim Hinzufügen der Notiz: ' + data.message);
+            }
         })
         .catch(error => {
-            console.error('Fehler beim Laden des Modals:', error);
-            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
+            console.error('Fehler:', error);
+            alert('Ein Fehler ist aufgetreten');
         });
+    });
 }
 
-function updateTicketStatus(newStatus) {
-    fetch(`/tickets/{{ ticket.id }}/update-status`, {
+// Materialliste-Funktionalität
+function addMaterialRow() {
+    const tbody = document.getElementById('materialRows');
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+        <td><input type="text" name="material" class="input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(newRow);
+}
+
+function removeMaterialRow(button) {
+    const row = button.closest('tr');
+    row.remove();
+    updateTotalSum();
+}
+
+function updateSumme(input) {
+    const row = input.closest('tr');
+    const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+    const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
+    updateTotalSum();
+}
+
+function updateTotalSum() {
+    const rows = document.querySelectorAll('#materialRows tr');
+    let total = 0;
+    rows.forEach(row => {
+        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        total += gesamtpreis;
+    });
+    document.getElementById('summeMaterial').textContent = total.toFixed(2) + ' €';
+}
+
+// Initial Summe berechnen
+if (document.getElementById('materialRows')) {
+    updateTotalSum();
+}
+
+// Ticket-Update-Funktionen
+function updateTicketStatus(status) {
+    fetch(`/admin/tickets/{{ ticket.id }}/status`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            status: newStatus
-        })
+        body: JSON.stringify({ status })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
+            // Status-Badge aktualisieren
+            const badge = document.querySelector('.badge');
+            badge.className = `badge badge-${data.status_color}`;
+            badge.textContent = data.status;
         } else {
             alert('Fehler beim Aktualisieren des Status: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
+        alert('Ein Fehler ist aufgetreten');
     });
 }
 
-function updateTicketAssignment(newAssignee) {
-    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+function updateTicketAssignment(assignedTo) {
+    fetch(`/admin/tickets/{{ ticket.id }}/assignment`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            assigned_to: newAssignee
-        })
+        body: JSON.stringify({ assigned_to: assignedTo })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
+        if (!data.success) {
             alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+        alert('Ein Fehler ist aufgetreten');
     });
 }
 
-function updateTicketCategory(newCategory) {
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+function updateTicketCategory(category) {
+    fetch(`/admin/tickets/{{ ticket.id }}/category`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            category: newCategory
-        })
+        body: JSON.stringify({ category })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
+        if (!data.success) {
             alert('Fehler beim Aktualisieren der Kategorie: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie.');
+        alert('Ein Fehler ist aufgetreten');
     });
 }
 
-function updateTicketDueDate(newDueDate) {
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+function updateTicketDueDate(dueDate) {
+    fetch(`/admin/tickets/{{ ticket.id }}/due-date`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            due_date: newDueDate
-        })
+        body: JSON.stringify({ due_date: dueDate })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
+        if (!data.success) {
             alert('Fehler beim Aktualisieren des Fälligkeitsdatums: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Fälligkeitsdatums.');
+        alert('Ein Fehler ist aufgetreten');
     });
 }
 
-function updateTicketEstimatedTime(newEstimatedTime) {
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(newEstimatedTime) / 60;
-    
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+function updateTicketEstimatedTime(estimatedTime) {
+    fetch(`/admin/tickets/{{ ticket.id }}/estimated-time`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            estimated_time: hours
-        })
+        body: JSON.stringify({ estimated_time: estimatedTime })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            showToast('success', 'Geschätzte Zeit wurde aktualisiert');
-        } else {
-            showToast('error', 'Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
+        if (!data.success) {
+            alert('Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der geschätzten Zeit.');
+        alert('Ein Fehler ist aufgetreten');
     });
 }
 
 function saveTicketChanges() {
-    const estimatedTime = document.getElementById('estimatedTimeInput').value;
     const category = document.getElementById('categoryInput').value;
     const dueDate = document.getElementById('dueDateInput').value;
-    
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(estimatedTime) / 60;
-    
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            estimated_time: hours,
-            category: category,
-            due_date: dueDate
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Änderungen wurden gespeichert');
-        } else {
-            showToast('error', 'Fehler beim Speichern: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Speichern.');
-    });
-}
+    const estimatedTime = document.getElementById('estimatedTimeInput').value;
 
-function showToast(type, message) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
-    toast.innerHTML = `
-        <div class="alert alert-${type}">
-            <span>${message}</span>
-        </div>
-    `;
-    document.body.appendChild(toast);
-    
-    // Toast nach 3 Sekunden ausblenden
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
+    Promise.all([
+        updateTicketCategory(category),
+        updateTicketDueDate(dueDate),
+        updateTicketEstimatedTime(estimatedTime)
+    ]).then(() => {
+        alert('Änderungen erfolgreich gespeichert');
+    }).catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
 }
 </script>
 {% endblock %} 
