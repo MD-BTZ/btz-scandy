@@ -233,6 +233,30 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Tickets -->
+                    <div class="card bg-base-200">
+                        <div class="card-body">
+                            <h3 class="text-lg font-semibold mb-4">{{ app_labels.tickets.name }}</h3>
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text">Name</span>
+                                </label>
+                                <input type="text" name="label_tickets_name" class="input input-bordered" value="{{ app_labels['tickets']['name'] }}" placeholder="z.B. Tickets, Aufgaben, Anfragen">
+                            </div>
+                            <div class="form-control relative">
+                                <label class="label flex items-center gap-2">
+                                    <span class="label-text">Icon</span>
+                                </label>
+                                <input type="hidden" name="label_tickets_icon" id="tickets-icon-input" value="{{ app_labels['tickets']['icon'] }}">
+                                <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tickets')">
+                                    <span><i id="tickets-icon-preview" class="{{ app_labels['tickets']['icon'] }} text-xl"></i></span>
+                                    <span class="ml-2">Icon wählen</span>
+                                    <i class="fas fa-chevron-down ml-auto"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-actions justify-end mt-6">
                     <button type="submit" class="btn btn-primary">

@@ -1043,6 +1043,10 @@ def get_app_labels():
         'consumables': {
             'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
             'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
+        },
+        'tickets': {
+            'name': get_label_setting('label_tickets_name', 'Tickets'),
+            'icon': get_label_setting('label_tickets_icon', 'fas fa-ticket-alt')
         }
     }
 
@@ -1081,6 +1085,8 @@ def server_settings():
         label_tools_icon = request.form.get('label_tools_icon')
         label_consumables_name = request.form.get('label_consumables_name')
         label_consumables_icon = request.form.get('label_consumables_icon')
+        label_tickets_name = request.form.get('label_tickets_name')
+        label_tickets_icon = request.form.get('label_tickets_icon')
         try:
             ticket_db = TicketDatabase()
             
@@ -1097,6 +1103,12 @@ def server_settings():
             ticket_db.query('''
                 INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
                 ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_tickets_name', label_tickets_name or 'Tickets'])
+            ticket_db.query('''
+                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
+                ['label_tickets_icon', label_tickets_icon or 'fas fa-ticket-alt'])
             
             # Speichere Server-Einstellungen in der inventory.db
             Database.query('''
