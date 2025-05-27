@@ -6,7 +6,7 @@
 <div class="container mx-auto px-4 py-8">
     <!-- Zurück Button -->
     <div class="mb-6">
-        <a href="{{ url_for('tickets.create') if not is_admin else url_for('admin.tickets') }}" class="btn btn-outline">
+        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
             <i class="fas fa-arrow-left mr-2"></i>
             Zurück zur Übersicht
         </a>
@@ -33,38 +33,26 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
-                                <input type="text" id="categoryInput" class="input input-bordered w-full" 
-                                       value="{{ ticket.category or '' }}" 
-                                       onchange="updateTicketCategory(this.value)"
-                                       placeholder="Kategorie eingeben">
-                            {% else %}
-                                <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
-                            {% endif %}
+                            <input type="text" id="categoryInput" class="input input-bordered w-full" 
+                                   value="{{ ticket.category or '' }}" 
+                                   onchange="updateTicketCategory(this.value)"
+                                   placeholder="Kategorie eingeben">
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
-                                <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                       value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
-                                       onchange="updateTicketDueDate(this.value)">
-                            {% else %}
-                                <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
-                            {% endif %}
+                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
+                                   value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
+                                   onchange="updateTicketDueDate(this.value)">
                             <div>
                                 <p class="text-sm opacity-70">Geschätzte Zeit</p>
-                                {% if is_admin or is_mitarbeiter or ticket.assigned_to == current_user.username %}
-                                    <div class="flex items-center gap-2">
-                                        <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                               value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
-                                               onchange="updateTicketEstimatedTime(this.value)"
-                                               min="0" step="1">
-                                        <span class="text-sm opacity-70">Minuten</span>
-                                    </div>
-                                    <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
-                                        <i class="fas fa-save mr-2"></i>Speichern
-                                    </button>
-                                {% else %}
-                                    <p>{{ (ticket.estimated_time * 60)|round|int if ticket.estimated_time else 'Nicht gesetzt' }} Minuten</p>
-                                {% endif %}
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
+                                           value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
+                                           onchange="updateTicketEstimatedTime(this.value)"
+                                           min="0" step="1">
+                                    <span class="text-sm opacity-70">Minuten</span>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
+                                    <i class="fas fa-save mr-2"></i>Speichern
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -114,18 +102,6 @@
                 </div>
             </div>
 
-            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
-            <div class="card bg-base-100 shadow-xl mb-6">
-                <div class="card-body">
-                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
-                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
-                    </button>
-                </div>
-            </div>
-
-            <!-- Modal Container -->
-            <div id="auftragDetailsModalContainer"></div>
-
             <!-- Kommunikation -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
@@ -173,31 +149,31 @@
                     <div class="space-y-4">
                         <div>
                             <p class="text-sm opacity-70">Status</p>
-                            {% if is_admin or is_mitarbeiter %}
-                                <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
-                                    <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
-                                    <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-                                    <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
-                                    <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
-                                    <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
-                                </select>
+                            {% if current_user.is_admin or current_user.is_worker %}
+                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
+                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                            </select>
                             {% else %}
-                                <p>{{ ticket.status }}</p>
+                            <p class="font-medium">{{ ticket.status }}</p>
                             {% endif %}
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            {% if is_admin or is_mitarbeiter %}
-                                <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                    <option value="">Nicht zugewiesen</option>
-                                    {% for worker in workers %}
-                                    <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
-                                        {{ worker.username }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
+                            {% if current_user.is_admin or current_user.is_worker %}
+                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
+                                <option value="">Nicht zugewiesen</option>
+                                {% for worker in workers %}
+                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
+                                    {{ worker.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
                             {% else %}
-                                <p>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
+                            <p class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
                             {% endif %}
                         </div>
                         <div>
@@ -214,7 +190,16 @@
                 </div>
             </div>
 
-            {% if is_admin %}
+            {% if current_user.is_admin %}
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <button class="btn btn-error w-full" onclick="deleteTicket({{ ticket.id }})">
+                        <i class="fas fa-trash mr-2"></i> Auftrag löschen
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Export-Button für Word-Dokument -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
@@ -223,47 +208,20 @@
                     </a>
                 </div>
             </div>
-            {% endif %}
 
-            {% if is_admin or is_mitarbeiter %}
-            <!-- Notizen -->
-            <div class="card bg-base-100 shadow-xl">
+            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
+            {% if current_user.is_admin or current_user.is_worker %}
+            <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <h3 class="card-title mb-4">Notizen</h3>
-                    <form id="noteForm" class="mb-4">
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Neue Notiz</span>
-                            </label>
-                            <textarea name="note" class="textarea textarea-bordered h-24" 
-                                    placeholder="Ihre Notiz hier..." required></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-4">
-                            <i class="fas fa-sticky-note mr-2"></i>
-                            Notiz hinzufügen
-                        </button>
-                    </form>
-                    
-                    <div class="notes-container mt-4">
-                        {% if notes %}
-                            {% for note in notes %}
-                            <div class="chat chat-start">
-                                <div class="chat-header">
-                                    {{ note.created_by }}
-                                    <time class="text-xs opacity-50">{{ note.created_at }}</time>
-                                </div>
-                                <div class="chat-bubble chat-bubble-info">
-                                    {{ note.note }}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <p class="text-base-content/60">Noch keine Notizen vorhanden.</p>
-                        {% endif %}
-                    </div>
+                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
+                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
+                    </button>
                 </div>
             </div>
             {% endif %}
+
+            <!-- Modal Container -->
+            <div id="auftragDetailsModalContainer"></div>
         </div>
     </div>
 </div>
@@ -272,44 +230,6 @@
 {% block scripts %}
 {{ super() }}
 <script>
-// Filter-Funktionalität
-const statusFilter = document.getElementById('statusFilter');
-const priorityFilter = document.getElementById('priorityFilter');
-const searchInput = document.getElementById('searchInput');
-const tableRows = document.querySelectorAll('.ticket-row');
-
-function applyFilters() {
-    const statusValue = statusFilter.value.toLowerCase();
-    const priorityValue = priorityFilter.value.toLowerCase();
-    const searchValue = searchInput.value.toLowerCase();
-
-    tableRows.forEach(row => {
-        const status = row.dataset.status.toLowerCase();
-        const priority = row.dataset.priority.toLowerCase();
-        const title = row.dataset.title.toLowerCase();
-        const createdBy = row.dataset.createdBy.toLowerCase();
-        const assignedTo = row.dataset.assignedTo.toLowerCase();
-
-        const statusMatch = !statusValue || status === statusValue;
-        const priorityMatch = !priorityValue || priority === priorityValue;
-        const searchMatch = !searchValue || 
-            title.includes(searchValue) || 
-            createdBy.includes(searchValue) || 
-            assignedTo.includes(searchValue);
-
-        row.style.display = statusMatch && priorityMatch && searchMatch ? '' : 'none';
-    });
-}
-
-// Event-Listener für Filter
-if (statusFilter) statusFilter.addEventListener('change', applyFilters);
-if (priorityFilter) priorityFilter.addEventListener('change', applyFilters);
-if (searchInput) searchInput.addEventListener('input', applyFilters);
-
-// Initial Filter anwenden
-if (tableRows.length > 0) applyFilters();
-
-// Nachrichten-Funktionalität
 document.getElementById('messageForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -347,12 +267,6 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
                 </div>
             `;
             
-            // Wenn keine Nachrichten vorhanden sind, entferne die "Keine Nachrichten" Meldung
-            const noMessages = messagesContainer.querySelector('.text-base-content\\/60');
-            if (noMessages) {
-                noMessages.remove();
-            }
-            
             messagesContainer.appendChild(newMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         } else {
@@ -365,125 +279,22 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
     });
 });
 
-// Notizen-Funktionalität
-const noteForm = document.getElementById('noteForm');
-if (noteForm) {
-    noteForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const data = {
-            note: formData.get('note')
-        };
-        
-        fetch(`/admin/tickets/{{ ticket.id }}/note`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Notiz erfolgreich hinzugefügt
-                const noteInput = this.querySelector('textarea[name="note"]');
-                noteInput.value = ''; // Formular leeren
-                
-                // Neue Notiz zur UI hinzufügen
-                const notesContainer = document.querySelector('.notes-container');
-                const newNote = document.createElement('div');
-                newNote.className = 'chat chat-start';
-                
-                newNote.innerHTML = `
-                    <div class="chat-header">
-                        ${data.note.created_by}
-                        <time class="text-xs opacity-50">${data.note.created_at}</time>
-                    </div>
-                    <div class="chat-bubble chat-bubble-info">
-                        ${data.note.note}
-                    </div>
-                `;
-                
-                // Wenn keine Notizen vorhanden sind, entferne die "Keine Notizen" Meldung
-                const noNotes = notesContainer.querySelector('.text-base-content\\/60');
-                if (noNotes) {
-                    noNotes.remove();
-                }
-                
-                notesContainer.appendChild(newNote);
-                notesContainer.scrollTop = notesContainer.scrollHeight;
-            } else {
-                alert('Fehler beim Hinzufügen der Notiz: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            alert('Ein Fehler ist aufgetreten');
-        });
-    });
-}
-
-// Materialliste-Funktionalität
-function addMaterialRow() {
-    const tbody = document.getElementById('materialRows');
-    const newRow = document.createElement('tr');
-    newRow.innerHTML = `
-        <td><input type="text" name="material" class="input input-bordered w-full"></td>
-        <td><input type="number" name="menge" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-        <td><input type="number" name="einzelpreis" class="input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
-        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
-    `;
-    tbody.appendChild(newRow);
-}
-
-function removeMaterialRow(button) {
-    const row = button.closest('tr');
-    row.remove();
-    updateTotalSum();
-}
-
-function updateSumme(input) {
-    const row = input.closest('tr');
-    const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
-    const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
-    const gesamtpreis = menge * einzelpreis;
-    row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
-    updateTotalSum();
-}
-
-function updateTotalSum() {
-    const rows = document.querySelectorAll('#materialRows tr');
-    let total = 0;
-    rows.forEach(row => {
-        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
-        total += gesamtpreis;
-    });
-    document.getElementById('summeMaterial').textContent = total.toFixed(2) + ' €';
-}
-
-// Initial Summe berechnen
-if (document.getElementById('materialRows')) {
-    updateTotalSum();
-}
-
-// Ticket-Update-Funktionen
+// Funktion zum Aktualisieren des Status
 function updateTicketStatus(status) {
-    fetch(`/admin/tickets/{{ ticket.id }}/status`, {
+    fetch(`/tickets/{{ ticket.id }}/status`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: status })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             // Status-Badge aktualisieren
-            const badge = document.querySelector('.badge');
-            badge.className = `badge badge-${data.status_color}`;
-            badge.textContent = data.status;
+            const statusBadge = document.querySelector('.badge');
+            statusBadge.className = `badge badge-${data.status_color}`;
+            statusBadge.textContent = status;
         } else {
             alert('Fehler beim Aktualisieren des Status: ' + data.message);
         }
@@ -494,17 +305,21 @@ function updateTicketStatus(status) {
     });
 }
 
-function updateTicketAssignment(assignedTo) {
-    fetch(`/admin/tickets/{{ ticket.id }}/assignment`, {
+// Funktion zum Aktualisieren der Zuweisung
+function updateTicketAssignment(username) {
+    fetch(`/tickets/{{ ticket.id }}/assignment`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ assigned_to: assignedTo })
+        body: JSON.stringify({ assigned_to: username })
     })
     .then(response => response.json())
     .then(data => {
-        if (!data.success) {
+        if (data.success) {
+            // Erfolgreich aktualisiert
+            console.log('Zuweisung aktualisiert');
+        } else {
             alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
         }
     })
@@ -514,95 +329,77 @@ function updateTicketAssignment(assignedTo) {
     });
 }
 
-function updateTicketCategory(category) {
-    fetch(`/admin/tickets/{{ ticket.id }}/category`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ category })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            alert('Fehler beim Aktualisieren der Kategorie: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
+// Funktion zum Löschen eines Tickets
+function deleteTicket(ticketId) {
+    if (confirm('Möchten Sie diesen Auftrag wirklich löschen?')) {
+        fetch(`/admin/tickets/${ticketId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/admin/tickets';
+            } else {
+                alert('Fehler beim Löschen des Auftrags: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            alert('Ein Fehler ist aufgetreten');
+        });
+    }
 }
 
-function updateTicketDueDate(dueDate) {
-    fetch(`/admin/tickets/{{ ticket.id }}/due-date`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ due_date: dueDate })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            alert('Fehler beim Aktualisieren des Fälligkeitsdatums: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
+// Funktion zum Laden des Auftragsdetails-Modals
+function loadAuftragDetailsModal() {
+    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
+        .then(response => response.text())
+        .then(html => {
+            const modalContainer = document.getElementById('auftragDetailsModalContainer');
+            modalContainer.innerHTML = html;
+            const modal = document.getElementById('auftragDetailsModal');
+            if (modal) {
+                modal.showModal();
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            alert('Ein Fehler ist aufgetreten');
+        });
 }
 
-function updateTicketEstimatedTime(estimatedTime) {
-    fetch(`/admin/tickets/{{ ticket.id }}/estimated-time`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ estimated_time: estimatedTime })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            alert('Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-}
-
+// Funktion zum Speichern der Ticket-Änderungen
 function saveTicketChanges() {
     const category = document.getElementById('categoryInput').value;
     const dueDate = document.getElementById('dueDateInput').value;
     const estimatedTime = document.getElementById('estimatedTimeInput').value;
 
-    Promise.all([
-        updateTicketCategory(category),
-        updateTicketDueDate(dueDate),
-        updateTicketEstimatedTime(estimatedTime)
-    ]).then(() => {
-        alert('Änderungen erfolgreich gespeichert');
-    }).catch(error => {
+    fetch(`/tickets/{{ ticket.id }}/update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            category: category,
+            due_date: dueDate,
+            estimated_time: estimatedTime
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Änderungen erfolgreich gespeichert');
+        } else {
+            alert('Fehler beim Speichern der Änderungen: ' + data.message);
+        }
+    })
+    .catch(error => {
         console.error('Fehler:', error);
         alert('Ein Fehler ist aufgetreten');
     });
-}
-
-function loadAuftragDetailsModal() {
-    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
-            const modal = document.getElementById('auftragDetailsModal');
-            modal.showModal();
-        })
-        .catch(error => {
-            console.error('Fehler beim Laden des Modals:', error);
-            alert('Fehler beim Laden des Modals');
-        });
 }
 </script>
 {% endblock %} 
