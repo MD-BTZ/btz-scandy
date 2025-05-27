@@ -56,24 +56,23 @@
                             {% for mat in material_list %}
                             <tr class="material-row">
                                 <td><input type="text" name="material" class="material-input input input-bordered w-full" value="{{ mat.material }}"></td>
-                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any"></td>
-                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any"></td>
+                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any" onchange="updateSumme(this)"></td>
+                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any" onchange="updateSumme(this)"></td>
                                 <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
-                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                                <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                            <tr class="material-row">
-                                <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
-                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
-                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
-                                <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
-                            </tr>
                         {% endif %}
+                        <tr class="material-row">
+                            <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+                            <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                            <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+                        </tr>
                     </tbody>
                 </table>
-                <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
             </div>
             <div class="flex justify-end mt-4">
                 <div class="font-bold mr-4">Summe Material:</div>
@@ -99,7 +98,7 @@
                                         <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" value="{{ parts[0] if parts|length > 0 else '' }}"></td>
                                         <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5" value="{{ parts[1] if parts|length > 1 else '' }}"></td>
                                         <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" value="{{ parts[2] if parts|length > 2 else '' }}"></td>
-                                        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                                        <td><button type="button" class="btn btn-error btn-sm" onclick="removeArbeitRow(this)"><i class="fas fa-trash"></i></button></td>
                                     </tr>
                                 {% endif %}
                             {% endfor %}
@@ -108,11 +107,11 @@
                             <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
                             <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
                             <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
-                            <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                            <td><button type="button" class="btn btn-error btn-sm" onclick="removeArbeitRow(this)"><i class="fas fa-trash"></i></button></td>
                         </tr>
                     </tbody>
                 </table>
-                <button type="button" class="btn btn-secondary mt-2" id="addArbeitBtn"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
+                <button type="button" class="btn btn-secondary mt-2" onclick="addArbeitRow()"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
             </div>
             <div class="flex justify-end mt-4">
                 <button type="submit" class="btn btn-primary">Speichern</button>
@@ -123,20 +122,140 @@
 </dialog>
 
 <script>
-// Setze die Ticket-ID für die JavaScript-Funktionen
-const ticketId = {{ ticket.id }};
+// Materialliste-Funktionalität
+function addMaterialRow() {
+    const tbody = document.getElementById('materialRows');
+    const newRow = document.createElement('tr');
+    newRow.className = 'material-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any" onchange="updateSumme(this)"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(newRow);
+}
 
-// Initialisiere das Modal nach dem Laden
-document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('auftragDetailsModal');
-    if (modal) {
-        console.log('Modal gefunden, initialisiere...');
-        // Lade das Script dynamisch nur wenn das Modal existiert
-        const script = document.createElement('script');
-        script.src = "{{ url_for('static', filename='js/tickets.js') }}";
-        document.body.appendChild(script);
-    } else {
-        console.log('Modal nicht gefunden');
+function removeMaterialRow(button) {
+    const row = button.closest('tr');
+    row.remove();
+    updateTotalSum();
+}
+
+function updateSumme(input) {
+    const row = input.closest('tr');
+    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
+    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
+    updateTotalSum();
+}
+
+function updateTotalSum() {
+    const rows = document.querySelectorAll('#materialRows tr');
+    let total = 0;
+    rows.forEach(row => {
+        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        total += gesamtpreis;
+    });
+    document.getElementById('summeMaterial').textContent = total.toFixed(2) + ' €';
+}
+
+// Ausgeführte Arbeiten-Funktionalität
+function addArbeitRow() {
+    const tbody = document.getElementById('arbeitenRows');
+    const newRow = document.createElement('tr');
+    newRow.className = 'arbeit-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
+        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+        <td><button type="button" class="btn btn-error btn-sm" onclick="removeArbeitRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(newRow);
+}
+
+function removeArbeitRow(button) {
+    const row = button.closest('tr');
+    row.remove();
+}
+
+// Initial Summe berechnen
+if (document.getElementById('materialRows')) {
+    updateTotalSum();
+}
+
+// Formular-Submit-Handler
+document.getElementById('auftragDetailsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Formulardaten sammeln
+    const formData = new FormData(this);
+    const jsonData = {};
+    
+    // Basis-Formulardaten
+    for (let [key, value] of formData.entries()) {
+        if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
+            jsonData[key] = value === '1';
+        } else {
+            jsonData[key] = value;
+        }
     }
+    
+    // Materialliste sammeln
+    const materialList = [];
+    document.querySelectorAll('.material-row').forEach(row => {
+        const material = row.querySelector('.material-input').value;
+        const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+        
+        if (material || menge || einzelpreis) {
+            materialList.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis
+            });
+        }
+    });
+    
+    jsonData.material_list = materialList;
+    
+    // Ausgeführte Arbeiten sammeln
+    const arbeitRows = document.querySelectorAll('.arbeit-row');
+    const ausgefuehrteArbeiten = [];
+    arbeitRows.forEach(row => {
+        const arbeit = row.querySelector('.arbeit-input').value;
+        const arbeitsstunden = row.querySelector('.arbeitsstunden-input').value;
+        const leistungskategorie = row.querySelector('.leistungskategorie-input').value;
+        
+        if (arbeit || arbeitsstunden || leistungskategorie) {
+            ausgefuehrteArbeiten.push(`${arbeit}|${arbeitsstunden}|${leistungskategorie}`);
+        }
+    });
+    
+    jsonData.ausgefuehrte_arbeiten = ausgefuehrteArbeiten.join('\n');
+    
+    // Sende die Daten an den Server
+    fetch(`/tickets/{{ ticket.id }}/update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(jsonData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('auftragDetailsModal').close();
+            location.reload();
+        } else {
+            alert('Fehler beim Speichern: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
 });
 </script> 
