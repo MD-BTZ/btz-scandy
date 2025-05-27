@@ -1078,66 +1078,50 @@ def get_categories():
 @admin_required
 def server_settings():
     if request.method == 'POST':
-        mode = request.form.get('mode')
-        server_url = request.form.get('server_url')
-        # Neue Felder für Labels/Icons
-        label_tools_name = request.form.get('label_tools_name')
-        label_tools_icon = request.form.get('label_tools_icon')
-        label_consumables_name = request.form.get('label_consumables_name')
-        label_consumables_icon = request.form.get('label_consumables_icon')
-        label_tickets_name = request.form.get('label_tickets_name')
-        label_tickets_icon = request.form.get('label_tickets_icon')
-        try:
-            ticket_db = TicketDatabase()
-            
-            # Speichere die neuen Label/Icons
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_tools_name', label_tools_name or 'Werkzeuge'])
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_tools_icon', label_tools_icon or 'fas fa-tools'])
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial'])
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open'])
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_tickets_name', label_tickets_name or 'Tickets'])
-            ticket_db.query('''
-                INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', 
-                ['label_tickets_icon', label_tickets_icon or 'fas fa-ticket-alt'])
-            
-            # Speichere Server-Einstellungen in der inventory.db
-            Database.query('''
-                INSERT OR REPLACE INTO settings (key, value)
-                VALUES (?, ?)
-            ''', ['server_mode', '1' if mode == 'server' else '0'])
-            if mode == 'client' and server_url:
-                Database.query('''
-                    INSERT OR REPLACE INTO settings (key, value)
-                    VALUES (?, ?)
-                ''', ['server_url', server_url])
-            
-            if mode == 'server':
-                Config.init_server()
-                flash('Server-Modus aktiviert', 'success')
-            else:
-                Config.init_client(server_url)
-                flash('Client-Modus aktiviert', 'success')
-                
-            flash('Einstellungen erfolgreich gespeichert', 'success')
-            return redirect(url_for('admin.server_settings'))
-        except Exception as e:
-            logger.error(f"Fehler beim Speichern der Einstellungen: {str(e)}")
-            flash('Fehler beim Speichern der Einstellungen', 'error')
-            return redirect(url_for('admin.server_settings'))
+        # Server-Einstellungen
+        server_mode = request.form.get('server_mode') == 'on'
+        server_url = request.form.get('server_url', '')
+        
+        # Begriffe & Icons
+        label_tools_name = request.form.get('label_tools_name', 'Werkzeuge')
+        label_tools_icon = request.form.get('label_tools_icon', 'fas fa-tools')
+        label_consumables_name = request.form.get('label_consumables_name', 'Verbrauchsmaterial')
+        label_consumables_icon = request.form.get('label_consumables_icon', 'fas fa-box')
+        label_tickets_name = request.form.get('label_tickets_name', 'Tickets')
+        label_tickets_icon = request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
+        
+        # Speichere die Einstellungen in der Datenbank
+        ticket_db.query('''
+            INSERT OR REPLACE INTO settings (key, value) VALUES 
+            (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)
+        ''', [
+            'label_tools_name', label_tools_name,
+            'label_tools_icon', label_tools_icon,
+            'label_consumables_name', label_consumables_name,
+            'label_consumables_icon', label_consumables_icon,
+            'label_tickets_name', label_tickets_name,
+            'label_tickets_icon', label_tickets_icon
+        ])
+        
+        # Speichere Server-Einstellungen in inventory.db
+        Database.query('''
+            INSERT OR REPLACE INTO settings (key, value) VALUES 
+            (?, ?), (?, ?)
+        ''', [
+            'server_mode', '1' if server_mode else '0',
+            'server_url', server_url
+        ])
+        
+        flash('Einstellungen wurden gespeichert', 'success')
+        return redirect(url_for('admin.server_settings'))
     
-    # Lade die aktuellen Einstellungen
-    app_labels = get_app_labels()
-    return render_template('admin/system.html', app_labels=app_labels)
+    # Hole aktuelle Einstellungen
+    server_mode = Database.query('SELECT value FROM settings WHERE key = ?', ['server_mode']).fetchone()
+    server_url = Database.query('SELECT value FROM settings WHERE key = ?', ['server_url']).fetchone()
+    
+    return render_template('admin/system.html',
+                         server_mode=server_mode['value'] if server_mode else '0',
+                         server_url=server_url['value'] if server_url else '')
 
 @bp.route('/export/all')
 @mitarbeiter_required
@@ -2111,6 +2095,8 @@ def tickets():
 @admin_required
 def system():
     """Zeigt die Systemeinstellungen an."""
+    ticket_db = TicketDatabase()
+    
     if request.method == 'POST':
         try:
             # Verarbeite Logo-Upload
@@ -2124,15 +2110,55 @@ def system():
                 else:
                     flash('Ungültiges Dateiformat. Erlaubt sind: PNG, JPG, JPEG, GIF', 'error')
             
+            # Hole Formulardaten
+            label_tools_name = request.form.get('label_tools_name', '').strip()
+            label_tools_icon = request.form.get('label_tools_icon', '').strip()
+            label_consumables_name = request.form.get('label_consumables_name', '').strip()
+            label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
+            system_name = request.form.get('system_name', '').strip()
+            
+            logger.info(f"[ADMIN] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}, system_name={system_name}")
+            
+            # Lösche alte Einstellungen
+            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?, ?)',
+                ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon', 'system_name'])
+            
+            # Füge neue Einstellungen hinzu
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
+            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+                ['system_name', system_name or 'Scandy', 'Name des Systems'])
+            
             flash('Einstellungen erfolgreich gespeichert', 'success')
             return redirect(url_for('admin.system'))
             
         except Exception as e:
             logger.error(f"Fehler beim Speichern der Einstellungen: {e}")
             flash('Fehler beim Speichern der Einstellungen', 'error')
+    
+    # GET: Zeige Einstellungen
+    try:
+        settings = {}
+        rows = ticket_db.query('SELECT key, value FROM settings')
+        for row in rows:
+            settings[row['key']] = row['value']
             
-    return render_template('admin/system.html')
-
+        return render_template('admin/system.html',
+            label_tools_name=settings.get('label_tools_name', 'Werkzeuge'),
+            label_tools_icon=settings.get('label_tools_icon', 'fas fa-tools'),
+            label_consumables_name=settings.get('label_consumables_name', 'Verbrauchsmaterial'),
+            label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'))
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Einstellungen: {str(e)}")
+        flash('Fehler beim Laden der Einstellungen', 'error')
+        return redirect(url_for('main.index'))
 
 @bp.route('/users')
 @admin_required

@@ -374,14 +374,32 @@ def timesheet_list():
     user_id = current_user.id
     sort = request.args.get('sort', 'kw_desc')
     
+    # Aktuelle Kalenderwoche ermitteln
+    today = datetime.now()
+    current_year = today.isocalendar()[0]
+    current_week = today.isocalendar()[1]
+    
+    # Prüfen ob ein Eintrag für die aktuelle Woche existiert
+    existing_entry = ticket_db.query('''
+        SELECT id FROM timesheets 
+        WHERE user_id = ? AND year = ? AND kw = ?
+    ''', [user_id, current_year, current_week], one=True)
+    
+    # Wenn kein Eintrag existiert, erstelle einen neuen
+    if not existing_entry:
+        ticket_db.query('''
+            INSERT INTO timesheets (user_id, year, kw, created_at, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', [user_id, current_year, current_week])
+    
     # Basis-Query mit Berechnung der ausgefüllten Tage
     query = '''
         SELECT *,
-               (CASE WHEN (montag_start != '' OR montag_end != '' OR montag_tasks != '') THEN 1 ELSE 0 END +
-                CASE WHEN (dienstag_start != '' OR dienstag_end != '' OR dienstag_tasks != '') THEN 1 ELSE 0 END +
-                CASE WHEN (mittwoch_start != '' OR mittwoch_end != '' OR mittwoch_tasks != '') THEN 1 ELSE 0 END +
-                CASE WHEN (donnerstag_start != '' OR donnerstag_end != '' OR donnerstag_tasks != '') THEN 1 ELSE 0 END +
-                CASE WHEN (freitag_start != '' OR freitag_end != '' OR freitag_tasks != '') THEN 1 ELSE 0 END) as filled_days,
+               (CASE WHEN (montag_start != '' AND montag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (dienstag_start != '' AND dienstag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (mittwoch_start != '' AND mittwoch_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (donnerstag_start != '' AND donnerstag_tasks != '') THEN 1 ELSE 0 END +
+                CASE WHEN (freitag_start != '' AND freitag_tasks != '') THEN 1 ELSE 0 END) as filled_days,
                strftime('%d.%m.%Y', created_at) as created_at_de,
                strftime('%d.%m.%Y', updated_at) as updated_at_de
         FROM timesheets 
@@ -412,7 +430,33 @@ def timesheet_list():
         query += ' ORDER BY updated_at ASC'
     
     timesheets = ticket_db.query(query, params)
-    return render_template('workers/timesheet_list.html', timesheets=timesheets)
+    
+    # Berechne unausgefüllte Tage für alle Wochen
+    unfilled_days = 0
+    for ts in timesheets:
+        # Berechne den Wochenstart
+        week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
+        days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+        
+        for i, day in enumerate(days):
+            # Berechne das Datum für den aktuellen Tag
+            current_day = week_start + timedelta(days=i)
+            
+            # Prüfe nur vergangene Tage
+            if current_day.date() < today.date():
+                has_times = ts[f'{day}_start'] or ts[f'{day}_end']
+                has_tasks = ts[f'{day}_tasks']
+                if not (has_times and has_tasks):
+                    unfilled_days += 1
+    
+    return render_template('workers/timesheet_list.html', 
+                         timesheets=timesheets,
+                         unfilled_days=unfilled_days,
+                         unfilled_timesheet_days=unfilled_days,
+                         today=today,
+                         datetime=datetime,
+                         timedelta=timedelta
+    )
 
 @bp.route('/timesheet/new', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -443,7 +487,7 @@ def timesheet_create():
         ticket_db.query(f'INSERT INTO timesheets ({placeholders}) VALUES ({qmarks})', values)
         flash('Wochenplan erfolgreich gespeichert.', 'success')
         return redirect(url_for('workers.timesheet_list'))
-    return render_template('workers/timesheet.html')
+    return render_template('workers/timesheet.html', now=datetime.now())
 
 @bp.route('/timesheet/<int:ts_id>/edit', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -477,7 +521,7 @@ def timesheet_edit(ts_id):
         ticket_db.query(f'UPDATE timesheets SET {", ".join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', values)
         flash('Wochenplan aktualisiert.', 'success')
         return redirect(url_for('workers.timesheet_list'))
-    return render_template('workers/timesheet.html', ts=ts)
+    return render_template('workers/timesheet.html', ts=ts, now=datetime.now())
 
 @bp.route('/timesheet/<int:ts_id>/download')
 @mitarbeiter_required

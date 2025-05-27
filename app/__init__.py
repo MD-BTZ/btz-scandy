@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash
+from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash, current_app
 from flask_session import Session  # Session-Management
 from .constants import Routes
 from app.config.version import VERSION
@@ -15,7 +15,7 @@ from app.utils.auth_utils import needs_setup
 from app.models.init_db import init_db
 from pathlib import Path
 import sys
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
@@ -291,6 +291,35 @@ def create_app(test_config=None):
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():
+        # Berechne unausgefüllte Tage für alle Wochen
+        unfilled_days = 0
+        if current_user.is_authenticated and current_user.is_mitarbeiter:
+            today = datetime.now()
+            # Verwende die Ticket-Datenbank für Timesheet-Abfragen
+            tickets_db_path = os.path.join(current_app.config['BASE_DIR'], 'app', 'database', 'tickets.db')
+            with sqlite3.connect(tickets_db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                timesheets = conn.execute('''
+                    SELECT * FROM timesheets 
+                    WHERE user_id = ?
+                ''', [current_user.id]).fetchall()
+                
+                for ts in timesheets:
+                    # Berechne den Wochenstart
+                    week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
+                    days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+                    
+                    for i, day in enumerate(days):
+                        # Berechne das Datum für den aktuellen Tag
+                        current_day = week_start + timedelta(days=i)
+                        
+                        # Prüfe nur vergangene Tage
+                        if current_day.date() < today.date():
+                            has_times = ts[f'{day}_start'] or ts[f'{day}_end']
+                            has_tasks = ts[f'{day}_tasks']
+                            if not (has_times and has_tasks):
+                                unfilled_days += 1
+
         return {
             'status_colors': {
                 'offen': 'danger',
@@ -304,7 +333,8 @@ def create_app(test_config=None):
                 'normal': 'primary',
                 'hoch': 'warning',
                 'kritisch': 'error'
-            }
+            },
+            'unfilled_timesheet_days': unfilled_days
         }
 
     return app

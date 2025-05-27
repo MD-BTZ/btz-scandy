@@ -106,8 +106,11 @@
             </a>
             <a href="{{ url_for('workers.timesheet_list') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
                      <i class="fas fa-clock text-xl"></i>
+                     {% if unfilled_timesheet_days is defined and unfilled_timesheet_days > 0 %}
+                     <span class="badge badge-error badge-sm absolute top-0 right-0" style="transform: translate(50%,-50%);">{{ unfilled_timesheet_days }}</span>
+                     {% endif %}
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Wochenberichte</span>
             </a>

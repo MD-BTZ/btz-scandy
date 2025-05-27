@@ -15,8 +15,11 @@
     </div>
     <div class="flex flex-row gap-2 mb-4">
         {% for day in ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag'] %}
-            {% set filled = (ts and (ts[day ~ '_start'] or ts[day ~ '_end'] or ts[day ~ '_tasks'])) or (not ts and (request.form['start_' ~ day] or request.form['end_' ~ day] or request.form['tasks_' ~ day])) %}
-            <span class="badge {{ 'badge-success' if filled else 'badge-outline' }}">{{ day|title }} {% if filled %}✔{% else %}–{% endif %}</span>
+            {% set has_times = (ts and (ts[day ~ '_start'] or ts[day ~ '_end'])) or (not ts and (request.form['start_' ~ day] or request.form['end_' ~ day])) %}
+            {% set has_tasks = (ts and ts[day ~ '_tasks']) or (not ts and request.form['tasks_' ~ day]) %}
+            {% set is_past = ts and (ts.year < now.year or (ts.year == now.year and ts.kw < now.isocalendar()[1]) or (ts.year == now.year and ts.kw == now.isocalendar()[1] and loop.index0 < now.weekday())) %}
+            {% set badge_class = 'badge-success' if has_times and has_tasks else 'badge-error' if is_past else 'badge-outline' %}
+            <span class="badge {{ badge_class }}">{{ day|title }} {% if has_times and has_tasks %}✔{% elif has_times or has_tasks %}!{% else %}–{% endif %}</span>
         {% endfor %}
     </div>
     <form method="POST" class="space-y-6">

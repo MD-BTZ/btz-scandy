@@ -169,6 +169,36 @@
         </div>
     </dialog>
 
+    <!-- Server-Einstellungen -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-server text-primary mr-2"></i>
+                Server-Einstellungen
+            </h2>
+            <form method="POST" action="{{ url_for('admin.server_settings') }}">
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Server-Modus</span>
+                        <input type="checkbox" name="server_mode" class="toggle toggle-primary" {% if server_mode == '1' %}checked{% endif %}>
+                    </label>
+                </div>
+                <div class="form-control mt-4">
+                    <label class="label">
+                        <span class="label-text">Server-URL (nur im Client-Modus)</span>
+                    </label>
+                    <input type="url" name="server_url" class="input input-bordered" value="{{ server_url }}" placeholder="http://server:5000">
+                </div>
+                <div class="card-actions justify-end mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>
+                        Server-Einstellungen speichern
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Begriffe & Icons Verwaltung -->
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
@@ -214,7 +244,7 @@
                                 <label class="label">
                                     <span class="label-text">Name</span>
                                 </label>
-                                <input type="text" name="label_consumables_name" class="input input-bordered" value="{{ app_labels['consumables']['name'] }}" placeholder="z.B. Verbrauchsmaterial, Material, Artikel">
+                                <input type="text" name="label_consumables_name" class="input input-bordered" value="{{ app_labels['consumables']['name'] }}" placeholder="z.B. Verbrauchsmaterial, Material, Zubehör">
                             </div>
                             <div class="form-control relative">
                                 <label class="label flex items-center gap-2">
@@ -223,34 +253,6 @@
                                 <input type="hidden" name="label_consumables_icon" id="consumables-icon-input" value="{{ app_labels['consumables']['icon'] }}">
                                 <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('consumables')">
                                     <span><i id="consumables-icon-preview" class="{{ app_labels['consumables']['icon'] }} text-xl"></i></span>
-                                    <span class="ml-2">Icon wählen</span>
-                                    <i class="fas fa-chevron-down ml-auto"></i>
-                                </button>
-                                <div id="consumables-icon-dropdown" class="absolute z-50 mt-2 bg-base-100 border rounded shadow-lg p-2 w-80 hidden" style="max-height: 320px; overflow-y: auto;">
-                                    <input type="text" id="consumables-icon-search" class="input input-bordered input-sm w-full mb-2" placeholder="Icon suchen..." oninput="filterIcons('consumables')">
-                                    <div id="consumables-icon-grid" class="grid grid-cols-5 gap-2" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tickets -->
-                    <div class="card bg-base-200">
-                        <div class="card-body">
-                            <h3 class="text-lg font-semibold mb-4">{{ app_labels.tickets.name }}</h3>
-                            <div class="form-control mb-4">
-                                <label class="label">
-                                    <span class="label-text">Name</span>
-                                </label>
-                                <input type="text" name="label_tickets_name" class="input input-bordered" value="{{ app_labels['tickets']['name'] }}" placeholder="z.B. Tickets, Aufgaben, Anfragen">
-                            </div>
-                            <div class="form-control relative">
-                                <label class="label flex items-center gap-2">
-                                    <span class="label-text">Icon</span>
-                                </label>
-                                <input type="hidden" name="label_tickets_icon" id="tickets-icon-input" value="{{ app_labels['tickets']['icon'] }}">
-                                <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tickets')">
-                                    <span><i id="tickets-icon-preview" class="{{ app_labels['tickets']['icon'] }} text-xl"></i></span>
                                     <span class="ml-2">Icon wählen</span>
                                     <i class="fas fa-chevron-down ml-auto"></i>
                                 </button>

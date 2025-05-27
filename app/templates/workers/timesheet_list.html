@@ -3,7 +3,7 @@
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-2xl font-bold mb-6">Wochenberichte</h1>
 
-    <div class="mb-4">
+    <div class="mb-4 flex flex-col md:flex-row gap-4 items-start md:items-center">
         <a href="{{ url_for('workers.timesheet_create') }}" class="btn btn-primary">Neuen Wochenbericht anlegen</a>
     </div>
 
@@ -66,9 +66,16 @@
                     <td>{{ ts.year }}</td>
                     <td>{{ ts.kw }}</td>
                     <td>
+                        {% set week_start = namespace(dt=None) %}
+                        {% set week_start.dt = datetime(ts.year, 1, 1) %}
+                        {% set week_start.dt = week_start.dt + timedelta(days=(ts.kw - 1) * 7 - week_start.dt.isoweekday() + 1) %}
                         {% for day in ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag'] %}
-                            {% set filled = ts[day ~ '_start'] or ts[day ~ '_end'] or ts[day ~ '_tasks'] %}
-                            <span class="badge {{ 'badge-success' if filled else 'badge-outline' }} text-xs">{{ day[0]|upper }}{% if filled %}✔{% else %}–{% endif %}</span>
+                            {% set day_date = week_start.dt + timedelta(days=loop.index0) %}
+                            {% set has_times = ts[day ~ '_start'] or ts[day ~ '_end'] %}
+                            {% set has_tasks = ts[day ~ '_tasks'] %}
+                            {% set is_past_day = day_date.date() < today.date() %}
+                            {% set badge_class = 'badge-success' if has_times and has_tasks else 'badge-error' if is_past_day else 'badge-outline' %}
+                            <span class="badge {{ badge_class }} text-xs">{{ day[0]|upper }}{% if has_times and has_tasks %}✔{% elif has_times or has_tasks %}!{% else %}–{% endif %}</span>
                         {% endfor %}
                         <span class="text-xs text-gray-500 ml-2">({{ ts.filled_days }}/5)</span>
                     </td>
