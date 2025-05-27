@@ -24,6 +24,7 @@ from app.config import Config
 from app.routes import init_app
 import sqlite3
 from app.utils.schema_validator import validate_and_migrate_databases
+from app.utils.migrations import migrate_categories
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -336,5 +337,9 @@ def create_app(test_config=None):
             },
             'unfilled_timesheet_days': unfilled_days
         }
+
+    # Führe die Migrationen aus
+    with app.app_context():
+        migrate_categories()
 
     return app

@@ -1631,118 +1631,82 @@ def delete_location():
 @login_required
 @mitarbeiter_required
 def list_categories():
-    """Listet alle Kategorien auf"""
+    """Listet alle Kategorien auf."""
     try:
+        category_type = request.args.get('type', 'ticket')
         with Database.get_db() as conn:
             categories = conn.execute('''
-                SELECT name
-                FROM categories
-                WHERE deleted = 0
+                SELECT name 
+                FROM categories 
+                WHERE deleted = 0 
+                AND type = ?
                 ORDER BY name
-            ''').fetchall()
-            
-            return jsonify({
-                'success': True,
-                'categories': [{'name': c['name']} for c in categories]
-            })
+            ''', [category_type]).fetchall()
+            categories = [{'name': c[0]} for c in categories]
+        return jsonify({'success': True, 'categories': categories})
     except Exception as e:
         logger.error(f"Fehler beim Laden der Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Kategorien'
-        }), 500
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'})
 
 @bp.route('/categories/add', methods=['POST'])
 @login_required
 @mitarbeiter_required
 def add_category():
-    """Fügt eine neue Kategorie hinzu"""
+    """Fügt eine neue Kategorie hinzu."""
     try:
-        name = request.form.get('category', '').strip()
+        data = request.get_json()
+        name = data.get('name')
+        category_type = data.get('type', 'ticket')
+        
         if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein'
-            }), 400
+            return jsonify({'success': False, 'message': 'Kategoriename ist erforderlich'})
             
         with Database.get_db() as conn:
             # Prüfe ob die Kategorie bereits existiert
             existing = conn.execute('''
                 SELECT 1 FROM categories 
-                WHERE name = ? AND deleted = 0
-            ''', [name]).fetchone()
+                WHERE name = ? AND type = ? AND deleted = 0
+            ''', [name, category_type]).fetchone()
             
             if existing:
-                return jsonify({
-                    'success': False,
-                    'message': 'Diese Kategorie existiert bereits'
-                }), 400
+                return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits'})
                 
             # Füge die neue Kategorie hinzu
             conn.execute('''
-                INSERT INTO categories (name)
-                VALUES (?)
-            ''', [name])
-            conn.commit()
+                INSERT INTO categories (name, type, created_at, updated_at)
+                VALUES (?, ?, datetime('now'), datetime('now'))
+            ''', [name, category_type])
             
-            return jsonify({
-                'success': True,
-                'message': 'Kategorie erfolgreich hinzugefügt'
-            })
+        return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Hinzufügen der Kategorie'
-        }), 500
+        return jsonify({'success': False, 'message': 'Fehler beim Hinzufügen der Kategorie'})
 
 @bp.route('/categories/delete', methods=['POST'])
 @login_required
 @mitarbeiter_required
 def delete_category():
-    """Löscht eine Kategorie"""
+    """Löscht eine Kategorie (soft delete)."""
     try:
         data = request.get_json()
         name = data.get('name')
+        category_type = data.get('type', 'ticket')
         
         if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Kein Name angegeben'
-            }), 400
+            return jsonify({'success': False, 'message': 'Kategoriename ist erforderlich'})
             
         with Database.get_db() as conn:
-            # Prüfe ob die Kategorie noch verwendet wird
-            in_use = conn.execute('''
-                SELECT COUNT(*) as count 
-                FROM tools 
-                WHERE category = ? AND deleted = 0
-            ''', [name]).fetchone()
-            
-            if in_use['count'] > 0:
-                return jsonify({
-                    'success': False,
-                    'message': f'Diese Kategorie wird noch von {in_use["count"]} Werkzeugen verwendet'
-                }), 409
-                
-            # Führe ein Soft-Delete durch
+            # Soft delete der Kategorie
             conn.execute('''
                 UPDATE categories 
-                SET deleted = 1, deleted_at = CURRENT_TIMESTAMP
-                WHERE name = ?
-            ''', [name])
-            conn.commit()
+                SET deleted = 1, updated_at = datetime('now')
+                WHERE name = ? AND type = ?
+            ''', [name, category_type])
             
-            return jsonify({
-                'success': True,
-                'message': 'Kategorie erfolgreich gelöscht'
-            })
+        return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Löschen der Kategorie'
-        }), 500
+        return jsonify({'success': False, 'message': 'Fehler beim Löschen der Kategorie'})
 
 @bp.route('/cleanup-database', methods=['POST'])
 @admin_required
