@@ -2032,6 +2032,7 @@ def delete_notice(id):
 @admin_required
 def tickets():
     from app.models.ticket_db import TicketDatabase
+    from app.models.database import Database
     ticket_db = TicketDatabase()
     
     # Filter aus Query-Parametern
@@ -2078,7 +2079,20 @@ def tickets():
             except (ValueError, TypeError):
                 ticket['due_date'] = None
     
-    return render_template('tickets/index.html', tickets=tickets, now=datetime.now())
+    # Hole alle Kategorien aus der Tabelle 'categories'
+    with Database.get_db() as conn:
+        categories = conn.execute('''
+            SELECT name 
+            FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
+        ''').fetchall()
+        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
+    
+    return render_template('tickets/index.html', 
+                         tickets=tickets, 
+                         now=datetime.now(),
+                         categories=categories)
 
 @bp.route('/system', methods=['GET', 'POST'])
 @login_required
@@ -2504,9 +2518,6 @@ def delete_worker_permanent(barcode):
 @admin_required
 def ticket_detail(ticket_id):
     """Zeigt die Details eines Tickets für Administratoren."""
-    print(f"DEBUG: Ticket-Detail-Ansicht für Ticket {ticket_id} wird geladen")
-    
-    # Hole das Ticket
     ticket = ticket_db.query(
         """
         SELECT *
@@ -2518,13 +2529,9 @@ def ticket_detail(ticket_id):
     )
     
     if not ticket:
-        print(f"DEBUG: Ticket {ticket_id} nicht gefunden")
-        flash('Ticket nicht gefunden', 'error')
-        return redirect(url_for('admin.tickets'))
-    
-    print(f"DEBUG: Ticket gefunden: {ticket}")
-    
-    # Konvertiere Datumsfelder
+        return render_template('404.html'), 404
+        
+    # Konvertiere alle Datumsfelder zu datetime-Objekten
     date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
     for field in date_fields:
         if ticket.get(field):
@@ -2532,42 +2539,49 @@ def ticket_detail(ticket_id):
                 ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
             except (ValueError, TypeError):
                 ticket[field] = None
-    
+        
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
-    print(f"DEBUG: Gefundene Notizen: {notes}")
-    
+
     # Hole die Nachrichten für das Ticket
     messages = ticket_db.get_ticket_messages(ticket_id)
-    print(f"DEBUG: Gefundene Nachrichten: {messages}")
+
+    # Hole die Auftragsdetails
+    auftrag_details = ticket_db.get_auftrag_details(ticket_id)
+    logging.info(f"DEBUG: auftrag_details für Ticket {ticket_id}: {auftrag_details}")
     
-    # Hole die Historie des Tickets
-    history = ticket_db.get_ticket_history(ticket_id)
-    print(f"DEBUG: Gefundene Historie: {history}")
-    
-    # Hole alle Benutzer für die Zuweisung
-    users = get_all_users()
-    
-    # Hole die Kategorien aus der Datenbank
-    categories = get_categories()
-    
-    # Definiere die Status-Farben
-    status_colors = {
-        'offen': 'danger',
-        'in_bearbeitung': 'warning',
-        'wartet_auf_antwort': 'info',
-        'gelöst': 'success',
-        'geschlossen': 'secondary'
-    }
-    
-    return render_template('admin/ticket_detail.html',
-                         ticket=ticket,
+    # Hole die Materialliste
+    material_list = ticket_db.get_auftrag_material(ticket_id)
+
+    # Hole alle Mitarbeiter aus der Hauptdatenbank
+    with Database.get_db() as db:
+        workers = db.execute(
+            """
+            SELECT username, username as name
+            FROM users
+            WHERE is_active = 1
+            ORDER BY username
+            """
+        ).fetchall()
+        
+        # Hole alle Kategorien
+        categories = db.execute('''
+            SELECT name 
+            FROM categories 
+            WHERE deleted = 0 
+            ORDER BY name
+        ''').fetchall()
+        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
+
+    return render_template('tickets/detail.html', 
+                         ticket=ticket, 
                          notes=notes,
                          messages=messages,
-                         history=history,
-                         users=users,
+                         workers=workers,
+                         auftrag_details=auftrag_details,
+                         material_list=material_list,
                          categories=categories,
-                         status_colors=status_colors)
+                         now=datetime.now())
 
 @bp.route('/tickets/<int:ticket_id>/message', methods=['POST'])
 @login_required
@@ -2704,6 +2718,8 @@ def add_ticket_note(ticket_id):
                 [ticket_id, current_user.username, note.strip()]
             )
             new_note = cursor.fetchone()
+            columns = [col[0] for col in cursor.description]
+            new_note_dict = dict(zip(columns, new_note))
 
             if not new_note:
                 print("DEBUG: Fehler beim Abrufen der neuen Notiz")
@@ -2712,17 +2728,11 @@ def add_ticket_note(ticket_id):
                     'message': 'Fehler beim Abrufen der Notiz'
                 }), 500
 
-            print(f"DEBUG: Notiz erfolgreich hinzugefügt: {new_note}")
+            print(f"DEBUG: Notiz erfolgreich hinzugefügt: {new_note_dict}")
             return jsonify({
                 'success': True,
                 'message': 'Notiz wurde gespeichert',
-                'note': {
-                    'id': new_note['id'],
-                    'note': new_note['note'],
-                    'created_by': new_note['created_by'],
-                    'is_private': 0,
-                    'created_at': new_note['created_at']
-                }
+                'note': new_note_dict
             })
 
     except Exception as e:

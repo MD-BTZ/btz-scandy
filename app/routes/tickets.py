@@ -139,7 +139,8 @@ def create():
         SELECT t.*, COUNT(tm.id) as message_count
         FROM tickets t
         LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE (t.assigned_to IS NULL OR t.assigned_to = '') AND t.status != 'geschlossen'
+        WHERE (t.assigned_to IS NULL OR t.assigned_to = '') 
+        AND t.status = 'offen'
         GROUP BY t.id
         ORDER BY t.created_at DESC
         """
