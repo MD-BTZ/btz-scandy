@@ -268,4 +268,49 @@ else
     echo -e "${YELLOW}Container-Logs:${NC}"
     docker logs "$CONTAINER_NAME"
     exit 1
-fi 
+fi
+
+# Aktualisiere das System
+echo "Aktualisiere das System..."
+sudo apt-get update
+sudo apt-get upgrade -y
+
+# Installiere die benötigten Pakete
+echo "Installiere benötigte Pakete..."
+sudo apt-get install -y python3-pip python3-venv nginx
+
+# Erstelle ein virtuelles Python-Environment
+echo "Erstelle Python-Environment..."
+python3 -m venv venv
+source venv/bin/activate
+
+# Installiere die Python-Abhängigkeiten
+echo "Installiere Python-Abhängigkeiten..."
+pip install -r requirements.txt
+
+# Erstelle das Datenbankverzeichnis und setze Berechtigungen
+echo "Erstelle Datenbankverzeichnis..."
+sudo mkdir -p /app/app/database
+sudo chown -R $USER:$USER /app/app/database
+sudo chmod -R 755 /app/app/database
+
+# Kopiere die Nginx-Konfiguration
+echo "Konfiguriere Nginx..."
+sudo cp nginx/scandy2 /etc/nginx/sites-available/
+sudo ln -sf /etc/nginx/sites-available/scandy2 /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Erstelle den Systemd-Service
+echo "Erstelle Systemd-Service..."
+sudo cp systemd/scandy2.service /etc/systemd/system/
+
+# Lade die Systemd-Konfiguration neu
+sudo systemctl daemon-reload
+
+# Starte die Dienste
+echo "Starte Dienste..."
+sudo systemctl start scandy2
+sudo systemctl enable scandy2
+sudo systemctl restart nginx
+
+echo "Installation abgeschlossen!" 

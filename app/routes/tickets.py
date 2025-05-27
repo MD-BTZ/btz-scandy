@@ -242,6 +242,8 @@ def view(ticket_id):
                          notes=notes,
                          message_count=message_count,
                          workers=workers,
+                         is_admin=current_user.is_admin,
+                         is_mitarbeiter=current_user.is_mitarbeiter,
                          now=datetime.now())
 
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
