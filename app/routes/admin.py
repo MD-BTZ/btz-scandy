@@ -2335,7 +2335,7 @@ def delete_user(user_id):
         return redirect(url_for('admin.manage_users'))
 
     try:
-        Database.query('''
+        ticket_db.query('''
             DELETE FROM users
             WHERE id = ?
         ''', [user_id])

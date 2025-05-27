@@ -193,7 +193,7 @@
             {% if current_user.is_admin %}
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <button class="btn btn-error w-full" onclick="deleteTicket({{ ticket.id }})">
+                    <button class="btn btn-error w-full" onclick="deleteTicket('{{ ticket.id }}')">
                         <i class="fas fa-trash mr-2"></i> Auftrag löschen
                     </button>
                 </div>

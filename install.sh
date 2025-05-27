@@ -9,6 +9,14 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Prüfe ob das Skript mit sudo ausgeführt wird
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}Dieses Skript muss mit sudo ausgeführt werden.${NC}"
+    echo "Bitte führen Sie das Skript erneut mit sudo aus:"
+    echo "sudo $0"
+    exit 1
+fi
+
 # Funktion zur Überprüfung, ob ein Befehl existiert
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -187,9 +195,11 @@ RUN pip install --no-cache-dir -r requirements.txt docker
 # Installiere und baue CSS
 RUN npm install && npm run build:css
 
-# Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/database /app/uploads /app/backups /app/logs /app/tmp
-RUN chmod -R 777 /app/database /app/uploads /app/backups /app/logs /app/tmp
+# Erstelle notwendige Verzeichnisse und setze Berechtigungen
+RUN mkdir -p /app/database /app/uploads /app/backups /app/logs /app/tmp && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app && \
+    chmod -R 777 /app/database /app/uploads /app/backups /app/logs /app/tmp
 
 # Setze Berechtigungen für das Update-Skript
 RUN chmod +x /app/update.sh
@@ -199,73 +209,21 @@ USER appuser
 
 EXPOSE 5000
 
-# Starte Gunicorn mit mehreren Workers
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--reload", "--reload-extra-file", "tmp/needs_restart", "--log-level", "debug", "app.wsgi:application"]
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"]
 EOL
 
-# Erstelle .env Datei
-cat > .env << EOL
-FLASK_APP=app
-FLASK_ENV=development
-FLASK_DEBUG=1
-SYSTEM_NAME=Scandy
-TICKET_SYSTEM_NAME=Aufgaben
-TOOL_SYSTEM_NAME=Werkzeuge
-CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
-CONTAINER_NAME=${CONTAINER_NAME}
-TZ=Europe/Berlin
-EOL
-
-# Erstelle Verzeichnisse
+# Erstelle Verzeichnisse und setze Berechtigungen
 mkdir -p database uploads backups logs
+chmod -R 777 database uploads backups logs
 
-# Erstelle .dockerignore
-cat > .dockerignore << EOL
-.git
-.gitignore
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.env
-*.log
-database/
-uploads/
-backups/
-logs/
-tmp/
-EOL
+# Setze Berechtigungen für die Dateien
+chmod 644 docker-compose.yml Dockerfile
 
-# Baue und starte die Container
-echo -e "${GREEN}Baue und starte die Container...${NC}"
-docker compose build --no-cache
-docker compose up -d
+# Baue und starte den Container
+echo -e "${GREEN}Baue und starte den Container...${NC}"
+docker compose up -d --build
 
-# Warte auf Container-Start
-echo -e "${GREEN}Warte auf Container-Start...${NC}"
-sleep 10
-
-# Prüfe Container-Status
-if docker ps | grep -q "$CONTAINER_NAME"; then
-    echo -e "${GREEN}----------------------------------------${NC}"
-    echo -e "${GREEN}Installation erfolgreich abgeschlossen!${NC}"
-    echo -e "${GREEN}Die Anwendung ist unter http://localhost:${PORT} erreichbar${NC}"
-    echo -e "${GREEN}Container-Name: ${CONTAINER_NAME}${NC}"
-    echo -e "${GREEN}----------------------------------------${NC}"
-    
-    # Zeige Container-Logs
-    echo -e "${YELLOW}Container-Logs:${NC}"
-    docker logs "$CONTAINER_NAME" --tail 20
-    
-    # Zeige Container-Status
-    echo -e "${YELLOW}Container-Status:${NC}"
-    docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_NAME"
-else
-    echo -e "${RED}Fehler: Container konnte nicht gestartet werden.${NC}"
-    echo -e "${YELLOW}Container-Logs:${NC}"
-    docker logs "$CONTAINER_NAME"
-    exit 1
-fi 
+echo -e "${GREEN}Installation abgeschlossen!${NC}"
+echo -e "Die Anwendung ist unter http://localhost:${PORT} erreichbar"
+echo -e "Container-Name: ${CONTAINER_NAME}"
+echo -e "Port: ${PORT}" 
