@@ -146,15 +146,9 @@ def create():
         """
     )
     
-    # Hole alle Kategorien aus der Tabelle 'categories'
-    with Database.get_db() as conn:
-        categories = conn.execute('''
-            SELECT name 
-            FROM categories 
-            WHERE deleted = 0 
-            ORDER BY name
-        ''').fetchall()
-        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
+    # Hole alle Kategorien aus der ticket_categories Tabelle
+    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = [c['name'] for c in categories]
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
@@ -336,22 +330,24 @@ def detail(id):
     # Hole die Materialliste
     material_list = ticket_db.get_auftrag_material(id)
 
-    # Hole alle Mitarbeiter aus der Hauptdatenbank
+    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
     with Database.get_db() as db:
-        workers = db.execute(
+        users = db.execute(
             """
-            SELECT username, username as name
-            FROM users
-            WHERE is_active = 1
-            ORDER BY username
+            SELECT username FROM users WHERE is_active = 1 ORDER BY username
             """
         ).fetchall()
+        users = [dict(row) for row in users]
+
+    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+    assigned_users = ticket_db.get_ticket_assignments(id)
 
     return render_template('tickets/detail.html', 
                          ticket=ticket, 
                          notes=notes,
                          messages=messages,
-                         workers=workers,
+                         users=users,
+                         assigned_users=assigned_users,
                          auftrag_details=auftrag_details,
                          material_list=material_list,
                          now=datetime.now())
@@ -524,22 +520,14 @@ def update_assignment(id):
 
         data = request.get_json()
         assigned_to = data.get('assigned_to')
-        
-        # Hole das aktuelle Ticket
-        ticket = ticket_db.get_ticket(id)
-        if not ticket:
-            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        if isinstance(assigned_to, str):
+            # Falls nur ein Nutzer ausgewählt wurde, kommt ein String, sonst Liste
+            assigned_to = [assigned_to] if assigned_to else []
+        elif assigned_to is None:
+            assigned_to = []
 
-        # Aktualisiere die Zuweisung und behalte die anderen Werte bei
-        ticket_db.update_ticket(
-            id=id,
-            status=ticket['status'],  # Behalte den aktuellen Status bei
-            assigned_to=assigned_to,
-            category=ticket['category'],  # Behalte die aktuelle Kategorie bei
-            due_date=ticket['due_date'],  # Behalte das aktuelle Fälligkeitsdatum bei
-            estimated_time=ticket['estimated_time'],  # Behalte die aktuelle geschätzte Zeit bei
-            last_modified_by=current_user.username
-        )
+        # Aktualisiere die Zuweisungen in ticket_assignments
+        ticket_db.set_ticket_assignments(id, assigned_to)
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
 
@@ -812,4 +800,33 @@ def debug_auftrag_details(ticket_id):
             [ticket_id],
             one=True
         )
-    }) 
+    })
+
+@bp.route('/<int:id>/note', methods=['POST'])
+@login_required
+@admin_required
+def add_note(id):
+    """Fügt eine neue Notiz zu einem Ticket hinzu"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        note = data.get('note')
+        
+        if not note or not note.strip():
+            return jsonify({'success': False, 'message': 'Notiz ist erforderlich'}), 400
+
+        # Füge die Notiz hinzu
+        ticket_db.add_note(
+            ticket_id=id,
+            note=note.strip(),
+            author_name=current_user.username,
+            is_private=False  # Alle Notizen sind öffentlich
+        )
+
+        return jsonify({'success': True, 'message': 'Notiz wurde gespeichert'})
+
+    except Exception as e:
+        logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500 

@@ -80,4 +80,12 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
     FOREIGN KEY (sender) REFERENCES users (username)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_assignments (
+    ticket_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    PRIMARY KEY (ticket_id, username),
+    FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
+    FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE
 ); 

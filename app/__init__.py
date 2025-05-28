@@ -4,7 +4,7 @@ from .constants import Routes
 from app.config.version import VERSION
 import os
 from datetime import datetime, timedelta
-from app.utils.filters import register_filters
+from app.utils.filters import register_filters, status_color, priority_color
 import logging
 from app.models.database import Database
 from app.utils.error_handler import handle_errors
@@ -24,7 +24,6 @@ from app.config import Config
 from app.routes import init_app
 import sqlite3
 from app.utils.schema_validator import validate_and_migrate_databases
-from app.utils.migrations import migrate_categories
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -257,6 +256,10 @@ def create_app(test_config=None):
     # Filter registrieren
     register_filters(app)
     
+    # Register custom filters
+    app.jinja_env.filters['status_color'] = status_color
+    app.jinja_env.filters['priority_color'] = priority_color
+    
     # Komprimierung aktivieren
     Compress(app)
     
@@ -337,9 +340,5 @@ def create_app(test_config=None):
             },
             'unfilled_timesheet_days': unfilled_days
         }
-
-    # Führe die Migrationen aus
-    with app.app_context():
-        migrate_categories()
 
     return app

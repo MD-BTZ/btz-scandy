@@ -2,91 +2,104 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold">Aufträge Übersicht</h1>
-        <div class="flex flex-wrap gap-4 items-center">
-            <div class="form-control w-auto">
-                <select id="statusFilter" class="select select-bordered w-full">
-                    <option value="">Alle Status</option>
-                    <option value="offen">Offen</option>
-                    <option value="in_bearbeitung">In Bearbeitung</option>
-                    <option value="wartet_auf_antwort">Wartet auf Antwort</option>
-                    <option value="gelöst">Gelöst</option>
-                    <option value="geschlossen">Geschlossen</option>
-                </select>
-            </div>
-            <div class="form-control w-auto">
-                <select id="priorityFilter" class="select select-bordered w-full">
-                    <option value="">Alle Prioritäten</option>
-                    <option value="niedrig">Niedrig</option>
-                    <option value="normal">Normal</option>
-                    <option value="hoch">Hoch</option>
-                    <option value="dringend">Dringend</option>
-                </select>
-            </div>
-            <div class="form-control w-auto">
-                <input type="text" id="searchInput" placeholder="Suchen..." class="input input-bordered w-full">
+    <div style="display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap;">
+        <!-- Linke Card: Ticket-Liste (breiter) -->
+        <div style="flex: 2 2 0%; min-width: 0;">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Tickets</h2>
+                    <!-- Filter-Bereich -->
+                    <div class="flex flex-col md:flex-row gap-2 mb-4">
+                        <select class="select select-bordered w-full max-w-xs" id="statusFilter">
+                            <option value="alle">Alle Status</option>
+                            <option value="offen">Offen</option>
+                            <option value="in_bearbeitung">In Bearbeitung</option>
+                            <option value="geschlossen">Geschlossen</option>
+                        </select>
+                        <select class="select select-bordered w-full max-w-xs" id="priorityFilter">
+                            <option value="alle">Alle Prioritäten</option>
+                            <option value="niedrig">Niedrig</option>
+                            <option value="mittel">Mittel</option>
+                            <option value="hoch">Hoch</option>
+                        </select>
+                        <input type="text" class="input input-bordered w-full max-w-xs" id="searchInput" placeholder="Suche...">
+                    </div>
+                    <!-- Ticket-Tabelle -->
+                    <div class="overflow-x-auto w-full">
+                        <table class="table table-zebra w-full">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Titel</th>
+                                    <th>Status</th>
+                                    <th>Priorität</th>
+                                    <th>Erstellt</th>
+                                    <th class="text-right">Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ticket in tickets %}
+                                <tr class="hover data-row ticket-row"
+                                    data-status="{{ ticket.status }}"
+                                    data-priority="{{ ticket.priority }}">
+                                    <td><div class="badge badge-outline">{{ ticket.id }}</div></td>
+                                    <td>
+                                        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover font-medium">
+                                            {{ ticket.title }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <div class="badge badge-{{ ticket.status|status_color }} gap-1">{{ ticket.status }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="badge badge-{{ ticket.priority|priority_color }} gap-1">{{ ticket.priority }}</div>
+                                    </td>
+                                    <td>{{ ticket.created_at }}</td>
+                                    <td class="text-right">
+                                        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-
-    <div class="overflow-x-auto">
-        <table class="table w-full">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Titel</th>
-                    <th>Status</th>
-                    <th>Priorität</th>
-                    <th>Erstellt von</th>
-                    <th>Zugewiesen an</th>
-                    <th>Erstellt am</th>
-                    <th>Aktionen</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ticket in tickets %}
-                <tr class="ticket-row" 
-                    data-status="{{ ticket.status }}"
-                    data-priority="{{ ticket.priority }}"
-                    data-title="{{ ticket.title }}"
-                    data-created-by="{{ ticket.created_by }}"
-                    data-assigned-to="{{ ticket.assigned_to or 'Nicht zugewiesen' }}">
-                    <td>{{ ticket.id }}</td>
-                    <td>
-                        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover">
-                            {{ ticket.title }}
-                        </a>
-                    </td>
-                    <td>
-                        <span class="badge badge-{{ status_colors[ticket.status] }}">
-                            {{ ticket.status }}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge badge-{{ priority_colors[ticket.priority] }}">
-                            {{ ticket.priority }}
-                        </span>
-                    </td>
-                    <td>{{ ticket.created_by }}</td>
-                    <td>{{ ticket.assigned_to or 'Nicht zugewiesen' }}</td>
-                    <td>{{ ticket.created_at }}</td>
-                    <td>
-                        <div class="flex gap-2">
-                            <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" 
-                               class="btn btn-sm btn-primary">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                            <button class="btn btn-sm btn-error" 
-                                    onclick="deleteTicket({{ ticket.id }})">
-                                <i class="fas fa-trash"></i>
+        <!-- Rechte Card: Kategorieverwaltung (noch breiter, Buttons mit vertikalem Abstand) -->
+        <div style="max-width:440px; width:100%; align-self: flex-start;" class="flex-shrink-0">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Ticket-Kategorien verwalten</h2>
+                    <div class="mb-3">
+                        <h6 class="mb-2">Bestehende Kategorien:</h6>
+                        <ul class="list-group list-group-flush">
+                            {% for category in categories %}
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center" style="display: flex; justify-content: space-between; align-items: center; min-height: 48px; line-height: 1.6;">
+                                <span class="text-start">{{ category }}</span>
+                                <form action="{{ url_for('admin.delete_ticket_category', category=category) }}" method="POST" class="d-inline" style="margin-left: auto;">
+                                    <button type="submit" class="btn btn-sm" style="color: #fff; background: #dc2626; border: none; min-width: 36px; margin-left: 16px; padding-top: 8px; padding-bottom: 8px;" title="Löschen">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <form action="{{ url_for('admin.add_ticket_category') }}" method="POST" class="mt-4">
+                        <label for="newCategory" class="form-label">Neue Kategorie:</label>
+                        <div class="input-group" style="width: 100%;">
+                            <input type="text" class="input input-bordered" style="flex:1 1 0%; min-width:0;" id="newCategory" name="category" required placeholder="Kategorie eingeben">
+                            <button type="submit" class="btn btn-primary" style="margin-left: 8px;">
+                                <i class="fas fa-plus"></i> Hinzufügen
                             </button>
                         </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -94,69 +107,33 @@
 {% block scripts %}
 {{ super() }}
 <script>
-// Filter-Funktionalität
-const statusFilter = document.getElementById('statusFilter');
-const priorityFilter = document.getElementById('priorityFilter');
-const searchInput = document.getElementById('searchInput');
-const tableRows = document.querySelectorAll('.ticket-row');
+document.addEventListener('DOMContentLoaded', function() {
+    const statusFilter = document.getElementById('statusFilter');
+    const priorityFilter = document.getElementById('priorityFilter');
+    const searchInput = document.getElementById('searchInput');
+    const ticketRows = document.querySelectorAll('.ticket-row');
 
-function applyFilters() {
-    const statusValue = statusFilter.value.toLowerCase();
-    const priorityValue = priorityFilter.value.toLowerCase();
-    const searchValue = searchInput.value.toLowerCase();
+    function filterTickets() {
+        const statusValue = statusFilter.value;
+        const priorityValue = priorityFilter.value;
+        const searchValue = searchInput.value.toLowerCase();
 
-    tableRows.forEach(row => {
-        const status = row.dataset.status.toLowerCase();
-        const priority = row.dataset.priority.toLowerCase();
-        const title = row.dataset.title.toLowerCase();
-        const createdBy = row.dataset.createdBy.toLowerCase();
-        const assignedTo = row.dataset.assignedTo.toLowerCase();
+        ticketRows.forEach(row => {
+            const status = row.dataset.status;
+            const priority = row.dataset.priority;
+            const text = row.textContent.toLowerCase();
 
-        const statusMatch = !statusValue || status === statusValue;
-        const priorityMatch = !priorityValue || priority === priorityValue;
-        const searchMatch = !searchValue || 
-            title.includes(searchValue) || 
-            createdBy.includes(searchValue) || 
-            assignedTo.includes(searchValue);
+            const statusMatch = statusValue === 'alle' || status === statusValue;
+            const priorityMatch = priorityValue === 'alle' || priority === priorityValue;
+            const searchMatch = text.includes(searchValue);
 
-        row.style.display = statusMatch && priorityMatch && searchMatch ? '' : 'none';
-    });
-}
-
-// Event-Listener für Filter
-statusFilter.addEventListener('change', applyFilters);
-priorityFilter.addEventListener('change', applyFilters);
-searchInput.addEventListener('input', applyFilters);
-
-// Initial Filter anwenden
-applyFilters();
-
-// Lösch-Funktionalität
-function deleteTicket(ticketId) {
-    if (confirm('Möchten Sie dieses {{ ticket_system_name }} wirklich löschen?')) {
-        fetch(`/admin/tickets/${ticketId}/delete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Entferne die Zeile aus der Tabelle
-                const row = document.querySelector(`tr[data-ticket-id="${ticketId}"]`);
-                if (row) {
-                    row.remove();
-                }
-            } else {
-                alert(data.message || 'Fehler beim Löschen des {{ ticket_system_name }}s');
-            }
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            alert('Ein Fehler ist aufgetreten');
+            row.style.display = statusMatch && priorityMatch && searchMatch ? '' : 'none';
         });
     }
-}
+
+    statusFilter.addEventListener('change', filterTickets);
+    priorityFilter.addEventListener('change', filterTickets);
+    searchInput.addEventListener('input', filterTickets);
+});
 </script>
 {% endblock %} 

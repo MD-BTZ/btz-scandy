@@ -33,27 +33,9 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <input type="text" id="categoryInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.category or '' }}" 
-                                   onchange="updateTicketCategory(this.value)"
-                                   placeholder="Kategorie eingeben">
+                            <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
-                                   onchange="updateTicketDueDate(this.value)">
-                            <div>
-                                <p class="text-sm opacity-70">Geschätzte Zeit</p>
-                                <div class="flex items-center gap-2">
-                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                           value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
-                                           onchange="updateTicketEstimatedTime(this.value)"
-                                           min="0" step="1">
-                                    <span class="text-sm opacity-70">Minuten</span>
-                                </div>
-                                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
-                                    <i class="fas fa-save mr-2"></i>Speichern
-                                </button>
-                            </div>
+                            <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
                         </div>
                     </div>
                     <div class="divider"></div>
@@ -61,44 +43,6 @@
                         <h3 class="font-bold mb-2">Beschreibung:</h3>
                         <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
                     </div>
-                    {% if auftrag_details %}
-                    <div class="divider"></div>
-                    <div>
-                        <h3 class="font-bold mb-2">Auftragsdetails:</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <p class="text-sm opacity-70">Bereich</p>
-                                <p>{{ auftrag_details.bereich or 'Nicht angegeben' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Auftraggeber</p>
-                                <p>
-                                    {% if auftrag_details.auftraggeber_intern %}
-                                        Intern
-                                    {% elif auftrag_details.auftraggeber_extern %}
-                                        Extern: {{ auftrag_details.auftraggeber_name }}
-                                    {% else %}
-                                        Nicht angegeben
-                                    {% endif %}
-                                </p>
-                                <p class="text-sm opacity-70 mt-2">Kontakt</p>
-                                <p>{{ auftrag_details.kontakt or 'Nicht angegeben' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-sm opacity-70">Fertigstellungstermin</p>
-                                <p>{{ auftrag_details.fertigstellungstermin or 'Nicht gesetzt' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden</p>
-                                <p>{{ auftrag_details.arbeitsstunden or 'Nicht angegeben' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Leistungskategorie</p>
-                                <p>{{ auftrag_details.leistungskategorie or 'Nicht angegeben' }}</p>
-                            </div>
-                        </div>
-                        {% if auftrag_details.ausgefuehrte_arbeiten %}
-                        <div class="mt-4">
-                            <p class="text-sm opacity-70">Ausgeführte Arbeiten</p>
-                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
                 </div>
             </div>
 
@@ -142,39 +86,17 @@
 
         <!-- Rechte Spalte -->
         <div class="lg:col-span-1">
-            <!-- Auftrag Status -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h3 class="card-title mb-4">Auftrag Status</h3>
+                    <h3 class="card-title mb-4">Ticket Details</h3>
                     <div class="space-y-4">
                         <div>
                             <p class="text-sm opacity-70">Status</p>
-                            {% if current_user.is_admin or current_user.is_worker %}
-                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
-                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
-                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
-                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
-                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
-                            </select>
-                            {% else %}
-                            <p class="font-medium">{{ ticket.status }}</p>
-                            {% endif %}
+                            <span class="font-medium">{{ ticket.status }}</span>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            {% if current_user.is_admin or current_user.is_worker %}
-                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                <option value="">Nicht zugewiesen</option>
-                                {% for worker in workers %}
-                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
-                                    {{ worker.username }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            {% else %}
-                            <p class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</p>
-                            {% endif %}
+                            <span class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</span>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -189,217 +111,7 @@
                     </div>
                 </div>
             </div>
-
-            {% if current_user.is_admin %}
-            <div class="card bg-base-100 shadow-xl mb-6">
-                <div class="card-body">
-                    <button class="btn btn-error w-full" onclick="deleteTicket('{{ ticket.id }}')">
-                        <i class="fas fa-trash mr-2"></i> Auftrag löschen
-                    </button>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Export-Button für Word-Dokument -->
-            <div class="card bg-base-100 shadow-xl mb-6">
-                <div class="card-body">
-                    <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="btn btn-accent w-full" target="_blank">
-                        <i class="fas fa-file-word mr-2"></i> Auftrag als Word exportieren
-                    </a>
-                </div>
-            </div>
-
-            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
-            {% if current_user.is_admin or current_user.is_worker %}
-            <div class="card bg-base-100 shadow-xl mb-6">
-                <div class="card-body">
-                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
-                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
-                    </button>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Modal Container -->
-            <div id="auftragDetailsModalContainer"></div>
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
-<script>
-document.getElementById('messageForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const data = {
-        message: formData.get('message')
-    };
-    
-    fetch(`/tickets/{{ ticket.id }}/message`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Nachricht erfolgreich gesendet
-            const messageInput = this.querySelector('textarea[name="message"]');
-            messageInput.value = ''; // Formular leeren
-            
-            // Neue Nachricht zur UI hinzufügen
-            const messagesContainer = document.querySelector('.messages-container');
-            const newMessage = document.createElement('div');
-            newMessage.className = 'chat chat-end';
-            
-            newMessage.innerHTML = `
-                <div class="chat-header">
-                    ${data.message.sender}
-                    <time class="text-xs opacity-50">${data.message.created_at}</time>
-                </div>
-                <div class="chat-bubble chat-bubble-primary">
-                    ${data.message.text}
-                </div>
-            `;
-            
-            messagesContainer.appendChild(newMessage);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        } else {
-            alert('Fehler beim Senden der Nachricht: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-});
-
-// Funktion zum Aktualisieren des Status
-function updateTicketStatus(status) {
-    fetch(`/tickets/{{ ticket.id }}/status`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: status })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Status-Badge aktualisieren
-            const statusBadge = document.querySelector('.badge');
-            statusBadge.className = `badge badge-${data.status_color}`;
-            statusBadge.textContent = status;
-        } else {
-            alert('Fehler beim Aktualisieren des Status: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-}
-
-// Funktion zum Aktualisieren der Zuweisung
-function updateTicketAssignment(username) {
-    fetch(`/tickets/{{ ticket.id }}/assignment`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ assigned_to: username })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Erfolgreich aktualisiert
-            console.log('Zuweisung aktualisiert');
-        } else {
-            alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-}
-
-// Funktion zum Löschen eines Tickets
-function deleteTicket(ticketId) {
-    if (confirm('Möchten Sie diesen Auftrag wirklich löschen?')) {
-        fetch(`/admin/tickets/${ticketId}/delete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = '/admin/tickets';
-            } else {
-                alert('Fehler beim Löschen des Auftrags: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            alert('Ein Fehler ist aufgetreten');
-        });
-    }
-}
-
-// Funktion zum Laden des Auftragsdetails-Modals
-function loadAuftragDetailsModal() {
-    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
-        .then(response => response.text())
-        .then(html => {
-            const modalContainer = document.getElementById('auftragDetailsModalContainer');
-            modalContainer.innerHTML = html;
-            const modal = document.getElementById('auftragDetailsModal');
-            if (modal) {
-                modal.showModal();
-            }
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            alert('Ein Fehler ist aufgetreten');
-        });
-}
-
-// Funktion zum Speichern der Ticket-Änderungen
-function saveTicketChanges() {
-    const category = document.getElementById('categoryInput').value;
-    const dueDate = document.getElementById('dueDateInput').value;
-    const estimatedTime = document.getElementById('estimatedTimeInput').value;
-
-    fetch(`/tickets/{{ ticket.id }}/update`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            category: category,
-            due_date: dueDate,
-            estimated_time: estimatedTime
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Änderungen erfolgreich gespeichert');
-        } else {
-            alert('Fehler beim Speichern der Änderungen: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-}
-</script>
 {% endblock %} 

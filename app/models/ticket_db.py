@@ -437,6 +437,18 @@ class TicketDatabase:
                 )
             ''')
             
+            # Ticket Assignments Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    username TEXT NOT NULL,
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                    UNIQUE(ticket_id, username)
+                )
+            ''')
+            
             conn.commit()
             logger.info("Datenbankschema erfolgreich initialisiert")
 
@@ -892,3 +904,39 @@ class TicketDatabase:
         except Exception as e:
             print(f"Migration konnte nicht ausgeführt werden: {e}")
         # ... bisheriger Code ... 
+
+    def get_ticket_assignments(self, ticket_id):
+        """Gibt alle zugewiesenen Benutzer für ein Ticket zurück."""
+        sql = "SELECT username FROM ticket_assignments WHERE ticket_id = ?"
+        return [row['username'] for row in self.query(sql, [ticket_id])]
+
+    def set_ticket_assignments(self, ticket_id, usernames):
+        """Setzt die Zuweisungen für ein Ticket (ersetzt alle bisherigen)."""
+        # Lösche alte Zuweisungen
+        self.delete_ticket_assignments(ticket_id)
+        # Füge neue Zuweisungen hinzu
+        for username in usernames:
+            self.query(
+                "INSERT INTO ticket_assignments (ticket_id, username) VALUES (?, ?)",
+                [ticket_id, username]
+            )
+
+    def delete_ticket_assignments(self, ticket_id):
+        """Löscht alle Zuweisungen für ein Ticket."""
+        self.query("DELETE FROM ticket_assignments WHERE ticket_id = ?", [ticket_id])
+
+    @staticmethod
+    def create_tables():
+        """Erstellt die notwendigen Tabellen, falls sie nicht existieren."""
+        with Database.get_db() as db:
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS ticket_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_id INTEGER NOT NULL,
+                    username TEXT NOT NULL,
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                    UNIQUE(ticket_id, username)
+                )
+            ''')
+            db.commit() 

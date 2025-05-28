@@ -259,16 +259,11 @@
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
-                    <i class="fas fa-tags text-primary mr-2"></i>
+                    <i class="fas fa-tags text-primary"></i>
                     Kategorien
                 </h2>
-                <div class="tabs tabs-boxed mb-4">
-                    <a class="tab tab-active" onclick="CategoryManager.switchTab('ticket')">Auftrags-Kategorien</a>
-                    <a class="tab" onclick="CategoryManager.switchTab('template')">Template-Kategorien</a>
-                </div>
                 <form id="addCategoryForm" class="mb-2 flex gap-2">
                     <input name="category" class="input input-bordered input-sm flex-1" placeholder="Neue Kategorie" required />
-                    <input type="hidden" name="type" value="ticket" id="categoryType" />
                     <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
                 </form>
                 <div class="overflow-y-auto max-h-64">
@@ -542,8 +537,6 @@ const LocationManager = {
 
 // Kategorieverwaltung
 const CategoryManager = {
-    currentType: 'ticket',
-    
     init() {
         const form = document.getElementById('addCategoryForm');
         if (form) {
@@ -552,22 +545,12 @@ const CategoryManager = {
         }
     },
 
-    switchTab(type) {
-        this.currentType = type;
-        document.getElementById('categoryType').value = type;
-        document.querySelectorAll('.tabs .tab').forEach(tab => {
-            tab.classList.remove('tab-active');
-        });
-        event.target.classList.add('tab-active');
-        this.loadCategories();
-    },
-
     async loadCategories() {
         const tbody = document.getElementById('categoriesList');
         if (!tbody) return;
 
         try {
-            const response = await fetch(`/admin/categories?type=${this.currentType}`);
+            const response = await fetch('/admin/categories');
             const data = await response.json();
             if (data.success) {
                 this.renderCategories(data.categories);
@@ -600,62 +583,55 @@ const CategoryManager = {
     async handleAddCategory(e) {
         e.preventDefault();
         const form = e.target;
-        const category = form.category.value;
-        const type = form.type.value;
+        const formData = new FormData(form);
 
         try {
-            const response = await fetch('/admin/categories', {
+            const response = await fetch('/admin/categories/add', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ name: category, type: type })
+                body: formData
             });
-
             const data = await response.json();
+            
             if (data.success) {
-                showToast('success', 'Kategorie erfolgreich hinzugefügt');
                 form.reset();
                 this.loadCategories();
+                showToast('success', 'Kategorie hinzugefügt');
             } else {
-                throw new Error(data.message || 'Fehler beim Hinzufügen der Kategorie');
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
             }
         } catch (error) {
-            console.error('Fehler:', error);
-            showToast('error', error.message);
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
         }
     },
 
     async deleteCategory(name) {
-        if (!confirm('Möchten Sie diese Kategorie wirklich löschen?')) return;
+        if (!confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
+            return;
+        }
 
         try {
-            const response = await fetch(`/admin/categories/${encodeURIComponent(name)}`, {
-                method: 'DELETE',
+            const response = await fetch('/admin/categories/delete', {
+                method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ type: this.currentType })
+                body: JSON.stringify({ name })
             });
-
             const data = await response.json();
+            
             if (data.success) {
-                showToast('success', 'Kategorie erfolgreich gelöscht');
                 this.loadCategories();
+                showToast('success', 'Kategorie gelöscht');
             } else {
-                throw new Error(data.message || 'Fehler beim Löschen der Kategorie');
+                showToast('error', data.message || 'Fehler beim Löschen');
             }
         } catch (error) {
-            console.error('Fehler:', error);
-            showToast('error', error.message);
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
         }
     }
 };
-
-// Initialisiere den CategoryManager
-document.addEventListener('DOMContentLoaded', () => {
-    CategoryManager.init();
-});
 
 function returnTool(barcode) {
     if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {

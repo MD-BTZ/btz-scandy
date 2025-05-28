@@ -56,4 +56,25 @@ def register_filters(app):
 
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_datetime'] = to_datetime
-    app.jinja_env.filters['format_duration'] = format_duration 
+    app.jinja_env.filters['format_duration'] = format_duration
+
+def status_color(status):
+    """Gibt die Bootstrap-Farbe für einen Ticket-Status zurück"""
+    colors = {
+        'offen': 'warning',
+        'in_bearbeitung': 'info',
+        'wartet_auf_antwort': 'secondary',
+        'gelöst': 'success',
+        'geschlossen': 'dark'
+    }
+    return colors.get(status.lower(), 'secondary')
+
+def priority_color(priority):
+    """Gibt die Bootstrap-Farbe für eine Ticket-Priorität zurück"""
+    colors = {
+        'niedrig': 'success',
+        'mittel': 'warning',
+        'hoch': 'danger',
+        'dringend': 'danger'
+    }
+    return colors.get(priority.lower(), 'secondary') 

@@ -1631,82 +1631,109 @@ def delete_location():
 @login_required
 @mitarbeiter_required
 def list_categories():
-    """Listet alle Kategorien auf."""
+    """Listet alle Kategorien auf"""
     try:
-        category_type = request.args.get('type', 'ticket')
         with Database.get_db() as conn:
             categories = conn.execute('''
-                SELECT name 
-                FROM categories 
-                WHERE deleted = 0 
-                AND type = ?
+                SELECT name
+                FROM categories
+                WHERE deleted = 0
                 ORDER BY name
-            ''', [category_type]).fetchall()
-            categories = [{'name': c[0]} for c in categories]
-        return jsonify({'success': True, 'categories': categories})
+            ''').fetchall()
+            
+            return jsonify({
+                'success': True,
+                'categories': [{'name': c['name']} for c in categories]
+            })
     except Exception as e:
         logger.error(f"Fehler beim Laden der Kategorien: {str(e)}")
-        return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'})
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Laden der Kategorien'
+        }), 500
 
 @bp.route('/categories/add', methods=['POST'])
 @login_required
-@mitarbeiter_required
+@admin_required
 def add_category():
-    """Fügt eine neue Kategorie hinzu."""
+    """Fügt eine neue Kategorie hinzu"""
     try:
-        data = request.get_json()
-        name = data.get('name')
-        category_type = data.get('type', 'ticket')
+        new_category = request.form.get('category')
+        if not new_category:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie eine Kategorie ein.'
+            }), 400
         
-        if not name:
-            return jsonify({'success': False, 'message': 'Kategoriename ist erforderlich'})
-            
         with Database.get_db() as conn:
-            # Prüfe ob die Kategorie bereits existiert
-            existing = conn.execute('''
-                SELECT 1 FROM categories 
-                WHERE name = ? AND type = ? AND deleted = 0
-            ''', [name, category_type]).fetchone()
-            
+            # Prüfen, ob die Kategorie bereits existiert
+            existing = conn.execute('SELECT 1 FROM categories WHERE name = ? AND deleted = 0', (new_category,)).fetchone()
             if existing:
-                return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits'})
-                
-            # Füge die neue Kategorie hinzu
-            conn.execute('''
-                INSERT INTO categories (name, type, created_at, updated_at)
-                VALUES (?, ?, datetime('now'), datetime('now'))
-            ''', [name, category_type])
-            
-        return jsonify({'success': True})
+                return jsonify({
+                    'success': False,
+                    'message': 'Diese Kategorie existiert bereits.'
+                }), 409
+            else:
+                conn.execute('INSERT INTO categories (name) VALUES (?)', (new_category,))
+                conn.commit()
+                return jsonify({
+                    'success': True,
+                    'message': 'Kategorie erfolgreich hinzugefügt.'
+                })
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Kategorie: {str(e)}")
-        return jsonify({'success': False, 'message': 'Fehler beim Hinzufügen der Kategorie'})
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Hinzufügen der Kategorie.'
+        }), 500
 
 @bp.route('/categories/delete', methods=['POST'])
 @login_required
 @mitarbeiter_required
 def delete_category():
-    """Löscht eine Kategorie (soft delete)."""
+    """Löscht eine Kategorie"""
     try:
         data = request.get_json()
         name = data.get('name')
-        category_type = data.get('type', 'ticket')
         
         if not name:
-            return jsonify({'success': False, 'message': 'Kategoriename ist erforderlich'})
+            return jsonify({
+                'success': False,
+                'message': 'Kein Name angegeben'
+            }), 400
             
         with Database.get_db() as conn:
-            # Soft delete der Kategorie
+            # Prüfe ob die Kategorie noch verwendet wird
+            in_use = conn.execute('''
+                SELECT COUNT(*) as count 
+                FROM tools 
+                WHERE category = ? AND deleted = 0
+            ''', [name]).fetchone()
+            
+            if in_use['count'] > 0:
+                return jsonify({
+                    'success': False,
+                    'message': f'Diese Kategorie wird noch von {in_use["count"]} Werkzeugen verwendet'
+                }), 409
+                
+            # Führe ein Soft-Delete durch
             conn.execute('''
                 UPDATE categories 
-                SET deleted = 1, updated_at = datetime('now')
-                WHERE name = ? AND type = ?
-            ''', [name, category_type])
+                SET deleted = 1, deleted_at = CURRENT_TIMESTAMP
+                WHERE name = ?
+            ''', [name])
+            conn.commit()
             
-        return jsonify({'success': True})
+            return jsonify({
+                'success': True,
+                'message': 'Kategorie erfolgreich gelöscht'
+            })
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Kategorie: {str(e)}")
-        return jsonify({'success': False, 'message': 'Fehler beim Löschen der Kategorie'})
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Löschen der Kategorie'
+        }), 500
 
 @bp.route('/cleanup-database', methods=['POST'])
 @admin_required
@@ -1992,7 +2019,6 @@ def delete_notice(id):
 @admin_required
 def tickets():
     from app.models.ticket_db import TicketDatabase
-    from app.models.database import Database
     ticket_db = TicketDatabase()
     
     # Filter aus Query-Parametern
@@ -2039,19 +2065,18 @@ def tickets():
             except (ValueError, TypeError):
                 ticket['due_date'] = None
     
-    # Hole alle Kategorien aus der Tabelle 'categories'
-    with Database.get_db() as conn:
-        categories = conn.execute('''
-            SELECT name 
-            FROM categories 
-            WHERE deleted = 0 
-            ORDER BY name
-        ''').fetchall()
-        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
-    
-    return render_template('tickets/index.html', 
+    # Hole alle Benutzer aus der Ticket-Datenbank
+    users = ticket_db.query(
+        """
+        SELECT username FROM users WHERE is_active = 1 ORDER BY username
+        """
+    )
+    # Hole alle Kategorien aus der ticket_categories Tabelle
+    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = [c['name'] for c in categories]
+
+    return render_template('admin/tickets.html', 
                          tickets=tickets, 
-                         now=datetime.now(),
                          categories=categories)
 
 @bp.route('/system', methods=['GET', 'POST'])
@@ -2555,31 +2580,25 @@ def ticket_detail(ticket_id):
     # Hole die Materialliste
     material_list = ticket_db.get_auftrag_material(ticket_id)
 
-    # Hole alle Mitarbeiter aus der Hauptdatenbank
-    with Database.get_db() as db:
-        workers = db.execute(
-            """
-            SELECT username, username as name
-            FROM users
-            WHERE is_active = 1
-            ORDER BY username
-            """
-        ).fetchall()
-        
-        # Hole alle Kategorien
-        categories = db.execute('''
-            SELECT name 
-            FROM categories 
-            WHERE deleted = 0 
-            ORDER BY name
-        ''').fetchall()
-        categories = [c[0] for c in categories]  # Verwende den ersten Wert des Tupels
+    # Hole alle Benutzer aus der Ticket-Datenbank
+    users = ticket_db.query(
+        """
+        SELECT username FROM users WHERE is_active = 1 ORDER BY username
+        """
+    )
+    # Hole alle Kategorien aus der ticket_categories Tabelle
+    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = [c['name'] for c in categories]
+
+    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+    assigned_users = ticket_db.get_ticket_assignments(ticket_id)
 
     return render_template('tickets/detail.html', 
                          ticket=ticket, 
                          notes=notes,
                          messages=messages,
-                         workers=workers,
+                         users=users,
+                         assigned_users=assigned_users,
                          auftrag_details=auftrag_details,
                          material_list=material_list,
                          categories=categories,
@@ -3197,3 +3216,53 @@ def apply_updates():
             'status': 'error',
             'message': str(e)
         }), 500
+
+@bp.route('/tickets/categories/add', methods=['POST'])
+@login_required
+@admin_required
+def add_ticket_category():
+    """Fügt eine neue Ticket-Kategorie hinzu."""
+    category = request.form.get('category')
+    if not category:
+        flash('Bitte geben Sie einen Kategorienamen ein.', 'error')
+        return redirect(url_for('admin.tickets'))
+        
+    ticket_db = TicketDatabase()
+    with ticket_db.get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            # Prüfe ob Kategorie bereits existiert
+            cursor.execute('SELECT 1 FROM ticket_categories WHERE name = ?', [category])
+            if cursor.fetchone():
+                flash('Diese Kategorie existiert bereits.', 'error')
+                return redirect(url_for('admin.tickets'))
+                
+            # Füge neue Kategorie hinzu
+            cursor.execute('INSERT INTO ticket_categories (name) VALUES (?)', [category])
+            conn.commit()
+            flash('Kategorie wurde erfolgreich hinzugefügt.', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash('Fehler beim Hinzufügen der Kategorie.', 'error')
+            logging.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
+            
+    return redirect(url_for('admin.tickets'))
+
+@bp.route('/tickets/categories/delete/<category>', methods=['POST'])
+@login_required
+@admin_required
+def delete_ticket_category(category):
+    """Löscht eine Ticket-Kategorie."""
+    ticket_db = TicketDatabase()
+    with ticket_db.get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM ticket_categories WHERE name = ?', [category])
+            conn.commit()
+            flash('Kategorie wurde erfolgreich gelöscht.', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash('Fehler beim Löschen der Kategorie.', 'error')
+            logging.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
+            
+    return redirect(url_for('admin.tickets'))

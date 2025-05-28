@@ -282,13 +282,12 @@ class SchemaManager:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS categories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    type TEXT NOT NULL DEFAULT 'ticket',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     deleted INTEGER DEFAULT 0,
-                    deleted_at DATETIME,
-                    UNIQUE(name, type)
+                    deleted_at TIMESTAMP
                 )
             ''')
 
@@ -938,18 +937,3 @@ def validate_input(table: str, data: dict) -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Fehler bei der Eingabevalidierung: {str(e)}")
         return False, f"Validierungsfehler: {str(e)}"
-
-def create_categories_table(conn):
-    """Erstellt die Kategorien-Tabelle."""
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL DEFAULT 'ticket',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            deleted INTEGER DEFAULT 0,
-            deleted_at DATETIME,
-            UNIQUE(name, type)
-        )
-    ''')
