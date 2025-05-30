@@ -24,6 +24,7 @@ import io
 from app.config.config import Config
 from app.models.ticket_db import TicketDatabase
 import subprocess
+from docx import Document
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -2593,7 +2594,7 @@ def ticket_detail(ticket_id):
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = ticket_db.get_ticket_assignments(ticket_id)
 
-    return render_template('tickets/detail.html', 
+    return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
                          notes=notes,
                          messages=messages,
@@ -3266,3 +3267,94 @@ def delete_ticket_category(category):
             logging.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
             
     return redirect(url_for('admin.tickets'))
+
+@bp.route('/tickets/<int:id>/export')
+@login_required
+@admin_required
+def export_ticket(id):
+    """Exportiert ein Ticket als Word-Dokument."""
+    ticket = ticket_db.query(
+        """
+        SELECT *
+        FROM tickets
+        WHERE id = ?
+        """,
+        [id],
+        one=True
+    )
+    
+    if not ticket:
+        return render_template('404.html'), 404
+        
+    # Hole die Auftragsdetails
+    auftrag_details = ticket_db.get_auftrag_details(id)
+    
+    # Hole die Materialliste
+    material_list = ticket_db.get_auftrag_material(id)
+    
+    # Erstelle das Word-Dokument
+    doc = Document()
+    
+    # Füge den Titel hinzu
+    doc.add_heading(f'Auftrag #{ticket["id"]}: {ticket["title"]}', 0)
+    
+    # Füge die Ticket-Details hinzu
+    doc.add_heading('Auftragsdetails', level=1)
+    doc.add_paragraph(f'Status: {ticket["status"]}')
+    doc.add_paragraph(f'Priorität: {ticket["priority"]}')
+    doc.add_paragraph(f'Kategorie: {ticket["category"]}')
+    doc.add_paragraph(f'Erstellt von: {ticket["created_by"]}')
+    doc.add_paragraph(f'Erstellt am: {ticket["created_at"]}')
+    if ticket["due_date"]:
+        doc.add_paragraph(f'Fällig am: {ticket["due_date"]}')
+    
+    # Füge die Beschreibung hinzu
+    doc.add_heading('Beschreibung', level=1)
+    doc.add_paragraph(ticket["description"])
+    
+    # Füge die Auftragsdetails hinzu, falls vorhanden
+    if auftrag_details:
+        doc.add_heading('Weitere Details', level=1)
+        doc.add_paragraph(f'Bereich: {auftrag_details["bereich"]}')
+        if auftrag_details["auftraggeber_intern"]:
+            doc.add_paragraph('Auftraggeber: Intern')
+        elif auftrag_details["auftraggeber_extern"]:
+            doc.add_paragraph(f'Auftraggeber: Extern - {auftrag_details["auftraggeber_name"]}')
+        if auftrag_details["kontakt"]:
+            doc.add_paragraph(f'Kontakt: {auftrag_details["kontakt"]}')
+        if auftrag_details["fertigstellungstermin"]:
+            doc.add_paragraph(f'Fertigstellungstermin: {auftrag_details["fertigstellungstermin"]}')
+        if auftrag_details["arbeitsstunden"]:
+            doc.add_paragraph(f'Arbeitsstunden: {auftrag_details["arbeitsstunden"]}')
+        if auftrag_details["leistungskategorie"]:
+            doc.add_paragraph(f'Leistungskategorie: {auftrag_details["leistungskategorie"]}')
+    
+    # Füge die Materialliste hinzu, falls vorhanden
+    if material_list:
+        doc.add_heading('Materialliste', level=1)
+        table = doc.add_table(rows=1, cols=3)
+        table.style = 'Table Grid'
+        
+        # Füge die Tabellenüberschriften hinzu
+        header_cells = table.rows[0].cells
+        header_cells[0].text = 'Material'
+        header_cells[1].text = 'Menge'
+        header_cells[2].text = 'Einzelpreis'
+        
+        # Füge die Materialien hinzu
+        for material in material_list:
+            row_cells = table.add_row().cells
+            row_cells[0].text = material["material"]
+            row_cells[1].text = str(material["menge"])
+            row_cells[2].text = f'{material["einzelpreis"]:.2f} €'
+    
+    # Speichere das Dokument
+    filename = f'auftrag_{ticket["id"]}.docx'
+    doc.save(filename)
+    
+    return send_file(
+        filename,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )

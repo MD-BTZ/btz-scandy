@@ -195,156 +195,199 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Funktion zum Hinzufügen einer neuen Materialzeile
-function addMaterialRow() {
-    console.log('Materialzeile hinzufügen');
-    const tbody = document.querySelector('#materialTable tbody');
-    const newRow = document.createElement('tr');
-    newRow.className = 'material-row';
-    newRow.innerHTML = `
-        <td><input type="text" class="input input-bordered w-full material-input" placeholder="Material"></td>
-        <td><input type="number" class="input input-bordered w-full menge-input" placeholder="Menge" min="0" step="0.01" onchange="updateMaterialSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full einzelpreis-input" placeholder="Einzelpreis" min="0" step="0.01" onchange="updateMaterialSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full summe-input" placeholder="Summe" readonly></td>
-        <td>
-            <button type="button" class="btn btn-error btn-sm" onclick="deleteRow(this)">
-                <i class="fas fa-trash"></i>
-            </button>
-        </td>
-    `;
-    tbody.appendChild(newRow);
-}
-
-// Funktion zum Hinzufügen einer neuen Arbeitszeile
-function addArbeitRow() {
-    console.log('Arbeitszeile hinzufügen');
-    const tbody = document.querySelector('#arbeitTable tbody');
-    const newRow = document.createElement('tr');
-    newRow.className = 'arbeit-row';
-    newRow.innerHTML = `
-        <td><input type="text" class="input input-bordered w-full arbeit-input" placeholder="Arbeit"></td>
-        <td><input type="number" class="input input-bordered w-full stunden-input" placeholder="Stunden" min="0" step="0.5" onchange="updateArbeitSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full stundensatz-input" placeholder="Stundensatz" min="0" step="0.01" onchange="updateArbeitSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full summe-input" placeholder="Summe" readonly></td>
-        <td>
-            <button type="button" class="btn btn-error btn-sm" onclick="deleteRow(this)">
-                <i class="fas fa-trash"></i>
-            </button>
-        </td>
-    `;
-    tbody.appendChild(newRow);
-}
-
-// Funktion zum Löschen einer Zeile
-function deleteRow(button) {
-    const row = button.closest('tr');
-    row.remove();
-    updateGesamtsumme();
-}
-
-// Funktion zum Aktualisieren der Materialsumme
-function updateMaterialSum(input) {
-    const row = input.closest('tr');
-    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-    const summe = menge * einzelpreis;
-    row.querySelector('.summe-input').value = summe.toFixed(2);
-    updateGesamtsumme();
-}
-
-// Funktion zum Aktualisieren der Arbeitssumme
-function updateArbeitSum(input) {
-    const row = input.closest('tr');
-    const stunden = parseFloat(row.querySelector('.stunden-input').value) || 0;
-    const stundensatz = parseFloat(row.querySelector('.stundensatz-input').value) || 0;
-    const summe = stunden * stundensatz;
-    row.querySelector('.summe-input').value = summe.toFixed(2);
-    updateGesamtsumme();
-}
-
-// Funktion zum Aktualisieren der Gesamtsumme
-function updateGesamtsumme() {
-    let materialSum = 0;
-    let arbeitSum = 0;
-
-    // Materialsumme berechnen
-    document.querySelectorAll('#materialTable .summe-input').forEach(input => {
-        materialSum += parseFloat(input.value) || 0;
+// Funktion zum Sammeln der Materialliste
+function collectMaterialList() {
+    const rows = document.querySelectorAll('#materialRows tr');
+    const materialList = [];
+    
+    rows.forEach(row => {
+        const material = row.querySelector('input[name="material"]').value;
+        const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+        
+        if (material && (menge > 0 || einzelpreis > 0)) {
+            materialList.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis,
+                gesamtpreis: menge * einzelpreis
+            });
+        }
     });
-
-    // Arbeitssumme berechnen
-    document.querySelectorAll('#arbeitTable .summe-input').forEach(input => {
-        arbeitSum += parseFloat(input.value) || 0;
-    });
-
-    const gesamtSum = materialSum + arbeitSum;
-    document.getElementById('gesamtsumme').value = gesamtSum.toFixed(2);
+    
+    return materialList;
 }
 
 // Funktion zum Sammeln der Auftragsdetails
 function collectAuftragDetails() {
-    const form = document.getElementById('auftragDetailsForm');
-    const formData = new FormData(form);
-    const data = {};
-
-    // Basis-Formulardaten
-    for (let [key, value] of formData.entries()) {
-        if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
-            data[key] = value === '1';
-        } else {
-            data[key] = value;
-        }
-    }
-
-    // Materialliste sammeln
-    data.material_list = collectMaterialList();
+    const data = {
+        materialList: [],
+        arbeitList: []
+    };
     
-    // Arbeitenliste sammeln
-    data.arbeit_list = collectArbeitList();
-
-    // Gesamtsumme hinzufügen
-    data.gesamtsumme = parseFloat(document.getElementById('gesamtsumme').value) || 0;
-
-    console.log('Gesammelte Daten:', data);
+    // Sammle Materialdaten
+    const materialRows = document.querySelectorAll('#materialRows tbody tr');
+    materialRows.forEach(row => {
+        const material = row.querySelector('input[name="material"]').value;
+        const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+        const gesamtpreis = parseFloat(row.querySelector('input[name="gesamtpreis"]').value) || 0;
+        
+        if (material && (menge > 0 || einzelpreis > 0)) {
+            data.materialList.push({
+                material: material,
+                menge: menge,
+                einzelpreis: einzelpreis,
+                gesamtpreis: gesamtpreis
+            });
+        }
+    });
+    
+    // Sammle Arbeitsdaten
+    const arbeitRows = document.querySelectorAll('.arbeit-row');
+    arbeitRows.forEach(row => {
+        const arbeit = row.querySelector('.arbeit-input')?.value;
+        const arbeitsstunden = parseFloat(row.querySelector('.arbeitsstunden-input')?.value) || 0;
+        const leistungskategorie = row.querySelector('.leistungskategorie-input')?.value;
+        
+        if (arbeit && (arbeitsstunden > 0 || leistungskategorie)) {
+            data.arbeitList.push({
+                arbeit: arbeit,
+                arbeitsstunden: arbeitsstunden,
+                leistungskategorie: leistungskategorie
+            });
+        }
+    });
+    
     return data;
 }
 
-// Funktion zum Sammeln der Materialliste
-function collectMaterialList() {
-    const materialList = [];
-    document.querySelectorAll('.material-row').forEach(row => {
-        const material = row.querySelector('.material-input').value;
-        const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+// Funktion zum Aktualisieren der Materialsumme
+function updateSummeMaterial() {
+    const rows = document.querySelectorAll('#materialRows tbody tr');
+    let summe = 0;
+    
+    rows.forEach(row => {
+        const menge = parseFloat(row.querySelector('input[name="menge"]').value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('input[name="einzelpreis"]').value) || 0;
+        const gesamtpreis = menge * einzelpreis;
         
-        if (material || menge || einzelpreis) {
-            materialList.push({
-                material: material,
-                menge: menge,
-                einzelpreis: einzelpreis
-            });
-        }
+        row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
+        summe += gesamtpreis;
     });
-    return materialList;
+    
+    document.getElementById('summeMaterial').textContent = summe.toFixed(2) + ' €';
+    updateGesamtsumme();
 }
 
-// Funktion zum Sammeln der Arbeitenliste
-function collectArbeitList() {
-    const arbeitList = [];
-    document.querySelectorAll('.arbeit-row').forEach(row => {
-        const arbeit = row.querySelector('.arbeit-input').value;
-        const stunden = parseFloat(row.querySelector('.stunden-input').value) || 0;
-        const stundensatz = parseFloat(row.querySelector('.stundensatz-input').value) || 0;
-        
-        if (arbeit || stunden || stundensatz) {
-            arbeitList.push({
-                arbeit: arbeit,
-                stunden: stunden,
-                stundensatz: stundensatz
-            });
-        }
+// Funktion zum Hinzufügen einer neuen Materialzeile
+function addMaterialRow() {
+    const tbody = document.getElementById('materialRows');
+    const newRow = document.createElement('tr');
+    newRow.className = 'material-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+    `;
+    
+    tbody.appendChild(newRow);
+    
+    // Event-Listener für die neuen Inputs
+    const inputs = newRow.querySelectorAll('.menge-input, .einzelpreis-input');
+    inputs.forEach(input => {
+        input.addEventListener('input', function() {
+            updateSumme(this);
+        });
     });
-    return arbeitList;
+    
+    // Event-Listener für den Lösch-Button
+    const deleteBtn = newRow.querySelector('.delete-material-btn');
+    deleteBtn.addEventListener('click', function() {
+        removeMaterialRow(this);
+    });
+}
+
+// Funktion zum Entfernen einer Materialzeile
+function removeMaterialRow(button) {
+    const row = button.closest('tr');
+    if (row) {
+        row.remove();
+        updateSummeMaterial();
+    }
+}
+
+// Funktion zum Hinzufügen einer neuen Arbeitszeile
+function addArbeitRow() {
+    const tbody = document.getElementById('arbeitenRows');
+    const newRow = document.createElement('tr');
+    newRow.className = 'arbeit-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+    `;
+    
+    tbody.appendChild(newRow);
+    
+    // Event-Listener für den Lösch-Button
+    const deleteBtn = newRow.querySelector('.delete-arbeit-btn');
+    deleteBtn.addEventListener('click', function() {
+        removeArbeitRow(this);
+    });
+}
+
+// Funktion zum Entfernen einer Arbeitszeile
+function removeArbeitRow(button) {
+    const row = button.closest('tr');
+    if (row) {
+        row.remove();
+    }
+}
+
+// Funktion zum Aktualisieren der Summe für eine einzelne Zeile
+function updateSumme(input) {
+    const row = input.closest('tr');
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+    
+    if (mengeInput && einzelpreisInput && gesamtpreisInput) {
+        const menge = parseFloat(mengeInput.value) || 0;
+        const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
+        const gesamtpreis = menge * einzelpreis;
+        
+        gesamtpreisInput.value = gesamtpreis.toFixed(2);
+        updateSummeMaterial();
+    }
+}
+
+function updateSummeArbeit() {
+    const rows = document.querySelectorAll('#arbeitRows tbody tr');
+    let summe = 0;
+    
+    rows.forEach(row => {
+        const stunden = parseFloat(row.querySelector('input[name="stunden"]').value) || 0;
+        const stundensatz = parseFloat(row.querySelector('input[name="stundensatz"]').value) || 0;
+        const gesamtpreis = stunden * stundensatz;
+        
+        row.querySelector('input[name="gesamtpreis"]').value = gesamtpreis.toFixed(2);
+        summe += gesamtpreis;
+    });
+    
+    document.getElementById('summeArbeit').textContent = summe.toFixed(2) + ' €';
+    updateGesamtsumme();
+}
+
+function updateGesamtsumme() {
+    const materialSumme = parseFloat(document.getElementById('summeMaterial').textContent) || 0;
+    const arbeitSumme = parseFloat(document.getElementById('summeArbeit').textContent) || 0;
+    const gesamtsumme = materialSumme + arbeitSumme;
+    
+    document.getElementById('gesamtsumme').textContent = gesamtsumme.toFixed(2) + ' €';
 }
 
 // Zentrale Initialisierungsfunktion für das Modal
