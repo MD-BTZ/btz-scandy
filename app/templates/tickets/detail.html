@@ -33,7 +33,14 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <p>{{ ticket.category or 'Nicht zugewiesen' }}</p>
+                            <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
+                                <option value="">Keine Kategorie</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                                {% endfor %}
+                            </select>
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
                             <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
                         </div>
@@ -339,17 +346,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Hilfsfunktion für Toast-Benachrichtigungen
-function showToast(type, message) {
+function updateTicketCategory(newCategory) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            category: newCategory
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Kategorie erfolgreich aktualisiert', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.message || 'Fehler beim Aktualisieren der Kategorie', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie', 'error');
+    });
+}
+
+function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type} fixed top-4 right-4 z-50`;
+    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
     toast.innerHTML = `
         <div class="alert alert-${type}">
             <span>${message}</span>
         </div>
     `;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    
+    // Toast nach 3 Sekunden ausblenden
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
 }
 </script>
 {% endblock %} 

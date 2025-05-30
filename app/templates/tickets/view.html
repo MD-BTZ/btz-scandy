@@ -33,10 +33,14 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <input type="text" id="categoryInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.category or '' }}" 
-                                   onchange="updateTicketCategory(this.value)"
-                                   placeholder="Kategorie eingeben">
+                            <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
+                                <option value="">Keine Kategorie</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                                {% endfor %}
+                            </select>
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
                             <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
                                    value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
@@ -45,7 +49,7 @@
                                 <p class="text-sm opacity-70">Geschätzte Zeit</p>
                                 <div class="flex items-center gap-2">
                                     <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                           value="{{ (ticket.estimated_time * 60) if ticket.estimated_time else '' }}"
+                                           value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
                                            onchange="updateTicketEstimatedTime(this.value)"
                                            min="0" step="1">
                                     <span class="text-sm opacity-70">Minuten</span>
@@ -472,16 +476,13 @@ function saveTicketChanges() {
     const category = document.getElementById('categoryInput').value;
     const dueDate = document.getElementById('dueDateInput').value;
     
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(estimatedTime) / 60;
-    
     fetch(`/tickets/{{ ticket.id }}/update-details`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            estimated_time: hours,
+            estimated_time: parseInt(estimatedTime),
             category: category,
             due_date: dueDate
         })

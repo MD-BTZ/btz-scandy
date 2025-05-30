@@ -3358,3 +3358,52 @@ def export_ticket(id):
         download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     )
+
+@bp.route('/tickets/<int:ticket_id>/update-details', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket_details(ticket_id):
+    """Aktualisiert die Details eines Tickets (Kategorie, Fälligkeitsdatum, geschätzte Zeit) im Admin-Bereich."""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.query(
+            """
+            SELECT * FROM tickets WHERE id = ?
+            """,
+            [ticket_id],
+            one=True
+        )
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Formatiere das Fälligkeitsdatum
+        due_date = data.get('due_date')
+        if due_date:
+            try:
+                due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
+                due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                due_date = None
+
+        # Aktualisiere die Ticket-Details, behalte bestehende Werte bei wenn nicht im Request
+        ticket_db.update_ticket(
+            id=ticket_id,
+            status=ticket['status'],
+            assigned_to=ticket['assigned_to'],
+            category=data.get('category', ticket['category']),
+            due_date=due_date if due_date else ticket['due_date'],
+            estimated_time=data.get('estimated_time', ticket['estimated_time']),
+            last_modified_by=current_user.username
+        )
+
+        return jsonify({'success': True, 'message': 'Ticket-Details erfolgreich aktualisiert'})
+
+    except Exception as e:
+        import logging
+        logging.error(f"Fehler beim Aktualisieren der Ticket-Details (Admin): {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500

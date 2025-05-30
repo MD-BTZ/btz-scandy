@@ -230,13 +230,18 @@ def view(ticket_id):
         logging.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}")
         workers = []
 
+    # Hole die Kategorien für das Formular
+    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = [c['name'] for c in categories]
+
     return render_template('tickets/view.html',
                          ticket=ticket,
                          messages=messages,
                          notes=notes,
                          message_count=message_count,
                          workers=workers,
-                         now=datetime.now())
+                         now=datetime.now(),
+                         categories=categories)
 
 @bp.route('/<int:ticket_id>/message', methods=['POST'])
 @login_required
@@ -342,6 +347,10 @@ def detail(id):
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = ticket_db.get_ticket_assignments(id)
 
+    # Hole alle Kategorien aus der ticket_categories Tabelle
+    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = [c['name'] for c in categories]
+
     return render_template('tickets/detail.html', 
                          ticket=ticket, 
                          notes=notes,
@@ -350,6 +359,7 @@ def detail(id):
                          assigned_users=assigned_users,
                          auftrag_details=auftrag_details,
                          material_list=material_list,
+                         categories=categories,
                          now=datetime.now())
 
 @bp.route('/<int:id>/update', methods=['POST'])

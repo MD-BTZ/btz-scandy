@@ -238,7 +238,7 @@ function addArbeitRow() {
 // Funktion zum Löschen einer Zeile
 function deleteRow(button) {
     const row = button.closest('tr');
-    row.remove();
+        row.remove();
     updateGesamtsumme();
 }
 
