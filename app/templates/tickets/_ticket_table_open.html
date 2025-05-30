@@ -35,7 +35,7 @@
                 </td>
                 <td>{{ ticket.category or '-' }}</td>
                 <td>{{ ticket.due_date or '-' }}</td>
-                <td>{{ ticket.estimated_time or '-' }} Min.</td>
+                <td>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</td>
                 <td>
                     {% if ticket.message_count > 0 %}
                     <span class="badge badge-primary">{{ ticket.message_count }}</span>
