@@ -162,11 +162,11 @@ def initialize_and_migrate_databases():
             return False
         logger.info("Hauptdatenbank erfolgreich initialisiert")
         
-        # Initialisiere Ticket-Datenbank
-        logger.info("Initialisiere Ticket-Datenbank...")
-        from app.models.init_ticket_db import init_ticket_db
-        init_ticket_db()
-        logger.info("Ticket-Datenbank erfolgreich initialisiert")
+        # Initialisiere und migriere Ticket-Datenbank
+        logger.info("Initialisiere und migriere Ticket-Datenbank...")
+        from app.models.migrations import run_migrations
+        run_migrations(tickets_db_path)
+        logger.info("Ticket-Datenbank erfolgreich initialisiert und migriert")
         
         return True
         

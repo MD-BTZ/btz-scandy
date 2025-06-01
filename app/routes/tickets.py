@@ -8,9 +8,22 @@ from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
 from app.models.user import User
+from docx import Document
+import tempfile
+from werkzeug.utils import secure_filename
+import pdfkit
+import PyPDF2
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 ticket_db = TicketDatabase()
+
+UPLOAD_FOLDER = 'app/uploads'
+ALLOWED_EXTENSIONS = {'docx', 'pdf'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @bp.route('/')
 @login_required
@@ -724,7 +737,6 @@ def export_ticket(id):
     doc.render(context)
     
     # Verwende tempfile für plattformunabhängige temporäre Dateien
-    import tempfile
     temp_dir = tempfile.gettempdir()
     output_path = os.path.join(temp_dir, f'auftrag_{id}.docx')
     doc.save(output_path)
@@ -839,4 +851,301 @@ def add_note(id):
 
     except Exception as e:
         logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500 
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/applications')
+@login_required
+def applications():
+    """Zeigt die Bewerbungsverwaltung an"""
+    try:
+        # Hole aktive Templates
+        templates = ticket_db.query("""
+            SELECT id, name, category 
+            FROM application_templates 
+            WHERE is_active = 1
+        """)
+        
+        # Hole Bewerbungen des aktuellen Benutzers
+        applications = ticket_db.query("""
+            SELECT a.*, t.name as template_name 
+            FROM applications a
+            JOIN application_templates t ON a.template_id = t.id
+            WHERE a.created_by = ?
+            ORDER BY a.created_at DESC
+        """, [current_user.username])
+        
+        # Formatiere Datum für jede Bewerbung
+        for app in applications:
+            if app.get('created_at'):
+                try:
+                    created_at = datetime.strptime(app['created_at'], '%Y-%m-%d %H:%M:%S')
+                    app['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
+                except ValueError:
+                    app['created_at'] = app['created_at']
+            
+            if app.get('updated_at'):
+                try:
+                    updated_at = datetime.strptime(app['updated_at'], '%Y-%m-%d %H:%M:%S')
+                    app['updated_at'] = updated_at.strftime('%d.%m.%Y, %H:%M')
+                except ValueError:
+                    app['updated_at'] = app['updated_at']
+            
+            if app.get('sent_at'):
+                try:
+                    sent_at = datetime.strptime(app['sent_at'], '%Y-%m-%d %H:%M:%S')
+                    app['sent_at'] = sent_at.strftime('%d.%m.%Y, %H:%M')
+                except ValueError:
+                    app['sent_at'] = app['sent_at']
+        
+        return render_template('tickets/applications.html', 
+                             templates=templates,
+                             applications=applications)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Bewerbungsseite: {str(e)}")
+        flash('Fehler beim Laden der Bewerbungsseite', 'error')
+        return redirect(url_for('main.index'))
+
+@bp.route('/applications/template/upload', methods=['POST'])
+@login_required
+def upload_template():
+    """Lädt ein neues Bewerbungstemplate hoch"""
+    if 'template' not in request.files:
+        flash('Keine Datei ausgewählt', 'error')
+        return redirect(url_for('tickets.applications'))
+        
+    file = request.files['template']
+    if file.filename == '':
+        flash('Keine Datei ausgewählt', 'error')
+        return redirect(url_for('tickets.applications'))
+        
+    if not allowed_file(file.filename):
+        flash('Nur .docx Dateien sind erlaubt', 'error')
+        return redirect(url_for('tickets.applications'))
+    
+    try:
+        # Speichere die Datei temporär
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, 'templates', filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        file.save(filepath)
+        
+        # Speichere Template in der Datenbank
+        ticket_db.query("""
+            INSERT INTO application_templates (name, file_path, category, active)
+            VALUES (?, ?, ?, 1)
+        """, [filename, filepath, request.form.get('category', '')])
+        
+        flash('Template erfolgreich hochgeladen', 'success')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Hochladen des Templates: {str(e)}")
+        flash('Fehler beim Hochladen des Templates', 'error')
+        
+    return redirect(url_for('tickets.applications'))
+
+@bp.route('/applications/create', methods=['POST'])
+@login_required
+def create_application():
+    """Erstellt eine neue Bewerbung"""
+    try:
+        # Dokumente speichern
+        cv_path = None
+        certificate_paths = []
+        
+        if 'cv' in request.files:
+            cv_file = request.files['cv']
+            if cv_file.filename != '':
+                filename = secure_filename(cv_file.filename)
+                cv_path = os.path.join(UPLOAD_FOLDER, 'documents', 'cv', filename)
+                os.makedirs(os.path.dirname(cv_path), exist_ok=True)
+                cv_file.save(cv_path)
+        
+        if 'certificates' in request.files:
+            for cert_file in request.files.getlist('certificates'):
+                if cert_file.filename != '':
+                    filename = secure_filename(cert_file.filename)
+                    cert_path = os.path.join(UPLOAD_FOLDER, 'documents', 'certificates', filename)
+                    os.makedirs(os.path.dirname(cert_path), exist_ok=True)
+                    cert_file.save(cert_path)
+                    certificate_paths.append(cert_path)
+        
+        # Bewerbung erstellen
+        template_id = request.form['template_id']
+        template = ticket_db.query("""
+            SELECT * FROM application_templates 
+            WHERE id = ? AND active = 1
+        """, [template_id], one=True)
+        
+        if not template:
+            flash('Template nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Ersetze Platzhalter
+        content = template['content']
+        content = content.replace('{{company_name}}', request.form['company_name'])
+        content = content.replace('{{position}}', request.form['position'])
+        content = content.replace('{{contact_person}}', request.form.get('contact_person', ''))
+        content = content.replace('{{contact_email}}', request.form.get('contact_email', ''))
+        content = content.replace('{{contact_phone}}', request.form.get('contact_phone', ''))
+        content = content.replace('{{address}}', request.form.get('address', ''))
+        
+        # Speichere Bewerbung
+        ticket_db.query("""
+            INSERT INTO applications (
+                template_id, company_name, position, contact_person,
+                contact_email, contact_phone, address,
+                generated_content, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)
+        """, [template_id, request.form['company_name'], request.form['position'],
+              request.form.get('contact_person'), request.form.get('contact_email'),
+              request.form.get('contact_phone'), request.form.get('address'),
+              content, current_user.username])
+        
+        flash('Bewerbung erfolgreich erstellt', 'success')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Erstellen der Bewerbung: {str(e)}")
+        flash('Fehler beim Erstellen der Bewerbung', 'error')
+        
+    return redirect(url_for('tickets.applications'))
+
+@bp.route('/applications/<int:id>/update_status', methods=['POST'])
+@login_required
+def update_application_status(id):
+    """Aktualisiert den Status einer Bewerbung"""
+    try:
+        status = request.form.get('status')
+        notes = request.form.get('notes', '')
+        
+        ticket_db.query("""
+            UPDATE applications 
+            SET status = ?, notes = ?
+            WHERE id = ? AND created_by = ?
+        """, [status, notes, id, current_user.username])
+        
+        flash('Status erfolgreich aktualisiert', 'success')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
+        flash('Fehler beim Aktualisieren des Status', 'error')
+        
+    return redirect(url_for('tickets.applications'))
+
+@bp.route('/applications/<int:id>/add_response', methods=['POST'])
+@login_required
+def add_application_response(id):
+    """Fügt eine Antwort zu einer Bewerbung hinzu"""
+    try:
+        response_type = request.form.get('response_type')
+        response_date = request.form.get('response_date')
+        content = request.form.get('content')
+        next_steps = request.form.get('next_steps', '')
+        
+        ticket_db.query("""
+            INSERT INTO application_responses (
+                application_id, response_type, response_date,
+                content, next_steps
+            ) VALUES (?, ?, ?, ?, ?)
+        """, [id, response_type, response_date, content, next_steps])
+        
+        flash('Antwort erfolgreich hinzugefügt', 'success')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Hinzufügen der Antwort: {str(e)}")
+        flash('Fehler beim Hinzufügen der Antwort', 'error')
+        
+    return redirect(url_for('tickets.applications'))
+
+@bp.route('/applications/<int:id>/details')
+def application_details(id):
+    db = Database.get_db()
+    application = db.execute('''
+        SELECT a.*, t.name as template_name 
+        FROM applications a 
+        JOIN application_templates t ON a.template_id = t.id 
+        WHERE a.id = ? AND a.created_by = ?
+    ''', (id, current_user.username)).fetchone()
+    
+    if application is None:
+        return jsonify({'error': 'Bewerbung nicht gefunden'}), 404
+    
+    return jsonify({
+        'content': application['generated_content'],
+        'custom_block': application['custom_block']
+    })
+
+@bp.route('/applications/<int:id>/download')
+def download_application(id):
+    db = Database.get_db()
+    application = db.execute('''
+        SELECT a.*, t.name as template_name 
+        FROM applications a 
+        JOIN application_templates t ON a.template_id = t.id 
+        WHERE a.id = ? AND a.created_by = ?
+    ''', (id, current_user.username)).fetchone()
+    
+    if application is None:
+        return jsonify({'error': 'Bewerbung nicht gefunden'}), 404
+    
+    # Temporäres HTML erstellen
+    with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as temp_html:
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                h1 {{ color: #2c3e50; }}
+                .content {{ margin: 20px 0; }}
+                .custom-block {{ margin: 20px 0; padding: 10px; background-color: #f8f9fa; }}
+            </style>
+        </head>
+        <body>
+            <h1>Bewerbung: {application['position']} bei {application['company_name']}</h1>
+            <div class="content">
+                {application['generated_content']}
+            </div>
+            <div class="custom-block">
+                {application['custom_block']}
+            </div>
+        </body>
+        </html>
+        """
+        temp_html.write(html_content.encode('utf-8'))
+        temp_html_path = temp_html.name
+    
+    # PDF generieren
+    pdf_path = temp_html_path.replace('.html', '.pdf')
+    pdfkit.from_file(temp_html_path, pdf_path)
+    
+    # Temporäre HTML-Datei löschen
+    os.unlink(temp_html_path)
+    
+    # PDF mit Dokumenten zusammenführen
+    final_pdf_path = pdf_path.replace('.pdf', '_final.pdf')
+    merger = PyPDF2.PdfMerger()
+    
+    # Haupt-PDF hinzufügen
+    merger.append(pdf_path)
+    
+    # Dokumente hinzufügen
+    documents = db.execute('''
+        SELECT * FROM application_documents 
+        WHERE application_id = ?
+        ORDER BY document_type
+    ''', (id,)).fetchall()
+    
+    for doc in documents:
+        if os.path.exists(doc['file_path']):
+            merger.append(doc['file_path'])
+    
+    merger.write(final_pdf_path)
+    merger.close()
+    
+    # Temporäre PDF löschen
+    os.unlink(pdf_path)
+    
+    return send_file(
+        final_pdf_path,
+        as_attachment=True,
+        download_name=f'bewerbung_{application["company_name"]}.pdf'
+    ) 

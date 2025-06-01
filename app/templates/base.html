@@ -114,6 +114,15 @@
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Wochenberichte</span>
             </a>
+
+            <!-- Bewerbungen Link -->
+            <a href="{{ url_for('tickets.applications') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.applications' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-file-alt text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Bewerbungen</span>
+            </a>
             {% endif %}
 
             <!-- Über Scandy (öffentlich) -->

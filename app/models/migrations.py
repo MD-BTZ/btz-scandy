@@ -7,7 +7,7 @@ import time
 logger = logging.getLogger(__name__)
 
 # Die Schema-Version, die die aktuelle Codebasis erwartet
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 def get_db_connection(db_path, timeout=30):
     """Erstellt eine Datenbankverbindung mit Timeout."""
@@ -181,156 +181,581 @@ def _migrate_v3_to_v4(conn):
         logger.error(f"Fehler bei Migration v3->v4: {e}")
         return False
 
+def _migrate_v4_to_v5(conn):
+    """Migration von Version 4 auf Version 5 - Fügt Bewerbungstabellen hinzu"""
+    try:
+        cursor = conn.cursor()
+        
+        # Erstelle application_templates Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS application_templates (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                template_content TEXT NOT NULL,
+                category TEXT,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT 1,
+                FOREIGN KEY (created_by) REFERENCES users(username)
+            )
+        """)
+
+        # Erstelle application_document_templates Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS application_document_templates (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                document_type TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                description TEXT,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT 1,
+                FOREIGN KEY (created_by) REFERENCES users(username)
+            )
+        """)
+
+        # Erstelle applications Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS applications (
+                id INTEGER PRIMARY KEY,
+                template_id INTEGER NOT NULL,
+                company_name TEXT NOT NULL,
+                position TEXT NOT NULL,
+                contact_person TEXT,
+                contact_email TEXT,
+                contact_phone TEXT,
+                address TEXT,
+                generated_content TEXT NOT NULL,
+                status TEXT DEFAULT 'erstellt',
+                sent_at TIMESTAMP,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                FOREIGN KEY (template_id) REFERENCES application_templates(id),
+                FOREIGN KEY (created_by) REFERENCES users(username)
+            )
+        """)
+
+        # Erstelle application_documents Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS application_documents (
+                id INTEGER PRIMARY KEY,
+                application_id INTEGER NOT NULL,
+                document_template_id INTEGER,
+                document_type TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (application_id) REFERENCES applications(id),
+                FOREIGN KEY (document_template_id) REFERENCES application_document_templates(id)
+            )
+        """)
+
+        # Erstelle application_responses Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS application_responses (
+                id INTEGER PRIMARY KEY,
+                application_id INTEGER NOT NULL,
+                response_type TEXT NOT NULL,
+                response_date TIMESTAMP,
+                response_content TEXT,
+                next_steps TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (application_id) REFERENCES applications(id)
+            )
+        """)
+
+        # Erstelle application_template_placeholders Tabelle
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS application_template_placeholders (
+                id INTEGER PRIMARY KEY,
+                template_id INTEGER NOT NULL,
+                placeholder_name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                example_value TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (template_id) REFERENCES application_templates(id)
+            )
+        """)
+        
+        # Aktualisiere die Schema-Version
+        set_db_schema_version(conn, 5)
+        logger.info("Schema-Version auf 5 aktualisiert")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v4->v5: {e}")
+        return False
+
 def _column_exists(cursor, table, column):
     cursor.execute(f"PRAGMA table_info({table})")
     return any(row[1] == column for row in cursor.fetchall())
 
 def _migrate_ticket_db(conn):
-    """Migration der Ticket-Datenbank auf Version 3."""
-    logger.info("Führe Migration der Ticket-Datenbank auf Version 3 durch...")
-    cursor = conn.cursor()
-
-    try:
-        # Prüfe ob schema_version Tabelle existiert
-        cursor.execute("""
+    """Führt die Migrationen für die Ticket-Datenbank durch."""
+    db_path = os.path.join(current_app.root_path, 'database', 'tickets.db')
+    logging.info(f"Verwendeter Ticket-Datenbankpfad: {db_path}")
+    
+    # Korrigiere Berechtigungen
+    logging.info(f"Korrigiere Berechtigungen für {db_path}")
+    _fix_permissions(db_path)
+    logging.info("Berechtigungen erfolgreich korrigiert")
+    
+    with sqlite3.connect(db_path) as db:
+        # Erstelle schema_version Tabelle falls nicht vorhanden
+        db.execute("""
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY,
                 applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
+        
         # Hole aktuelle Version
-        cursor.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
-        result = cursor.fetchone()
-        current_version = result[0] if result else 0
-
-        if current_version < 3:
-            # Füge neue Spalten zur tickets Tabelle hinzu, nur wenn sie noch nicht existieren
-            if not _column_exists(cursor, "tickets", "last_modified_by"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN last_modified_by TEXT;")
-            if not _column_exists(cursor, "tickets", "last_modified_at"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN last_modified_at TIMESTAMP;")
-            if not _column_exists(cursor, "tickets", "category"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN category TEXT;")
-            if not _column_exists(cursor, "tickets", "due_date"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN due_date TIMESTAMP;")
-            if not _column_exists(cursor, "tickets", "estimated_time"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN estimated_time INTEGER;")
-            if not _column_exists(cursor, "tickets", "actual_time"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN actual_time INTEGER;")
-            if not _column_exists(cursor, "tickets", "response"):
-                cursor.execute("ALTER TABLE tickets ADD COLUMN response TEXT;")
-
-            # Füge neue Spalten zur ticket_notes Tabelle hinzu, nur wenn sie noch nicht existieren
-            if not _column_exists(cursor, "ticket_notes", "modified_at"):
-                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN modified_at TIMESTAMP;")
-            if not _column_exists(cursor, "ticket_notes", "modified_by"):
-                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN modified_by TEXT;")
-            if not _column_exists(cursor, "ticket_notes", "is_private"):
-                cursor.execute("ALTER TABLE ticket_notes ADD COLUMN is_private BOOLEAN DEFAULT 0;")
-
+        current_version = db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] or 0
+        
+        # Führe Migrationen durch
+        if current_version < 1:
+            # Erstelle users Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    email TEXT,
+                    firstname TEXT,
+                    lastname TEXT,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                )
+            """)
+            
+            # Erstelle settings Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    description TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle categories Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle ticket_categories Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS ticket_categories (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE
+                )
+            """)
+            
+            # Erstelle locations Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle departments Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS departments (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP
+                )
+            """)
+            
+            # Erstelle tools Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS tools (
+                    id INTEGER PRIMARY KEY,
+                    barcode TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'verfügbar',
+                    category TEXT,
+                    location TEXT,
+                    last_maintenance DATE,
+                    next_maintenance DATE,
+                    maintenance_interval INTEGER,
+                    last_checked TIMESTAMP,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle workers Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS workers (
+                    id INTEGER PRIMARY KEY,
+                    barcode TEXT NOT NULL UNIQUE,
+                    firstname TEXT NOT NULL,
+                    lastname TEXT NOT NULL,
+                    department TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle consumables Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS consumables (
+                    id INTEGER PRIMARY KEY,
+                    barcode TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    quantity INTEGER DEFAULT 0,
+                    min_quantity INTEGER DEFAULT 0,
+                    category TEXT,
+                    location TEXT,
+                    unit TEXT,
+                    supplier TEXT,
+                    reorder_point INTEGER,
+                    notes TEXT,
+                    deleted BOOLEAN DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Erstelle lendings Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS lendings (
+                    id INTEGER PRIMARY KEY,
+                    tool_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    lent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    returned_at TIMESTAMP,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode),
+                    FOREIGN KEY (tool_barcode) REFERENCES tools(barcode)
+                )
+            """)
+            
+            # Erstelle consumable_usages Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS consumable_usages (
+                    id INTEGER PRIMARY KEY,
+                    consumable_barcode TEXT NOT NULL,
+                    worker_barcode TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sync_status TEXT DEFAULT 'pending',
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (worker_barcode) REFERENCES workers(barcode),
+                    FOREIGN KEY (consumable_barcode) REFERENCES consumables(barcode)
+                )
+            """)
+            
+            # Erstelle tickets Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS tickets (
+                    id INTEGER PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    status TEXT DEFAULT 'offen',
+                    priority TEXT DEFAULT 'normal',
+                    created_by TEXT NOT NULL,
+                    assigned_to TEXT,
+                    category TEXT,
+                    due_date TIMESTAMP,
+                    estimated_time INTEGER,
+                    actual_time INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at TIMESTAMP,
+                    resolution_notes TEXT,
+                    response TEXT,
+                    last_modified_by TEXT,
+                    last_modified_at TIMESTAMP,
+                    FOREIGN KEY (last_modified_by) REFERENCES users(username),
+                    FOREIGN KEY (assigned_to) REFERENCES users(username),
+                    FOREIGN KEY (created_by) REFERENCES users(username)
+                )
+            """)
+            
+            # Erstelle auftrag_details Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS auftrag_details (
+                    id INTEGER PRIMARY KEY,
+                    ticket_id INTEGER NOT NULL,
+                    auftrag_an TEXT,
+                    bereich TEXT,
+                    auftraggeber_intern BOOLEAN DEFAULT 1,
+                    auftraggeber_extern BOOLEAN DEFAULT 0,
+                    auftraggeber_name TEXT,
+                    kontakt TEXT,
+                    auftragsbeschreibung TEXT,
+                    ausgefuehrte_arbeiten TEXT,
+                    arbeitsstunden REAL,
+                    leistungskategorie TEXT,
+                    fertigstellungstermin TEXT,
+                    gesamtsumme REAL DEFAULT 0,
+                    erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+                )
+            """)
+            
+            # Erstelle auftrag_material Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS auftrag_material (
+                    id INTEGER PRIMARY KEY,
+                    ticket_id INTEGER NOT NULL,
+                    material TEXT,
+                    menge REAL,
+                    einzelpreis REAL,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+                )
+            """)
+            
+            # Erstelle ticket_notes Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS ticket_notes (
+                    id INTEGER PRIMARY KEY,
+                    ticket_id INTEGER NOT NULL,
+                    note TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    is_private BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (created_by) REFERENCES users(username),
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+                )
+            """)
+            
             # Erstelle ticket_messages Tabelle
-            cursor.execute('''
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS ticket_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY,
                     ticket_id INTEGER NOT NULL,
                     message TEXT NOT NULL,
                     sender TEXT NOT NULL,
                     is_admin BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                    FOREIGN KEY (sender) REFERENCES users(username)
+                    FOREIGN KEY (sender) REFERENCES users(username),
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
                 )
-            ''')
-
+            """)
+            
             # Erstelle ticket_history Tabelle
-            cursor.execute('''
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS ticket_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY,
                     ticket_id INTEGER NOT NULL,
                     field_name TEXT NOT NULL,
                     old_value TEXT,
                     new_value TEXT,
                     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     changed_by TEXT NOT NULL,
-                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-                    FOREIGN KEY (changed_by) REFERENCES users(username)
+                    FOREIGN KEY (changed_by) REFERENCES users(username),
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
                 )
-            ''')
+            """)
+            
+            # Erstelle system_logs Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS system_logs (
+                    id INTEGER PRIMARY KEY,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    level TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    details TEXT
+                )
+            """)
+            
+            # Erstelle access_settings Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS access_settings (
+                    route TEXT PRIMARY KEY,
+                    is_public BOOLEAN DEFAULT 0,
+                    description TEXT
+                )
+            """)
+            
+            # Erstelle timesheets Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS timesheets (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    year INTEGER NOT NULL,
+                    kw INTEGER NOT NULL,
+                    montag_start TEXT,
+                    montag_end TEXT,
+                    montag_tasks TEXT,
+                    dienstag_start TEXT,
+                    dienstag_end TEXT,
+                    dienstag_tasks TEXT,
+                    mittwoch_start TEXT,
+                    mittwoch_end TEXT,
+                    mittwoch_tasks TEXT,
+                    donnerstag_start TEXT,
+                    donnerstag_end TEXT,
+                    donnerstag_tasks TEXT,
+                    freitag_start TEXT,
+                    freitag_end TEXT,
+                    freitag_tasks TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
 
-            # Aktualisiere Schema-Version
-            cursor.execute("INSERT INTO schema_version (version) VALUES (3)")
-            conn.commit()
-            logger.info("Ticket-Datenbank erfolgreich auf Version 3 migriert")
-            return True
+            # Erstelle application_templates Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS application_templates (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    template_content TEXT NOT NULL,
+                    category TEXT,
+                    created_by TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT 1,
+                    FOREIGN KEY (created_by) REFERENCES users(username)
+                )
+            """)
 
-        logger.info("Ticket-Datenbank ist bereits auf Version 3")
-        return True
+            # Erstelle applications Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    id INTEGER PRIMARY KEY,
+                    template_id INTEGER NOT NULL,
+                    company_name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    contact_person TEXT,
+                    contact_email TEXT,
+                    contact_phone TEXT,
+                    address TEXT,
+                    generated_content TEXT NOT NULL,
+                    custom_block TEXT,
+                    status TEXT DEFAULT 'erstellt',
+                    sent_at TIMESTAMP,
+                    created_by TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    FOREIGN KEY (template_id) REFERENCES application_templates(id),
+                    FOREIGN KEY (created_by) REFERENCES users(username)
+                )
+            """)
 
-    except Exception as e:
-        logger.error(f"Fehler bei der Ticket-Datenbank-Migration: {str(e)}")
-        conn.rollback()
-        return False
+            # Erstelle application_documents Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS application_documents (
+                    id INTEGER PRIMARY KEY,
+                    application_id INTEGER NOT NULL,
+                    document_type TEXT NOT NULL,
+                    file_name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (application_id) REFERENCES applications(id)
+                )
+            """)
+
+            # Erstelle application_responses Tabelle
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS application_responses (
+                    id INTEGER PRIMARY KEY,
+                    application_id INTEGER NOT NULL,
+                    response_type TEXT NOT NULL,
+                    response_date TIMESTAMP,
+                    response_content TEXT,
+                    next_steps TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (application_id) REFERENCES applications(id)
+                )
+            """)
+            
+            # Aktualisiere Version
+            db.execute("INSERT INTO schema_version (version) VALUES (1)")
+            db.commit()
+            logging.info("Schema-Migration für {} abgeschlossen.".format(db_path))
 
 def run_migrations(db_path):
-    """Prüft die Schema-Version und führt notwendige Migrationen aus."""
-    logger.info(f"Prüfe Datenbank-Schema-Migrationen für: {db_path}")
-    if not os.path.exists(db_path):
-        logger.warning(f"Datenbankdatei {db_path} existiert nicht. Migrationen werden übersprungen (wird neu erstellt).")
-        return
-
-    conn = None
-    max_retries = 3
-    retry_delay = 1  # Sekunden
-
-    for attempt in range(max_retries):
-        try:
-            conn = get_db_connection(db_path)
-            current_version = get_db_schema_version(conn)
-            logger.info(f"Aktuelle Datenbank Schema-Version: {current_version}")
-            logger.info(f"Erwartete App Schema-Version: {CURRENT_SCHEMA_VERSION}")
-
-            if current_version < CURRENT_SCHEMA_VERSION:
-                logger.warning(f"Datenbank-Schema (v{current_version}) ist veraltet. Starte Migrationen...")
-
-                # --- Migration v1 -> v2 ---
-                if current_version < 2:
-                    if not _migrate_v1_to_v2(conn):
-                        raise Exception("Migration von v1 auf v2 fehlgeschlagen!")
-                    current_version = 2
-
-                # --- Migration v2 -> v3 ---
-                if current_version < 3:
-                    if not _migrate_v2_to_v3(conn):
-                        raise Exception("Migration von v2 auf v3 fehlgeschlagen!")
-                    current_version = 3
-
-                # --- Migration v3 -> v4 ---
-                if current_version < 4:
-                    if not _migrate_v3_to_v4(conn):
-                        raise Exception("Migration von v3 auf v4 fehlgeschlagen!")
-                    current_version = 4
-
-                conn.commit()
-                logger.info("Datenbank-Migrationen erfolgreich abgeschlossen.")
-            elif current_version > CURRENT_SCHEMA_VERSION:
-                logger.warning(f"Datenbank-Schema (v{current_version}) ist neuer als von der App erwartet (v{CURRENT_SCHEMA_VERSION}). Möglicherweise Inkompatibilitäten!")
-            else:
-                logger.info("Datenbank-Schema ist aktuell.")
-
-            break  # Erfolgreich, keine weiteren Versuche nötig
-
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e).lower():
-                if attempt < max_retries - 1:
-                    logger.warning(f"Datenbank ist gesperrt. Versuche {attempt + 1} von {max_retries}...")
-                    time.sleep(retry_delay)
-                    continue
-            logger.error(f"Fehler bei der Datenbank-Migration: {str(e)}")
-            raise
-        finally:
-            if conn:
-                conn.close()
+    """Führt alle notwendigen Migrationen für die Ticket-Datenbank durch"""
+    try:
+        logger.info(f"Starte Migration für {db_path}")
+        
+        # Prüfe ob die Datenbank existiert
+        if not os.path.exists(db_path):
+            logger.info("Datenbank existiert nicht, erstelle neue Datenbank")
+            _migrate_ticket_db(db_path)
+            return
+            
+        # Hole aktuelle Schema-Version
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(version) FROM schema_version")
+            current_version = cursor.fetchone()[0] or 0
+            logger.info(f"Aktuelle Schema-Version: {current_version}")
+            
+        # Führe Migrationen basierend auf Version durch
+        if current_version < 1:
+            logger.info("Führe Migration von v1 zu v2 durch")
+            _migrate_v1_to_v2(db_path)
+        if current_version < 2:
+            logger.info("Führe Migration von v2 zu v3 durch")
+            _migrate_v2_to_v3(db_path)
+        if current_version < 3:
+            logger.info("Führe Migration von v3 zu v4 durch")
+            _migrate_v3_to_v4(db_path)
+        if current_version < 4:
+            logger.info("Führe Migration von v4 zu v5 durch")
+            _migrate_v4_to_v5(db_path)
+            
+        logger.info("Migration erfolgreich abgeschlossen")
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Migration: {str(e)}")
+        raise
 
 def run_ticket_db_migrations(ticket_db_path):
     """Führt Migrationen für die Ticket-Datenbank durch."""

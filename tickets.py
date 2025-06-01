@@ -8,6 +8,7 @@ from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
 from app.models.user import User
+from docx import Document
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 ticket_db = TicketDatabase()
@@ -808,4 +809,141 @@ def debug_auftrag_details(ticket_id):
             [ticket_id],
             one=True
         )
-    }) 
+    })
+
+# Bewerbungsfeature Routen
+@bp.route('/applications')
+@login_required
+def applications():
+    templates = ticket_db.query("SELECT * FROM application_templates WHERE created_by = ? AND is_active = 1", 
+                         (current_user.username,)).fetchall()
+    applications = ticket_db.query('''
+        SELECT a.*, t.name as template_name 
+        FROM applications a 
+        JOIN application_templates t ON a.template_id = t.id 
+        WHERE a.created_by = ?
+        ORDER BY a.created_at DESC
+    ''', (current_user.username,)).fetchall()
+    return render_template('applications.html', templates=templates, applications=applications)
+
+@bp.route('/applications/template/upload', methods=['POST'])
+@login_required
+def upload_template():
+    if 'template' not in request.files:
+        flash('Keine Datei ausgewählt', 'error')
+        return redirect(url_for('applications'))
+    
+    file = request.files['template']
+    if file.filename == '':
+        flash('Keine Datei ausgewählt', 'error')
+        return redirect(url_for('applications'))
+    
+    if not file.filename.endswith('.docx'):
+        flash('Nur .docx Dateien sind erlaubt', 'error')
+        return redirect(url_for('applications'))
+    
+    try:
+        # Speichere die Datei temporär
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_' + file.filename)
+        file.save(temp_path)
+        
+        # Extrahiere den Text aus der DOCX-Datei
+        doc = Document(temp_path)
+        template_content = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+        
+        # Speichere die Vorlage in der Datenbank
+        ticket_db.execute('''
+            INSERT INTO application_templates (name, template_content, category, created_by)
+            VALUES (?, ?, ?, ?)
+        ''', (file.filename, template_content, request.form.get('category'), current_user.username))
+        ticket_db.commit()
+        
+        # Lösche die temporäre Datei
+        os.remove(temp_path)
+        
+        flash('Vorlage erfolgreich hochgeladen', 'success')
+    except Exception as e:
+        flash(f'Fehler beim Hochladen: {str(e)}', 'error')
+    
+    return redirect(url_for('applications'))
+
+@bp.route('/applications/create', methods=['POST'])
+@login_required
+def create_application():
+    template_id = request.form.get('template_id')
+    company_name = request.form.get('company_name')
+    position = request.form.get('position')
+    contact_person = request.form.get('contact_person')
+    contact_email = request.form.get('contact_email')
+    contact_phone = request.form.get('contact_phone')
+    address = request.form.get('address')
+    
+    # Hole die Vorlage
+    template = ticket_db.query('SELECT * FROM application_templates WHERE id = ?', (template_id,)).fetchone()
+    if not template:
+        flash('Vorlage nicht gefunden', 'error')
+        return redirect(url_for('applications'))
+    
+    # Ersetze die Platzhalter
+    content = template['template_content']
+    replacements = {
+        '{{company_name}}': company_name,
+        '{{position}}': position,
+        '{{contact_person}}': contact_person,
+        '{{contact_email}}': contact_email,
+        '{{contact_phone}}': contact_phone,
+        '{{address}}': address,
+        '{{date}}': datetime.now().strftime('%d.%m.%Y')
+    }
+    
+    for placeholder, value in replacements.items():
+        content = content.replace(placeholder, value)
+    
+    # Speichere die Bewerbung
+    ticket_db.execute('''
+        INSERT INTO applications (
+            template_id, company_name, position, contact_person, 
+            contact_email, contact_phone, address, generated_content, 
+            created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (template_id, company_name, position, contact_person, 
+          contact_email, contact_phone, address, content, 
+          current_user.username))
+    ticket_db.commit()
+    
+    flash('Bewerbung erfolgreich erstellt', 'success')
+    return redirect(url_for('applications'))
+
+@bp.route('/applications/<int:id>/update_status', methods=['POST'])
+@login_required
+def update_application_status(id):
+    status = request.form.get('status')
+    notes = request.form.get('notes')
+    
+    ticket_db.execute('''
+        UPDATE applications 
+        SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND created_by = ?
+    ''', (status, notes, id, current_user.username))
+    ticket_db.commit()
+    
+    flash('Status aktualisiert', 'success')
+    return redirect(url_for('applications'))
+
+@bp.route('/applications/<int:id>/add_response', methods=['POST'])
+@login_required
+def add_application_response(id):
+    response_type = request.form.get('response_type')
+    response_content = request.form.get('response_content')
+    next_steps = request.form.get('next_steps')
+    
+    ticket_db.execute('''
+        INSERT INTO application_responses (
+            application_id, response_type, response_content, 
+            next_steps, response_date
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (id, response_type, response_content, next_steps))
+    ticket_db.commit()
+    
+    flash('Antwort hinzugefügt', 'success')
+    return redirect(url_for('applications')) 

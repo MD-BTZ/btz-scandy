@@ -16,6 +16,7 @@ class SchemaValidator:
         """Lädt das Schema aus der Schema-Datei"""
         schema = {}
         current_table = None
+        in_columns = False
         
         with open(self.schema_file, 'r', encoding='utf-8') as f:
             for line in f:
@@ -29,28 +30,51 @@ class SchemaValidator:
                         'indices': [],
                         'foreign_keys': []
                     }
+                    in_columns = False
+                
+                # Spalten-Bereich gefunden
+                elif line == 'Spalten:' and current_table:
+                    in_columns = True
+                    continue
                 
                 # Spalten gefunden
-                elif line.startswith('  - ') and current_table:
-                    if 'PRIMARY KEY' in line:
-                        schema[current_table]['columns'].append({
-                            'name': line.split('(')[0].strip('- ').strip(),
-                            'type': line.split('(')[1].split(')')[0],
-                            'primary_key': True
-                        })
-                    else:
-                        schema[current_table]['columns'].append({
-                            'name': line.split('(')[0].strip('- ').strip(),
-                            'type': line.split('(')[1].split(')')[0],
-                            'primary_key': False
-                        })
+                elif line.startswith('  - ') and current_table and in_columns:
+                    # Extrahiere Spaltenname und Definition
+                    col_def = line.strip('- ').strip()
+                    if '(' in col_def:
+                        name = col_def.split('(')[0].strip()
+                        type_info = col_def[col_def.find('(')+1:col_def.rfind(')')].strip()
+                        
+                        # Extrahiere Typ und Constraints
+                        type_parts = type_info.split()
+                        col_type = type_parts[0]
+                        
+                        column = {
+                            'name': name,
+                            'type': col_type,
+                            'primary_key': 'PRIMARY KEY' in type_info,
+                            'not_null': 'NOT NULL' in type_info
+                        }
+                        
+                        # Extrahiere DEFAULT-Wert
+                        if 'DEFAULT' in type_info:
+                            default_start = type_info.find('DEFAULT') + 7
+                            column['default'] = type_info[default_start:].strip()
+                        
+                        schema[current_table]['columns'].append(column)
                 
                 # Indizes gefunden
-                elif line.startswith('  - idx_') and current_table:
+                elif line == 'Indizes:' and current_table:
+                    in_columns = False
+                    continue
+                elif line.startswith('  - ') and current_table and not in_columns and 'idx_' in line:
                     schema[current_table]['indices'].append(line.strip('- ').strip())
                 
                 # Foreign Keys gefunden
-                elif line.startswith('  - ') and '->' in line and current_table:
+                elif line == 'Foreign Keys:' and current_table:
+                    in_columns = False
+                    continue
+                elif line.startswith('  - ') and current_table and not in_columns and '->' in line:
                     schema[current_table]['foreign_keys'].append(line.strip('- ').strip())
         
         return schema
@@ -66,41 +90,45 @@ class SchemaValidator:
                 columns = []
                 for col in table_schema['columns']:
                     col_def = f"{col['name']} {col['type']}"
-                    if col['primary_key']:
+                    if col.get('primary_key'):
                         col_def += " PRIMARY KEY"
+                    if col.get('not_null'):
+                        col_def += " NOT NULL"
+                    if col.get('default'):
+                        col_def += f" DEFAULT {col['default']}"
                     columns.append(col_def)
                 
-                create_table_sql = f"CREATE TABLE {table_name} (\n    " + ",\n    ".join(columns) + "\n)"
-                migration_sql.append(create_table_sql)
+                # Füge Foreign Keys hinzu
+                for fk in table_schema.get('foreign_keys', []):
+                    from_col, ref = fk.split(' -> ')
+                    ref_table, ref_col = ref.split('.')
+                    columns.append(f"FOREIGN KEY ({from_col}) REFERENCES {ref_table}({ref_col})")
+                
+                if columns:  # Nur erstellen wenn Spalten vorhanden sind
+                    create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} (\n    " + ",\n    ".join(columns) + "\n)"
+                    migration_sql.append(create_table_sql)
                 continue
             
             # Spalten hinzufügen oder ändern
             for column in table_schema['columns']:
                 if column['name'] not in db_columns:
                     # Neue Spalte hinzufügen
-                    migration_sql.append(f"ALTER TABLE {table_name} ADD COLUMN {column['name']} {column['type']}")
-                else:
-                    # Spaltentyp ändern, wenn nötig
-                    db_col = db_columns[column['name']]
-                    if db_col['type'].upper() != column['type'].upper():
-                        # SQLite unterstützt kein ALTER COLUMN, daher temporäre Tabelle
-                        temp_table = f"{table_name}_temp"
-                        migration_sql.extend([
-                            f"CREATE TABLE {temp_table} AS SELECT * FROM {table_name}",
-                            f"DROP TABLE {table_name}",
-                            f"CREATE TABLE {table_name} AS SELECT * FROM {temp_table}",
-                            f"DROP TABLE {temp_table}"
-                        ])
+                    col_def = f"{column['name']} {column['type']}"
+                    if column.get('not_null'):
+                        col_def += " NOT NULL"
+                    if column.get('default'):
+                        col_def += f" DEFAULT {column['default']}"
+                    migration_sql.append(f"ALTER TABLE {table_name} ADD COLUMN {col_def}")
             
             # Indizes hinzufügen
-            for index in table_schema['indices']:
+            for index in table_schema.get('indices', []):
                 if index not in db_indices:
                     # Extrahiere Spaltennamen aus dem Index
                     index_columns = index.split('_')[1:]  # Entferne 'idx_' Präfix
-                    migration_sql.append(f"CREATE INDEX {index} ON {table_name} ({', '.join(index_columns)})")
+                    migration_sql.append(f"CREATE INDEX IF NOT EXISTS {index} ON {table_name} ({', '.join(index_columns)})")
             
             # Foreign Keys hinzufügen
-            for fk in table_schema['foreign_keys']:
+            for fk in table_schema.get('foreign_keys', []):
                 if fk not in db_foreign_keys:
                     # Extrahiere Spalten und Referenzen
                     from_col, ref = fk.split(' -> ')

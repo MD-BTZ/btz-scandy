@@ -25,6 +25,7 @@ from app.config.config import Config
 from app.models.ticket_db import TicketDatabase
 import subprocess
 from docx import Document
+from app.routes.applications import delete_user_documents
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -2350,7 +2351,7 @@ def toggle_user_active(user_id):
 @bp.route('/users/delete/<int:user_id>', methods=['POST'])
 @admin_required
 def delete_user(user_id):
-    """Löscht einen Benutzer."""
+    """Löscht einen Benutzer und alle zugehörigen Dokumente."""
     user_to_delete = User.get_by_id(user_id)
 
     if not user_to_delete:
@@ -2363,6 +2364,10 @@ def delete_user(user_id):
         return redirect(url_for('admin.manage_users'))
 
     try:
+        # Lösche zuerst die Dokumente des Benutzers
+        delete_user_documents(user_to_delete.username)
+        
+        # Dann lösche den Benutzer aus der Datenbank
         ticket_db.query('''
             DELETE FROM users
             WHERE id = ?

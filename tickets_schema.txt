@@ -414,3 +414,65 @@ Foreign Keys:
 
 ================================================================================
 
+Tabelle: application_templates
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - name (TEXT) NOT NULL
+  - template_content (TEXT) NOT NULL
+  - category (TEXT)
+  - created_by (TEXT) NOT NULL
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - is_active (BOOLEAN) DEFAULT 1
+
+Foreign Keys:
+  - created_by -> users.username
+
+================================================================================
+
+Tabelle: applications
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - template_id (INTEGER) NOT NULL
+  - company_name (TEXT) NOT NULL
+  - position (TEXT) NOT NULL
+  - contact_person (TEXT)
+  - contact_email (TEXT)
+  - contact_phone (TEXT)
+  - address (TEXT)
+  - generated_content (TEXT) NOT NULL
+  - status (TEXT) DEFAULT 'erstellt'
+  - sent_at (TIMESTAMP)
+  - created_by (TEXT) NOT NULL
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - notes (TEXT)
+
+Foreign Keys:
+  - template_id -> application_templates.id
+  - created_by -> users.username
+
+================================================================================
+
+Tabelle: application_responses
+----------------------------------------
+
+Spalten:
+  - id (INTEGER) PRIMARY KEY
+  - application_id (INTEGER) NOT NULL
+  - response_type (TEXT) NOT NULL
+  - response_date (TIMESTAMP)
+  - response_content (TEXT)
+  - next_steps (TEXT)
+  - created_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+  - updated_at (TIMESTAMP) DEFAULT CURRENT_TIMESTAMP
+
+Foreign Keys:
+  - application_id -> applications.id
+
+================================================================================
+
