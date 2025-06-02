@@ -26,6 +26,7 @@ from app.models.ticket_db import TicketDatabase
 import subprocess
 from docx import Document
 from app.routes.applications import delete_user_documents
+from app.routes.tickets import delete_user_files
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -2364,8 +2365,9 @@ def delete_user(user_id):
         return redirect(url_for('admin.manage_users'))
 
     try:
-        # Lösche zuerst die Dokumente des Benutzers
-        delete_user_documents(user_to_delete.username)
+        # Lösche zuerst die Dateien des Benutzers
+        if not delete_user_files(user_to_delete.username):
+            flash("Warnung: Einige Dateien konnten nicht gelöscht werden.", "warning")
         
         # Dann lösche den Benutzer aus der Datenbank
         ticket_db.query('''

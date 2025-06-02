@@ -2,6 +2,7 @@ import os
 import sqlite3
 import shutil
 from datetime import datetime
+from .migrate_applications import migrate_applications
 
 def migrate_database():
     # Pfade definieren
@@ -42,6 +43,13 @@ def migrate_database():
             os.rename(new_db_path, old_db_path)
             print("Migration erfolgreich abgeschlossen!")
             print(f"Die alte Datenbank wurde unter {old_db_path}.{timestamp}.old gesichert.")
+            
+        # Bewerbungstabellen migrieren
+        print("Initialisiere Bewerbungstabellen...")
+        if migrate_applications():
+            print("Bewerbungstabellen erfolgreich initialisiert")
+        else:
+            print("Fehler bei der Initialisierung der Bewerbungstabellen")
             
     except sqlite3.OperationalError as e:
         print(f"Fehler bei der Migration: {str(e)}")

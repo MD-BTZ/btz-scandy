@@ -387,3 +387,32 @@ function initializeAuftragDetailsModal() {
     updateSummeMaterial();
     updateSummeArbeit();
 } 
+
+// Funktion zum Löschen eines Templates
+function deleteTemplate(templateId) {
+    if (!confirm('Möchten Sie dieses Template wirklich löschen?')) {
+        return;
+    }
+    
+    fetch(`/tickets/templates/${templateId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast('error', data.message || 'Fehler beim Löschen des Templates');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+} 

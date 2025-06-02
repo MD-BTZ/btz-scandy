@@ -19,11 +19,12 @@ from flask_login import LoginManager, current_user
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
-from app.routes import auth, tools, consumables, workers, setup, backup
+from app.routes import auth, tools, consumables, workers, setup, backup, applications
 from app.config import Config
 from app.routes import init_app
 import sqlite3
 from app.utils.schema_validator import validate_and_migrate_databases
+from app.models.ticket_migrations import run_migrations
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -164,9 +165,14 @@ def initialize_and_migrate_databases():
         
         # Initialisiere und migriere Ticket-Datenbank
         logger.info("Initialisiere und migriere Ticket-Datenbank...")
-        from app.models.migrations import run_migrations
         run_migrations(tickets_db_path)
         logger.info("Ticket-Datenbank erfolgreich initialisiert und migriert")
+        
+        # Initialisiere Bewerbungstabellen
+        logger.info("Initialisiere Bewerbungstabellen...")
+        from app.models.applications import create_application_tables
+        create_application_tables()
+        logger.info("Bewerbungstabellen erfolgreich initialisiert")
         
         return True
         
@@ -233,7 +239,7 @@ def create_app(test_config=None):
     from app.routes import (
         main, auth, admin, tools, workers, 
         consumables, lending, dashboard, history, 
-        quick_scan, api, tickets, setup, backup
+        quick_scan, api, tickets, setup, backup, applications
     )
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
@@ -249,6 +255,7 @@ def create_app(test_config=None):
     app.register_blueprint(tickets.bp, url_prefix='/tickets')
     app.register_blueprint(setup.bp)
     app.register_blueprint(backup.bp)
+    app.register_blueprint(applications.bp)
     
     # Fehlerbehandlung registrieren
     handle_errors(app)

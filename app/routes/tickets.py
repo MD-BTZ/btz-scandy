@@ -13,17 +13,34 @@ import tempfile
 from werkzeug.utils import secure_filename
 import pdfkit
 import PyPDF2
+import shutil
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 ticket_db = TicketDatabase()
 
-UPLOAD_FOLDER = 'app/uploads'
+UPLOAD_FOLDER = os.path.join('app', 'uploads', 'users')
 ALLOWED_EXTENSIONS = {'docx', 'pdf'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_user_upload_path(username):
+    """Gibt den Upload-Pfad für einen bestimmten Benutzer zurück"""
+    return os.path.join(UPLOAD_FOLDER, username)
+
+def ensure_user_directories(username):
+    """Erstellt die notwendigen Verzeichnisse für einen Benutzer"""
+    user_path = get_user_upload_path(username)
+    directories = [
+        os.path.join(user_path, 'templates'),
+        os.path.join(user_path, 'documents', 'cv'),
+        os.path.join(user_path, 'documents', 'certificates')
+    ]
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+    return user_path
 
 @bp.route('/')
 @login_required
@@ -856,54 +873,70 @@ def add_note(id):
 @bp.route('/applications')
 @login_required
 def applications():
-    """Zeigt die Bewerbungsverwaltung an"""
+    # Korrigiere die Dateipfade in der Datenbank
     try:
-        # Hole aktive Templates
-        templates = ticket_db.query("""
-            SELECT id, name, category 
-            FROM application_templates 
-            WHERE is_active = 1
-        """)
+        # Templates korrigieren
+        templates = ticket_db.query('SELECT id, file_path FROM application_templates')
+        for template in templates:
+            if template['file_path'].startswith('app/app/'):
+                new_path = template['file_path'].replace('app/app/', 'app/')
+                ticket_db.query("""
+                    UPDATE application_templates 
+                    SET file_path = ? 
+                    WHERE id = ?
+                """, [new_path, template['id']])
         
-        # Hole Bewerbungen des aktuellen Benutzers
-        applications = ticket_db.query("""
-            SELECT a.*, t.name as template_name 
-            FROM applications a
-            JOIN application_templates t ON a.template_id = t.id
-            WHERE a.created_by = ?
-            ORDER BY a.created_at DESC
-        """, [current_user.username])
-        
-        # Formatiere Datum für jede Bewerbung
-        for app in applications:
-            if app.get('created_at'):
-                try:
-                    created_at = datetime.strptime(app['created_at'], '%Y-%m-%d %H:%M:%S')
-                    app['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-                except ValueError:
-                    app['created_at'] = app['created_at']
-            
-            if app.get('updated_at'):
-                try:
-                    updated_at = datetime.strptime(app['updated_at'], '%Y-%m-%d %H:%M:%S')
-                    app['updated_at'] = updated_at.strftime('%d.%m.%Y, %H:%M')
-                except ValueError:
-                    app['updated_at'] = app['updated_at']
-            
-            if app.get('sent_at'):
-                try:
-                    sent_at = datetime.strptime(app['sent_at'], '%Y-%m-%d %H:%M:%S')
-                    app['sent_at'] = sent_at.strftime('%d.%m.%Y, %H:%M')
-                except ValueError:
-                    app['sent_at'] = app['sent_at']
-        
-        return render_template('tickets/applications.html', 
-                             templates=templates,
-                             applications=applications)
+        # Dokumente korrigieren
+        documents = ticket_db.query('SELECT id, file_path FROM application_documents')
+        for document in documents:
+            if document['file_path'].startswith('app/app/'):
+                new_path = document['file_path'].replace('app/app/', 'app/')
+                ticket_db.query("""
+                    UPDATE application_documents 
+                    SET file_path = ? 
+                    WHERE id = ?
+                """, [new_path, document['id']])
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Bewerbungsseite: {str(e)}")
-        flash('Fehler beim Laden der Bewerbungsseite', 'error')
-        return redirect(url_for('main.index'))
+        logging.error(f"Fehler beim Korrigieren der Dateipfade: {str(e)}")
+
+    # Verfügbare Platzhalter
+    placeholders = {
+        '{{company_name}}': 'Name des Unternehmens',
+        '{{position}}': 'Bezeichnung der Position',
+        '{{contact_person}}': 'Name der Kontaktperson',
+        '{{contact_email}}': 'E-Mail der Kontaktperson',
+        '{{contact_phone}}': 'Telefonnummer der Kontaktperson',
+        '{{address}}': 'Adresse des Unternehmens'
+    }
+
+    # Templates abrufen
+    templates = ticket_db.query(
+            'SELECT * FROM application_templates WHERE is_active = 1'
+    )
+
+    # Gespeicherte Dokumente abrufen
+    documents = ticket_db.query(
+        'SELECT * FROM application_documents WHERE created_by = ?',
+        [current_user.username]
+    )
+
+    # Bewerbungen abrufen
+    applications = ticket_db.query(
+        '''
+        SELECT a.*, t.name as template_name 
+        FROM applications a 
+        JOIN application_templates t ON a.template_id = t.id 
+        WHERE a.created_by = ? 
+        ORDER BY a.created_at DESC
+        ''',
+        [current_user.username]
+    )
+
+    return render_template('tickets/applications.html',
+                         placeholders=placeholders,
+                         templates=templates,
+                         documents=documents,
+                         applications=applications)
 
 @bp.route('/applications/template/upload', methods=['POST'])
 @login_required
@@ -923,17 +956,19 @@ def upload_template():
         return redirect(url_for('tickets.applications'))
     
     try:
-        # Speichere die Datei temporär
+        # Erstelle Benutzerverzeichnisse
+        user_path = ensure_user_directories(current_user.username)
+        
+        # Speichere die Datei
         filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, 'templates', filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        filepath = os.path.join(user_path, 'templates', filename)
         file.save(filepath)
         
         # Speichere Template in der Datenbank
         ticket_db.query("""
-            INSERT INTO application_templates (name, file_path, category, active)
-            VALUES (?, ?, ?, 1)
-        """, [filename, filepath, request.form.get('category', '')])
+            INSERT INTO application_templates (name, file_path, file_name, category, created_by, is_active)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """, [filename, filepath, filename, request.form.get('category', ''), current_user.username])
         
         flash('Template erfolgreich hochgeladen', 'success')
         
@@ -946,66 +981,124 @@ def upload_template():
 @bp.route('/applications/create', methods=['POST'])
 @login_required
 def create_application():
-    """Erstellt eine neue Bewerbung"""
     try:
-        # Dokumente speichern
+        # Erstelle Verzeichnisse für den Benutzer
+        user_path = get_user_upload_path(current_user.username)
+        ensure_user_directories(current_user.username)
+        
+        # Initialisiere Listen für Dokumente
         cv_path = None
         certificate_paths = []
         
+        # Verarbeite Lebenslauf
         if 'cv' in request.files:
             cv_file = request.files['cv']
-            if cv_file.filename != '':
+            if cv_file and allowed_file(cv_file.filename):
                 filename = secure_filename(cv_file.filename)
-                cv_path = os.path.join(UPLOAD_FOLDER, 'documents', 'cv', filename)
+                cv_path = os.path.join(user_path, 'cv', filename)
                 os.makedirs(os.path.dirname(cv_path), exist_ok=True)
                 cv_file.save(cv_path)
+                
+                # Speichere das Dokument in der Datenbank
+                ticket_db.query("""
+                    INSERT INTO application_documents (
+                        file_name, file_path, document_type, created_by
+                    ) VALUES (?, ?, 'cv', ?)
+                """, [filename, cv_path, current_user.username])
         
+        # Verarbeite Zeugnisse
         if 'certificates' in request.files:
-            for cert_file in request.files.getlist('certificates'):
-                if cert_file.filename != '':
+            cert_files = request.files.getlist('certificates')
+            for cert_file in cert_files:
+                if cert_file and allowed_file(cert_file.filename):
                     filename = secure_filename(cert_file.filename)
-                    cert_path = os.path.join(UPLOAD_FOLDER, 'documents', 'certificates', filename)
+                    cert_path = os.path.join(user_path, 'certificates', filename)
                     os.makedirs(os.path.dirname(cert_path), exist_ok=True)
                     cert_file.save(cert_path)
                     certificate_paths.append(cert_path)
+                    
+                    # Speichere das Dokument in der Datenbank
+                    ticket_db.query("""
+                        INSERT INTO application_documents (
+                            file_name, file_path, document_type, created_by
+                        ) VALUES (?, ?, 'certificate', ?)
+                    """, [filename, cert_path, current_user.username])
+        
+        # Verwende gespeicherte Zeugnisse
+        saved_cert_ids = request.form.getlist('saved_certificate_ids[]')
+        for cert_id in saved_cert_ids:
+            saved_cert = ticket_db.query("""
+                SELECT * FROM application_documents 
+                WHERE id = ? AND document_type = 'certificate'
+            """, [cert_id], one=True)
+            if saved_cert:
+                certificate_paths.append(saved_cert['file_path'])
         
         # Bewerbung erstellen
         template_id = request.form['template_id']
         template = ticket_db.query("""
             SELECT * FROM application_templates 
-            WHERE id = ? AND active = 1
+            WHERE id = ? AND is_active = 1
         """, [template_id], one=True)
         
         if not template:
             flash('Template nicht gefunden', 'error')
             return redirect(url_for('tickets.applications'))
             
+        # Lade das Template
+        template_path = template['file_path']
+        if not os.path.exists(template_path):
+            flash('Template-Datei nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        doc = DocxTemplate(template_path)
+            
         # Ersetze Platzhalter
-        content = template['content']
-        content = content.replace('{{company_name}}', request.form['company_name'])
-        content = content.replace('{{position}}', request.form['position'])
-        content = content.replace('{{contact_person}}', request.form.get('contact_person', ''))
-        content = content.replace('{{contact_email}}', request.form.get('contact_email', ''))
-        content = content.replace('{{contact_phone}}', request.form.get('contact_phone', ''))
-        content = content.replace('{{address}}', request.form.get('address', ''))
+        context = {
+            'company_name': request.form['company_name'],
+            'position': request.form['position'],
+            'contact_person': request.form.get('contact_person', ''),
+            'contact_email': request.form.get('contact_email', ''),
+            'contact_phone': request.form.get('contact_phone', ''),
+            'address': request.form.get('address', '')
+        }
         
-        # Speichere Bewerbung
+        # Rendere das Template
+        doc.render(context)
+        
+        # Speichere die gerenderte Bewerbung
+        output_path = os.path.join(user_path, 'applications', f'bewerbung_{datetime.now().strftime("%Y%m%d_%H%M%S")}.docx')
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        doc.save(output_path)
+        
+        # Speichere in der Datenbank
         ticket_db.query("""
             INSERT INTO applications (
                 template_id, company_name, position, contact_person,
                 contact_email, contact_phone, address,
-                generated_content, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)
-        """, [template_id, request.form['company_name'], request.form['position'],
-              request.form.get('contact_person'), request.form.get('contact_email'),
-              request.form.get('contact_phone'), request.form.get('address'),
-              content, current_user.username])
+                generated_content, status, created_by,
+                cv_path, certificate_paths, output_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?)
+        """, [
+            template_id, 
+            request.form['company_name'], 
+            request.form['position'],
+            request.form.get('contact_person'), 
+            request.form.get('contact_email'),
+            request.form.get('contact_phone'), 
+            request.form.get('address'),
+            str(context),  # Speichere den Kontext als String
+            current_user.username, 
+            cv_path, 
+            ','.join(certificate_paths) if certificate_paths else None,
+            output_path
+        ])
         
         flash('Bewerbung erfolgreich erstellt', 'success')
         
     except Exception as e:
         logging.error(f"Fehler beim Erstellen der Bewerbung: {str(e)}")
-        flash('Fehler beim Erstellen der Bewerbung', 'error')
+        flash(f'Fehler beim Erstellen der Bewerbung: {str(e)}', 'error')
         
     return redirect(url_for('tickets.applications'))
 
@@ -1149,3 +1242,192 @@ def download_application(id):
         as_attachment=True,
         download_name=f'bewerbung_{application["company_name"]}.pdf'
     ) 
+
+@bp.route('/templates/<int:id>/download')
+@login_required
+def download_template(id):
+    """Template herunterladen"""
+    try:
+        # Template aus der Datenbank holen
+        template = ticket_db.query("""
+            SELECT * FROM application_templates 
+            WHERE id = ? AND is_active = 1
+        """, [id], one=True)
+        
+        if not template:
+            flash('Template nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Korrigiere den Dateipfad (entferne doppeltes app/)
+        file_path = template['file_path'].replace('app/app/', 'app/')
+            
+        # Prüfen ob die Datei existiert
+        if not os.path.exists(file_path):
+            flash('Template-Datei nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Datei zum Download senden
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=template['file_name']
+        )
+        
+    except Exception as e:
+        flash(f'Fehler beim Herunterladen des Templates: {str(e)}', 'error')
+        return redirect(url_for('tickets.applications'))
+
+@bp.route('/templates/<int:id>/delete', methods=['POST'])
+@login_required
+def delete_template(id):
+    try:
+        # Hole das Template aus der Datenbank
+        template = ticket_db.query("""
+            SELECT * FROM application_templates 
+            WHERE id = ? AND is_active = 1
+        """, [id], one=True)
+        
+        if not template:
+            return jsonify({'success': False, 'message': 'Template nicht gefunden'}), 404
+            
+        # Korrigiere den Dateipfad (entferne doppeltes app/)
+        file_path = template['file_path'].replace('app/app/', 'app/')
+            
+        # Template in der Datenbank als inaktiv markieren
+        ticket_db.query("""
+            UPDATE application_templates 
+            SET is_active = 0 
+            WHERE id = ?
+        """, [id])
+        
+        # Datei physisch löschen
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                logging.error(f"Fehler beim Löschen der Template-Datei: {str(e)}")
+                return jsonify({'success': False, 'message': 'Fehler beim Löschen der Datei'})
+            
+        return jsonify({'success': True, 'message': 'Template erfolgreich gelöscht'})
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Löschen des Templates: {str(e)}")
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen des Templates: {str(e)}'})
+
+@bp.route('/applications/document/upload', methods=['POST'])
+@login_required
+def upload_document():
+    try:
+        if 'document' not in request.files:
+            return redirect(url_for('tickets.applications'))
+        
+        file = request.files['document']
+        document_type = request.form.get('document_type')
+        
+        if file.filename == '':
+            return redirect(url_for('tickets.applications'))
+            
+        if file and document_type:
+            # Erstelle die Verzeichnisstruktur
+            user_dir = os.path.join('app', 'uploads', 'users', current_user.username, 'documents', document_type)
+            os.makedirs(user_dir, exist_ok=True)
+            
+            # Speichere die Datei
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(user_dir, filename)
+            file.save(file_path)
+            
+            # Speichere in der Datenbank
+            ticket_db.query("""
+                INSERT INTO application_documents 
+                (file_name, file_path, document_type, created_by) 
+                VALUES (?, ?, ?, ?)
+            """, [filename, file_path, document_type, current_user.username])
+            
+            flash('Dokument erfolgreich hochgeladen', 'success')
+        else:
+            flash('Fehler beim Hochladen des Dokuments', 'error')
+            
+    except Exception as e:
+        logging.error(f'Fehler beim Hochladen des Dokuments: {str(e)}')
+        flash(f'Fehler beim Hochladen des Dokuments: {str(e)}', 'error')
+        
+    return redirect(url_for('tickets.applications'))
+
+@bp.route('/documents/<int:id>/download')
+@login_required
+def download_document(id):
+    """Lädt ein Dokument herunter"""
+    try:
+        # Dokument aus der Datenbank holen
+        document = ticket_db.query("""
+            SELECT * FROM application_documents 
+            WHERE id = ? AND created_by = ?
+        """, [id, current_user.username], one=True)
+        
+        if not document:
+            flash('Dokument nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Korrigiere den Dateipfad (entferne doppeltes app/)
+        file_path = document['file_path'].replace('app/app/', 'app/')
+            
+        # Prüfen ob die Datei existiert
+        if not os.path.exists(file_path):
+            flash('Dokument-Datei nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Datei zum Download senden
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=document['file_name']
+        )
+        
+    except Exception as e:
+        flash(f'Fehler beim Herunterladen des Dokuments: {str(e)}', 'error')
+        return redirect(url_for('tickets.applications'))
+
+@bp.route('/documents/<int:id>/delete', methods=['POST'])
+@login_required
+def delete_document(id):
+    """Löscht ein Dokument"""
+    try:
+        # Dokument aus der Datenbank holen
+        document = ticket_db.query("""
+            SELECT * FROM application_documents 
+            WHERE id = ? AND created_by = ?
+        """, [id, current_user.username], one=True)
+        
+        if not document:
+            return jsonify({'success': False, 'message': 'Dokument nicht gefunden'})
+            
+        # Korrigiere den Dateipfad (entferne doppeltes app/)
+        file_path = document['file_path'].replace('app/app/', 'app/')
+            
+        # Dokument aus der Datenbank löschen
+        ticket_db.query("""
+            DELETE FROM application_documents 
+            WHERE id = ?
+        """, [id])
+        
+        # Optional: Datei physisch löschen
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        return jsonify({'success': True, 'message': 'Dokument erfolgreich gelöscht'})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen des Dokuments: {str(e)}'})
+
+def delete_user_files(username):
+    """Löscht alle Dateien und Verzeichnisse eines Benutzers"""
+    try:
+        user_path = get_user_upload_path(username)
+        if os.path.exists(user_path):
+            shutil.rmtree(user_path)
+            logging.info(f"Alle Dateien für Benutzer {username} wurden gelöscht")
+        return True
+    except Exception as e:
+        logging.error(f"Fehler beim Löschen der Dateien für Benutzer {username}: {str(e)}")
+        return False 
