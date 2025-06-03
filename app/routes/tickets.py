@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string, current_app
 from app.models.ticket_db import TicketDatabase
 from app.models.database import Database
 from app.utils.decorators import login_required, admin_required
@@ -14,6 +14,10 @@ from werkzeug.utils import secure_filename
 import pdfkit
 import PyPDF2
 import shutil
+from app.utils.file_utils import allowed_file, ensure_user_directories
+import uuid
+import docx2pdf
+from PyPDF2 import PdfMerger
 
 logger = logging.getLogger(__name__)
 
@@ -873,108 +877,220 @@ def add_note(id):
 @bp.route('/applications')
 @login_required
 def applications():
-    # Korrigiere die Dateipfade in der Datenbank
+    """Bewerbungsverwaltung"""
     try:
-        # Templates korrigieren
-        templates = ticket_db.query('SELECT id, file_path FROM application_templates')
-        for template in templates:
-            if template['file_path'].startswith('app/app/'):
-                new_path = template['file_path'].replace('app/app/', 'app/')
-                ticket_db.query("""
-                    UPDATE application_templates 
-                    SET file_path = ? 
-                    WHERE id = ?
-                """, [new_path, template['id']])
+        # Erstelle Tabellen falls sie nicht existieren
+        ticket_db.query("""
+            CREATE TABLE IF NOT EXISTS application_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                category TEXT,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
+            )
+        """)
         
-        # Dokumente korrigieren
-        documents = ticket_db.query('SELECT id, file_path FROM application_documents')
-        for document in documents:
-            if document['file_path'].startswith('app/app/'):
-                new_path = document['file_path'].replace('app/app/', 'app/')
-                ticket_db.query("""
-                    UPDATE application_documents 
-                    SET file_path = ? 
-                    WHERE id = ?
-                """, [new_path, document['id']])
+        ticket_db.query("""
+            CREATE TABLE IF NOT EXISTS application_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                document_type TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
+            )
+        """)
+        
+        ticket_db.query("""
+            CREATE TABLE IF NOT EXISTS applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id INTEGER,
+                company_name TEXT NOT NULL,
+                position TEXT NOT NULL,
+                contact_person TEXT,
+                contact_email TEXT,
+                contact_phone TEXT,
+                address TEXT,
+                generated_content TEXT,
+                status TEXT DEFAULT 'neu',
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                cv_path TEXT,
+                certificate_paths TEXT,
+                output_path TEXT,
+                FOREIGN KEY (template_id) REFERENCES application_templates(id)
+            )
+        """)
+        
+        # Hole Templates des Benutzers
+        templates = ticket_db.query("""
+            SELECT id, name, file_name, category, created_at
+            FROM application_templates
+            WHERE created_by = ? AND is_active = 1
+            ORDER BY created_at DESC
+        """, [current_user.username])
+        
+        logger.info(f"Gefundene Templates für {current_user.username}: {templates}")
+        
+        # Hole Dokumente des Benutzers
+        documents = ticket_db.query("""
+            SELECT id, file_name, document_type, created_at
+            FROM application_documents
+            WHERE created_by = ? AND is_active = 1
+            ORDER BY created_at DESC
+        """, [current_user.username])
+        
+        # Hole Bewerbungen des Benutzers
+        applications = ticket_db.query("""
+            SELECT a.*, t.name as template_name
+            FROM applications a
+            LEFT JOIN application_templates t ON a.template_id = t.id
+            WHERE a.created_by = ?
+            ORDER BY a.created_at DESC
+        """, [current_user.username])
+        
+        # Definiere die verfügbaren Platzhalter
+        placeholders = {
+            'company_name': 'Firmenname',
+            'position': 'Position',
+            'contact_person': 'Ansprechpartner',
+            'contact_email': 'E-Mail',
+            'contact_phone': 'Telefon',
+            'address': 'Adresse',
+            'date': 'Datum'
+        }
+        
+        logger.info(f"Gefundene Templates: {len(templates)}")
+        logger.info(f"Gefundene Dokumente: {len(documents)}")
+        logger.info(f"Gefundene Bewerbungen: {len(applications)}")
+        
+        return render_template('tickets/applications.html',
+                             templates=templates,
+                             documents=documents,
+                             applications=applications,
+                             placeholders=placeholders)
+                             
     except Exception as e:
-        logging.error(f"Fehler beim Korrigieren der Dateipfade: {str(e)}")
-
-    # Verfügbare Platzhalter
-    placeholders = {
-        '{{company_name}}': 'Name des Unternehmens',
-        '{{position}}': 'Bezeichnung der Position',
-        '{{contact_person}}': 'Name der Kontaktperson',
-        '{{contact_email}}': 'E-Mail der Kontaktperson',
-        '{{contact_phone}}': 'Telefonnummer der Kontaktperson',
-        '{{address}}': 'Adresse des Unternehmens'
-    }
-
-    # Templates abrufen
-    templates = ticket_db.query(
-            'SELECT * FROM application_templates WHERE is_active = 1'
-    )
-
-    # Gespeicherte Dokumente abrufen
-    documents = ticket_db.query(
-        'SELECT * FROM application_documents WHERE created_by = ?',
-        [current_user.username]
-    )
-
-    # Bewerbungen abrufen
-    applications = ticket_db.query(
-        '''
-        SELECT a.*, t.name as template_name 
-        FROM applications a 
-        JOIN application_templates t ON a.template_id = t.id 
-        WHERE a.created_by = ? 
-        ORDER BY a.created_at DESC
-        ''',
-        [current_user.username]
-    )
-
-    return render_template('tickets/applications.html',
-                         placeholders=placeholders,
-                         templates=templates,
-                         documents=documents,
-                         applications=applications)
+        logger.error(f"Fehler beim Laden der Bewerbungsseite: {str(e)}")
+        flash('Fehler beim Laden der Bewerbungsseite', 'error')
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/applications/template/upload', methods=['POST'])
 @login_required
 def upload_template():
     """Lädt ein neues Bewerbungstemplate hoch"""
-    if 'template' not in request.files:
-        flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('tickets.applications'))
-        
-    file = request.files['template']
-    if file.filename == '':
-        flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('tickets.applications'))
-        
-    if not allowed_file(file.filename):
-        flash('Nur .docx Dateien sind erlaubt', 'error')
-        return redirect(url_for('tickets.applications'))
-    
     try:
+        # Überprüfe die Datenbanktabelle
+        tables = ticket_db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='application_templates'")
+        if not tables:
+            logger.error("Tabelle application_templates existiert nicht")
+            # Erstelle die Tabelle
+            ticket_db.query("""
+                CREATE TABLE IF NOT EXISTS application_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_name TEXT NOT NULL,
+                    category TEXT,
+                    created_by TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active INTEGER DEFAULT 1
+                )
+            """)
+            logger.info("Tabelle application_templates wurde erstellt")
+        
+        if 'template' not in request.files:
+            logger.warning("Keine Datei im Request gefunden")
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        file = request.files['template']
+        if file.filename == '':
+            logger.warning("Leerer Dateiname")
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        if not allowed_file(file.filename):
+            logger.warning(f"Ungültiger Dateityp: {file.filename}")
+            flash('Nur .docx Dateien sind erlaubt', 'error')
+            return redirect(url_for('tickets.applications'))
+        
         # Erstelle Benutzerverzeichnisse
-        user_path = ensure_user_directories(current_user.username)
+        try:
+            user_path = ensure_user_directories(current_user.username)
+            logger.info(f"Benutzerverzeichnisse erstellt für {current_user.username}")
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen der Verzeichnisse: {str(e)}")
+            flash('Fehler beim Erstellen der Verzeichnisse', 'error')
+            return redirect(url_for('tickets.applications'))
         
         # Speichere die Datei
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(user_path, 'templates', filename)
-        file.save(filepath)
+        try:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(user_path, 'templates', filename)
+            file.save(filepath)
+            logger.info(f"Template gespeichert unter: {filepath}")
+            
+            # Überprüfe, ob die Datei tatsächlich gespeichert wurde
+            if not os.path.exists(filepath):
+                raise Exception("Datei wurde nicht gespeichert")
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der Datei: {str(e)}")
+            flash('Fehler beim Speichern der Datei', 'error')
+            return redirect(url_for('tickets.applications'))
         
         # Speichere Template in der Datenbank
-        ticket_db.query("""
-            INSERT INTO application_templates (name, file_path, file_name, category, created_by, is_active)
-            VALUES (?, ?, ?, ?, ?, 1)
-        """, [filename, filepath, filename, request.form.get('category', ''), current_user.username])
-        
-        flash('Template erfolgreich hochgeladen', 'success')
+        try:
+            template_name = request.form.get('name', filename)
+            category = request.form.get('category', '')
+            
+            # Überprüfe, ob das Template bereits existiert
+            existing_template = ticket_db.query("""
+                SELECT id FROM application_templates 
+                WHERE file_name = ? AND created_by = ? AND is_active = 1
+            """, [filename, current_user.username])
+            
+            if existing_template:
+                logger.warning(f"Template {filename} existiert bereits")
+                flash('Ein Template mit diesem Namen existiert bereits', 'error')
+                return redirect(url_for('tickets.applications'))
+            
+            # Füge das Template hinzu
+            ticket_db.query("""
+                INSERT INTO application_templates (name, file_path, file_name, category, created_by, is_active)
+                VALUES (?, ?, ?, ?, ?, 1)
+            """, [template_name, filepath, filename, category, current_user.username])
+            
+            # Überprüfe, ob das Template gespeichert wurde
+            saved_template = ticket_db.query("""
+                SELECT * FROM application_templates 
+                WHERE file_name = ? AND created_by = ? AND is_active = 1
+            """, [filename, current_user.username])
+            
+            if not saved_template:
+                raise Exception("Template wurde nicht in der Datenbank gespeichert")
+            
+            logger.info(f"Template in Datenbank gespeichert: {template_name}")
+            flash('Template erfolgreich hochgeladen', 'success')
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern in der Datenbank: {str(e)}")
+            # Lösche die Datei wieder, da die Datenbankoperation fehlgeschlagen ist
+            try:
+                os.remove(filepath)
+            except:
+                pass
+            flash('Fehler beim Speichern in der Datenbank', 'error')
+            return redirect(url_for('tickets.applications'))
         
     except Exception as e:
-        logging.error(f"Fehler beim Hochladen des Templates: {str(e)}")
-        flash('Fehler beim Hochladen des Templates', 'error')
+        logger.error(f"Unerwarteter Fehler beim Hochladen des Templates: {str(e)}")
+        flash(f'Unerwarteter Fehler: {str(e)}', 'error')
         
     return redirect(url_for('tickets.applications'))
 
@@ -982,11 +1098,8 @@ def upload_template():
 @login_required
 def create_application():
     try:
-        # Erstelle Verzeichnisse für den Benutzer
-        user_path = get_user_upload_path(current_user.username)
-        ensure_user_directories(current_user.username)
-        
-        # Initialisiere Listen für Dokumente
+        # Erstelle Benutzerverzeichnisse
+        user_path = ensure_user_directories(current_user.username)
         cv_path = None
         certificate_paths = []
         
@@ -1005,6 +1118,16 @@ def create_application():
                         file_name, file_path, document_type, created_by
                     ) VALUES (?, ?, 'cv', ?)
                 """, [filename, cv_path, current_user.username])
+        
+        # Verwende gespeicherten Lebenslauf
+        saved_cv_id = request.form.get('saved_cv_id')
+        if saved_cv_id:
+            saved_cv = ticket_db.query("""
+                SELECT * FROM application_documents 
+                WHERE id = ? AND document_type = 'cv'
+            """, [saved_cv_id], one=True)
+            if saved_cv:
+                cv_path = saved_cv['file_path']
         
         # Verarbeite Zeugnisse
         if 'certificates' in request.files:
@@ -1060,7 +1183,8 @@ def create_application():
             'contact_person': request.form.get('contact_person', ''),
             'contact_email': request.form.get('contact_email', ''),
             'contact_phone': request.form.get('contact_phone', ''),
-            'address': request.form.get('address', '')
+            'address': request.form.get('address', ''),
+            'date': datetime.now().strftime('%d.%m.%Y')
         }
         
         # Rendere das Template
@@ -1150,98 +1274,136 @@ def add_application_response(id):
     return redirect(url_for('tickets.applications'))
 
 @bp.route('/applications/<int:id>/details')
+@login_required
 def application_details(id):
-    db = Database.get_db()
-    application = db.execute('''
-        SELECT a.*, t.name as template_name 
-        FROM applications a 
-        JOIN application_templates t ON a.template_id = t.id 
-        WHERE a.id = ? AND a.created_by = ?
-    ''', (id, current_user.username)).fetchone()
-    
-    if application is None:
-        return jsonify({'error': 'Bewerbung nicht gefunden'}), 404
-    
-    return jsonify({
-        'content': application['generated_content'],
-        'custom_block': application['custom_block']
-    })
+    """Detailansicht einer Bewerbung"""
+    try:
+        # Hole die Bewerbung aus der Datenbank
+        application = ticket_db.query("""
+            SELECT a.*, t.name as template_name
+            FROM applications a
+            LEFT JOIN application_templates t ON a.template_id = t.id
+            WHERE a.id = ? AND a.created_by = ?
+        """, [id, current_user.username])
+        
+        if not application:
+            flash('Bewerbung nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        application = application[0]
+        
+        # Konvertiere generated_content von String zu Dict
+        if application.get('generated_content'):
+            try:
+                application['generated_content'] = eval(application['generated_content'])
+            except:
+                application['generated_content'] = {}
+        
+        return render_template('tickets/application_details.html', application=application)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Bewerbungsdetails: {str(e)}")
+        flash('Fehler beim Laden der Bewerbungsdetails', 'error')
+        return redirect(url_for('tickets.applications'))
 
 @bp.route('/applications/<int:id>/download')
+@login_required
 def download_application(id):
-    db = Database.get_db()
-    application = db.execute('''
-        SELECT a.*, t.name as template_name 
-        FROM applications a 
-        JOIN application_templates t ON a.template_id = t.id 
-        WHERE a.id = ? AND a.created_by = ?
-    ''', (id, current_user.username)).fetchone()
-    
-    if application is None:
-        return jsonify({'error': 'Bewerbung nicht gefunden'}), 404
-    
-    # Temporäres HTML erstellen
-    with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as temp_html:
-        html_content = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                h1 {{ color: #2c3e50; }}
-                .content {{ margin: 20px 0; }}
-                .custom-block {{ margin: 20px 0; padding: 10px; background-color: #f8f9fa; }}
-            </style>
-        </head>
-        <body>
-            <h1>Bewerbung: {application['position']} bei {application['company_name']}</h1>
-            <div class="content">
-                {application['generated_content']}
-            </div>
-            <div class="custom-block">
-                {application['custom_block']}
-            </div>
-        </body>
-        </html>
-        """
-        temp_html.write(html_content.encode('utf-8'))
-        temp_html_path = temp_html.name
-    
-    # PDF generieren
-    pdf_path = temp_html_path.replace('.html', '.pdf')
-    pdfkit.from_file(temp_html_path, pdf_path)
-    
-    # Temporäre HTML-Datei löschen
-    os.unlink(temp_html_path)
-    
-    # PDF mit Dokumenten zusammenführen
-    final_pdf_path = pdf_path.replace('.pdf', '_final.pdf')
-    merger = PyPDF2.PdfMerger()
-    
-    # Haupt-PDF hinzufügen
-    merger.append(pdf_path)
-    
-    # Dokumente hinzufügen
-    documents = db.execute('''
-        SELECT * FROM application_documents 
-        WHERE application_id = ?
-        ORDER BY document_type
-    ''', (id,)).fetchall()
-    
-    for doc in documents:
-        if os.path.exists(doc['file_path']):
-            merger.append(doc['file_path'])
-    
-    merger.write(final_pdf_path)
-    merger.close()
-    
-    # Temporäre PDF löschen
-    os.unlink(pdf_path)
-    
-    return send_file(
-        final_pdf_path,
-        as_attachment=True,
-        download_name=f'bewerbung_{application["company_name"]}.pdf'
-    ) 
+    """Bewerbung als PDF herunterladen"""
+    try:
+        # Hole die Bewerbung aus der Datenbank
+        application = ticket_db.query("""
+            SELECT a.*, t.name as template_name, t.file_path as template_path
+            FROM applications a
+            LEFT JOIN application_templates t ON a.template_id = t.id
+            WHERE a.id = ? AND a.created_by = ?
+        """, [id, current_user.username])
+        
+        if not application:
+            flash('Bewerbung nicht gefunden', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        application = application[0]
+        
+        # Erstelle temporäres Verzeichnis für die Zusammenführung
+        temp_dir = os.path.join(current_app.config['TEMP_FOLDER'], str(uuid.uuid4()))
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        try:
+            # 1. Anschreiben (bereits generiert)
+            anschreiben_path = application.get('output_path')
+            if not anschreiben_path or not os.path.exists(anschreiben_path):
+                raise Exception('Anschreiben nicht gefunden')
+                
+            # 2. Lebenslauf mit Platzhaltern füllen
+            cv_path = application.get('cv_path')
+            if not cv_path or not os.path.exists(cv_path):
+                raise Exception('Lebenslauf nicht gefunden')
+                
+            # Lade den Lebenslauf
+            doc = Document(cv_path)
+            
+            # Ersetze Platzhalter
+            for paragraph in doc.paragraphs:
+                for key, value in application.get('generated_content', {}).items():
+                    if f'{{{{ {key} }}}}' in paragraph.text:
+                        paragraph.text = paragraph.text.replace(f'{{{{ {key} }}}}', str(value))
+            
+            # Speichere gefüllten Lebenslauf
+            filled_cv_path = os.path.join(temp_dir, 'lebenslauf.docx')
+            doc.save(filled_cv_path)
+            
+            # 3. Zeugnisse
+            certificate_paths = []
+            if application.get('certificate_paths'):
+                cert_paths = application['certificate_paths'].split(',')
+                for path in cert_paths:
+                    if os.path.exists(path.strip()):
+                        certificate_paths.append(path.strip())
+            
+            # 4. Zusammenführen der Dokumente
+            merger = PdfMerger()
+            
+            # Füge Anschreiben hinzu
+            docx2pdf.convert(anschreiben_path, os.path.join(temp_dir, 'anschreiben.pdf'))
+            merger.append(os.path.join(temp_dir, 'anschreiben.pdf'))
+            
+            # Füge Lebenslauf hinzu
+            docx2pdf.convert(filled_cv_path, os.path.join(temp_dir, 'lebenslauf.pdf'))
+            merger.append(os.path.join(temp_dir, 'lebenslauf.pdf'))
+            
+            # Füge Zeugnisse hinzu
+            for cert_path in certificate_paths:
+                docx2pdf.convert(cert_path, os.path.join(temp_dir, f'zeugnis_{os.path.basename(cert_path)}.pdf'))
+                merger.append(os.path.join(temp_dir, f'zeugnis_{os.path.basename(cert_path)}.pdf'))
+            
+            # Speichere zusammengeführte PDF
+            output_pdf = os.path.join(temp_dir, 'bewerbung.pdf')
+            merger.write(output_pdf)
+            merger.close()
+            
+            # Generiere sicheren Dateinamen
+            safe_filename = secure_filename(f"bewerbung_{application['company_name']}_{datetime.now().strftime('%Y%m%d')}.pdf")
+            
+            # Sende die Datei
+            return send_file(
+                output_pdf,
+                as_attachment=True,
+                download_name=safe_filename,
+                mimetype='application/pdf'
+            )
+            
+        finally:
+            # Aufräumen
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Herunterladen der Bewerbung: {str(e)}")
+        flash('Fehler beim Herunterladen der Bewerbung', 'error')
+        return redirect(url_for('tickets.applications'))
 
 @bp.route('/templates/<int:id>/download')
 @login_required
@@ -1430,4 +1592,21 @@ def delete_user_files(username):
         return True
     except Exception as e:
         logging.error(f"Fehler beim Löschen der Dateien für Benutzer {username}: {str(e)}")
-        return False 
+        return False
+
+@bp.route('/applications/debug')
+@login_required
+def debug_applications():
+    """Debug-Route für die Bewerbungsverwaltung"""
+    try:
+        # Überprüfe die Tabellen
+        tables = ticket_db.query("SELECT name FROM sqlite_master WHERE type='table'")
+        result = {
+            'tables': tables,
+            'templates': ticket_db.query("SELECT * FROM application_templates"),
+            'documents': ticket_db.query("SELECT * FROM application_documents"),
+            'applications': ticket_db.query("SELECT * FROM applications")
+        }
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500 
