@@ -12,8 +12,8 @@ def allowed_file(filename):
 def ensure_user_directories(username):
     """Erstellt die notwendigen Verzeichnisse für einen Benutzer"""
     try:
-        # Basis-Upload-Verzeichnis
-        base_path = os.path.join('app', 'uploads', 'users')
+        # Basis-Upload-Verzeichnis (absoluter Pfad)
+        base_path = os.path.abspath(os.path.join('app', 'uploads', 'users'))
         os.makedirs(base_path, exist_ok=True)
         
         # Benutzer-spezifisches Verzeichnis

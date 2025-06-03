@@ -878,9 +878,9 @@ def add_note(id):
 @bp.route('/applications')
 @login_required
 def applications():
-    """Bewerbungsverwaltung"""
+    """Zeigt die Bewerbungsübersicht für den Benutzer."""
     try:
-        # Erstelle Tabellen falls sie nicht existieren
+        # Stelle sicher, dass die Tabellen existieren
         ticket_db.query("""
             CREATE TABLE IF NOT EXISTS application_templates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -910,24 +910,29 @@ def applications():
             CREATE TABLE IF NOT EXISTS applications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 template_id INTEGER,
-                company_name TEXT NOT NULL,
+                firmenname TEXT NOT NULL,
                 position TEXT NOT NULL,
-                contact_person TEXT,
-                contact_email TEXT,
-                contact_phone TEXT,
-                address TEXT,
-                generated_content TEXT,
+                ansprechpartner TEXT,
+                anrede TEXT,
+                email TEXT,
+                telefon TEXT,
+                adresse TEXT,
+                generierter_inhalt TEXT,
+                eigener_text TEXT,
                 status TEXT DEFAULT 'neu',
-                created_by TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                cv_path TEXT,
-                certificate_paths TEXT,
-                output_path TEXT,
+                notizen TEXT,
+                erstellt_von TEXT NOT NULL,
+                erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                aktualisiert_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                lebenslauf_pfad TEXT,
+                zeugnisse_pfad TEXT,
+                ausgabe_pfad TEXT,
+                pdf_pfad TEXT,
                 FOREIGN KEY (template_id) REFERENCES application_templates(id)
             )
         """)
         
-        # Hole Templates des Benutzers
+        # Hole die Templates des Benutzers
         templates = ticket_db.query("""
             SELECT id, name, file_name, category, created_at
             FROM application_templates
@@ -935,9 +940,9 @@ def applications():
             ORDER BY created_at DESC
         """, [current_user.username])
         
-        logger.info(f"Gefundene Templates für {current_user.username}: {templates}")
+        logging.info(f"Gefundene Templates für {current_user.username}: {templates}")
         
-        # Hole Dokumente des Benutzers
+        # Hole die Dokumente des Benutzers
         documents = ticket_db.query("""
             SELECT id, file_name, document_type, created_at
             FROM application_documents
@@ -945,39 +950,23 @@ def applications():
             ORDER BY created_at DESC
         """, [current_user.username])
         
-        # Hole Bewerbungen des Benutzers
+        # Hole die Bewerbungen des Benutzers
         applications = ticket_db.query("""
             SELECT a.*, t.name as template_name
             FROM applications a
             LEFT JOIN application_templates t ON a.template_id = t.id
-            WHERE a.created_by = ?
-            ORDER BY a.created_at DESC
+            WHERE a.erstellt_von = ?
+            ORDER BY a.erstellt_am DESC
         """, [current_user.username])
-        
-        # Definiere die verfügbaren Platzhalter
-        placeholders = {
-            'company_name': 'Firmenname',
-            'position': 'Position',
-            'contact_person': 'Ansprechpartner',
-            'contact_email': 'E-Mail',
-            'contact_phone': 'Telefon',
-            'address': 'Adresse',
-            'date': 'Datum'
-        }
-        
-        logger.info(f"Gefundene Templates: {len(templates)}")
-        logger.info(f"Gefundene Dokumente: {len(documents)}")
-        logger.info(f"Gefundene Bewerbungen: {len(applications)}")
         
         return render_template('tickets/applications.html',
                              templates=templates,
                              documents=documents,
-                             applications=applications,
-                             placeholders=placeholders)
+                             applications=applications)
                              
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Bewerbungsseite: {str(e)}")
-        flash('Fehler beim Laden der Bewerbungsseite', 'error')
+        logging.error(f"Fehler beim Laden der Bewerbungsseite: {str(e)}")
+        flash('Fehler beim Laden der Bewerbungsseite.', 'error')
         return redirect(url_for('tickets.index'))
 
 @bp.route('/applications/template/upload', methods=['POST'])
@@ -1098,134 +1087,54 @@ def upload_template():
 @bp.route('/applications/create', methods=['POST'])
 @login_required
 def create_application():
+    """Erstellt eine neue Bewerbung."""
     try:
-        # Erstelle Benutzerverzeichnisse
-        user_path = ensure_user_directories(current_user.username)
-        cv_path = None
-        certificate_paths = []
+        # Hole die Formulardaten
+        template_id = request.form.get('template_id')
+        firmenname = request.form.get('firmenname')
+        position = request.form.get('position')
+        ansprechpartner = request.form.get('ansprechpartner')
+        anrede = request.form.get('anrede')
+        email = request.form.get('email')
+        telefon = request.form.get('telefon')
+        adresse = request.form.get('adresse')
+        eigener_text = request.form.get('eigener_text')
         
-        # Verarbeite Lebenslauf
-        if 'cv' in request.files:
-            cv_file = request.files['cv']
-            if cv_file and allowed_file(cv_file.filename):
-                filename = secure_filename(cv_file.filename)
-                cv_path = os.path.join(user_path, 'cv', filename)
-                os.makedirs(os.path.dirname(cv_path), exist_ok=True)
-                cv_file.save(cv_path)
-                
-                # Speichere das Dokument in der Datenbank
-                ticket_db.query("""
-                    INSERT INTO application_documents (
-                        file_name, file_path, document_type, created_by
-                    ) VALUES (?, ?, 'cv', ?)
-                """, [filename, cv_path, current_user.username])
-        
-        # Verwende gespeicherten Lebenslauf
-        saved_cv_id = request.form.get('saved_cv_id')
-        if saved_cv_id:
-            saved_cv = ticket_db.query("""
-                SELECT * FROM application_documents 
-                WHERE id = ? AND document_type = 'cv'
-            """, [saved_cv_id], one=True)
-            if saved_cv:
-                cv_path = saved_cv['file_path']
-        
-        # Verarbeite Zeugnisse
-        if 'certificates' in request.files:
-            cert_files = request.files.getlist('certificates')
-            for cert_file in cert_files:
-                if cert_file and allowed_file(cert_file.filename):
-                    filename = secure_filename(cert_file.filename)
-                    cert_path = os.path.join(user_path, 'certificates', filename)
-                    os.makedirs(os.path.dirname(cert_path), exist_ok=True)
-                    cert_file.save(cert_path)
-                    certificate_paths.append(cert_path)
-                    
-                    # Speichere das Dokument in der Datenbank
-                    ticket_db.query("""
-                        INSERT INTO application_documents (
-                            file_name, file_path, document_type, created_by
-                        ) VALUES (?, ?, 'certificate', ?)
-                    """, [filename, cert_path, current_user.username])
-        
-        # Verwende gespeicherte Zeugnisse
-        saved_cert_ids = request.form.getlist('saved_certificate_ids[]')
-        for cert_id in saved_cert_ids:
-            saved_cert = ticket_db.query("""
-                SELECT * FROM application_documents 
-                WHERE id = ? AND document_type = 'certificate'
-            """, [cert_id], one=True)
-            if saved_cert:
-                certificate_paths.append(saved_cert['file_path'])
-        
-        # Bewerbung erstellen
-        template_id = request.form['template_id']
+        # Validiere die Pflichtfelder
+        if not all([template_id, firmenname, position]):
+            flash('Bitte füllen Sie alle Pflichtfelder aus.', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Hole das Template
         template = ticket_db.query("""
             SELECT * FROM application_templates 
-            WHERE id = ? AND is_active = 1
-        """, [template_id], one=True)
+            WHERE id = ? AND created_by = ? AND is_active = 1
+        """, [template_id, current_user.username], one=True)
         
         if not template:
-            flash('Template nicht gefunden', 'error')
+            flash('Template nicht gefunden.', 'error')
             return redirect(url_for('tickets.applications'))
             
-        # Lade das Template
-        template_path = template['file_path']
-        if not os.path.exists(template_path):
-            flash('Template-Datei nicht gefunden', 'error')
-            return redirect(url_for('tickets.applications'))
-            
-        doc = DocxTemplate(template_path)
-            
-        # Ersetze Platzhalter
-        context = {
-            'company_name': request.form['company_name'],
-            'position': request.form['position'],
-            'contact_person': request.form.get('contact_person', ''),
-            'contact_email': request.form.get('contact_email', ''),
-            'contact_phone': request.form.get('contact_phone', ''),
-            'address': request.form.get('address', ''),
-            'date': datetime.now().strftime('%d.%m.%Y')
-        }
-        
-        # Rendere das Template
-        doc.render(context)
-        
-        # Speichere die gerenderte Bewerbung
-        output_path = os.path.join(user_path, 'applications', f'bewerbung_{datetime.now().strftime("%Y%m%d_%H%M%S")}.docx')
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        doc.save(output_path)
-        
-        # Speichere in der Datenbank
+        # Erstelle die Bewerbung
         ticket_db.query("""
             INSERT INTO applications (
-                template_id, company_name, position, contact_person,
-                contact_email, contact_phone, address,
-                generated_content, status, created_by,
-                cv_path, certificate_paths, output_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?)
+                template_id, firmenname, position, ansprechpartner, 
+                anrede, email, telefon, adresse, eigener_text,
+                erstellt_von, erstellt_am, aktualisiert_am
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, [
-            template_id, 
-            request.form['company_name'], 
-            request.form['position'],
-            request.form.get('contact_person'), 
-            request.form.get('contact_email'),
-            request.form.get('contact_phone'), 
-            request.form.get('address'),
-            str(context),  # Speichere den Kontext als String
-            current_user.username, 
-            cv_path, 
-            ','.join(certificate_paths) if certificate_paths else None,
-            output_path
+            template_id, firmenname, position, ansprechpartner,
+            anrede, email, telefon, adresse, eigener_text,
+            current_user.username
         ])
         
-        flash('Bewerbung erfolgreich erstellt', 'success')
+        flash('Bewerbung wurde erfolgreich erstellt.', 'success')
+        return redirect(url_for('tickets.applications'))
         
     except Exception as e:
         logging.error(f"Fehler beim Erstellen der Bewerbung: {str(e)}")
-        flash(f'Fehler beim Erstellen der Bewerbung: {str(e)}', 'error')
-        
-    return redirect(url_for('tickets.applications'))
+        flash('Fehler beim Erstellen der Bewerbung.', 'error')
+        return redirect(url_for('tickets.applications'))
 
 @bp.route('/applications/<int:id>/update_status', methods=['POST'])
 @login_required
@@ -1235,9 +1144,13 @@ def update_application_status(id):
         status = request.form.get('status')
         notes = request.form.get('notes', '')
         
+        if not status:
+            flash('Status ist erforderlich', 'error')
+            return redirect(url_for('tickets.applications'))
+        
         ticket_db.query("""
             UPDATE applications 
-            SET status = ?, notes = ?
+            SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND created_by = ?
         """, [status, notes, id, current_user.username])
         
@@ -1310,124 +1223,48 @@ def application_details(id):
 @bp.route('/applications/<int:id>/download')
 @login_required
 def download_application(id):
-    """Bewerbung als PDF herunterladen"""
+    """Lädt eine Bewerbung herunter."""
     try:
-        logger.info(f"Starte Download-Prozess für Bewerbung {id} von Benutzer {current_user.username}")
-        logger.info(f"PATH: {os.environ.get('PATH')}")
         # Hole die Bewerbung aus der Datenbank
         application = ticket_db.query("""
-            SELECT a.*, t.name as template_name, t.file_path as template_path
+            SELECT a.*, t.name as template_name
             FROM applications a
             LEFT JOIN application_templates t ON a.template_id = t.id
             WHERE a.id = ? AND a.created_by = ?
-        """, [id, current_user.username])
+        """, [id, current_user.username], one=True)
         
         if not application:
-            logger.error('Bewerbung nicht gefunden')
-            flash('Bewerbung nicht gefunden', 'error')
+            flash('Bewerbung nicht gefunden.', 'error')
             return redirect(url_for('tickets.applications'))
             
-        application = application[0]
+        # Prüfe ob PDF existiert
+        pdf_path = application['pdf_path']
+        if not pdf_path:
+            flash('PDF-Datei nicht gefunden.', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Konstruiere den absoluten Pfad
+        if not pdf_path.startswith('/'):
+            pdf_path = os.path.join(os.getcwd(), pdf_path)
+            
+        if not os.path.exists(pdf_path):
+            flash('PDF-Datei nicht gefunden.', 'error')
+            return redirect(url_for('tickets.applications'))
+            
+        # Generiere Dateinamen
+        filename = f"bewerbung_{application['company_name']}_{datetime.now().strftime('%Y%m%d')}.pdf"
         
-        # Erstelle temporäres Verzeichnis für die Zusammenführung
-        temp_dir = os.path.join(current_app.config['TEMP_FOLDER'], str(uuid.uuid4()))
-        logger.info(f"Lege temporäres Verzeichnis an: {temp_dir}")
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        try:
-            # 1. Anschreiben (bereits generiert, immer DOCX)
-            anschreiben_path = application.get('output_path')
-            logger.info(f"Anschreiben-Pfad: {anschreiben_path}")
-            if not anschreiben_path or not os.path.exists(anschreiben_path):
-                logger.error('Anschreiben nicht gefunden!')
-                raise Exception('Anschreiben nicht gefunden')
-            anschreiben_pdf = os.path.join(temp_dir, 'anschreiben.pdf')
-            logger.info(f"Konvertiere Anschreiben mit Pandoc: {anschreiben_path} -> {anschreiben_pdf}")
-            subprocess.run(['/usr/bin/pandoc', anschreiben_path, '-o', anschreiben_pdf], check=True, timeout=30)
+        # Sende Datei
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
             
-            # 2. Lebenslauf (DOCX oder PDF)
-            cv_path = application.get('cv_path')
-            logger.info(f"Lebenslauf-Pfad: {cv_path}")
-            if not cv_path or not os.path.exists(cv_path):
-                logger.error('Lebenslauf nicht gefunden!')
-                raise Exception('Lebenslauf nicht gefunden')
-            cv_ext = os.path.splitext(cv_path)[1].lower()
-            if cv_ext == '.docx':
-                logger.info("Lebenslauf ist DOCX, ersetze Platzhalter und konvertiere mit Pandoc")
-                doc = Document(cv_path)
-                for paragraph in doc.paragraphs:
-                    for key, value in application.get('generated_content', {}).items():
-                        if f'{{{{ {key} }}}}' in paragraph.text:
-                            paragraph.text = paragraph.text.replace(f'{{{{ {key} }}}}', str(value))
-                filled_cv_path = os.path.join(temp_dir, 'lebenslauf.docx')
-                doc.save(filled_cv_path)
-                cv_pdf = os.path.join(temp_dir, 'lebenslauf.pdf')
-                logger.info(f"Konvertiere Lebenslauf mit Pandoc: {filled_cv_path} -> {cv_pdf}")
-                subprocess.run(['/usr/bin/pandoc', filled_cv_path, '-o', cv_pdf], check=True, timeout=30)
-            elif cv_ext == '.pdf':
-                logger.info("Lebenslauf ist PDF, wird direkt übernommen")
-                cv_pdf = cv_path
-            else:
-                logger.error('Lebenslauf muss DOCX oder PDF sein!')
-                raise Exception('Lebenslauf muss DOCX oder PDF sein')
-            
-            # 3. Zeugnisse (Liste von DOCX oder PDF)
-            certificate_paths = []
-            if application.get('certificate_paths'):
-                cert_paths = application['certificate_paths'].split(',')
-                for path in cert_paths:
-                    path = path.strip().replace('app/app/', 'app/')
-                    logger.info(f"Verarbeite Zeugnis: {path}")
-                    if not os.path.exists(path):
-                        logger.warning(f"Zeugnis nicht gefunden: {path}")
-                        continue
-                    ext = os.path.splitext(path)[1].lower()
-                    if ext == '.docx':
-                        cert_pdf = os.path.join(temp_dir, f'zeugnis_{os.path.basename(path)}.pdf')
-                        logger.info(f"Konvertiere Zeugnis mit Pandoc: {path} -> {cert_pdf}")
-                        subprocess.run(['/usr/bin/pandoc', path, '-o', cert_pdf], check=True, timeout=30)
-                        certificate_paths.append(cert_pdf)
-                    elif ext == '.pdf':
-                        logger.info(f"Zeugnis ist PDF, wird direkt übernommen: {path}")
-                        certificate_paths.append(path)
-            
-            # 4. Zusammenführen der Dokumente
-            logger.info(f"Führe PDFs zusammen: Anschreiben, Lebenslauf, {len(certificate_paths)} Zeugnisse")
-            merger = PdfMerger()
-            merger.append(anschreiben_pdf)
-            merger.append(cv_pdf)
-            for cert_pdf in certificate_paths:
-                merger.append(cert_pdf)
-            
-            # Speichere zusammengeführte PDF
-            output_pdf = os.path.join(temp_dir, 'bewerbung.pdf')
-            logger.info(f"Speichere zusammengeführte PDF: {output_pdf}")
-            merger.write(output_pdf)
-            merger.close()
-            
-            # Generiere sicheren Dateinamen
-            safe_filename = secure_filename(f"bewerbung_{application['company_name']}_{datetime.now().strftime('%Y%m%d')}.pdf")
-            logger.info(f"Sende Datei an Browser: {safe_filename}")
-            
-            # Sende die Datei
-            return send_file(
-                output_pdf,
-                as_attachment=True,
-                download_name=safe_filename,
-                mimetype='application/pdf'
-            )
-            
-        finally:
-            # Aufräumen
-            try:
-                logger.info(f"Lösche temporäres Verzeichnis: {temp_dir}")
-                shutil.rmtree(temp_dir)
-            except Exception as cleanup_err:
-                logger.warning(f"Fehler beim Aufräumen: {cleanup_err}")
-        
     except Exception as e:
-        logger.error(f"Fehler beim Herunterladen der Bewerbung: {str(e)}", exc_info=True)
-        flash('Fehler beim Herunterladen der Bewerbung', 'error')
+        current_app.logger.error(f"Fehler beim Herunterladen der Bewerbung: {str(e)}")
+        flash('Fehler beim Herunterladen der Bewerbung.', 'error')
         return redirect(url_for('tickets.applications'))
 
 @bp.route('/templates/<int:id>/download')
@@ -1634,4 +1471,84 @@ def debug_applications():
         }
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+def convert_docx_to_pdf(input_path, output_path):
+    """Konvertiert eine DOCX-Datei in PDF mit pandoc oder docx2pdf"""
+    try:
+        # Versuche zuerst mit pandoc und behalte die Formatierung bei
+        logger.info(f"Versuche Konvertierung mit pandoc: {input_path} -> {output_path}")
+        result = subprocess.run([
+            'pandoc',
+            input_path,
+            '-o', output_path,
+            '--pdf-engine=wkhtmltopdf',
+            '--reference-doc=' + input_path  # Behalte die Formatierung des Original-Dokuments bei
+        ], capture_output=True, text=True, check=True)
+        
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            logger.info("PDF-Konvertierung mit pandoc erfolgreich")
+        return True
+            
+        # Wenn pandoc fehlschlägt, versuche docx2pdf mit Formatierungserhaltung
+        logger.info("Pandoc-Konvertierung fehlgeschlagen, versuche docx2pdf")
+        import docx2pdf
+        docx2pdf.convert(input_path, output_path, keep_active=True)
+        
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            logger.info("PDF-Konvertierung mit docx2pdf erfolgreich")
+            return True
+            
+        logger.error("Beide Konvertierungsmethoden sind fehlgeschlagen")
+        return False
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Fehler bei der PDF-Konvertierung mit pandoc: {e.stderr}")
+        try:
+            # Versuche docx2pdf als Fallback mit Formatierungserhaltung
+            logger.info("Versuche Konvertierung mit docx2pdf")
+            import docx2pdf
+            docx2pdf.convert(input_path, output_path, keep_active=True)
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                logger.info("PDF-Konvertierung mit docx2pdf erfolgreich")
+                return True
+        except Exception as e2:
+            logger.error(f"Fehler bei der PDF-Konvertierung mit docx2pdf: {str(e2)}")
+        return False 
+    except Exception as e:
+        logger.error(f"Unerwarteter Fehler bei der PDF-Konvertierung: {str(e)}")
+        return False
+
+@bp.route('/applications/<int:id>/delete', methods=['POST'])
+@login_required
+def delete_application(id):
+    """Löscht eine Bewerbung"""
+    try:
+        # Bewerbung aus der Datenbank holen
+        application = ticket_db.query("""
+            SELECT * FROM applications 
+            WHERE id = ? AND created_by = ?
+        """, [id, current_user.username], one=True)
+        
+        if not application:
+            return jsonify({'success': False, 'message': 'Bewerbung nicht gefunden'})
+            
+        # PDF-Datei löschen
+        pdf_path = application['pdf_path']
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
+            except Exception as e:
+                logging.error(f"Fehler beim Löschen der PDF-Datei: {str(e)}")
+        
+        # Bewerbung aus der Datenbank löschen
+        ticket_db.query("""
+            DELETE FROM applications 
+            WHERE id = ?
+        """, [id])
+            
+        return jsonify({'success': True, 'message': 'Bewerbung erfolgreich gelöscht'})
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Löschen der Bewerbung: {str(e)}")
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen der Bewerbung: {str(e)}'}) 
