@@ -62,6 +62,15 @@ fi
 # Prüfe Docker-Version
 check_docker_version
 
+# Installiere pandoc, falls nicht vorhanden
+if ! command_exists pandoc; then
+    echo -e "${YELLOW}Pandoc wird installiert...${NC}"
+    apt-get update
+    apt-get install -y pandoc
+else
+    echo -e "${GREEN}Pandoc ist bereits installiert.${NC}"
+fi
+
 # Container-Name Abfrage
 while true; do
     read -p "Bitte geben Sie einen Namen für die Testumgebung ein (z.B. scandy_test): " CONTAINER_NAME

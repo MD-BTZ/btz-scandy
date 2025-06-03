@@ -19,7 +19,7 @@ from flask_login import LoginManager, current_user
 from app.models.user import User
 from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
-from app.routes import auth, tools, consumables, workers, setup, backup, applications
+from app.routes import auth, tools, consumables, workers, setup, backup, applications, profile
 from app.config import Config
 from app.routes import init_app
 import sqlite3
@@ -71,7 +71,7 @@ def ensure_directories_exist():
         os.path.dirname(current_config.DATABASE),
         current_config.BACKUP_DIR,
         current_config.UPLOAD_FOLDER,
-        project_root / 'tmp' # Hinzugefügt
+        os.path.join(current_config.BASE_DIR, 'app', 'tmp') # tmp-Verzeichnis explizit
     ]
     
     # Verzeichnisse erstellen
@@ -195,6 +195,9 @@ def create_app(test_config=None):
     app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
     app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
     
+    # TEMP_FOLDER setzen
+    app.config['TEMP_FOLDER'] = os.path.join(app.config['BASE_DIR'], 'app', 'tmp')
+    
     # Logger einrichten
     from app.utils.logger import init_app_logger
     init_app_logger(app)
@@ -239,7 +242,7 @@ def create_app(test_config=None):
     from app.routes import (
         main, auth, admin, tools, workers, 
         consumables, lending, dashboard, history, 
-        quick_scan, api, tickets, setup, backup, applications
+        quick_scan, api, tickets, setup, backup, applications, profile
     )
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
@@ -256,6 +259,7 @@ def create_app(test_config=None):
     app.register_blueprint(setup.bp)
     app.register_blueprint(backup.bp)
     app.register_blueprint(applications.bp)
+    app.register_blueprint(profile.bp)
     
     # Fehlerbehandlung registrieren
     handle_errors(app)

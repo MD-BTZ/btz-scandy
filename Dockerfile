@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     git \
     nodejs \
     npm \
+    pandoc \
     && rm -rf /var/lib/apt/lists/*
 
 # Setze das Arbeitsverzeichnis

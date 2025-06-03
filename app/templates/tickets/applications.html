@@ -1,226 +1,27 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-2 py-8 max-w-7xl w-full">
     <h1 class="text-3xl font-bold mb-8">Bewerbungsverwaltung</h1>
-
-    <!-- Dokumentenverwaltung -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <!-- Anschreiben -->
-        <div class="bg-base-200 p-4 rounded-lg">
-            <h2 class="text-xl font-semibold mb-4">Anschreiben</h2>
-            <form action="{{ url_for('tickets.upload_template') }}" method="post" enctype="multipart/form-data" class="space-y-4">
-                <div>
-                    <label class="label">
-                        <span class="label-text">Template hochladen</span>
-                    </label>
-                    <input type="file" name="template" accept=".docx" class="file-input file-input-bordered w-full" required>
-                </div>
-                <div>
-                    <label class="label">
-                        <span class="label-text">Kategorie</span>
-                    </label>
-                    <input type="text" name="category" class="input input-bordered w-full">
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Template hochladen</button>
-            </form>
-            <div class="mt-4">
-                <h3 class="font-semibold mb-2">Gespeicherte Templates</h3>
-                <div class="space-y-2">
-                    {% for template in templates %}
-                    <div class="flex justify-between items-center bg-base-300 p-2 rounded">
-                        <span class="truncate max-w-[200px]" title="{{ template.name }}">{{ template.name }}</span>
-                        <div class="flex gap-2 flex-shrink-0">
-                            <a href="{{ url_for('tickets.download_template', id=template.id) }}" class="btn btn-sm btn-info">
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <button onclick="deleteTemplate({{ template.id }})" class="btn btn-sm btn-error">
-                                <i class="fas fa-trash"></i>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Linke Spalte: Bewerbungsformular & Übersicht als Tabs -->
+        <div class="col-span-2 flex flex-col gap-6">
+            <!-- Tabs -->
+            <div x-data="{ tab: 'overview' }" class="w-full">
+                <div class="flex border-b mb-4">
+                    <button class="px-4 py-2 -mb-px font-semibold border-b-2 transition-all duration-150"
+                        :class="tab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-gray-500'"
+                        @click="tab = 'overview'">
+                        Meine Bewerbungen
                             </button>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Lebenslauf -->
-        <div class="bg-base-200 p-4 rounded-lg">
-            <h2 class="text-xl font-semibold mb-4">Lebenslauf</h2>
-            <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-4">
-                <input type="hidden" name="document_type" value="cv">
-                <div>
-                    <label class="label">
-                        <span class="label-text">Lebenslauf hochladen</span>
-                    </label>
-                    <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered w-full" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Lebenslauf hochladen</button>
-            </form>
-            <div class="mt-4">
-                <h3 class="font-semibold mb-2">Gespeicherte Lebensläufe</h3>
-                <div class="space-y-2">
-                    {% for doc in documents if doc.document_type == 'cv' %}
-                    <div class="flex justify-between items-center bg-base-300 p-2 rounded">
-                        <span class="truncate max-w-[200px]" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                        <div class="flex gap-2 flex-shrink-0">
-                            <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-sm btn-info">
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <button onclick="deleteDocument({{ doc.id }})" class="btn btn-sm btn-error">
-                                <i class="fas fa-trash"></i>
+                    <button class="px-4 py-2 -mb-px font-semibold border-b-2 transition-all duration-150"
+                        :class="tab === 'form' ? 'border-primary text-primary' : 'border-transparent text-gray-500'"
+                        @click="tab = 'form'">
+                        Neue Bewerbung erstellen
                             </button>
-                        </div>
-                    </div>
-                    {% endfor %}
                 </div>
-            </div>
-        </div>
-
-        <!-- Zeugnisse -->
-        <div class="bg-base-200 p-4 rounded-lg">
-            <h2 class="text-xl font-semibold mb-4">Zeugnisse</h2>
-            <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-4">
-                <input type="hidden" name="document_type" value="certificate">
-                <div>
-                    <label class="label">
-                        <span class="label-text">Zeugnis hochladen</span>
-                    </label>
-                    <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered w-full" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Zeugnis hochladen</button>
-            </form>
-            <div class="mt-4">
-                <h3 class="font-semibold mb-2">Gespeicherte Zeugnisse</h3>
-                <div class="space-y-2">
-                    {% for doc in documents if doc.document_type == 'certificate' %}
-                    <div class="flex justify-between items-center bg-base-300 p-2 rounded">
-                        <span class="truncate max-w-[200px]" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                        <div class="flex gap-2 flex-shrink-0">
-                            <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-sm btn-info">
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <button onclick="deleteDocument({{ doc.id }})" class="btn btn-sm btn-error">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Platzhalter-Info -->
-    <div class="bg-base-200 p-4 rounded-lg mb-8">
-        <h2 class="text-xl font-semibold mb-4">Verfügbare Platzhalter</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {% for placeholder, description in placeholders.items() %}
-            <div class="flex items-center gap-2">
-                <code class="bg-base-300 px-2 py-1 rounded">{{ placeholder }}</code>
-                <span>{{ description }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <!-- Bewerbung erstellen -->
-    <div class="bg-base-200 p-4 rounded-lg mb-8">
-        <h2 class="text-xl font-semibold mb-4">Neue Bewerbung erstellen</h2>
-        <form action="{{ url_for('tickets.create_application') }}" method="post" enctype="multipart/form-data" class="space-y-4">
-            <div>
-                <label class="label">
-                    <span class="label-text">Template auswählen</span>
-                </label>
-                <select name="template_id" class="select select-bordered w-full" required>
-                    <option value="">Bitte wählen...</option>
-                    {% for template in templates %}
-                    <option value="{{ template.id }}">{{ template.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">Unternehmen</span>
-                </label>
-                <input type="text" name="company_name" class="input input-bordered w-full" required>
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">Position</span>
-                </label>
-                <input type="text" name="position" class="input input-bordered w-full" required>
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">Kontaktperson</span>
-                </label>
-                <input type="text" name="contact_person" class="input input-bordered w-full">
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">E-Mail</span>
-                </label>
-                <input type="email" name="contact_email" class="input input-bordered w-full">
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">Telefon</span>
-                </label>
-                <input type="tel" name="contact_phone" class="input input-bordered w-full">
-            </div>
-
-            <div>
-                <label class="label">
-                    <span class="label-text">Adresse</span>
-                </label>
-                <textarea name="address" class="textarea textarea-bordered w-full"></textarea>
-            </div>
-
-            <!-- Dokumentenauswahl -->
-            <div class="divider">Dokumente auswählen</div>
-
-            <!-- Lebenslauf -->
-            <div class="form-control">
-                <label class="label">
-                    <span class="label-text">Lebenslauf</span>
-                </label>
-                <div class="flex flex-col gap-2">
-                    {% for doc in documents if doc.document_type == 'cv' %}
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="saved_cv_id" value="{{ doc.id }}" class="radio radio-primary" required>
-                        <span class="truncate max-w-[300px]" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- Zeugnisse -->
-            <div class="form-control">
-                <label class="label">
-                    <span class="label-text">Zeugnisse</span>
-                </label>
-                <div class="flex flex-col gap-2">
-                    {% for doc in documents if doc.document_type == 'certificate' %}
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" name="saved_certificate_ids[]" value="{{ doc.id }}" class="checkbox checkbox-primary">
-                        <span class="truncate max-w-[300px]" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary w-full">Bewerbung erstellen</button>
-        </form>
-    </div>
-
-    <!-- Bestehende Bewerbungen -->
-    <div class="bg-base-200 p-4 rounded-lg">
+                <!-- Übersicht -->
+                <div x-show="tab === 'overview'" class="bg-base-200 p-4 rounded-lg">
         <h2 class="text-xl font-semibold mb-4">Meine Bewerbungen</h2>
         {% if applications %}
         <div class="overflow-x-auto">
@@ -248,16 +49,11 @@
                         </td>
                         <td>{{ app.created_at }}</td>
                         <td>
-                            <div class="flex gap-2">
-                                <a href="{{ url_for('tickets.application_details', id=app.id) }}" 
-                                   class="btn btn-sm btn-info">
-                                    Details
-                                </a>
-                                <a href="{{ url_for('tickets.download_application', id=app.id) }}" 
-                                   class="btn btn-sm btn-success">
-                                    Download
-                                </a>
-                            </div>
+                                        <a href="{{ url_for('tickets.download_application', id=app.id) }}" class="btn btn-xs btn-info mr-1"><i class="fas fa-download"></i></a>
+                                        <form action="{{ url_for('tickets.update_application_status', id=app.id) }}" method="POST" class="inline">
+                                            <input type="hidden" name="status" value="{{ app.status }}">
+                                            <button type="submit" class="btn btn-xs btn-secondary"><i class="fas fa-edit"></i></button>
+                                        </form>
                         </td>
                     </tr>
                     {% endfor %}
@@ -265,18 +61,202 @@
             </table>
         </div>
         {% else %}
-        <p class="text-center text-gray-500">Keine Bewerbungen vorhanden</p>
+                    <p class="text-gray-500">Noch keine Bewerbungen vorhanden.</p>
+                    {% endif %}
+                </div>
+                <!-- Formular -->
+                <div x-show="tab === 'form'" class="bg-base-200 p-4 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4">Neue Bewerbung erstellen</h2>
+                    <form action="{{ url_for('tickets.create_application') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+                        <div>
+                            <label class="label">
+                                <span class="label-text">Template auswählen</span>
+                            </label>
+                            <select name="template_id" class="select select-bordered select-sm w-full" required>
+                                <option value="">Bitte wählen...</option>
+                                {% for template in templates %}
+                                <option value="{{ template.id }}">{{ template.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="label"><span class="label-text">Unternehmen</span></label>
+                                <input type="text" name="company_name" class="input input-bordered input-sm w-full" required>
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Position</span></label>
+                                <input type="text" name="position" class="input input-bordered input-sm w-full" required>
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Kontaktperson</span></label>
+                                <input type="text" name="contact_person" class="input input-bordered input-sm w-full">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">E-Mail</span></label>
+                                <input type="email" name="contact_email" class="input input-bordered input-sm w-full">
+                            </div>
+                            <div>
+                                <label class="label"><span class="label-text">Telefon</span></label>
+                                <input type="tel" name="contact_phone" class="input input-bordered input-sm w-full">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="label"><span class="label-text">Adresse</span></label>
+                                <textarea name="address" class="textarea textarea-bordered textarea-sm w-full"></textarea>
+                            </div>
+                        </div>
+                        <div class="divider my-2">Dokumente auswählen</div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text">Lebenslauf</span></label>
+                            <div class="flex flex-col gap-1">
+                                {% for doc in documents if doc.document_type == 'cv' %}
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="saved_cv_id" value="{{ doc.id }}" class="radio radio-primary radio-sm" required>
+                                    <span class="truncate max-w-[220px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text">Zeugnisse</span></label>
+                            <div class="flex flex-col gap-1">
+                                {% for doc in documents if doc.document_type == 'certificate' %}
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" name="saved_certificate_ids[]" value="{{ doc.id }}" class="checkbox checkbox-primary checkbox-sm">
+                                    <span class="truncate max-w-[220px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Bewerbung erstellen</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <!-- Rechte Spalte: Upload & Management -->
+        <div class="col-span-1 flex flex-col gap-6">
+            <!-- Dokumentenverwaltung -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h2 class="text-xl font-semibold mb-4">Dokumentenverwaltung</h2>
+                <!-- Anschreiben-Upload -->
+                <div class="mb-4">
+                    <h3 class="font-semibold mb-1 text-base">Anschreiben-Templates</h3>
+                    <form action="{{ url_for('tickets.upload_template') }}" method="post" enctype="multipart/form-data" class="space-y-1">
+                        <div>
+                            <input type="file" name="template" accept=".docx" class="file-input file-input-bordered file-input-sm w-full" required>
+                        </div>
+                        <div>
+                            <input type="text" name="category" class="input input-bordered input-sm w-full" placeholder="Kategorie">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Template hochladen</button>
+                    </form>
+                    <div class="mt-1 space-y-1">
+                        {% for template in templates %}
+                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
+                            <span class="truncate max-w-[110px] text-sm" title="{{ template.name }}">{{ template.name }}</span>
+                            <div class="flex gap-1 flex-shrink-0">
+                                <a href="{{ url_for('tickets.download_template', id=template.id) }}" class="btn btn-xs btn-info"><i class="fas fa-download"></i></a>
+                                <button onclick="deleteTemplate({{ template.id }})" class="btn btn-xs btn-error"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <!-- Lebenslauf-Upload -->
+                <div class="mb-4">
+                    <h3 class="font-semibold mb-1 text-base">Lebensläufe</h3>
+                    <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-1">
+                        <input type="hidden" name="document_type" value="cv">
+                        <div>
+                            <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered file-input-sm w-full" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Lebenslauf hochladen</button>
+                    </form>
+                    <div class="mt-1 space-y-1">
+                        {% for doc in documents if doc.document_type == 'cv' %}
+                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
+                            <span class="truncate max-w-[110px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
+                            <div class="flex gap-1 flex-shrink-0">
+                                <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-xs btn-info"><i class="fas fa-download"></i></a>
+                                <button onclick="deleteDocument({{ doc.id }})" class="btn btn-xs btn-error"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <!-- Zeugnisse-Upload -->
+                <div>
+                    <h3 class="font-semibold mb-1 text-base">Zeugnisse</h3>
+                    <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-1">
+                        <input type="hidden" name="document_type" value="certificate">
+                        <div>
+                            <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered file-input-sm w-full" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Zeugnis hochladen</button>
+                    </form>
+                    <div class="mt-1 space-y-1">
+                        {% for doc in documents if doc.document_type == 'certificate' %}
+                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
+                            <span class="truncate max-w-[110px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
+                            <div class="flex gap-1 flex-shrink-0">
+                                <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-xs btn-info"><i class="fas fa-download"></i></a>
+                                <button onclick="deleteDocument({{ doc.id }})" class="btn btn-xs btn-error"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <!-- Platzhalter-Info -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h2 class="text-xl font-semibold mb-4">Verfügbare Platzhalter</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for placeholder, description in placeholders.items() %}
+                    {% if "{{" in placeholder and "}}" in placeholder %}
+                    <div class="flex items-center gap-2">
+                        <code class="bg-base-300 px-2 py-1 rounded">{{ placeholder }}</code>
+                        <span>{{ description }}</span>
+                    </div>
         {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
-
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <script>
 function deleteDocument(id) {
     if (!confirm('Möchten Sie dieses Dokument wirklich löschen?')) {
         return;
     }
-    
     fetch(`/tickets/documents/${id}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast('error', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+}
+function deleteTemplate(id) {
+    if (!confirm('Möchten Sie dieses Template wirklich löschen?')) {
+        return;
+    }
+    fetch(`/tickets/templates/${id}/delete`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

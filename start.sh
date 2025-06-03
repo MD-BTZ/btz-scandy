@@ -12,6 +12,10 @@ fi
 # Aktiviere die virtuelle Umgebung
 source venv/bin/activate
 
+# Überprüfe und installiere Requirements
+echo "Überprüfe und installiere fehlende Pakete..."
+pip install -r requirements.txt
+
 # Setze Debug-Umgebungsvariable
 export FLASK_DEBUG=1
 export FLASK_ENV=development

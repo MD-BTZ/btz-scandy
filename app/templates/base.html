@@ -104,25 +104,6 @@
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftrag</span>
             </a>
-            <a href="{{ url_for('workers.timesheet_list') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
-                     <i class="fas fa-clock text-xl"></i>
-                     {% if unfilled_timesheet_days is defined and unfilled_timesheet_days > 0 %}
-                     <span class="badge badge-error badge-sm absolute top-0 right-0" style="transform: translate(50%,-50%);">{{ unfilled_timesheet_days }}</span>
-                     {% endif %}
-                 </div>
-                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Wochenberichte</span>
-            </a>
-
-            <!-- Bewerbungen Link -->
-            <a href="{{ url_for('tickets.applications') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.applications' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                     <i class="fas fa-file-alt text-xl"></i>
-                 </div>
-                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Bewerbungen</span>
-            </a>
             {% endif %}
 
             <!-- Über Scandy (öffentlich) -->
@@ -239,16 +220,34 @@
                 </a>
                 {% endif %}
                 {% if current_user.is_authenticated %}
-                    <span class="text-sm mr-2 hidden md:inline" title="Eingeloggter Benutzer">
-                        <i class="fas fa-user mr-1"></i>{{ current_user.username }}
-                    </span>
+                    <div x-data="{ open: false }" class="relative inline-block text-left mr-2 hidden md:inline">
+                        <button @click="open = !open" type="button" class="flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-base-200 transition-all relative" id="user-menu-button" aria-expanded="true" aria-haspopup="true">
+                            <i class="fas fa-user mr-1"></i>{{ current_user.username }}
+                            {% if unfilled_timesheet_days is defined and unfilled_timesheet_days > 0 %}
+                            <span class="badge badge-error badge-sm absolute -top-2 -right-4" style="transform: translate(50%,-50%);">{{ unfilled_timesheet_days }}</span>
+                            {% endif %}
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        <div x-show="open" @click.away="open = false" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 focus:outline-none z-50" x-cloak>
+                            <div class="py-1">
+                                <a href="{{ url_for('tickets.applications') }}" class="block px-4 py-2 text-sm hover:bg-base-200">Bewerbungen</a>
+                                <a href="{{ url_for('workers.timesheet_list') }}" class="block px-4 py-2 text-sm hover:bg-base-200 relative">
+                                    Wochenberichte
+                                    {% if unfilled_timesheet_days is defined and unfilled_timesheet_days > 0 %}
+                                    <span class="badge badge-error badge-sm absolute right-2 top-1/2 transform -translate-y-1/2">{{ unfilled_timesheet_days }}</span>
+                                    {% endif %}
+                                </a>
+                                <a href="{{ url_for('profile.index') }}" class="block px-4 py-2 text-sm hover:bg-base-200">Profil</a>
+                            </div>
+                        </div>
+                    </div>
                     <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-circle btn-sm" title="Logout">
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
                 {% else %}
-                <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-sm ml-auto">
-                    <i class="fas fa-sign-in-alt mr-2"></i>Login
-                </a>
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-sm ml-auto">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Login
+                    </a>
                 {% endif %}
             </div>
         </div>

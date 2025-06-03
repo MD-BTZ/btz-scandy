@@ -23,6 +23,9 @@ class Config:
     # Backup-Verzeichnis
     BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
     
+    # Temporäres Verzeichnis für generierte Dateien
+    TEMP_FOLDER = os.path.join(BASE_DIR, 'app', 'tmp')
+    
     # Flask-Session
     SESSION_TYPE = 'filesystem'
     SESSION_FILE_DIR = os.path.join(BASE_DIR, 'app', 'database', 'flask_session')

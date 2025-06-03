@@ -18,6 +18,7 @@ from app.utils.file_utils import allowed_file, ensure_user_directories
 import uuid
 import docx2pdf
 from PyPDF2 import PdfMerger
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -1311,6 +1312,8 @@ def application_details(id):
 def download_application(id):
     """Bewerbung als PDF herunterladen"""
     try:
+        logger.info(f"Starte Download-Prozess für Bewerbung {id} von Benutzer {current_user.username}")
+        logger.info(f"PATH: {os.environ.get('PATH')}")
         # Hole die Bewerbung aus der Datenbank
         application = ticket_db.query("""
             SELECT a.*, t.name as template_name, t.file_path as template_path
@@ -1320,6 +1323,7 @@ def download_application(id):
         """, [id, current_user.username])
         
         if not application:
+            logger.error('Bewerbung nicht gefunden')
             flash('Bewerbung nicht gefunden', 'error')
             return redirect(url_for('tickets.applications'))
             
@@ -1327,63 +1331,83 @@ def download_application(id):
         
         # Erstelle temporäres Verzeichnis für die Zusammenführung
         temp_dir = os.path.join(current_app.config['TEMP_FOLDER'], str(uuid.uuid4()))
+        logger.info(f"Lege temporäres Verzeichnis an: {temp_dir}")
         os.makedirs(temp_dir, exist_ok=True)
         
         try:
-            # 1. Anschreiben (bereits generiert)
+            # 1. Anschreiben (bereits generiert, immer DOCX)
             anschreiben_path = application.get('output_path')
+            logger.info(f"Anschreiben-Pfad: {anschreiben_path}")
             if not anschreiben_path or not os.path.exists(anschreiben_path):
+                logger.error('Anschreiben nicht gefunden!')
                 raise Exception('Anschreiben nicht gefunden')
-                
-            # 2. Lebenslauf mit Platzhaltern füllen
+            anschreiben_pdf = os.path.join(temp_dir, 'anschreiben.pdf')
+            logger.info(f"Konvertiere Anschreiben mit Pandoc: {anschreiben_path} -> {anschreiben_pdf}")
+            subprocess.run(['/usr/bin/pandoc', anschreiben_path, '-o', anschreiben_pdf], check=True, timeout=30)
+            
+            # 2. Lebenslauf (DOCX oder PDF)
             cv_path = application.get('cv_path')
+            logger.info(f"Lebenslauf-Pfad: {cv_path}")
             if not cv_path or not os.path.exists(cv_path):
+                logger.error('Lebenslauf nicht gefunden!')
                 raise Exception('Lebenslauf nicht gefunden')
-                
-            # Lade den Lebenslauf
-            doc = Document(cv_path)
+            cv_ext = os.path.splitext(cv_path)[1].lower()
+            if cv_ext == '.docx':
+                logger.info("Lebenslauf ist DOCX, ersetze Platzhalter und konvertiere mit Pandoc")
+                doc = Document(cv_path)
+                for paragraph in doc.paragraphs:
+                    for key, value in application.get('generated_content', {}).items():
+                        if f'{{{{ {key} }}}}' in paragraph.text:
+                            paragraph.text = paragraph.text.replace(f'{{{{ {key} }}}}', str(value))
+                filled_cv_path = os.path.join(temp_dir, 'lebenslauf.docx')
+                doc.save(filled_cv_path)
+                cv_pdf = os.path.join(temp_dir, 'lebenslauf.pdf')
+                logger.info(f"Konvertiere Lebenslauf mit Pandoc: {filled_cv_path} -> {cv_pdf}")
+                subprocess.run(['/usr/bin/pandoc', filled_cv_path, '-o', cv_pdf], check=True, timeout=30)
+            elif cv_ext == '.pdf':
+                logger.info("Lebenslauf ist PDF, wird direkt übernommen")
+                cv_pdf = cv_path
+            else:
+                logger.error('Lebenslauf muss DOCX oder PDF sein!')
+                raise Exception('Lebenslauf muss DOCX oder PDF sein')
             
-            # Ersetze Platzhalter
-            for paragraph in doc.paragraphs:
-                for key, value in application.get('generated_content', {}).items():
-                    if f'{{{{ {key} }}}}' in paragraph.text:
-                        paragraph.text = paragraph.text.replace(f'{{{{ {key} }}}}', str(value))
-            
-            # Speichere gefüllten Lebenslauf
-            filled_cv_path = os.path.join(temp_dir, 'lebenslauf.docx')
-            doc.save(filled_cv_path)
-            
-            # 3. Zeugnisse
+            # 3. Zeugnisse (Liste von DOCX oder PDF)
             certificate_paths = []
             if application.get('certificate_paths'):
                 cert_paths = application['certificate_paths'].split(',')
                 for path in cert_paths:
-                    if os.path.exists(path.strip()):
-                        certificate_paths.append(path.strip())
+                    path = path.strip().replace('app/app/', 'app/')
+                    logger.info(f"Verarbeite Zeugnis: {path}")
+                    if not os.path.exists(path):
+                        logger.warning(f"Zeugnis nicht gefunden: {path}")
+                        continue
+                    ext = os.path.splitext(path)[1].lower()
+                    if ext == '.docx':
+                        cert_pdf = os.path.join(temp_dir, f'zeugnis_{os.path.basename(path)}.pdf')
+                        logger.info(f"Konvertiere Zeugnis mit Pandoc: {path} -> {cert_pdf}")
+                        subprocess.run(['/usr/bin/pandoc', path, '-o', cert_pdf], check=True, timeout=30)
+                        certificate_paths.append(cert_pdf)
+                    elif ext == '.pdf':
+                        logger.info(f"Zeugnis ist PDF, wird direkt übernommen: {path}")
+                        certificate_paths.append(path)
             
             # 4. Zusammenführen der Dokumente
+            logger.info(f"Führe PDFs zusammen: Anschreiben, Lebenslauf, {len(certificate_paths)} Zeugnisse")
             merger = PdfMerger()
-            
-            # Füge Anschreiben hinzu
-            docx2pdf.convert(anschreiben_path, os.path.join(temp_dir, 'anschreiben.pdf'))
-            merger.append(os.path.join(temp_dir, 'anschreiben.pdf'))
-            
-            # Füge Lebenslauf hinzu
-            docx2pdf.convert(filled_cv_path, os.path.join(temp_dir, 'lebenslauf.pdf'))
-            merger.append(os.path.join(temp_dir, 'lebenslauf.pdf'))
-            
-            # Füge Zeugnisse hinzu
-            for cert_path in certificate_paths:
-                docx2pdf.convert(cert_path, os.path.join(temp_dir, f'zeugnis_{os.path.basename(cert_path)}.pdf'))
-                merger.append(os.path.join(temp_dir, f'zeugnis_{os.path.basename(cert_path)}.pdf'))
+            merger.append(anschreiben_pdf)
+            merger.append(cv_pdf)
+            for cert_pdf in certificate_paths:
+                merger.append(cert_pdf)
             
             # Speichere zusammengeführte PDF
             output_pdf = os.path.join(temp_dir, 'bewerbung.pdf')
+            logger.info(f"Speichere zusammengeführte PDF: {output_pdf}")
             merger.write(output_pdf)
             merger.close()
             
             # Generiere sicheren Dateinamen
             safe_filename = secure_filename(f"bewerbung_{application['company_name']}_{datetime.now().strftime('%Y%m%d')}.pdf")
+            logger.info(f"Sende Datei an Browser: {safe_filename}")
             
             # Sende die Datei
             return send_file(
@@ -1396,12 +1420,13 @@ def download_application(id):
         finally:
             # Aufräumen
             try:
+                logger.info(f"Lösche temporäres Verzeichnis: {temp_dir}")
                 shutil.rmtree(temp_dir)
-            except:
-                pass
+            except Exception as cleanup_err:
+                logger.warning(f"Fehler beim Aufräumen: {cleanup_err}")
         
     except Exception as e:
-        logger.error(f"Fehler beim Herunterladen der Bewerbung: {str(e)}")
+        logger.error(f"Fehler beim Herunterladen der Bewerbung: {str(e)}", exc_info=True)
         flash('Fehler beim Herunterladen der Bewerbung', 'error')
         return redirect(url_for('tickets.applications'))
 

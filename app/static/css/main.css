@@ -5843,4 +5843,11 @@ details.collapse summary::-webkit-details-marker {
     padding-left: 2rem;
     padding-right: 2rem;
   }
+}
+
+.badge-user-menu {
+    position: absolute;
+    top: -0.5rem;
+    right: -1rem;
+    z-index: 10;
 } 

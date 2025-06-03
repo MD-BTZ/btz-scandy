@@ -5,7 +5,7 @@ from datetime import datetime
 def migrate_applications():
     db_path = 'app/database/tickets.db'
     
-    # SQL-Skript für die Bewerbungstabellen
+    # SQL-Skript für die Bewerbungstabellen (Basis)
     migration_sql = """
     -- Erstelle die application_templates Tabelle
     CREATE TABLE IF NOT EXISTS application_templates (
@@ -38,6 +38,7 @@ def migrate_applications():
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         cv_path TEXT,
         certificate_paths TEXT,
+        output_path TEXT,
         FOREIGN KEY (template_id) REFERENCES application_templates(id)
     );
 
@@ -50,6 +51,7 @@ def migrate_applications():
         document_type TEXT,
         created_by TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active INTEGER DEFAULT 1,
         FOREIGN KEY (application_id) REFERENCES applications(id)
     );
 
@@ -67,24 +69,34 @@ def migrate_applications():
     """
     
     print(f"Starte Migration für {db_path}")
-    
-    # Verbindung zur Datenbank herstellen
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     try:
-        # Migration ausführen
+        # Migration ausführen (legt Tabellen an, falls sie fehlen)
         cursor.executescript(migration_sql)
         conn.commit()
-        print("Bewerbungstabellen erfolgreich erstellt")
-        
+
+        # Prüfe und ergänze fehlende Spalten in applications
+        cursor.execute("PRAGMA table_info(applications)")
+        columns = [row[1] for row in cursor.fetchall()]
+        needed = [
+            ("output_path", "TEXT"),
+            ("custom_block", "TEXT"),
+            ("notes", "TEXT"),
+            ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        ]
+        for col, typ in needed:
+            if col not in columns:
+                print(f"Füge Spalte {col} zu applications hinzu...")
+                cursor.execute(f"ALTER TABLE applications ADD COLUMN {col} {typ}")
+        conn.commit()
+        print("Bewerbungstabellen erfolgreich erstellt und migriert")
     except sqlite3.OperationalError as e:
         print(f"Fehler bei der Migration: {str(e)}")
         conn.rollback()
         return False
     finally:
         conn.close()
-    
     return True
 
 if __name__ == '__main__':
