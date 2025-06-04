@@ -880,58 +880,6 @@ def add_note(id):
 def applications():
     """Zeigt die Bewerbungsübersicht für den Benutzer."""
     try:
-        # Stelle sicher, dass die Tabellen existieren
-        ticket_db.query("""
-            CREATE TABLE IF NOT EXISTS application_templates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                file_name TEXT NOT NULL,
-                category TEXT,
-                created_by TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active INTEGER DEFAULT 1
-            )
-        """)
-        
-        ticket_db.query("""
-            CREATE TABLE IF NOT EXISTS application_documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                document_type TEXT NOT NULL,
-                created_by TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active INTEGER DEFAULT 1
-            )
-        """)
-        
-        ticket_db.query("""
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                template_id INTEGER,
-                firmenname TEXT NOT NULL,
-                position TEXT NOT NULL,
-                ansprechpartner TEXT,
-                anrede TEXT,
-                email TEXT,
-                telefon TEXT,
-                adresse TEXT,
-                generierter_inhalt TEXT,
-                eigener_text TEXT,
-                status TEXT DEFAULT 'neu',
-                notizen TEXT,
-                erstellt_von TEXT NOT NULL,
-                erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                aktualisiert_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                lebenslauf_pfad TEXT,
-                zeugnisse_pfad TEXT,
-                ausgabe_pfad TEXT,
-                pdf_pfad TEXT,
-                FOREIGN KEY (template_id) REFERENCES application_templates(id)
-            )
-        """)
-        
         # Hole die Templates des Benutzers
         templates = ticket_db.query("""
             SELECT id, name, file_name, category, created_at

@@ -281,6 +281,21 @@ def run_migrations(db_path):
         if current_version < 3:
             logger.info("Führe Migration von v3 zu v4 durch")
             _migrate_v3_to_v4(db_path)
+        if current_version < 4:
+            logger.info("Führe Migration von v4 zu v5 durch")
+            _migrate_v4_to_v5(db_path)
+        if current_version < 5:
+            logger.info("Führe Migration von v5 zu v6 durch")
+            _migrate_v5_to_v6(db_path)
+        if current_version < 6:
+            logger.info("Führe Migration von v6 zu v7 durch")
+            _migrate_v6_to_v7(db_path)
+        if current_version < 7:
+            logger.info("Führe Migration von v7 zu v8 durch")
+            _migrate_v7_to_v8(db_path)
+        if current_version < 8:
+            logger.info("Führe Migration von v8 zu v9 durch")
+            _migrate_v8_to_v9(db_path)
             
         logger.info("Migration erfolgreich abgeschlossen")
         
@@ -318,6 +333,111 @@ def run_ticket_db_migrations():
         finally:
             if conn:
                 conn.close()
+
+def _migrate_v8_to_v9(db_path):
+    """Migration von Version 8 auf Version 9"""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Führe die Migration aus
+            with open('app/migrations/migration_9.sql', 'r') as f:
+                sql = f.read()
+                cursor.executescript(sql)
+            
+            # Aktualisiere die Schema-Version
+            cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (9)')
+            conn.commit()
+            
+            logger.info("Migration von v8 zu v9 erfolgreich durchgeführt")
+            return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v8->v9: {e}")
+        return False
+
+def _migrate_v4_to_v5(db_path):
+    """Migration von Version 4 auf Version 5"""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Führe die Migration aus
+            with open('app/migrations/migration_5.sql', 'r') as f:
+                sql = f.read()
+                cursor.executescript(sql)
+            
+            # Aktualisiere die Schema-Version
+            cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (5)')
+            conn.commit()
+            
+            logger.info("Migration von v4 zu v5 erfolgreich durchgeführt")
+            return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v4->v5: {e}")
+        return False
+
+def _migrate_v5_to_v6(db_path):
+    """Migration von Version 5 auf Version 6"""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Führe die Migration aus
+            with open('app/migrations/migration_6.sql', 'r') as f:
+                sql = f.read()
+                cursor.executescript(sql)
+            
+            # Aktualisiere die Schema-Version
+            cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (6)')
+            conn.commit()
+            
+            logger.info("Migration von v5 zu v6 erfolgreich durchgeführt")
+            return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v5->v6: {e}")
+        return False
+
+def _migrate_v6_to_v7(db_path):
+    """Migration von Version 6 auf Version 7"""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Führe die Migration aus
+            with open('app/migrations/migration_7.sql', 'r') as f:
+                sql = f.read()
+                cursor.executescript(sql)
+            
+            # Aktualisiere die Schema-Version
+            cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (7)')
+            conn.commit()
+            
+            logger.info("Migration von v6 zu v7 erfolgreich durchgeführt")
+            return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v6->v7: {e}")
+        return False
+
+def _migrate_v7_to_v8(db_path):
+    """Migration von Version 7 auf Version 8"""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Führe die Migration aus
+            with open('app/migrations/migration_8.sql', 'r') as f:
+                sql = f.read()
+                cursor.executescript(sql)
+            
+            # Aktualisiere die Schema-Version
+            cursor.execute('INSERT OR IGNORE INTO schema_version (version) VALUES (8)')
+            conn.commit()
+            
+            logger.info("Migration von v7 zu v8 erfolgreich durchgeführt")
+            return True
+    except Exception as e:
+        logger.error(f"Fehler bei Migration v7->v8: {e}")
+        return False
 
 if __name__ == '__main__':
     run_ticket_db_migrations() 
