@@ -37,7 +37,9 @@
                 <td>{{ ticket.due_date or '-' }}</td>
                 <td>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</td>
                 <td>
-                    {% if ticket.message_count > 0 %}
+                    {% if ticket.message_count > 0 and ticket.status == 'offen' %}
+                    <span class="badge badge-error">{{ ticket.message_count }}</span>
+                    {% elif ticket.message_count > 0 %}
                     <span class="badge badge-primary">{{ ticket.message_count }}</span>
                     {% else %}
                     <span class="text-base-content/60">-</span>

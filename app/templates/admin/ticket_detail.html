@@ -164,7 +164,7 @@
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
                             <pre style="background:#eee; color:#333; padding:8px; font-size:12px;">DEBUG users: {{ users|tojson }}</pre>
-                            <form method="POST" action="{{ url_for('tickets.update_assignment', ticket_id=ticket.id) }}" id="assignmentForm">
+                            <form method="POST" action="{{ url_for('tickets.update_assignment', id=ticket.id) }}" id="assignmentForm">
                                 <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
                                     {% for user in users %}
                                         <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">

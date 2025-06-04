@@ -168,14 +168,13 @@ def create():
         [current_user.username]
     )
 
-    # Hole offene Tickets (nur nicht geschlossene)
+    # Hole offene Tickets (alle mit Status 'offen')
     open_tickets = ticket_db.query(
         """
         SELECT t.*, COUNT(tm.id) as message_count
         FROM tickets t
         LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE (t.assigned_to IS NULL OR t.assigned_to = '') 
-        AND t.status = 'offen'
+        WHERE t.status = 'offen'
         GROUP BY t.id
         ORDER BY t.created_at DESC
         """
@@ -208,62 +207,46 @@ def create():
 @login_required
 def view(ticket_id):
     """Zeigt die Details eines Tickets für den Benutzer."""
-    logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
-    
-    ticket = ticket_db.get_ticket(ticket_id)
+    ticket = ticket_db.query(
+        """
+        SELECT *
+        FROM tickets
+        WHERE id = ?
+        """,
+        [ticket_id],
+        one=True
+    )
     
     if not ticket:
-        logging.error(f"Ticket {ticket_id} nicht gefunden")
-        flash('Ticket nicht gefunden.', 'error')
-        return redirect(url_for('tickets.create'))
+        return render_template('404.html'), 404
         
-    # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
-    if ticket['created_by'] != current_user.username and not current_user.is_admin:
-        logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
-        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-        return redirect(url_for('tickets.create'))
-    
-    # Hole die Nachrichten für das Ticket
-    logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
-    
-    try:
-        # Verwende ticket_db für die Nachrichtenabfrage
-        messages = ticket_db.get_ticket_messages(ticket_id)
-        logging.info(f"Nachrichtenabfrage ergab {len(messages)} Nachrichten")
+    # Konvertiere alle Datumsfelder zu datetime-Objekten
+    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+    for field in date_fields:
+        if ticket.get(field):
+            try:
+                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                ticket[field] = None
         
-        # Formatiere Datum für jede Nachricht
-        for msg in messages:
-            if msg['created_at']:
-                try:
-                    created_at = datetime.strptime(msg['created_at'], '%Y-%m-%d %H:%M:%S')
-                    msg['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-                    logging.info(f"Nachricht {msg['id']} formatiert: {msg['created_at']}")
-                except ValueError as e:
-                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {msg['id']}: {str(e)}")
-    except Exception as e:
-        logging.error(f"Fehler beim Laden der Nachrichten: {str(e)}")
-        messages = []
-    
-    message_count = len(messages)
-    logging.info(f"Nachrichtenanzahl: {message_count}")
-    
     # Hole die Notizen für das Ticket
     notes = ticket_db.get_ticket_notes(ticket_id)
 
-    # Hole die Liste der verfügbaren Mitarbeiter
-    try:
-        workers = ticket_db.query(
+    # Hole die Nachrichten für das Ticket
+    messages = ticket_db.get_ticket_messages(ticket_id)
+    message_count = len(messages)
+
+    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
+    with Database.get_db() as db:
+        users = db.execute(
             """
-            SELECT username, username as name
-            FROM users
-            WHERE is_active = 1
-            ORDER BY username
+            SELECT username FROM users WHERE is_active = 1 ORDER BY username
             """
-        )
-        logging.info(f"Gefundene Mitarbeiter: {workers}")
-    except Exception as e:
-        logging.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}")
-        workers = []
+        ).fetchall()
+        users = [dict(row) for row in users]
+
+    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+    assigned_users = [u['username'] for u in ticket_db.get_ticket_assignments(ticket_id)]
 
     # Hole die Kategorien für das Formular
     categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
@@ -274,7 +257,8 @@ def view(ticket_id):
                          messages=messages,
                          notes=notes,
                          message_count=message_count,
-                         workers=workers,
+                         users=users,
+                         assigned_users=assigned_users,
                          now=datetime.now(),
                          categories=categories)
 
@@ -565,15 +549,15 @@ def update_status(id):
         logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/tickets/<int:ticket_id>/update-assignment', methods=['POST'])
+@bp.route('/<int:id>/update-assignment', methods=['POST'])
 @login_required
-def update_assignment(ticket_id):
+def update_assignment(id):
     """Aktualisiert die Zuweisungen für ein Ticket."""
     if not request.is_json:
         return jsonify({'error': 'Nur JSON-Anfragen werden akzeptiert'}), 400
         
     data = request.get_json()
-    assigned_users = data.get('assigned_users', [])
+    assigned_users = data.get('assigned_to', [])
     
     if not isinstance(assigned_users, list):
         assigned_users = [assigned_users]
@@ -586,7 +570,7 @@ def update_assignment(ticket_id):
             FROM tickets
             WHERE id = ?
             """,
-            [ticket_id],
+            [id],
             one=True
         )
         
@@ -594,42 +578,36 @@ def update_assignment(ticket_id):
             return jsonify({'error': 'Ticket nicht gefunden'}), 404
             
         # Aktualisiere die Zuweisungen
-        if not ticket_db.set_ticket_assignments(ticket_id, assigned_users):
+        if not ticket_db.set_ticket_assignments(id, assigned_users):
             return jsonify({'error': 'Fehler beim Aktualisieren der Zuweisungen'}), 500
             
         # Setze die primäre Zuweisung auf den ersten Benutzer
         primary_assignment = assigned_users[0] if assigned_users else None
         
         # Aktualisiere das Hauptticket
-        ticket_db.execute(
-            """
-            UPDATE tickets
-            SET assigned_to = ?,
-                status = ?,
-                category = ?,
-                due_date = ?,
-                estimated_time = ?,
-                actual_time = ?,
-                last_modified_by = ?
-            WHERE id = ?
-            """,
-            [
-                primary_assignment,
-                ticket['status'],
-                ticket['category'],
-                ticket['due_date'],
-                ticket['estimated_time'],
-                ticket['actual_time'],
-                current_user.username,
-                ticket_id
-            ]
-        )
+        with ticket_db.get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE tickets
+                SET assigned_to = ?,
+                    last_modified_by = ?,
+                    last_modified_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                [
+                    primary_assignment,
+                    current_user.username,
+                    id
+                ]
+            )
+            conn.commit()
         
         return jsonify({'message': 'Zuweisungen erfolgreich aktualisiert'})
         
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren der Zuweisungen: {str(e)}")
-        return jsonify({'error': 'Interner Serverfehler'}), 500
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/<int:id>/update-details', methods=['POST'])
 @login_required
@@ -895,7 +873,7 @@ def public_create_order():
                          })
 
 def get_unassigned_ticket_count():
-    result = ticket_db.query("SELECT COUNT(*) as cnt FROM tickets WHERE assigned_to IS NULL OR assigned_to = ''")
+    result = ticket_db.query("SELECT COUNT(*) as cnt FROM tickets WHERE (assigned_to IS NULL OR assigned_to = '') AND status = 'offen'")
     return result[0]['cnt'] if result and len(result) > 0 else 0
 
 # Kontextprozessor für alle Templates

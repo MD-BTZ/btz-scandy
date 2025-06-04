@@ -2074,6 +2074,8 @@ def tickets():
         SELECT username FROM users WHERE is_active = 1 ORDER BY username
         """
     )
+    users = [dict(row) for row in users]
+
     # Hole alle Kategorien aus der ticket_categories Tabelle
     categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
     categories = [c['name'] for c in categories]
@@ -2588,14 +2590,13 @@ def ticket_detail(ticket_id):
     # Hole die Materialliste
     material_list = ticket_db.get_auftrag_material(ticket_id)
 
-    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
-    with Database.get_db() as db:
-        users = db.execute(
-            """
-            SELECT username FROM users WHERE is_active = 1 ORDER BY username
-            """
-        ).fetchall()
-        users = [dict(row) for row in users]
+    # Hole alle Benutzer aus der Ticket-Datenbank
+    users = ticket_db.query(
+        """
+        SELECT username FROM users WHERE is_active = 1 ORDER BY username
+        """
+    )
+    users = [dict(row) for row in users]
 
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = [u['username'] for u in ticket_db.get_ticket_assignments(ticket_id)]

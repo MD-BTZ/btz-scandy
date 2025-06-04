@@ -163,21 +163,15 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <form method="POST" action="{{ url_for('tickets.update_assignment', id=ticket.id) }}" id="assignmentForm">
-                                <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
-                                    {% for user in users %}
-                                        <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
-                                            <input type="checkbox" 
-                                                   name="assigned_to" 
-                                                   value="{{ user['username'] }}" 
-                                                   class="checkbox checkbox-primary"
-                                                   {% if user['username'] in assigned_users %}checked{% endif %}>
-                                            <span>{{ user['username'] }}</span>
-                                        </label>
+                            <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
+                                {% if assigned_users %}
+                                    {% for user in assigned_users %}
+                                        <div class="p-2">{{ user }}</div>
                                     {% endfor %}
-                                </div>
-                                <button type="submit" class="btn btn-primary btn-sm w-full mb-2">Zuweisung speichern</button>
-                            </form>
+                                {% else %}
+                                    <div class="p-2 text-base-content/60">Nicht zugewiesen</div>
+                                {% endif %}
+                            </div>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -221,6 +215,53 @@
 {% block scripts %}
 {{ super() }}
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Zuweisungs-Formular
+    const assignmentForm = document.getElementById('assignmentForm');
+    if (assignmentForm) {
+        assignmentForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const checkboxes = this.querySelectorAll('input[name="assigned_to"]:checked');
+            const assignedUsers = Array.from(checkboxes).map(cb => cb.value);
+            
+            try {
+                const response = await fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ assigned_to: assignedUsers })
+                });
+                
+                if (response.ok) {
+                    showToast('Zuweisung erfolgreich aktualisiert', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const data = await response.json();
+                    showToast(data.error || 'Fehler beim Aktualisieren der Zuweisung', 'error');
+                }
+            } catch (error) {
+                showToast('Fehler beim Aktualisieren der Zuweisung', 'error');
+            }
+        });
+    }
+});
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
+    toast.innerHTML = `
+        <div class="alert alert-${type}">
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
 document.getElementById('messageForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -376,31 +417,6 @@ function updateTicketStatus(newStatus) {
     });
 }
 
-function updateTicketAssignment(newAssignee) {
-    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            assigned_to: newAssignee
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
-            alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
-    });
-}
-
 function updateTicketCategory(newCategory) {
     fetch(`/tickets/{{ ticket.id }}/update-details`, {
         method: 'POST',
@@ -506,22 +522,6 @@ function saveTicketChanges() {
         console.error('Fehler:', error);
         showToast('error', 'Ein Fehler ist aufgetreten beim Speichern.');
     });
-}
-
-function showToast(type, message) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
-    toast.innerHTML = `
-        <div class="alert alert-${type}">
-            <span>${message}</span>
-        </div>
-    `;
-    document.body.appendChild(toast);
-    
-    // Toast nach 3 Sekunden ausblenden
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
 }
 </script>
 {% endblock %} 
