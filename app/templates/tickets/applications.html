@@ -1,70 +1,67 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-2 py-8 max-w-7xl w-full">
-    <h1 class="text-3xl font-bold mb-8">Bewerbungsverwaltung</h1>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <!-- Linke Spalte: Bewerbungsformular & Übersicht als Tabs -->
-        <div class="col-span-2 flex flex-col gap-6">
-            <!-- Tabs -->
-            <div x-data="{ tab: 'overview' }" class="w-full">
-                <div class="flex border-b mb-4">
-                    <button class="px-4 py-2 -mb-px font-semibold border-b-2 transition-all duration-150"
-                        :class="tab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-gray-500'"
-                        @click="tab = 'overview'">
-                        Meine Bewerbungen
-                    </button>
-                    <button class="px-4 py-2 -mb-px font-semibold border-b-2 transition-all duration-150"
-                        :class="tab === 'form' ? 'border-primary text-primary' : 'border-transparent text-gray-500'"
-                        @click="tab = 'form'">
-                        Neue Bewerbung erstellen
-                    </button>
-                </div>
-                <!-- Übersicht -->
-                <div x-show="tab === 'overview'" class="bg-base-200 p-4 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4">Meine Bewerbungen</h2>
-                    {% if applications %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Bewerbungsverwaltung</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="mb-8">
+        <div class="border-b border-gray-200">
+            <nav class="flex space-x-8" id="tab-nav">
+                <a href="#documents" class="tab-link active-tab">Meine Dokumente</a>
+                <a href="#new" class="tab-link">Neue Bewerbung</a>
+                <a href="#overview" class="tab-link">Übersicht</a>
+            </nav>
+        </div>
+
+        <!-- Meine Dokumente Tab -->
+        <div id="documents" class="tab-content mt-6" style="display:block;">
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium mb-4">Dokumente hochladen</h2>
+                <form action="{{ url_for('applications.upload_document') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Dokumententyp</label>
+                        <select name="document_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="lebenslauf">Lebenslauf</option>
+                            <option value="anschreiben">Anschreiben</option>
+                            <option value="zeugnisse">Zeugnisse</option>
+                            <option value="sonstiges">Sonstiges</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Datei</label>
+                        <input type="file" name="document" class="mt-1 block w-full" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Hochladen</button>
+                </form>
+
+                <!-- Dokumentenliste -->
+                <div class="mt-8">
+                    <h3 class="text-lg font-medium mb-4">Meine Dokumente</h3>
                     <div class="overflow-x-auto">
-                        <table class="table w-full">
-                            <thead>
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
                                 <tr>
-                                    <th>Unternehmen</th>
-                                    <th>Position</th>
-                                    <th>Status</th>
-                                    <th>Erstellt am</th>
-                                    <th class="w-1/4">Aktionen</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Typ</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dateiname</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hochgeladen am</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for app in applications %}
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for doc in documents %}
                                 <tr>
-                                    <td>{{ app.firmenname }}</td>
-                                    <td>{{ app.position }}</td>
-                                    <td>
-                                        <span class="badge badge-{{ app.status|lower }}">
-                                            {% if app.status == 'neu' %}Neu{% elif app.status == 'versendet' %}Versendet{% elif app.status == 'antwort' %}Antwort{% elif app.status == 'abgelehnt' %}Abgelehnt{% else %}{{ app.status|capitalize }}{% endif %}
-                                        </span>
-                                    </td>
-                                    <td>{{ app.erstellt_am }}</td>
-                                    <td>
-                                        <div class="flex items-center gap-2">
-                                            <a href="{{ url_for('tickets.download_application', id=app.id) }}" class="btn btn-xs btn-info" title="Herunterladen">
-                                                <i class="fas fa-download"></i>
-                                            </a>
-                                            <form action="{{ url_for('tickets.update_application_status', id=app.id) }}" method="POST" class="flex items-center gap-2">
-                                                <select name="status" class="select select-bordered select-xs">
-                                                    <option value="neu" {% if app.status == 'neu' %}selected{% endif %}>Neu</option>
-                                                    <option value="versendet" {% if app.status == 'versendet' %}selected{% endif %}>Versendet</option>
-                                                    <option value="antwort" {% if app.status == 'antwort' %}selected{% endif %}>Antwort</option>
-                                                    <option value="abgelehnt" {% if app.status == 'abgelehnt' %}selected{% endif %}>Abgelehnt</option>
-                                                </select>
-                                                <button type="submit" class="btn btn-xs btn-secondary" title="Status speichern">
-                                                    <i class="fas fa-save"></i>
-                                                </button>
-                                            </form>
-                                            <button onclick="deleteApplication({{ app.id }})" class="btn btn-xs btn-error" title="Bewerbung löschen">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                    <td class="px-6 py-4 whitespace-nowrap">{{ doc.dokument_id }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">{{ doc.dateipfad.split('/')[-1] }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">{{ doc.hochgeladen_am }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex space-x-2">
+                                            <a href="{{ url_for('applications.download_document', id=doc.id) }}" 
+                                               class="text-blue-600 hover:text-blue-900">Download</a>
+                                            <button onclick="deleteDocument({{ doc.id }})" 
+                                                    class="text-red-600 hover:text-red-900">Löschen</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -72,263 +69,211 @@
                             </tbody>
                         </table>
                     </div>
-                    {% else %}
-                    <p class="text-gray-500">Noch keine Bewerbungen vorhanden.</p>
-                    {% endif %}
-                </div>
-
-                <!-- Formular -->
-                <div x-show="tab === 'form'" class="bg-base-200 p-4 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4">Neue Bewerbung erstellen</h2>
-                    <form action="{{ url_for('tickets.create_application') }}" method="post" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Vorlage auswählen</label>
-                            <select name="template_id" required
-                                    class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                                <option value="">Bitte wählen...</option>
-                                {% for template in templates %}
-                                <option value="{{ template.id }}">{{ template.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Firmenname</label>
-                                <input type="text" name="firmenname" required
-                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Position</label>
-                                <input type="text" name="position" required
-                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Ansprechpartner</label>
-                                <input type="text" name="ansprechpartner"
-                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Anrede</label>
-                                <select name="anrede" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                                    <option value="Sehr geehrte Damen und Herren">Sehr geehrte Damen und Herren</option>
-                                    <option value="Sehr geehrter Herr">Sehr geehrter Herr</option>
-                                    <option value="Sehr geehrte Frau">Sehr geehrte Frau</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">E-Mail</label>
-                                <input type="email" name="email"
-                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Telefon</label>
-                                <input type="tel" name="telefon"
-                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-                            </div>
-                            <div class="col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Adresse</label>
-                                <textarea name="adresse" rows="3"
-                                          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></textarea>
-                            </div>
-                            <div class="col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Eigener Text</label>
-                                <textarea name="eigener_text" rows="5"
-                                          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></textarea>
-                            </div>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="submit" class="btn btn-primary">Bewerbung erstellen</button>
-                        </div>
-                    </form>
                 </div>
             </div>
         </div>
 
-        <!-- Rechte Spalte: Upload & Management -->
-        <div class="col-span-1 flex flex-col gap-6">
-            <!-- Dokumentenverwaltung -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h2 class="text-xl font-semibold mb-4">Dokumentenverwaltung</h2>
-                <!-- Anschreiben-Upload -->
-                <div class="mb-4">
-                    <h3 class="font-semibold mb-2 text-base">Anschreiben-Templates</h3>
-                    <form action="{{ url_for('tickets.upload_template') }}" method="post" enctype="multipart/form-data" class="space-y-2">
-                        <div class="flex gap-2">
-                            <input type="file" name="template" accept=".docx" class="file-input file-input-bordered file-input-sm flex-1" required>
-                            <button type="submit" class="btn btn-primary btn-sm">Hochladen</button>
-                        </div>
-                    </form>
-                    <div class="mt-2 space-y-1">
-                        {% for template in templates %}
-                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
-                            <span class="truncate max-w-[150px] text-sm" title="{{ template.name }}">{{ template.name }}</span>
-                            <div class="flex gap-1 flex-shrink-0">
-                                <a href="{{ url_for('tickets.download_template', id=template.id) }}" class="btn btn-xs btn-info" title="Herunterladen">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                                <button onclick="deleteTemplate({{ template.id }})" class="btn btn-xs btn-error" title="Löschen">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
+        <!-- Neue Bewerbung Tab -->
+        <div id="new" class="tab-content mt-6" style="display:none;">
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium mb-4">Neue Bewerbung erstellen</h2>
+                <form action="{{ url_for('applications.create_application') }}" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Vorlage</label>
+                        <select name="template_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                            <option value="">Bitte wählen...</option>
+                            {% for template in templates %}
+                            <option value="{{ template.id }}">{{ template.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                </div>
-                <!-- Lebenslauf-Upload -->
-                <div class="mb-4">
-                    <h3 class="font-semibold mb-2 text-base">Lebensläufe</h3>
-                    <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-2">
-                        <input type="hidden" name="document_type" value="cv">
-                        <div class="flex gap-2">
-                            <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered file-input-sm flex-1" required>
-                            <button type="submit" class="btn btn-primary btn-sm">Hochladen</button>
-                        </div>
-                    </form>
-                    <div class="mt-2 space-y-1">
-                        {% for doc in documents if doc.document_type == 'cv' %}
-                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
-                            <span class="truncate max-w-[150px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                            <div class="flex gap-1 flex-shrink-0">
-                                <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-xs btn-info" title="Herunterladen">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                                <button onclick="deleteDocument({{ doc.id }})" class="btn btn-xs btn-error" title="Löschen">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Firmenname</label>
+                        <input type="text" name="firmenname" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
                     </div>
-                </div>
-                <!-- Zeugnisse-Upload -->
-                <div>
-                    <h3 class="font-semibold mb-2 text-base">Zeugnisse</h3>
-                    <form action="{{ url_for('tickets.upload_document') }}" method="post" enctype="multipart/form-data" class="space-y-2">
-                        <input type="hidden" name="document_type" value="certificate">
-                        <div class="flex gap-2">
-                            <input type="file" name="document" accept=".pdf,.doc,.docx" class="file-input file-input-bordered file-input-sm flex-1" required>
-                            <button type="submit" class="btn btn-primary btn-sm">Hochladen</button>
-                        </div>
-                    </form>
-                    <div class="mt-2 space-y-1">
-                        {% for doc in documents if doc.document_type == 'certificate' %}
-                        <div class="flex justify-between items-center bg-base-300 p-1 rounded">
-                            <span class="truncate max-w-[150px] text-sm" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
-                            <div class="flex gap-1 flex-shrink-0">
-                                <a href="{{ url_for('tickets.download_document', id=doc.id) }}" class="btn btn-xs btn-info" title="Herunterladen">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                                <button onclick="deleteDocument({{ doc.id }})" class="btn btn-xs btn-error" title="Löschen">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Position</label>
+                        <input type="text" name="position" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
                     </div>
-                </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Ansprechpartner</label>
+                        <input type="text" name="ansprechpartner" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Anrede</label>
+                        <select name="anrede" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="">Bitte wählen...</option>
+                            <option value="Herr">Herr</option>
+                            <option value="Frau">Frau</option>
+                            <option value="Divers">Divers</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">E-Mail</label>
+                        <input type="email" name="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Telefon</label>
+                        <input type="tel" name="telefon" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Adresse</label>
+                        <textarea name="adresse" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Eigener Text</label>
+                        <textarea name="eigener_text" rows="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Bewerbung erstellen</button>
+                </form>
             </div>
-            <!-- Platzhalter-Info -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h2 class="text-xl font-semibold mb-4">Verfügbare Platzhalter</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {% if placeholders %}
-                    {% for placeholder, description in placeholders.items() %}
-                    {% if "{{" in placeholder and "}}" in placeholder %}
-                    <div class="flex items-center gap-2">
-                        <code class="bg-base-300 px-2 py-1 rounded">{{ placeholder }}</code>
-                        <span>{{ description }}</span>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                    {% else %}
-                    <span class="text-gray-500">Keine Platzhalter verfügbar.</span>
-                    {% endif %}
-                </div>
+        </div>
+
+        <!-- Übersicht Tab -->
+        <div id="overview" class="tab-content mt-6" style="display:none;">
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Erstellt am</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for app in applications %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ app.firmenname }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ app.position }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                           {% if app.status == 'in_bearbeitung' %}bg-yellow-100 text-yellow-800
+                                           {% elif app.status == 'versendet' %}bg-blue-100 text-blue-800
+                                           {% elif app.status == 'antwort' %}bg-green-100 text-green-800
+                                           {% elif app.status == 'abgelehnt' %}bg-red-100 text-red-800
+                                           {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ app.status }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ app.erstellt_am }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex space-x-2">
+                                    <a href="{{ url_for('applications.application_details', id=app.id) }}" 
+                                       class="text-blue-600 hover:text-blue-900">Details</a>
+                                    <a href="{{ url_for('applications.download_application', id=app.id) }}" 
+                                       class="text-green-600 hover:text-green-900">Download</a>
+                                    <button onclick="deleteApplication({{ app.id }})" 
+                                            class="text-red-600 hover:text-red-900">Löschen</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script>
-function deleteDocument(id) {
-    if (!confirm('Möchten Sie dieses Dokument wirklich löschen?')) {
-        return;
-    }
-    fetch(`/tickets/documents/${id}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', data.message);
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
-        } else {
-            showToast('error', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten');
-    });
-}
 
-function deleteTemplate(id) {
-    if (!confirm('Möchten Sie dieses Template wirklich löschen?')) {
-        return;
+<style>
+#tab-nav .tab-link {
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    padding: 1rem 1.5rem 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 1rem;
+    transition: all 0.2s;
+    cursor: pointer;
+    text-decoration: none;
+}
+#tab-nav .tab-link.active-tab {
+    border-bottom: 2px solid #2563eb;
+    color: #2563eb;
+    background: #f9fafb;
+}
+#tab-nav .tab-link:hover {
+    color: #1d4ed8;
+    border-bottom: 2px solid #a5b4fc;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tabLinks = document.querySelectorAll('.tab-link');
+    const tabContents = document.querySelectorAll('.tab-content');
+    function showTab(tabId) {
+        tabContents.forEach(content => {
+            content.style.display = 'none';
+        });
+        tabLinks.forEach(link => {
+            link.classList.remove('active-tab');
+        });
+        const selectedTab = document.getElementById(tabId);
+        if (selectedTab) {
+            selectedTab.style.display = 'block';
+        }
+        const activeLink = document.querySelector('.tab-link[href="#' + tabId + '"]');
+        if (activeLink) {
+            activeLink.classList.add('active-tab');
+        }
     }
-    fetch(`/tickets/templates/${id}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', data.message);
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
-        } else {
-            showToast('error', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten');
+    // Initial anzeigen
+    let hash = window.location.hash.replace('#', '') || 'documents';
+    showTab(hash);
+    tabLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const tabId = this.getAttribute('href').replace('#', '');
+            showTab(tabId);
+            window.location.hash = tabId;
+        });
     });
+});
+
+function deleteDocument(id) {
+    if (confirm('Möchten Sie dieses Dokument wirklich löschen?')) {
+        fetch(`/applications/document/${id}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Fehler beim Löschen des Dokuments: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Fehler beim Löschen des Dokuments: ' + error);
+        });
+    }
 }
 
 function deleteApplication(id) {
-    if (!confirm('Möchten Sie diese Bewerbung wirklich löschen?')) {
-        return;
-    }
-    fetch(`/tickets/applications/${id}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', data.message);
-            setTimeout(() => {
+    if (confirm('Möchten Sie diese Bewerbung wirklich löschen?')) {
+        fetch(`/applications/${id}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
                 window.location.reload();
-            }, 1000);
-        } else {
-            showToast('error', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten');
-    });
+            } else {
+                alert('Fehler beim Löschen der Bewerbung: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Fehler beim Löschen der Bewerbung: ' + error);
+        });
+    }
 }
 </script>
 {% endblock %} 

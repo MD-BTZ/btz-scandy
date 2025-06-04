@@ -542,10 +542,20 @@ def update_status(id):
         if not new_status:
             return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
 
-        # Aktualisiere den Status
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.get_ticket(id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Aktualisiere nur den Status und behalte andere Felder bei
         ticket_db.update_ticket(
             id=id,
             status=new_status,
+            assigned_to=ticket['assigned_to'],  # Behalte die aktuelle Zuweisung bei
+            category=ticket['category'],  # Behalte die aktuelle Kategorie bei
+            due_date=ticket['due_date'],  # Behalte das aktuelle Fälligkeitsdatum bei
+            estimated_time=ticket['estimated_time'],  # Behalte die aktuelle geschätzte Zeit bei
+            actual_time=ticket['actual_time'],  # Behalte die aktuelle tatsächliche Zeit bei
             last_modified_by=current_user.username
         )
 
@@ -555,30 +565,71 @@ def update_status(id):
         logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/<int:id>/update-assignment', methods=['POST'])
+@bp.route('/tickets/<int:ticket_id>/update-assignment', methods=['POST'])
 @login_required
-def update_assignment(id):
-    """Aktualisiert die Zuweisung eines Tickets"""
+def update_assignment(ticket_id):
+    """Aktualisiert die Zuweisungen für ein Ticket."""
+    if not request.is_json:
+        return jsonify({'error': 'Nur JSON-Anfragen werden akzeptiert'}), 400
+        
+    data = request.get_json()
+    assigned_users = data.get('assigned_users', [])
+    
+    if not isinstance(assigned_users, list):
+        assigned_users = [assigned_users]
+    
     try:
-        if not request.is_json:
-            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
-
-        data = request.get_json()
-        assigned_to = data.get('assigned_to')
-        if isinstance(assigned_to, str):
-            # Falls nur ein Nutzer ausgewählt wurde, kommt ein String, sonst Liste
-            assigned_to = [assigned_to] if assigned_to else []
-        elif assigned_to is None:
-            assigned_to = []
-
-        # Aktualisiere die Zuweisungen in ticket_assignments
-        ticket_db.set_ticket_assignments(id, assigned_to)
-
-        return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
-
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.query(
+            """
+            SELECT *
+            FROM tickets
+            WHERE id = ?
+            """,
+            [ticket_id],
+            one=True
+        )
+        
+        if not ticket:
+            return jsonify({'error': 'Ticket nicht gefunden'}), 404
+            
+        # Aktualisiere die Zuweisungen
+        if not ticket_db.set_ticket_assignments(ticket_id, assigned_users):
+            return jsonify({'error': 'Fehler beim Aktualisieren der Zuweisungen'}), 500
+            
+        # Setze die primäre Zuweisung auf den ersten Benutzer
+        primary_assignment = assigned_users[0] if assigned_users else None
+        
+        # Aktualisiere das Hauptticket
+        ticket_db.execute(
+            """
+            UPDATE tickets
+            SET assigned_to = ?,
+                status = ?,
+                category = ?,
+                due_date = ?,
+                estimated_time = ?,
+                actual_time = ?,
+                last_modified_by = ?
+            WHERE id = ?
+            """,
+            [
+                primary_assignment,
+                ticket['status'],
+                ticket['category'],
+                ticket['due_date'],
+                ticket['estimated_time'],
+                ticket['actual_time'],
+                current_user.username,
+                ticket_id
+            ]
+        )
+        
+        return jsonify({'message': 'Zuweisungen erfolgreich aktualisiert'})
+        
     except Exception as e:
-        logging.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logging.error(f"Fehler beim Aktualisieren der Zuweisungen: {str(e)}")
+        return jsonify({'error': 'Interner Serverfehler'}), 500
 
 @bp.route('/<int:id>/update-details', methods=['POST'])
 @login_required
@@ -777,6 +828,12 @@ def public_create_order():
             due_date = request.form.get('due_date')
             estimated_time = request.form.get('estimated_time')
             
+            # Hole die Auftragsdetails
+            name = request.form.get('name')
+            kontakt = request.form.get('kontakt')
+            bereich = request.form.get('bereich')
+            auftraggeber_typ = request.form.get('auftraggeber_typ')
+            
             # Validiere die Pflichtfelder
             if not title:
                 flash('Titel ist erforderlich.', 'error')
@@ -790,6 +847,10 @@ def public_create_order():
                 flash('Kategorie ist erforderlich.', 'error')
                 return redirect(url_for('tickets.public_create_order'))
             
+            if not auftraggeber_typ or auftraggeber_typ not in ['intern', 'extern']:
+                flash('Bitte wählen Sie einen gültigen Auftraggeber-Typ.', 'error')
+                return redirect(url_for('tickets.public_create_order'))
+            
             # Erstelle das Ticket
             ticket_id = ticket_db.create_ticket(
                 title=title,
@@ -801,6 +862,17 @@ def public_create_order():
                 estimated_time=estimated_time
             )
             
+            # Erstelle die Auftragsdetails mit exklusiven intern/extern Werten
+            ticket_db.add_auftrag_details(
+                ticket_id=ticket_id,
+                bereich=bereich,
+                auftraggeber_intern=(auftraggeber_typ == 'intern'),
+                auftraggeber_extern=(auftraggeber_typ == 'extern'),
+                auftraggeber_name=name,
+                kontakt=kontakt,
+                auftragsbeschreibung=description
+            )
+            
             flash('Ihr Auftrag wurde erfolgreich erstellt. Wir werden uns schnellstmöglich bei Ihnen melden.', 'success')
             return redirect(url_for('tickets.public_create_order'))
             
@@ -810,8 +882,8 @@ def public_create_order():
             return redirect(url_for('tickets.public_create_order'))
     
     # Hole die Kategorien für das Formular
-    categories = ticket_db.query("SELECT name FROM categories")
-    categories = [c[0] for c in categories]  # Extrahiere nur die Namen aus den Tupeln
+    categories = ticket_db.query("SELECT name FROM ticket_categories ORDER BY name")
+    categories = [c['name'] for c in categories]  # Extrahiere nur die Namen aus den Dictionaries
     
     return render_template('auftrag_public.html', 
                          categories=categories,
@@ -882,27 +954,26 @@ def applications():
     try:
         # Hole die Templates des Benutzers
         templates = ticket_db.query("""
-            SELECT id, name, file_name, category, created_at
-            FROM application_templates
-            WHERE created_by = ? AND is_active = 1
-            ORDER BY created_at DESC
+            SELECT * FROM bewerbungsvorlagen
+            WHERE erstellt_von = ? AND ist_aktiv = 1
+            ORDER BY erstellt_am DESC
         """, [current_user.username])
         
         logging.info(f"Gefundene Templates für {current_user.username}: {templates}")
         
         # Hole die Dokumente des Benutzers
         documents = ticket_db.query("""
-            SELECT id, file_name, document_type, created_at
-            FROM application_documents
-            WHERE created_by = ? AND is_active = 1
-            ORDER BY created_at DESC
+            SELECT id, name, beschreibung, erstellt_am
+            FROM bewerbungsdokumente
+            WHERE erstellt_von = ?
+            ORDER BY erstellt_am DESC
         """, [current_user.username])
         
         # Hole die Bewerbungen des Benutzers
         applications = ticket_db.query("""
-            SELECT a.*, t.name as template_name
-            FROM applications a
-            LEFT JOIN application_templates t ON a.template_id = t.id
+            SELECT a.*, t.name as vorlagen_name
+            FROM bewerbungen a
+            LEFT JOIN bewerbungsvorlagen t ON a.vorlagen_id = t.id
             WHERE a.erstellt_von = ?
             ORDER BY a.erstellt_am DESC
         """, [current_user.username])
@@ -934,7 +1005,7 @@ def upload_template():
                     file_path TEXT NOT NULL,
                     file_name TEXT NOT NULL,
                     category TEXT,
-                    created_by TEXT NOT NULL,
+                    erstellt_von TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_active INTEGER DEFAULT 1
                 )
@@ -984,14 +1055,14 @@ def upload_template():
         
         # Speichere Template in der Datenbank
         try:
-            template_name = request.form.get('name', filename)
+            name = request.form.get('name', filename)
             category = request.form.get('category', '')
             
             # Überprüfe, ob das Template bereits existiert
             existing_template = ticket_db.query("""
-                SELECT id FROM application_templates 
-                WHERE file_name = ? AND created_by = ? AND is_active = 1
-            """, [filename, current_user.username])
+                SELECT * FROM application_templates 
+                WHERE file_name = ? AND erstellt_von = ? AND is_active = 1
+            """, [filename, current_user.username], one=True)
             
             if existing_template:
                 logger.warning(f"Template {filename} existiert bereits")
@@ -1000,20 +1071,20 @@ def upload_template():
             
             # Füge das Template hinzu
             ticket_db.query("""
-                INSERT INTO application_templates (name, file_path, file_name, category, created_by, is_active)
+                INSERT INTO application_templates (name, file_path, file_name, category, erstellt_von, is_active)
                 VALUES (?, ?, ?, ?, ?, 1)
-            """, [template_name, filepath, filename, category, current_user.username])
+            """, [name, filepath, filename, category, current_user.username])
             
             # Überprüfe, ob das Template gespeichert wurde
             saved_template = ticket_db.query("""
                 SELECT * FROM application_templates 
-                WHERE file_name = ? AND created_by = ? AND is_active = 1
+                WHERE file_name = ? AND erstellt_von = ? AND is_active = 1
             """, [filename, current_user.username])
             
             if not saved_template:
                 raise Exception("Template wurde nicht in der Datenbank gespeichert")
             
-            logger.info(f"Template in Datenbank gespeichert: {template_name}")
+            logger.info(f"Template in Datenbank gespeichert: {name}")
             flash('Template erfolgreich hochgeladen', 'success')
             
         except Exception as e:
@@ -1038,7 +1109,7 @@ def create_application():
     """Erstellt eine neue Bewerbung."""
     try:
         # Hole die Formulardaten
-        template_id = request.form.get('template_id')
+        vorlagen_id = request.form.get('template_id')
         firmenname = request.form.get('firmenname')
         position = request.form.get('position')
         ansprechpartner = request.form.get('ansprechpartner')
@@ -1049,15 +1120,15 @@ def create_application():
         eigener_text = request.form.get('eigener_text')
         
         # Validiere die Pflichtfelder
-        if not all([template_id, firmenname, position]):
+        if not all([vorlagen_id, firmenname, position]):
             flash('Bitte füllen Sie alle Pflichtfelder aus.', 'error')
             return redirect(url_for('tickets.applications'))
             
         # Hole das Template
         template = ticket_db.query("""
-            SELECT * FROM application_templates 
-            WHERE id = ? AND created_by = ? AND is_active = 1
-        """, [template_id, current_user.username], one=True)
+            SELECT * FROM bewerbungsvorlagen 
+            WHERE id = ? AND erstellt_von = ? AND ist_aktiv = 1
+        """, [vorlagen_id, current_user.username], one=True)
         
         if not template:
             flash('Template nicht gefunden.', 'error')
@@ -1065,16 +1136,12 @@ def create_application():
             
         # Erstelle die Bewerbung
         ticket_db.query("""
-            INSERT INTO applications (
-                template_id, firmenname, position, ansprechpartner, 
+            INSERT INTO bewerbungen (
+                vorlagen_id, firmenname, position, ansprechpartner,
                 anrede, email, telefon, adresse, eigener_text,
                 erstellt_von, erstellt_am, aktualisiert_am
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        """, [
-            template_id, firmenname, position, ansprechpartner,
-            anrede, email, telefon, adresse, eigener_text,
-            current_user.username
-        ])
+        """, [vorlagen_id, firmenname, position, ansprechpartner, anrede, email, telefon, adresse, eigener_text, current_user.username])
         
         flash('Bewerbung wurde erfolgreich erstellt.', 'success')
         return redirect(url_for('tickets.applications'))
@@ -1097,9 +1164,9 @@ def update_application_status(id):
             return redirect(url_for('tickets.applications'))
         
         ticket_db.query("""
-            UPDATE applications 
+            UPDATE bewerbungen 
             SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND created_by = ?
+            WHERE id = ? AND erstellt_von = ?
         """, [status, notes, id, current_user.username])
         
         flash('Status erfolgreich aktualisiert', 'success')
@@ -1142,11 +1209,9 @@ def application_details(id):
     try:
         # Hole die Bewerbung aus der Datenbank
         application = ticket_db.query("""
-            SELECT a.*, t.name as template_name
-            FROM applications a
-            LEFT JOIN application_templates t ON a.template_id = t.id
-            WHERE a.id = ? AND a.created_by = ?
-        """, [id, current_user.username])
+            SELECT * FROM bewerbungen 
+            WHERE id = ? AND erstellt_von = ?
+        """, [id, current_user.username], one=True)
         
         if not application:
             flash('Bewerbung nicht gefunden', 'error')
@@ -1154,12 +1219,12 @@ def application_details(id):
             
         application = application[0]
         
-        # Konvertiere generated_content von String zu Dict
-        if application.get('generated_content'):
+        # Konvertiere generierter_inhalt von String zu Dict
+        if application.get('generierter_inhalt'):
             try:
-                application['generated_content'] = eval(application['generated_content'])
+                application['generierter_inhalt'] = eval(application['generierter_inhalt'])
             except:
-                application['generated_content'] = {}
+                application['generierter_inhalt'] = {}
         
         return render_template('tickets/application_details.html', application=application)
         
@@ -1175,10 +1240,10 @@ def download_application(id):
     try:
         # Hole die Bewerbung aus der Datenbank
         application = ticket_db.query("""
-            SELECT a.*, t.name as template_name
-            FROM applications a
-            LEFT JOIN application_templates t ON a.template_id = t.id
-            WHERE a.id = ? AND a.created_by = ?
+            SELECT a.*, t.name as vorlagen_name
+            FROM bewerbungen a
+            LEFT JOIN bewerbungsvorlagen t ON a.vorlagen_id = t.id
+            WHERE a.id = ? AND a.erstellt_von = ?
         """, [id, current_user.username], one=True)
         
         if not application:
@@ -1223,8 +1288,8 @@ def download_template(id):
         # Template aus der Datenbank holen
         template = ticket_db.query("""
             SELECT * FROM application_templates 
-            WHERE id = ? AND is_active = 1
-        """, [id], one=True)
+            WHERE id = ? AND erstellt_von = ?
+        """, [id, current_user.username], one=True)
         
         if not template:
             flash('Template nicht gefunden', 'error')
@@ -1256,8 +1321,8 @@ def delete_template(id):
         # Hole das Template aus der Datenbank
         template = ticket_db.query("""
             SELECT * FROM application_templates 
-            WHERE id = ? AND is_active = 1
-        """, [id], one=True)
+            WHERE id = ? AND erstellt_von = ?
+        """, [id, current_user.username], one=True)
         
         if not template:
             return jsonify({'success': False, 'message': 'Template nicht gefunden'}), 404
@@ -1312,7 +1377,7 @@ def upload_document():
             # Speichere in der Datenbank
             ticket_db.query("""
                 INSERT INTO application_documents 
-                (file_name, file_path, document_type, created_by) 
+                (file_name, file_path, document_type, erstellt_von) 
                 VALUES (?, ?, ?, ?)
             """, [filename, file_path, document_type, current_user.username])
             
@@ -1334,7 +1399,7 @@ def download_document(id):
         # Dokument aus der Datenbank holen
         document = ticket_db.query("""
             SELECT * FROM application_documents 
-            WHERE id = ? AND created_by = ?
+            WHERE id = ? AND erstellt_von = ?
         """, [id, current_user.username], one=True)
         
         if not document:
@@ -1368,7 +1433,7 @@ def delete_document(id):
         # Dokument aus der Datenbank holen
         document = ticket_db.query("""
             SELECT * FROM application_documents 
-            WHERE id = ? AND created_by = ?
+            WHERE id = ? AND erstellt_von = ?
         """, [id, current_user.username], one=True)
         
         if not document:
@@ -1413,9 +1478,9 @@ def debug_applications():
         tables = ticket_db.query("SELECT name FROM sqlite_master WHERE type='table'")
         result = {
             'tables': tables,
-            'templates': ticket_db.query("SELECT * FROM application_templates"),
-            'documents': ticket_db.query("SELECT * FROM application_documents"),
-            'applications': ticket_db.query("SELECT * FROM applications")
+            'templates': ticket_db.query("SELECT * FROM bewerbungsvorlagen"),
+            'documents': ticket_db.query("SELECT * FROM bewerbungsdokumente"),
+            'applications': ticket_db.query("SELECT * FROM bewerbungen")
         }
         return jsonify(result)
     except Exception as e:
@@ -1474,8 +1539,8 @@ def delete_application(id):
     try:
         # Bewerbung aus der Datenbank holen
         application = ticket_db.query("""
-            SELECT * FROM applications 
-            WHERE id = ? AND created_by = ?
+            SELECT * FROM bewerbungen 
+            WHERE id = ? AND erstellt_von = ?
         """, [id, current_user.username], one=True)
         
         if not application:
@@ -1491,7 +1556,7 @@ def delete_application(id):
         
         # Bewerbung aus der Datenbank löschen
         ticket_db.query("""
-            DELETE FROM applications 
+            DELETE FROM bewerbungen 
             WHERE id = ?
         """, [id])
             

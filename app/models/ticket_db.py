@@ -588,17 +588,16 @@ class TicketDatabase:
     def create_ticket(self, title, description, created_by, priority='normal', category=None, due_date=None, estimated_time=None):
         """Erstellt ein neues Ticket"""
         try:
-            # Füge das Ticket ein
-            self.query("""
-                INSERT INTO tickets 
-                (title, description, status, priority, created_by, category, due_date, estimated_time, created_at, updated_at)
-                VALUES (?, ?, 'offen', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-            """, [title, description, priority, created_by, category, due_date, estimated_time])
-            
-            # Hole die ID des neuen Tickets
-            ticket_id = self.query("SELECT last_insert_rowid() as id", one=True)['id']
-            
-            return ticket_id
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO tickets 
+                    (title, description, status, priority, created_by, category, due_date, estimated_time, created_at, updated_at)
+                    VALUES (?, ?, 'offen', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """, [title, description, priority, created_by, category, due_date, estimated_time])
+                ticket_id = cursor.lastrowid
+                conn.commit()
+                return ticket_id
         except Exception as e:
             logging.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
             raise
@@ -906,20 +905,34 @@ class TicketDatabase:
         # ... bisheriger Code ... 
 
     def get_ticket_assignments(self, ticket_id):
-        """Gibt alle zugewiesenen Benutzer für ein Ticket zurück."""
-        sql = "SELECT username FROM ticket_assignments WHERE ticket_id = ?"
-        return [row['username'] for row in self.query(sql, [ticket_id])]
+        """Holt alle zugewiesenen Nutzer für ein Ticket."""
+        return self.query(
+            """
+            SELECT username
+            FROM ticket_assignments
+            WHERE ticket_id = ?
+            ORDER BY username
+            """,
+            [ticket_id]
+        )
 
     def set_ticket_assignments(self, ticket_id, usernames):
-        """Setzt die Zuweisungen für ein Ticket (ersetzt alle bisherigen)."""
-        # Lösche alte Zuweisungen
-        self.delete_ticket_assignments(ticket_id)
-        # Füge neue Zuweisungen hinzu
-        for username in usernames:
-            self.query(
-                "INSERT INTO ticket_assignments (ticket_id, username) VALUES (?, ?)",
-                [ticket_id, username]
-            )
+        """Setzt die Zuweisungen für ein Ticket."""
+        try:
+            # Lösche alte Zuweisungen
+            self.query("DELETE FROM ticket_assignments WHERE ticket_id = ?", [ticket_id])
+            
+            # Füge neue Zuweisungen hinzu
+            for username in usernames:
+                self.query("""
+                    INSERT INTO ticket_assignments (ticket_id, username)
+                    VALUES (?, ?)
+                """, [ticket_id, username])
+            
+            return True
+        except Exception as e:
+            logging.error(f"Fehler beim Setzen der Ticket-Zuweisungen: {str(e)}")
+            return False
 
     def delete_ticket_assignments(self, ticket_id):
         """Löscht alle Zuweisungen für ein Ticket."""

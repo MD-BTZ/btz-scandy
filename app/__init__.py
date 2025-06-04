@@ -25,6 +25,7 @@ from app.routes import init_app
 import sqlite3
 from app.utils.schema_validator import validate_and_migrate_databases
 from app.models.ticket_migrations import run_migrations
+from app.utils.auto_migrate import auto_migrate_and_check
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -155,24 +156,21 @@ def initialize_and_migrate_databases():
         os.makedirs(os.path.dirname(inventory_db_path), exist_ok=True)
         os.makedirs(os.path.dirname(tickets_db_path), exist_ok=True)
         
+        # Initialisiere und migriere beide Datenbanken
+        logger.info("Initialisiere und migriere Datenbanken...")
+        from app.models.ticket_migrations import run_migrations
+        
         # Initialisiere Hauptdatenbank
-        logger.info("Initialisiere Hauptdatenbank...")
-        schema_manager = SchemaManager(inventory_db_path)
-        if not schema_manager.initialize():
+        if not run_migrations(inventory_db_path):
             logger.error("Fehler bei der Initialisierung der Hauptdatenbank")
             return False
         logger.info("Hauptdatenbank erfolgreich initialisiert")
         
-        # Initialisiere und migriere Ticket-Datenbank
-        logger.info("Initialisiere und migriere Ticket-Datenbank...")
-        run_migrations(tickets_db_path)
-        logger.info("Ticket-Datenbank erfolgreich initialisiert und migriert")
-        
-        # Initialisiere Bewerbungstabellen
-        logger.info("Initialisiere Bewerbungstabellen...")
-        from app.models.applications import create_application_tables
-        create_application_tables()
-        logger.info("Bewerbungstabellen erfolgreich initialisiert")
+        # Initialisiere Ticket-Datenbank
+        if not run_migrations(tickets_db_path):
+            logger.error("Fehler bei der Initialisierung der Ticket-Datenbank")
+            return False
+        logger.info("Ticket-Datenbank erfolgreich initialisiert")
         
         return True
         
@@ -209,14 +207,9 @@ def create_app(test_config=None):
     
     # Datenbanken nur einmal beim Start initialisieren
     if not hasattr(app, '_database_initialized'):
-        initialize_and_migrate_databases()
+        if not initialize_and_migrate_databases():
+            logging.error("Datenbankinitialisierung fehlgeschlagen. Bitte überprüfen Sie die Datenbankstruktur.")
         app._database_initialized = True
-    
-    # Validiere und migriere Datenbanken beim Start
-    if not validate_and_migrate_databases():
-        logging.error("Datenbankvalidierung und -migration fehlgeschlagen. Bitte überprüfen Sie die Datenbankstruktur.")
-        # Hier könnten wir auch die App beenden, aber das wäre zu drastisch
-        # sys.exit(1)
     
     # Flask-Login initialisieren
     login_manager.init_app(app)

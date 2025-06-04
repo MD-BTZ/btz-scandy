@@ -2588,18 +2588,21 @@ def ticket_detail(ticket_id):
     # Hole die Materialliste
     material_list = ticket_db.get_auftrag_material(ticket_id)
 
-    # Hole alle Benutzer aus der Ticket-Datenbank
-    users = ticket_db.query(
-        """
-        SELECT username FROM users WHERE is_active = 1 ORDER BY username
-        """
-    )
+    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
+    with Database.get_db() as db:
+        users = db.execute(
+            """
+            SELECT username FROM users WHERE is_active = 1 ORDER BY username
+            """
+        ).fetchall()
+        users = [dict(row) for row in users]
+
+    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+    assigned_users = [u['username'] for u in ticket_db.get_ticket_assignments(ticket_id)]
+
     # Hole alle Kategorien aus der ticket_categories Tabelle
     categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
     categories = [c['name'] for c in categories]
-
-    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-    assigned_users = ticket_db.get_ticket_assignments(ticket_id)
 
     return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
@@ -3414,3 +3417,70 @@ def update_ticket_details(ticket_id):
         import logging
         logging.error(f"Fehler beim Aktualisieren der Ticket-Details (Admin): {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/tickets/<int:ticket_id>/update-assignment', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket_assignment(ticket_id):
+    """Aktualisiert die Zuweisungen für ein Ticket."""
+    if not request.is_json:
+        return jsonify({'error': 'Nur JSON-Anfragen werden akzeptiert'}), 400
+        
+    data = request.get_json()
+    assigned_users = data.get('assigned_users', [])
+    
+    if not isinstance(assigned_users, list):
+        assigned_users = [assigned_users]
+    
+    try:
+        # Hole das aktuelle Ticket
+        ticket = ticket_db.query(
+            """
+            SELECT *
+            FROM tickets
+            WHERE id = ?
+            """,
+            [ticket_id],
+            one=True
+        )
+        
+        if not ticket:
+            return jsonify({'error': 'Ticket nicht gefunden'}), 404
+            
+        # Aktualisiere die Zuweisungen
+        if not ticket_db.set_ticket_assignments(ticket_id, assigned_users):
+            return jsonify({'error': 'Fehler beim Aktualisieren der Zuweisungen'}), 500
+            
+        # Setze die primäre Zuweisung auf den ersten Benutzer
+        primary_assignment = assigned_users[0] if assigned_users else None
+        
+        # Aktualisiere das Hauptticket
+        ticket_db.execute(
+            """
+            UPDATE tickets
+            SET assigned_to = ?,
+                status = ?,
+                category = ?,
+                due_date = ?,
+                estimated_time = ?,
+                actual_time = ?,
+                last_modified_by = ?
+            WHERE id = ?
+            """,
+            [
+                primary_assignment,
+                ticket['status'],
+                ticket['category'],
+                ticket['due_date'],
+                ticket['estimated_time'],
+                ticket['actual_time'],
+                current_user.username,
+                ticket_id
+            ]
+        )
+        
+        return jsonify({'message': 'Zuweisungen erfolgreich aktualisiert'})
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren der Zuweisungen: {str(e)}")
+        return jsonify({'error': 'Interner Serverfehler'}), 500

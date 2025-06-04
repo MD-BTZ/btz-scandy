@@ -14,8 +14,6 @@ class SchemaManager:
     
     def __init__(self, db_path):
         self.db_path = db_path
-        self.current_version = self._get_current_version()
-        self.expected_version = 5
         self._initialized = False
         self._backup_path = f"{db_path}.backup"
 
@@ -62,21 +60,6 @@ class SchemaManager:
                 return False
         return False
 
-    def _get_current_version(self):
-        """Ermittelt die aktuelle Schema-Version"""
-        try:
-            if not os.path.exists(self.db_path):
-                return 0
-                
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
-                result = cursor.fetchone()
-                return result[0] if result else 0
-        except Exception as e:
-            logger.error(f"Fehler beim Ermitteln der Schema-Version: {str(e)}")
-            return 0
-
     def initialize(self):
         """Initialisiert die Datenbank mit allen notwendigen Tabellen"""
         if self.db_path in self._initialized_dbs:
@@ -121,14 +104,6 @@ class SchemaManager:
 
                 # Erstelle alle Tabellen
                 self._create_tables(conn)
-
-                # Setze Schema-Version
-                current_version = self._get_current_version()
-                if current_version < self.expected_version:
-                    conn.execute(
-                        "INSERT INTO schema_version (version) VALUES (?)",
-                        [self.expected_version]
-                    )
 
                 # Füge Standarddaten ein, falls noch keine vorhanden sind
                 self._insert_default_data(conn)

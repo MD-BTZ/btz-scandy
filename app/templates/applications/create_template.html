@@ -1,133 +1,86 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Bewerbungsvorlage erstellen</h2>
-    
-    <div class="row">
-        <div class="col-md-8">
-            <form method="POST" enctype="multipart/form-data">
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="name" class="form-label">Name der Vorlage</label>
-                            <input type="text" class="form-control" id="name" name="name" required>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="category" class="form-label">Kategorie</label>
-                            <select class="form-select" id="category" name="category">
-                                <option value="anschreiben">Anschreiben</option>
-                                <option value="lebenslauf">Lebenslauf</option>
-                                <option value="zeugnis">Zeugnis</option>
-                            </select>
-                        </div>
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold mb-6">Bewerbungsvorlage erstellen</h2>
+        
+        <form method="POST" enctype="multipart/form-data" class="space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Name der Vorlage</label>
+                <input type="text" name="name" required
+                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Kategorie</label>
+                <select name="category"
+                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+                    <option value="anschreiben">Anschreiben</option>
+                    <option value="lebenslauf">Lebenslauf</option>
+                    <option value="zeugnis">Zeugnis</option>
+                </select>
+            </div>
 
-                        <div class="mb-3">
-                            <label for="template_content" class="form-label">Vorlageninhalt</label>
-                            <textarea class="form-control" id="template_content" name="template_content" rows="10" required></textarea>
-                        </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Vorlageninhalt</label>
+                <textarea name="template_content" rows="10" required
+                          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></textarea>
+            </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Dokumente</label>
-                            <div class="card">
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label for="cv" class="form-label">Lebenslauf</label>
-                                        <input type="file" class="form-control" id="cv" name="cv" accept=".pdf,.doc,.docx">
-                                        <small class="text-muted">Unterstützte Formate: PDF, DOC, DOCX</small>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="certificates" class="form-label">Zeugnisse</label>
-                                        <input type="file" class="form-control" id="certificates" name="certificates" accept=".pdf,.doc,.docx" multiple>
-                                        <small class="text-muted">Unterstützte Formate: PDF, DOC, DOCX</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary">Vorlage speichern</button>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Dokumente</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Lebenslauf</label>
+                        <input type="file" name="cv" accept=".pdf,.doc,.docx"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+                        <p class="mt-1 text-sm text-gray-500">Unterstützte Formate: PDF, DOC, DOCX</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Zeugnisse</label>
+                        <input type="file" name="certificates" accept=".pdf,.doc,.docx" multiple
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+                        <p class="mt-1 text-sm text-gray-500">Unterstützte Formate: PDF, DOC, DOCX</p>
                     </div>
                 </div>
-            </form>
-        </div>
+            </div>
 
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Verfügbare Platzhalter</h5>
-                </div>
-                <div class="card-body">
-                    <div class="accordion" id="placeholdersAccordion">
-                        <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#personalData">
-                                    Persönliche Daten
-                                </button>
-                            </h2>
-                            <div id="personalData" class="accordion-collapse collapse show" data-bs-parent="#placeholdersAccordion">
-                                <div class="accordion-body">
-                                    <ul class="list-unstyled">
-                                        <li><code>{{firstname}}</code> - Vorname</li>
-                                        <li><code>{{lastname}}</code> - Nachname</li>
-                                        <li><code>{{address}}</code> - Adresse</li>
-                                        <li><code>{{phone}}</code> - Telefon</li>
-                                        <li><code>{{email}}</code> - E-Mail</li>
-                                        <li><code>{{birthdate}}</code> - Geburtsdatum</li>
-                                        <li><code>{{birthplace}}</code> - Geburtsort</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
+            <div class="flex justify-end">
+                <button type="submit" 
+                        class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
+                    Vorlage speichern
+                </button>
+            </div>
+        </form>
+    </div>
 
-                        <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#applicationData">
-                                    Bewerbungsdaten
-                                </button>
-                            </h2>
-                            <div id="applicationData" class="accordion-collapse collapse" data-bs-parent="#placeholdersAccordion">
-                                <div class="accordion-body">
-                                    <ul class="list-unstyled">
-                                        <li><code>{{position}}</code> - Stelle</li>
-                                        <li><code>{{company_name}}</code> - Unternehmen</li>
-                                        <li><code>{{application_date}}</code> - Bewerbungsdatum</li>
-                                        <li><code>{{reference_number}}</code> - Referenznummer</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
+    <!-- Platzhalter Dokumentation -->
+    <div class="mt-8 bg-white rounded-lg shadow-md p-6">
+        <h3 class="text-xl font-bold mb-4">Verfügbare Platzhalter</h3>
+        
+        <div class="space-y-4">
+            <div>
+                <h4 class="text-lg font-medium text-gray-900">Persönliche Daten</h4>
+                <ul class="mt-2 space-y-1 text-sm text-gray-600">
+                    <li><code class="bg-gray-100 px-1 rounded">{{firstname}}</code> - Vorname des Bewerbers</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{lastname}}</code> - Nachname des Bewerbers</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{address}}</code> - Vollständige Adresse</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{phone}}</code> - Telefonnummer</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{email}}</code> - E-Mail-Adresse</li>
+                </ul>
+            </div>
 
-                        <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#additionalInfo">
-                                    Zusätzliche Informationen
-                                </button>
-                            </h2>
-                            <div id="additionalInfo" class="accordion-collapse collapse" data-bs-parent="#placeholdersAccordion">
-                                <div class="accordion-body">
-                                    <ul class="list-unstyled">
-                                        <li><code>{{skills}}</code> - Fähigkeiten</li>
-                                        <li><code>{{experience}}</code> - Berufserfahrung</li>
-                                        <li><code>{{education}}</code> - Ausbildung</li>
-                                        <li><code>{{languages}}</code> - Sprachkenntnisse</li>
-                                        <li><code>{{notes}}</code> - Anmerkungen</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-3">
-                        <h6>Hinweise:</h6>
-                        <ul class="small text-muted">
-                            <li>Platzhalter müssen in doppelten geschweiften Klammern <code>{{}}</code> eingeschlossen sein</li>
-                            <li>Groß-/Kleinschreibung beachten</li>
-                            <li>Nicht verwendete Platzhalter werden automatisch entfernt</li>
-                        </ul>
-                    </div>
-                </div>
+            <div>
+                <h4 class="text-lg font-medium text-gray-900">Bewerbungsdaten</h4>
+                <ul class="mt-2 space-y-1 text-sm text-gray-600">
+                    <li><code class="bg-gray-100 px-1 rounded">{{position}}</code> - Stelle</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{company_name}}</code> - Unternehmen</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{application_date}}</code> - Bewerbungsdatum</li>
+                    <li><code class="bg-gray-100 px-1 rounded">{{reference_number}}</code> - Referenznummer</li>
+                </ul>
             </div>
         </div>
     </div>

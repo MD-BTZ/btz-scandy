@@ -13,101 +13,83 @@ def create_application_tables():
         
         # Tabelle für Bewerbungsvorlagen
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS application_templates (
+            CREATE TABLE IF NOT EXISTS bewerbungsvorlagen (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                category TEXT,
-                template_content TEXT,
-                created_by TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1
-            )
-        ''')
-        
-        # Tabelle für Dokumentenvorlagen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS application_document_templates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                template_id INTEGER,
-                name TEXT NOT NULL,
-                document_type TEXT,
-                file_name TEXT,
-                file_path TEXT,
-                created_by TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1,
-                FOREIGN KEY (template_id) REFERENCES application_templates(id)
-            )
-        ''')
-        
-        # Tabelle für Bewerbungen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                template_id INTEGER,
-                company_name TEXT NOT NULL,
-                position TEXT NOT NULL,
-                contact_person TEXT,
-                contact_email TEXT,
-                contact_phone TEXT,
-                address TEXT,
-                generated_content TEXT,
-                custom_block TEXT,
-                status TEXT DEFAULT 'created',
-                notes TEXT,
-                created_by TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                cv_path TEXT,
-                certificate_paths TEXT,
-                FOREIGN KEY (template_id) REFERENCES application_templates(id)
+                dateiname TEXT NOT NULL,
+                kategorie TEXT,
+                erstellt_von TEXT NOT NULL,
+                erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ist_aktiv BOOLEAN DEFAULT 1,
+                FOREIGN KEY (erstellt_von) REFERENCES users(username)
             )
         ''')
         
         # Tabelle für Bewerbungsdokumente
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS application_documents (
+            CREATE TABLE IF NOT EXISTS bewerbungsdokumente (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                application_id INTEGER,
-                file_name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                document_type TEXT,
-                created_by TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (application_id) REFERENCES applications(id)
+                vorlagen_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                beschreibung TEXT,
+                dateipfad TEXT NOT NULL,
+                ist_erforderlich BOOLEAN DEFAULT 1,
+                erstellt_von TEXT NOT NULL,
+                erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vorlagen_id) REFERENCES bewerbungsvorlagen(id) ON DELETE CASCADE,
+                FOREIGN KEY (erstellt_von) REFERENCES users(username)
             )
         ''')
         
-        # Tabelle für Bewerbungsantworten
+        # Tabelle für Bewerbungen
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS application_responses (
+            CREATE TABLE IF NOT EXISTS bewerbungen (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                application_id INTEGER,
-                response_type TEXT,
-                response_date TIMESTAMP,
-                content TEXT,
-                next_steps TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (application_id) REFERENCES applications(id)
+                vorlagen_id INTEGER NOT NULL,
+                bewerber TEXT NOT NULL,
+                status TEXT DEFAULT 'in_bearbeitung',
+                erstellt_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                aktualisiert_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vorlagen_id) REFERENCES bewerbungsvorlagen(id),
+                FOREIGN KEY (bewerber) REFERENCES users(username)
             )
+        ''')
+        
+        # Tabelle für Bewerbungsdokumente Uploads
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bewerbungsdokumente_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bewerbung_id INTEGER NOT NULL,
+                dokument_id INTEGER NOT NULL,
+                dateipfad TEXT NOT NULL,
+                hochgeladen_am TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (bewerbung_id) REFERENCES bewerbungen(id) ON DELETE CASCADE,
+                FOREIGN KEY (dokument_id) REFERENCES bewerbungsdokumente(id)
+            )
+        ''')
+        
+        # Index für erstellt_von in bewerbungsvorlagen
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_bewerbungsvorlagen_erstellt_von 
+            ON bewerbungsvorlagen(erstellt_von)
         ''')
         
         conn.commit()
         print("Bewerbungstabellen erfolgreich erstellt")
 
-class ApplicationTemplate:
+class Bewerbungsvorlage:
     """Klasse für die Verwaltung von Bewerbungsvorlagen"""
     
     @staticmethod
-    def create(name, description=None):
+    def create(name, dateiname, kategorie=None, erstellt_von=None):
         """Erstellt eine neue Bewerbungsvorlage"""
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'tickets.db')
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO application_templates (name, template_content)
-                VALUES (?, ?)
-            ''', (name, description))
+                INSERT INTO bewerbungsvorlagen (name, dateiname, kategorie, erstellt_von)
+                VALUES (?, ?, ?, ?)
+            ''', (name, dateiname, kategorie, erstellt_von))
             conn.commit()
             return cursor.lastrowid
     
@@ -119,51 +101,51 @@ class ApplicationTemplate:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT id, name, category 
-                FROM application_templates 
-                WHERE is_active = 1
+                SELECT id, name, dateiname, kategorie 
+                FROM bewerbungsvorlagen 
+                WHERE ist_aktiv = 1
             ''')
             return cursor.fetchall()
     
     @staticmethod
-    def get_by_id(template_id):
+    def get_by_id(vorlagen_id):
         """Gibt eine Bewerbungsvorlage anhand ihrer ID zurück"""
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'tickets.db')
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT * FROM application_templates 
-                WHERE id = ? AND is_active = 1
-            ''', [template_id])
+                SELECT * FROM bewerbungsvorlagen 
+                WHERE id = ? AND ist_aktiv = 1
+            ''', [vorlagen_id])
             return cursor.fetchone()
 
-class ApplicationDocumentTemplate:
+class Bewerbungsdokument:
     """Klasse für die Verwaltung von Dokumentenvorlagen"""
     
     @staticmethod
-    def create(template_id, name, file_path, description=None, is_required=True):
+    def create(vorlagen_id, name, dateipfad, beschreibung=None, ist_erforderlich=True, erstellt_von=None):
         """Erstellt eine neue Dokumentenvorlage"""
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'tickets.db')
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO application_document_templates 
-                (template_id, name, document_type, file_name, file_path)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (template_id, name, description, os.path.basename(file_path), file_path))
+                INSERT INTO bewerbungsdokumente 
+                (vorlagen_id, name, beschreibung, dateipfad, ist_erforderlich, erstellt_von)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (vorlagen_id, name, beschreibung, dateipfad, ist_erforderlich, erstellt_von))
             conn.commit()
             return cursor.lastrowid
     
     @staticmethod
-    def get_by_template_id(template_id):
+    def get_by_vorlagen_id(vorlagen_id):
         """Gibt alle Dokumentenvorlagen für eine Bewerbungsvorlage zurück"""
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'tickets.db')
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT * FROM application_document_templates 
-                WHERE template_id = ? AND is_active = 1
-            ''', [template_id])
+                SELECT * FROM bewerbungsdokumente 
+                WHERE vorlagen_id = ?
+            ''', [vorlagen_id])
             return cursor.fetchall() 

@@ -163,14 +163,21 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                <option value="">Nicht zugewiesen</option>
-                                {% for worker in workers %}
-                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
-                                    {{ worker.username }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <form method="POST" action="{{ url_for('tickets.update_assignment', id=ticket.id) }}" id="assignmentForm">
+                                <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
+                                    {% for user in users %}
+                                        <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
+                                            <input type="checkbox" 
+                                                   name="assigned_to" 
+                                                   value="{{ user['username'] }}" 
+                                                   class="checkbox checkbox-primary"
+                                                   {% if user['username'] in assigned_users %}checked{% endif %}>
+                                            <span>{{ user['username'] }}</span>
+                                        </label>
+                                    {% endfor %}
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm w-full mb-2">Zuweisung speichern</button>
+                            </form>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
