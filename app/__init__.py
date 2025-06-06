@@ -1,31 +1,32 @@
-from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash, current_app
-from flask_session import Session  # Session-Management
-from .constants import Routes
-from app.config.version import VERSION
-import os
-from datetime import datetime, timedelta
-from app.utils.filters import register_filters, status_color, priority_color
-import logging
-from app.models.database import Database
-from app.utils.error_handler import handle_errors
-from app.utils.db_schema import SchemaManager
+from flask import Flask, redirect, url_for, session, request, current_app, g
+from flask_login import current_user
+from flask_session import Session
 from flask_compress import Compress
-from app.models.settings import Settings
-from app.utils.auth_utils import needs_setup
-from app.models.init_db import init_db
+from flask_login import LoginManager
 from pathlib import Path
+import os
 import sys
-from flask_login import LoginManager, current_user
-from app.models.user import User
-from app.models.init_ticket_db import init_ticket_db
-from app.utils.context_processors import register_context_processors
-from app.routes import auth, tools, consumables, workers, setup, backup, applications, profile
-from app.config import Config
-from app.routes import init_app
+import logging
 import sqlite3
-from app.utils.schema_validator import validate_and_migrate_databases
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List
+
+# Local imports
+from app.config import Config
+from app.models import Database, BaseModel, Tool, Worker
+from app.models.user import User
+from app.models.settings import Settings
+from app.models.init_db import init_db
+from app.models.init_ticket_db import init_ticket_db
 from app.models.ticket_migrations import run_migrations
+from app.utils.error_handler import handle_errors
+from app.utils.filters import register_filters
+from app.utils.db_schema import SchemaManager
+from app.utils.auth_utils import needs_setup
+from app.utils.context_processors import register_context_processors
 from app.utils.auto_migrate import auto_migrate_and_check
+from app.utils.schema_validator import validate_and_migrate_databases
+from app.routes import init_app
 
 # Backup-System importieren
 sys.path.append(str(Path(__file__).parent.parent))
@@ -41,25 +42,17 @@ backup_manager = DatabaseBackup(str(Path(__file__).parent.parent))
 backup_dir = Path(__file__).parent.parent / 'backups'
 backup_dir.mkdir(exist_ok=True)
 
+# Initialize Flask extensions
 login_manager = LoginManager()
 login_manager.session_protection = "strong"
 login_manager.login_view = 'auth.login'
 login_manager.login_message = "Bitte melden Sie sich an, um auf diese Seite zuzugreifen."
 login_manager.login_message_category = "info"
 
-class Config:
-    @staticmethod
-    def init_server():
-        pass
+# Initialize other extensions
+db = Database.get_instance()
 
-    @staticmethod
-    def init_client(server_url=None):
-        pass
-
-    @staticmethod
-    def is_pythonanywhere():
-        # This is a placeholder implementation. You might want to implement a more robust check for PythonAnywhere
-        return False
+# Configuration is now in app/config.py
 
 def ensure_directories_exist():
     """Stellt sicher, dass alle benötigten Verzeichnisse existieren"""
@@ -178,8 +171,13 @@ def initialize_and_migrate_databases():
         logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
         return False
 
-def create_app(test_config=None):
-    """Erstellt und konfiguriert die Flask-Anwendung"""
+def create_app(test_config=None, db_path: Optional[str] = None):
+    """Erstellt und konfiguriert die Flask-Anwendung
+    
+    Args:
+        test_config: Konfiguration für Tests
+        db_path: Optionaler Pfad zur Datenbankdatei
+    """
     app = Flask(__name__)
     
     # Konfiguration laden
@@ -192,6 +190,13 @@ def create_app(test_config=None):
     app.config['TICKET_SYSTEM_NAME'] = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
     app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
     app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
+    
+    # Datenbankpfad konfigurieren
+    if db_path is None:
+        db_path = os.path.join(app.config['BASE_DIR'], 'app', 'database', 'inventory.db')
+    
+    # Datenbank initialisieren
+    db = Database.get_instance(db_path=db_path)
     
     # TEMP_FOLDER setzen
     app.config['TEMP_FOLDER'] = os.path.join(app.config['BASE_DIR'], 'app', 'tmp')
@@ -207,28 +212,42 @@ def create_app(test_config=None):
     
     # Datenbanken nur einmal beim Start initialisieren
     if not hasattr(app, '_database_initialized'):
-        if not initialize_and_migrate_databases():
-            logging.error("Datenbankinitialisierung fehlgeschlagen. Bitte überprüfen Sie die Datenbankstruktur.")
-        app._database_initialized = True
+        try:
+            # Migrations durchführen
+            from migrations.apply_migration import main as run_migrations
+            if run_migrations() != 0:
+                logging.error("Fehler bei der Datenbankmigration. Bitte überprüfen Sie die Logs.")
+            
+            # Alte Initialisierung für Abwärtskompatibilität
+            if not initialize_and_migrate_databases():
+                logging.warning("Alte Datenbankinitialisierung fehlgeschlagen. Fortfahren mit neuer Struktur.")
+            
+            app._database_initialized = True
+        except Exception as e:
+            logging.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
+            raise
     
     # Flask-Login initialisieren
     login_manager.init_app(app)
     
     @login_manager.user_loader
     def load_user(user_id):
+        # Verwende das neue User-Modell mit der Basisklasse
         return User.get_by_id(user_id)
     
     # Context Processors registrieren
     register_context_processors(app)
     
-    # Context Processor für Systemnamen
+    # Context Processor für Systemnamen und Datenbank
     @app.context_processor
-    def inject_system_names():
+    def inject_globals():
+        """Fügt globale Variablen zu allen Templates hinzu"""
         return {
             'system_name': app.config['SYSTEM_NAME'],
             'ticket_system_name': app.config['TICKET_SYSTEM_NAME'],
             'tool_system_name': app.config['TOOL_SYSTEM_NAME'],
-            'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME']
+            'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME'],
+            'db': db  # Füge die Datenbankinstanz zu den Templates hinzu
         }
     
     # Blueprints registrieren
@@ -260,73 +279,95 @@ def create_app(test_config=None):
     # Filter registrieren
     register_filters(app)
     
-    # Register custom filters
-    app.jinja_env.filters['status_color'] = status_color
-    app.jinja_env.filters['priority_color'] = priority_color
-    
     # Komprimierung aktivieren
     Compress(app)
     
-    # Wenn auf Render, lade Demo-Daten
-    if os.environ.get('RENDER') == 'true':
+    # Demo-Daten laden, wenn gewünscht
+    if os.environ.get('LOAD_DEMO_DATA', 'false').lower() == 'true':
         with app.app_context():
             demo_data_lock = os.path.join(app.instance_path, 'demo_data.lock')
             if not os.path.exists(demo_data_lock):
-                # Lösche vorhandene Benutzer
-                with Database.get_db() as db:
-                    db.execute("DELETE FROM users")
-                    db.commit()
-                    print("Vorhandene Benutzer gelöscht")
-                
-                # Demo-Daten laden
-                from app.models.demo_data import load_demo_data
-                load_demo_data()
-                print("Demo-Daten wurden geladen")
-                
-                # Erstelle Lock-Datei
-                os.makedirs(app.instance_path, exist_ok=True)
-                with open(demo_data_lock, 'w') as f:
-                    f.write('1')
-            else:
-                # Versuche das letzte Backup wiederherzustellen
-                backup = DatabaseBackup(app_path=Path(__file__).parent.parent)
-                latest_backup = "inventory_20250110_190000.db"
-                if backup.restore_backup(latest_backup):
-                    print(f"Backup {latest_backup} erfolgreich wiederhergestellt")
-                else:
-                    print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
+                try:
+                    print("Lade Demo-Daten...")
+                    
+                    # Lösche vorhandene Daten
+                    with db.get_connection() as conn:
+                        cursor = conn.cursor()
+                        # Lösche in umgekehrter Reihenfolge der Abhängigkeiten
+                        cursor.execute("DELETE FROM lendings")
+                        cursor.execute("DELETE FROM tools")
+                        cursor.execute("DELETE FROM workers")
+                        cursor.execute("DELETE FROM users WHERE is_admin = 0")  # Behalte Admin-Benutzer
+                        conn.commit()
+                    
+                    # Lade Demo-Daten
+                    from app.models.demo_data import load_demo_data
+                    load_demo_data()
+                    
+                    # Erstelle Lock-Datei
+                    os.makedirs(app.instance_path, exist_ok=True)
+                    with open(demo_data_lock, 'w') as f:
+                        f.write('1')
+                        
+                    print("Demo-Daten erfolgreich geladen")
+                    
+                except Exception as e:
+                    print(f"Fehler beim Laden der Demo-Daten: {str(e)}")
+                    raise
     
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():
-        # Berechne unausgefüllte Tage für alle Wochen
+        # Initialize with default values
         unfilled_days = 0
-        if current_user.is_authenticated and current_user.is_mitarbeiter:
-            today = datetime.now()
-            # Verwende die Ticket-Datenbank für Timesheet-Abfragen
-            tickets_db_path = os.path.join(current_app.config['BASE_DIR'], 'app', 'database', 'tickets.db')
-            with sqlite3.connect(tickets_db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                timesheets = conn.execute('''
-                    SELECT * FROM timesheets 
-                    WHERE user_id = ?
-                ''', [current_user.id]).fetchall()
-                
-                for ts in timesheets:
-                    # Berechne den Wochenstart
-                    week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
-                    days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
-                    
-                    for i, day in enumerate(days):
-                        # Berechne das Datum für den aktuellen Tag
-                        current_day = week_start + timedelta(days=i)
+        
+        # Check if we have a valid user context
+        try:
+            if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated and hasattr(current_user, 'is_mitarbeiter') and current_user.is_mitarbeiter:
+                today = datetime.now()
+                # Use the ticket database for timesheet queries
+                tickets_db_path = os.path.join(current_app.config.get('BASE_DIR', ''), 'app', 'database', 'tickets.db')
+                if os.path.exists(tickets_db_path):
+                    with sqlite3.connect(tickets_db_path) as conn:
+                        conn.row_factory = sqlite3.Row
+                        timesheets = conn.execute('''
+                            SELECT * FROM timesheets 
+                            WHERE user_id = ?
+                        ''', [current_user.id]).fetchall()
                         
-                        # Prüfe nur vergangene Tage
-                        if current_day.date() < today.date():
-                            has_times = ts[f'{day}_start'] or ts[f'{day}_end']
-                            has_tasks = ts[f'{day}_tasks']
-                            if not (has_times and has_tasks):
-                                unfilled_days += 1
+                        for ts in timesheets:
+                            try:
+                                # Calculate week start
+                                week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Monday
+                                days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+                                
+                                for i, day in enumerate(days):
+                                    try:
+                                        # Calculate the date for the current day
+                                        current_day = week_start + timedelta(days=i)
+                                        
+                                        # Only check past days
+                                        if current_day.date() < today.date():
+                                            # Use direct key access for SQLite Row objects
+                                            start_key = f'{day}_start'
+                                            end_key = f'{day}_end'
+                                            tasks_key = f'{day}_tasks'
+                                            
+                                            # Check if keys exist in the row before accessing
+                                            has_times = (start_key in ts and ts[start_key]) or (end_key in ts and ts[end_key])
+                                            has_tasks = tasks_key in ts and ts[tasks_key]
+                                            
+                                            if not (has_times and has_tasks):
+                                                unfilled_days += 1
+                                    except Exception as day_error:
+                                        logging.error(f"Error processing day {day}: {str(day_error)}")
+                                        continue
+                            except Exception as ts_error:
+                                logging.error(f"Error processing timesheet: {str(ts_error)}")
+                                continue
+        except Exception as e:
+            logging.error(f"Error in utility_processor: {str(e)}")
+            unfilled_days = 0
 
         return {
             'status_colors': {

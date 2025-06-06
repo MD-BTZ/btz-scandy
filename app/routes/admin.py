@@ -932,99 +932,13 @@ def trash():
                                workers=workers)
     except Exception as e:
         logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
-        flash('Fehler beim Laden des Papierkorbs', 'error')
-        return redirect(url_for('admin.dashboard'))
-
-@bp.route('/trash/restore/<type>/<barcode>', methods=['POST'])
-@mitarbeiter_required
-def restore_item(type, barcode):
-    """Stellt einen gelöschten Eintrag wieder her"""
     try:
-        with Database.get_db() as conn:
-            if type == 'tool':
-                # Prüfe ob das Werkzeug existiert
-                tool = conn.execute('''
-                    SELECT * FROM tools 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not tool:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Werkzeug nicht gefunden'
-                    }), 404
-                    
-                # Stelle das Werkzeug wieder her
-                conn.execute('''
-                    UPDATE tools 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-                
-            elif type == 'consumable':
-                # Prüfe ob das Verbrauchsmaterial existiert
-                consumable = conn.execute('''
-                    SELECT * FROM consumables 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not consumable:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Verbrauchsmaterial nicht gefunden'
-                    }), 404
-                    
-                # Stelle das Verbrauchsmaterial wieder her
-                conn.execute('''
-                    UPDATE consumables 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-                
-            elif type == 'worker':
-                # Prüfe ob der Mitarbeiter existiert
-                worker = conn.execute('''
-                    SELECT * FROM workers 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not worker:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Mitarbeiter nicht gefunden'
-                    }), 404
-                    
-                # Stelle den Mitarbeiter wieder her
-                conn.execute('''
-                    UPDATE workers 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Ungültiger Typ'
-                }), 400
-                
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Eintrag wurde wiederhergestellt'
-            })
-            
+        ticket_db = TicketDatabase()
+        value = ticket_db.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
+        return value['value'] if value and value['value'] else default
     except Exception as e:
-        logger.error(f"Fehler beim Wiederherstellen des Eintrags: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Wiederherstellen: {str(e)}'
-        }), 500
+        logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
+        return default
 
 def get_label_setting(key, default):
     """Hole eine Label-Einstellung aus der tickets.db"""
@@ -1033,7 +947,7 @@ def get_label_setting(key, default):
         value = ticket_db.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
         return value['value'] if value and value['value'] else default
     except Exception as e:
-        logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
+        current_app.logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
         return default
 
 def get_app_labels():
@@ -3283,7 +3197,10 @@ def delete_ticket_category(category):
 @login_required
 @admin_required
 def export_ticket(id):
-    """Exportiert ein Ticket als Word-Dokument."""
+    """Exportiert ein Ticket als Word-Dokument mit dem BTZ-Template."""
+    from docxtpl import DocxTemplate
+    import tempfile
+    
     ticket = ticket_db.query(
         """
         SELECT *
@@ -3296,79 +3213,110 @@ def export_ticket(id):
     
     if not ticket:
         return render_template('404.html'), 404
-        
+    
     # Hole die Auftragsdetails
-    auftrag_details = ticket_db.get_auftrag_details(id)
+    auftrag_details = ticket_db.get_auftrag_details(id) or {}
     
     # Hole die Materialliste
-    material_list = ticket_db.get_auftrag_material(id)
+    material_list = ticket_db.get_auftrag_material(id) or []
     
-    # Erstelle das Word-Dokument
-    doc = Document()
+    # Bereite den Kontext für die Vorlage vor
+    context = {
+        # Header
+        'auftragnehmer': 'BTZ GmbH',  # Sollte aus den Einstellungen kommen
+        'auftragnummer': ticket.get('id', ''),
+        'datum': datetime.now().strftime('%d.%m.%Y'),
+        
+        # Auftraggeber
+        'bereich': auftrag_details.get('bereich', ''),
+        'auftraggebername': auftrag_details.get('auftraggeber_name', ''),
+        'auftraggebermail': auftrag_details.get('kontakt', ''),
+        'auftragsbeschreibung': ticket.get('description', ''),
+        
+        # Ausgeführte Arbeiten
+        'arbeitenblock': '\n'.join([f"{a['material']}" for a in material_list]) if material_list else '',
+        'stundenblock': '\n'.join([f"{a['menge']}" for a in material_list]) if material_list else '',
+        'kategorieblock': '\n'.join([f"{a['einzelpreis']:.2f} €" for a in material_list]) if material_list else '',
+        
+        # Materialliste
+        'materialblock': '\n'.join([a['material'] for a in material_list]) if material_list else '',
+        'mengenblock': '\n'.join([f"{a['menge']}" for a in material_list]) if material_list else '',
+        'preisblock': '\n'.join([f"{a['einzelpreis']:.2f} €" for a in material_list]) if material_list else '',
+        'gesamtblock': '\n'.join([f"{a['menge'] * a['einzelpreis']:.2f} €" for a in material_list]) if material_list else '',
+        
+        # Summen
+        'matsum': f"{sum(a['menge'] * a['einzelpreis'] for a in material_list):.2f} €" if material_list else '0.00 €',
+        'utrag': '0.00 €',  # Übertrag, falls benötigt
+        'arpausch': '0.00 €',  # Arbeitspauschale, falls benötigt
+        'zwsum': f"{sum(a['menge'] * a['einzelpreis'] for a in material_list):.2f} €" if material_list else '0.00 €',
+        'mwst': f"{sum(a['menge'] * a['einzelpreis'] for a in material_list) * 0.19:.2f} €" if material_list else '0.00 €',  # 19% MwSt
+        'gesamtsumme': f"{sum(a['menge'] * a['einzelpreis'] for a in material_list) * 1.19:.2f} €" if material_list else '0.00 €',  # Bruttosumme
+        
+        # Termine
+        'duedate': auftrag_details.get('fertigstellungstermin', '')
+    }
     
-    # Füge den Titel hinzu
-    doc.add_heading(f'Auftrag #{ticket["id"]}: {ticket["title"]}', 0)
+    # Debug: Logge den Kontext
+    current_app.logger.info(f"Template Kontext: {context}")
     
-    # Füge die Ticket-Details hinzu
-    doc.add_heading('Auftragsdetails', level=1)
-    doc.add_paragraph(f'Status: {ticket["status"]}')
-    doc.add_paragraph(f'Priorität: {ticket["priority"]}')
-    doc.add_paragraph(f'Kategorie: {ticket["category"]}')
-    doc.add_paragraph(f'Erstellt von: {ticket["created_by"]}')
-    doc.add_paragraph(f'Erstellt am: {ticket["created_at"]}')
-    if ticket["due_date"]:
-        doc.add_paragraph(f'Fällig am: {ticket["due_date"]}')
+    # Setze die Checkboxen für intern/extern
+    if auftrag_details.get('auftraggeber_intern'):
+        context['internchk'] = '☑'
+        context['externchk'] = '☐'
+    elif auftrag_details.get('auftraggeber_extern'):
+        context['internchk'] = '☐'
+        context['externchk'] = '☑'
+    else:
+        context['internchk'] = '☐'
+        context['externchk'] = '☐'
     
-    # Füge die Beschreibung hinzu
-    doc.add_heading('Beschreibung', level=1)
-    doc.add_paragraph(ticket["description"])
+    # Füge Materialien hinzu (falls vorhanden)
+    for i, material in enumerate(material_list[:8], 1):  # Maximal 8 Materialien
+        context[f'material{i}'] = material.get('material', '')
+        context[f'menge{i}'] = str(material.get('menge', ''))
+        context[f'preis{i}'] = f"{float(material.get('einzelpreis', 0)):.2f} €"
     
-    # Füge die Auftragsdetails hinzu, falls vorhanden
-    if auftrag_details:
-        doc.add_heading('Weitere Details', level=1)
-        doc.add_paragraph(f'Bereich: {auftrag_details["bereich"]}')
-        if auftrag_details["auftraggeber_intern"]:
-            doc.add_paragraph('Auftraggeber: Intern')
-        elif auftrag_details["auftraggeber_extern"]:
-            doc.add_paragraph(f'Auftraggeber: Extern - {auftrag_details["auftraggeber_name"]}')
-        if auftrag_details["kontakt"]:
-            doc.add_paragraph(f'Kontakt: {auftrag_details["kontakt"]}')
-        if auftrag_details["fertigstellungstermin"]:
-            doc.add_paragraph(f'Fertigstellungstermin: {auftrag_details["fertigstellungstermin"]}')
-        if auftrag_details["arbeitsstunden"]:
-            doc.add_paragraph(f'Arbeitsstunden: {auftrag_details["arbeitsstunden"]}')
-        if auftrag_details["leistungskategorie"]:
-            doc.add_paragraph(f'Leistungskategorie: {auftrag_details["leistungskategorie"]}')
+    # Fülle die restlichen Materialzeilen mit leeren Werten
+    for i in range(len(material_list) + 1, 9):
+        context[f'material{i}'] = ''
+        context[f'menge{i}'] = ''
+        context[f'preis{i}'] = ''
     
-    # Füge die Materialliste hinzu, falls vorhanden
+    # Debug: Logge die ersten Materialien
     if material_list:
-        doc.add_heading('Materialliste', level=1)
-        table = doc.add_table(rows=1, cols=3)
-        table.style = 'Table Grid'
-        
-        # Füge die Tabellenüberschriften hinzu
-        header_cells = table.rows[0].cells
-        header_cells[0].text = 'Material'
-        header_cells[1].text = 'Menge'
-        header_cells[2].text = 'Einzelpreis'
-        
-        # Füge die Materialien hinzu
-        for material in material_list:
-            row_cells = table.add_row().cells
-            row_cells[0].text = material["material"]
-            row_cells[1].text = str(material["menge"])
-            row_cells[2].text = f'{material["einzelpreis"]:.2f} €'
+        current_app.logger.info(f"Materialien: {material_list[:2]}...")
+    else:
+        current_app.logger.warning("Keine Materialien gefunden")
     
-    # Speichere das Dokument
-    filename = f'auftrag_{ticket["id"]}.docx'
-    doc.save(filename)
+    # Pfad zur Word-Vorlage
+    template_path = os.path.join(current_app.root_path, 'static', 'word', 'btzauftrag.docx')
     
-    return send_file(
-        filename,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    )
+    # Lade die Vorlage und fülle sie mit den Daten
+    doc = DocxTemplate(template_path)
+    doc.render(context)
+    
+    # Erstelle eine temporäre Datei
+    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_file:
+        temp_path = temp_file.name
+    
+    # Speichere das ausgefüllte Dokument
+    doc.save(temp_path)
+    
+    # Sende die Datei und lösche sie nach dem Senden
+    try:
+        return send_file(
+            temp_path,
+            as_attachment=True,
+            download_name=f'auftrag_{id}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            max_age=0  # Verhindert Caching
+        )
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        except Exception as e:
+            current_app.logger.error(f'Fehler beim Löschen der temporären Datei {temp_path}: {str(e)}')
 
 @bp.route('/tickets/<int:ticket_id>/update-details', methods=['POST'])
 @login_required

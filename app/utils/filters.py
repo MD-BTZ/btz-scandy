@@ -54,9 +54,14 @@ def register_filters(app):
     def author_filter(s):
         return get_author()
 
-    app.jinja_env.filters['format_datetime'] = format_datetime
-    app.jinja_env.filters['to_datetime'] = to_datetime
-    app.jinja_env.filters['format_duration'] = format_duration
+    # Register all filters
+    app.jinja_env.filters.update({
+        'format_datetime': format_datetime,
+        'to_datetime': to_datetime,
+        'format_duration': format_duration,
+        'status_color': status_color,
+        'priority_color': priority_color
+    })
 
 def status_color(status):
     """Gibt die Bootstrap-Farbe für einen Ticket-Status zurück"""

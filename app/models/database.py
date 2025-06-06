@@ -1,63 +1,133 @@
-from flask import g, current_app
+"""
+Database module for Scandy application.
+
+This module provides database connection handling and base model functionality.
+New code should use the BaseModel class as the base for all database models.
+"""
 import sqlite3
 from datetime import datetime
 import os
+import sys
 import logging
-from app.config import Config
-import json
-from pathlib import Path
-import shutil
-from contextlib import contextmanager
-import threading
 import time
-
-# Optional requests importieren
-try:
-    import requests
-except ImportError:
-    requests = None
+import threading
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Union, Tuple, TypeVar
+from contextlib import contextmanager
+from app.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Type variable for type hints
+T = TypeVar('T', bound='BaseModel')
+
+
 class Database:
+    """Database connection handler using singleton pattern.
+    
+    This class manages database connections and provides thread-safe access
+    to the SQLite database. It implements connection pooling with timeout
+    and automatic reconnection.
+    
+    Note: New code should prefer using the BaseModel class for database operations.
+    """
     _instance = None
     _lock = threading.Lock()
     _connection = None
     _last_used = None
-    _timeout = 300  # 5 Minuten Timeout für Verbindungen
-    _max_retries = 3  # Maximale Anzahl von Wiederholungsversuchen
-    _retry_delay = 1  # Verzögerung zwischen Wiederholungsversuchen in Sekunden
+    _timeout = 300  # 5 minutes timeout for connections
+    _max_retries = 3  # Maximum number of retry attempts
+    _retry_delay = 1  # Delay between retry attempts in seconds
+    _db_path = None  # Will be set during initialization
 
     @classmethod
-    def get_instance(cls):
-        """Singleton-Pattern für die Datenbankverbindung"""
+    def get_instance(cls, db_path: Optional[str] = None):
+        """Get or create a database instance (singleton pattern).
+        
+        Args:
+            db_path: Optional path to the SQLite database file.
+                    If not provided, uses the default path 'app/database/inventory.db'.
+                    
+        Returns:
+            Database: The database instance
+        """
+        # If no instance exists, create one
         if cls._instance is None:
             with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
+                if cls._instance is None:  # Double-checked locking pattern
+                    cls._instance = cls(db_path)
+        else:
+            # If a new db_path is provided and it's different from the current one,
+            # close the existing connection and create a new one
+            current_path = getattr(cls._instance, '_db_path', None)
+            if db_path is not None and db_path != current_path:
+                with cls._lock:
+                    # Double-check after acquiring the lock
+                    current_path = getattr(cls._instance, '_db_path', None)
+                    if db_path != current_path:
+                        logger.info(f"Changing database path from {current_path} to {db_path}")
+                        if hasattr(cls._instance, '_connection') and cls._instance._connection is not None:
+                            try:
+                                cls._instance._connection.close()
+                            except Exception as e:
+                                logger.warning(f"Error closing database connection: {e}")
+                        # Create a new instance with the new path
+                        cls._instance = cls(db_path)
+        
         return cls._instance
 
-    def __init__(self):
-        """Initialisiert die Datenbankverbindung"""
-        self.current_config = Config.config['default']()
-        self.db_path = os.path.join(self.current_config.BASE_DIR, 'app', 'database', 'inventory.db')
+    def __init__(self, db_path: Optional[str] = None):
+        """Initialize the database connection.
+        
+        Args:
+            db_path: Optional path to the SQLite database file.
+                    If not provided, uses the default path 'app/database/inventory.db'.
+        """
+        # Use provided db_path or construct default path
+        if db_path is None:
+            # Get the base directory of the project (one level up from app/)
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            db_path = os.path.join(base_dir, 'app', 'database', 'inventory.db')
+        
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+        
+        # Store the database path
+        self._db_path = db_path
+        
+        # Initialize the connection
         self._ensure_connection()
+        
+        # Set up WAL mode for better concurrency
+        self._setup_wal_mode()
+    
+    def _setup_wal_mode(self):
+        """Set up Write-Ahead Logging (WAL) mode for better concurrency."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute("PRAGMA synchronous=NORMAL;")
+                conn.execute("PRAGMA foreign_keys=ON;")
+                conn.commit()
+                logger.debug("Database configured with WAL mode")
+        except Exception as e:
+            logger.error(f"Error setting up WAL mode: {e}")
 
     def _ensure_connection(self):
-        """Stellt sicher, dass eine gültige Verbindung existiert"""
+        """Ensure a valid database connection exists."""
         current_time = datetime.now()
         
-        # Prüfe ob die Verbindung abgelaufen ist
+        # Check if connection has timed out
         if (self._last_used and 
             (current_time - self._last_used).total_seconds() > self._timeout):
             self.close_connection()
         
-        # Erstelle neue Verbindung wenn nötig
+        # Create new connection if necessary
         if not self._connection:
             for attempt in range(self._max_retries):
                 try:
                     self._connection = sqlite3.connect(
-                        self.db_path,
+                        self._db_path,  # Use _db_path instead of db_path
                         timeout=20.0,  # Timeout für Locks
                         check_same_thread=False  # Erlaubt Zugriff von verschiedenen Threads
                     )
@@ -90,37 +160,37 @@ class Database:
 
     @contextmanager
     def get_connection(self):
-        """Kontext-Manager für Datenbankverbindungen"""
+        """Context manager for database connections."""
         try:
             self._ensure_connection()
             self._last_used = datetime.now()
             yield self._connection
         except Exception as e:
-            logger.error(f"Fehler bei der Datenbankoperation: {str(e)}")
+            logger.error(f"Database operation failed: {str(e)}")
             if self._connection:
                 try:
                     self._connection.rollback()
                 except Exception as rollback_error:
-                    logger.error(f"Fehler beim Rollback: {str(rollback_error)}")
+                    logger.error(f"Rollback failed: {str(rollback_error)}")
             raise
         finally:
             self._last_used = datetime.now()
 
     def close_connection(self):
-        """Schließt die aktuelle Datenbankverbindung"""
+        """Close the current database connection."""
         if self._connection:
             try:
-                # Führe WAL-Checkpoint durch
+                # Perform WAL checkpoint
                 self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self._connection.close()
-                logger.info("Datenbankverbindung geschlossen")
+                logger.info("Database connection closed")
             except Exception as e:
-                logger.error(f"Fehler beim Schließen der Datenbankverbindung: {str(e)}")
+                logger.error(f"Error closing database connection: {str(e)}")
             finally:
                 self._connection = None
 
     def execute_query(self, query, params=None):
-        """Führt eine SQL-Abfrage aus"""
+        """Execute a SQL query."""
         for attempt in range(self._max_retries):
             try:
                 with self.get_connection() as conn:
@@ -133,17 +203,17 @@ class Database:
                     return cursor.fetchall()
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e) and attempt < self._max_retries - 1:
-                    logger.warning(f"Datenbank gesperrt, Versuch {attempt + 1} von {self._max_retries}")
+                    logger.warning(f"Database locked, attempt {attempt + 1} of {self._max_retries}")
                     time.sleep(self._retry_delay)
                 else:
-                    logger.error(f"Fehler bei der Ausführung der Abfrage: {str(e)}")
+                    logger.error(f"Error executing query: {str(e)}")
                     raise
             except Exception as e:
-                logger.error(f"Fehler bei der Ausführung der Abfrage: {str(e)}")
+                logger.error(f"Error executing query: {str(e)}")
                 raise
 
     def execute_many(self, query, params_list):
-        """Führt mehrere SQL-Abfragen aus"""
+        """Execute multiple SQL queries."""
         for attempt in range(self._max_retries):
             try:
                 with self.get_connection() as conn:
@@ -153,74 +223,74 @@ class Database:
                     return
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e) and attempt < self._max_retries - 1:
-                    logger.warning(f"Datenbank gesperrt, Versuch {attempt + 1} von {self._max_retries}")
+                    logger.warning(f"Database locked, attempt {attempt + 1} of {self._max_retries}")
                     time.sleep(self._retry_delay)
                 else:
-                    logger.error(f"Fehler bei der Ausführung mehrerer Abfragen: {str(e)}")
+                    logger.error(f"Error executing multiple queries: {str(e)}")
                     raise
             except Exception as e:
-                logger.error(f"Fehler bei der Ausführung mehrerer Abfragen: {str(e)}")
+                logger.error(f"Error executing multiple queries: {str(e)}")
                 raise
 
     def backup_database(self):
-        """Erstellt ein Backup der Datenbank"""
-        backup_path = f"{self.db_path}.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        """Create a backup of the database."""
+        backup_path = f"{self._db_path}.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         try:
             with self.get_connection() as conn:
-                # WAL-Datei synchronisieren
+                # Sync WAL file
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 
-                # Backup erstellen
+                # Create backup
                 with sqlite3.connect(backup_path) as backup_conn:
                     conn.backup(backup_conn)
                 
-                logger.info(f"Datenbank-Backup erstellt: {backup_path}")
+                logger.info(f"Database backup created: {backup_path}")
                 return backup_path
         except Exception as e:
-            logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
+            logger.error(f"Error creating backup: {str(e)}")
             raise
 
     def vacuum(self):
-        """Führt VACUUM auf der Datenbank aus"""
+        """Run VACUUM on the database."""
         with self.get_connection() as conn:
             try:
-                # Führe WAL-Checkpoint durch
+                # Perform WAL checkpoint
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 
-                # Führe VACUUM aus
+                # Run VACUUM
                 conn.execute("VACUUM")
-                logger.info("Datenbank-VACUUM durchgeführt")
+                logger.info("Database VACUUM completed")
             except Exception as e:
-                logger.error(f"Fehler beim VACUUM: {str(e)}")
+                logger.error(f"Error running VACUUM: {str(e)}")
                 raise
 
     def check_integrity(self):
-        """Überprüft die Datenbankintegrität"""
+        """Check database integrity."""
         with self.get_connection() as conn:
             try:
-                # Führe WAL-Checkpoint durch
+                # Perform WAL checkpoint
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 
-                # Prüfe Integrität
+                # Check integrity
                 result = conn.execute("PRAGMA integrity_check").fetchone()
                 if result[0] == "ok":
-                    logger.info("Datenbankintegrität OK")
+                    logger.info("Database integrity check passed")
                     return True
                 else:
-                    logger.error(f"Datenbankintegritätsprüfung fehlgeschlagen: {result[0]}")
+                    logger.error(f"Database integrity check failed: {result[0]}")
                     return False
             except Exception as e:
-                logger.error(f"Fehler bei der Integritätsprüfung: {str(e)}")
+                logger.error(f"Error during integrity check: {str(e)}")
                 raise
 
     @classmethod
     def print_database_contents(cls):
-        """Gibt den Inhalt aller Tabellen der Hauptdatenbank (inventory.db) zu Debugging-Zwecken aus.
+        """Print contents of all tables in the main database (inventory.db) for debugging.
 
-        Listet Tabellen, Spalten und die ersten paar Zeilen jeder Tabelle auf.
-        Passwörter werden aus Sicherheitsgründen zensiert.
+        Lists tables, columns, and the first few rows of each table.
+        Passwords are censored for security.
         """
-        logger.info("\n=== DATENBANK INHALTE ===")
+        logger.info("\n=== DATABASE CONTENTS ===")
         try:
             conn = cls.get_db_connection()
             cursor = conn.cursor()
@@ -235,7 +305,7 @@ class Database:
             
             for table in tables:
                 table_name = table[0]
-                logger.info(f"\nTabelle: {table_name}")
+                logger.info(f"\nTable: {table_name}")
                 
                 try:
                     # Hole alle Einträge
@@ -243,13 +313,13 @@ class Database:
                     rows = cursor.fetchall()
                     
                     if not rows:
-                        logger.info("  [LEER]")
+                        logger.info("  [EMPTY]")
                         continue
                     
                     # Hole Spaltennamen
                     columns = [description[0] for description in cursor.description]
-                    logger.info(f"  Spalten: {', '.join(columns)}")
-                    logger.info(f"  Anzahl Einträge: {len(rows)}")
+                    logger.info(f"  Columns: {', '.join(columns)}")
+                    logger.info(f"  Number of entries: {len(rows)}")
                     
                     # Zeige die ersten 5 Einträge
                     for i, row in enumerate(rows[:5]):
@@ -364,8 +434,16 @@ class Database:
         Returns:
             sqlite3.Connection: Die Datenbankverbindung für den aktuellen Request-Kontext.
         """
-        if 'db' not in g:
-            g.db = sqlite3.connect(Config.DATABASE)
+        try:
+            from flask import g, current_app
+            if hasattr(g, 'db'):
+                return g.db
+                
+            # Get database path from config
+            db_path = current_app.config.get('DATABASE') or Config.DATABASE
+            
+            # Create new connection if not in g
+            g.db = sqlite3.connect(db_path)
             g.db.row_factory = sqlite3.Row
             
             # Debug: Prüfe Tabelleninhalte beim ersten Verbindungsaufbau
@@ -378,7 +456,14 @@ class Database:
                 count = cursor.fetchone()['count']
                 logging.info(f"Tabelle {table_name} enthält {count} Einträge")
                 
-        return g.db
+            return g.db
+            
+        except RuntimeError:  # Outside of application context
+            # Create a new connection if we're not in a request context
+            db_path = Config.DATABASE
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            return conn
     
     @classmethod
     def show_db_structure(cls):
@@ -692,36 +777,10 @@ class Database:
             print(f"Fehler beim Abrufen der Bestandsprognose: {e}")
             return []
 
-class BaseModel:
-    """Basisklasse für alle Datenbankmodelle"""
-    TABLE_NAME = None
-    
-    @classmethod
-    def get_all_active(cls):
-        """Gibt alle aktiven (nicht gelöschten) Einträge zurück"""
-        return Database.query(f"SELECT * FROM {cls.TABLE_NAME} WHERE deleted = 0")
-    
-    @classmethod
-    def get_by_id(cls, id):
-        """Gibt einen Eintrag anhand seiner ID zurück"""
-        return Database.query(
-            f"SELECT * FROM {cls.TABLE_NAME} WHERE id = ? AND deleted = 0", 
-            [id], 
-            one=True
-        )
-    
-    @classmethod
-    def get_by_barcode(cls, barcode):
-        """Gibt einen Eintrag anhand seines Barcodes zurück"""
-        return Database.query(
-            f"SELECT * FROM {cls.TABLE_NAME} WHERE barcode = ? AND deleted = 0", 
-            [barcode], 
-            one=True
-        )
-
 def init_db():
     """Initialisiert die Hauptdatenbank, falls sie leer ist oder Tabellen fehlen."""
     try:
+        conn = sqlite3.connect(Config.DATABASE)
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         
