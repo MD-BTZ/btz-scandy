@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Scandy Docker-Installer (Template-basiert) - Linux Version
-# MongoDB + App Container Setup mit Template-System
+# Scandy Docker-Installer (Vollständig) - Linux Version
+# MongoDB + App Container Setup
 
 echo "========================================"
-echo "   Scandy Docker-Installer (Template)"
+echo "   Scandy Docker-Installer (Vollständig)"
 echo "   MongoDB + App Container Setup"
 echo "========================================"
 
@@ -46,24 +46,14 @@ CONTAINER_NAME=$(echo "$CONTAINER_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^
 read -p "Bitte geben Sie den Port für die App ein (Standard: 5000): " APP_PORT
 APP_PORT=${APP_PORT:-5000}
 
-# MongoDB-Port Abfrage
-read -p "Bitte geben Sie den Port für MongoDB ein (Standard: 27017): " MONGO_PORT
-MONGO_PORT=${MONGO_PORT:-27017}
+# Berechne dynamische Ports basierend auf App-Port
+MONGO_PORT=$((27017 + APP_PORT - 5000))
+MONGO_EXPRESS_PORT=$((8081 + APP_PORT - 5000))
 
-# Mongo Express Port Abfrage
-read -p "Bitte geben Sie den Port für Mongo Express (Web-UI) ein (Standard: 8081): " MONGO_EXPRESS_PORT
-MONGO_EXPRESS_PORT=${MONGO_EXPRESS_PORT:-8081}
-
-# MongoDB Credentials
-read -p "MongoDB Admin Benutzername (Standard: admin): " MONGO_USER
-MONGO_USER=${MONGO_USER:-admin}
-
-read -p "MongoDB Admin Passwort (Standard: scandy123): " MONGO_PASS
-MONGO_PASS=${MONGO_PASS:-scandy123}
-
-# Datenverzeichnis
-read -p "Datenverzeichnis (Standard: ./scandy_data): " DATA_DIR
-DATA_DIR=${DATA_DIR:-./scandy_data}
+# Feste Werte für alle anderen Parameter
+MONGO_USER=admin
+MONGO_PASS=scandy123
+DATA_DIR=./scandy_data
 
 echo "========================================"
 echo "   Konfiguration:"
@@ -84,26 +74,106 @@ fi
 
 # Erstelle Projektverzeichnis
 PROJECT_DIR="${CONTAINER_NAME}_project"
+if [ -d "$PROJECT_DIR" ]; then
+    echo "WARNING: Directory $PROJECT_DIR already exists!"
+    echo "Overwriting existing directory..."
+    rm -rf "$PROJECT_DIR"
+fi
 mkdir -p "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 
 echo "Erstelle Projektverzeichnis: $PROJECT_DIR"
 
-# Kopiere Template-Dateien
-echo "Kopiere Template-Dateien..."
-cp "../docker-compose.template.yml" "."
-cp "../process_template.py" "."
+# Erstelle feste docker-compose.yml
+echo "Erstelle docker-compose.yml..."
+cat > docker-compose.yml << EOF
+version: '3.8'
 
-# Verarbeite Template
-echo "Verarbeite Template..."
-python3 process_template.py "$CONTAINER_NAME" "$APP_PORT" "$MONGO_PORT" "$MONGO_EXPRESS_PORT" "$MONGO_USER" "$MONGO_PASS" "$DATA_DIR"
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: ${CONTAINER_NAME}-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+      MONGO_INITDB_DATABASE: scandy
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - ${DATA_DIR}/mongodb:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - ${CONTAINER_NAME}-network
+    command: mongod --auth --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-if [ $? -ne 0 ]; then
-    echo "FEHLER: Template-Verarbeitung fehlgeschlagen!"
-    exit 1
-fi
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: ${CONTAINER_NAME}-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_USER}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_PASS}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_USER}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_PASS}
+    ports:
+      - "${MONGO_EXPRESS_PORT}:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - ${CONTAINER_NAME}-network
 
-# Erstelle Dockerfile
+  app:
+    build: .
+    container_name: ${CONTAINER_NAME}-app
+    restart: unless-stopped
+    environment:
+      - DATABASE_MODE=mongodb
+      - MONGODB_URI=mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb:27017/
+      - MONGODB_DB=scandy
+      - FLASK_ENV=production
+      - SECRET_KEY=scandy-secret-key-fixed
+      - SYSTEM_NAME=Scandy
+      - TICKET_SYSTEM_NAME=Aufgaben
+      - TOOL_SYSTEM_NAME=Werkzeuge
+      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - TZ=Europe/Berlin
+    ports:
+      - "${APP_PORT}:5000"
+    volumes:
+      - ${DATA_DIR}/uploads:/app/app/uploads
+      - ${DATA_DIR}/backups:/app/app/backups
+      - ${DATA_DIR}/logs:/app/app/logs
+      - ${DATA_DIR}/static:/app/app/static
+    depends_on:
+      - mongodb
+    networks:
+      - ${CONTAINER_NAME}-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  ${CONTAINER_NAME}-network:
+    driver: bridge
+EOF
+
+# Erstelle verbessertes Dockerfile
 echo "Erstelle Dockerfile..."
 cat > Dockerfile << 'EOF'
 FROM python:3.11-slim
@@ -115,8 +185,6 @@ RUN apt-get update && apt-get install -y \
     npm \
     curl \
     build-essential \
-    zip \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Erstelle nicht-root Benutzer
@@ -133,8 +201,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Kopiere den Rest der Anwendung
 COPY . .
 
-# Installiere und baue CSS
-RUN npm install && npm run build:css
+# Stelle sicher, dass CSS-Dateien vorhanden sind
+RUN if [ ! -f "app/static/css/main.css" ]; then \
+    echo "CSS-Datei nicht gefunden, generiere sie..." && \
+    npm install && npm run build:css; \
+fi
 
 # Erstelle notwendige Verzeichnisse und setze Berechtigungen
 RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp && \
@@ -230,6 +301,36 @@ coverage.xml
 Thumbs.db
 EOF
 
+# Kopiere Anwendungsdateien
+echo "Kopiere Anwendungsdateien..."
+cp -r "../app" "."
+cp "../requirements.txt" "."
+cp "../package.json" "."
+cp "../tailwind.config.js" "."
+cp "../postcss.config.js" "."
+
+# Generiere CSS vor dem Docker-Build
+echo "Generiere CSS..."
+echo "Installiere npm-Abhängigkeiten..."
+if npm install > /dev/null 2>&1; then
+    echo "Baue CSS..."
+    if npm run build:css > /dev/null 2>&1; then
+        echo "CSS erfolgreich generiert"
+    else
+        echo "WARNUNG: CSS-Build fehlgeschlagen, verwende vorhandene CSS-Dateien"
+    fi
+else
+    echo "WARNUNG: npm install fehlgeschlagen, versuche ohne CSS-Build fortzufahren"
+fi
+
+# Erstelle Datenverzeichnisse
+echo "Erstelle Datenverzeichnisse..."
+mkdir -p "$DATA_DIR/mongodb"
+mkdir -p "$DATA_DIR/uploads"
+mkdir -p "$DATA_DIR/backups"
+mkdir -p "$DATA_DIR/logs"
+mkdir -p "$DATA_DIR/static"
+
 # Erstelle Start-Skript
 echo "Erstelle Start-Skript..."
 cat > start.sh << EOF
@@ -238,7 +339,7 @@ echo "Starte Scandy Docker-Container..."
 docker-compose up -d
 
 echo "Warte auf Container-Start..."
-sleep 10
+sleep 15
 
 echo "Container-Status:"
 docker-compose ps
@@ -311,28 +412,22 @@ echo "Backup erstellt: \$BACKUP_DIR"
 EOF
 chmod +x backup.sh
 
-# Erstelle Datenverzeichnisse
-echo "Erstelle Datenverzeichnisse..."
-mkdir -p "$DATA_DIR/mongodb"
-mkdir -p "$DATA_DIR/uploads"
-mkdir -p "$DATA_DIR/backups"
-mkdir -p "$DATA_DIR/logs"
-mkdir -p "$DATA_DIR/static"
-
-# Kopiere aktuelle Anwendung
-echo "Kopiere Anwendung..."
-# Das Template-System übernimmt das Kopieren und CSS-Build
-
 # Baue und starte Container
 echo "Baue Docker-Container..."
-docker-compose build
+if ! docker-compose build --no-cache; then
+    echo "FEHLER: Docker-Build fehlgeschlagen!"
+    exit 1
+fi
 
 echo "Starte Container..."
-docker-compose up -d
+if ! docker-compose up -d; then
+    echo "FEHLER: Container-Start fehlgeschlagen!"
+    exit 1
+fi
 
 # Warte auf Container-Start
 echo "Warte auf Container-Start..."
-sleep 15
+sleep 20
 
 # Zeige Status
 echo "Container-Status:"

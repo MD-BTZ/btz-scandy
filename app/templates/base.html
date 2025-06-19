@@ -196,6 +196,11 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{{ url_for('admin.tickets') }}" class="{% if request.endpoint and 'admin.tickets' in request.endpoint %}active{% endif %}">
+                                <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}-Verwaltung
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ url_for('admin.updates') }}" class="{% if request.endpoint and 'admin.updates' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-sync-alt mr-2"></i>System-Updates
                             </a>
@@ -206,9 +211,6 @@
                                 <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
                             </a>
                         </li>
-                        {% if current_user.is_authenticated and current_user.role == 'admin' %}
-                        <!-- System-Updates Link entfernt, da Route nicht existiert -->
-                        {% endif %}
                     </ul>
                 </div>
                 <a href="{{ url_for('admin.trash') }}" 

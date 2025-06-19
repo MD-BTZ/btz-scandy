@@ -77,15 +77,34 @@ def inject_app_labels():
     """Fügt die App-Labels in alle Templates ein"""
     try:
         label_docs = mongodb.find('settings', {'key': {'$regex': '^label_'}})
-        label_dict = {}
+        app_labels = {
+            'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},
+            'consumables': {'name': 'Verbrauchsmaterial', 'icon': 'fas fa-box-open'},
+            'tickets': {'name': 'Tickets', 'icon': 'fas fa-ticket-alt'}
+        }
+        
+        # Labels aus der Datenbank laden
         for doc in label_docs:
             key = doc['key'].replace('label_', '')
             value = doc['value']
-            label_dict[key] = value
-        return {'app_labels': label_dict}
+            
+            # Label-Typ und Attribut extrahieren (z.B. tools_name -> tools.name)
+            parts = key.split('_')
+            if len(parts) == 2:
+                label_type, attr = parts
+                if label_type in app_labels:
+                    app_labels[label_type][attr] = value
+        
+        return {'app_labels': app_labels}
     except Exception as e:
         print(f"Fehler beim Laden der App-Labels: {str(e)}")
-        return {'app_labels': {}}
+        return {
+            'app_labels': {
+                'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},
+                'consumables': {'name': 'Verbrauchsmaterial', 'icon': 'fas fa-box-open'},
+                'tickets': {'name': 'Tickets', 'icon': 'fas fa-ticket-alt'}
+            }
+        }
 
 def register_context_processors(app):
     """Registriert alle Context Processors"""

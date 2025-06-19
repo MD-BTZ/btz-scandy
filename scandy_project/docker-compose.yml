@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_ROOT_PASSWORD: scandy123
       MONGO_INITDB_DATABASE: scandy
     ports:
       - "27017:27017"
@@ -30,14 +30,15 @@ services:
     restart: unless-stopped
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: admin123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:admin123@scandy-mongodb:27017/
+      ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+      ME_CONFIG_BASICAUTH_PASSWORD: scandy123
     ports:
       - "8081:8081"
     depends_on:
-      - scandy-mongodb
+      scandy-mongodb:
+        condition: service_healthy
     networks:
       - scandy-network
 
@@ -47,10 +48,10 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:admin123@scandy-mongodb:27017/
+      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-Bi6rrorm
+      - SECRET_KEY=scandy-secret-key-14970
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge
@@ -65,7 +66,8 @@ services:
       - ./scandy_data/logs:/app/app/logs
       - ./scandy_data/static:/app/app/static
     depends_on:
-      - scandy-mongodb
+      scandy-mongodb:
+        condition: service_healthy
     networks:
       - scandy-network
     healthcheck:
@@ -86,4 +88,4 @@ volumes:
 
 networks:
   scandy-network:
-    driver: bridge 
+    driver: bridge

@@ -218,11 +218,16 @@ chmod -R 777 database uploads backups logs
 # Setze Berechtigungen für die Dateien
 chmod 644 docker-compose.yml Dockerfile
 
-# Baue und starte den Container
-echo -e "${GREEN}Baue und starte den Container...${NC}"
-docker compose up -d --build
+# Verzeichnisse erstellen
+mkdir -p scandy_data/{mongodb,uploads,backups,logs,static}
 
-echo -e "${GREEN}Installation abgeschlossen!${NC}"
-echo -e "Die Anwendung ist unter http://localhost:${PORT} erreichbar"
+# Statische Dateien kopieren
+cp -r app/static/* scandy_data/static/
+
+# Container stoppen und neu erstellen
+docker-compose down --volumes --remove-orphans
+docker-compose up -d --build
+
+echo "Installation abgeschlossen. Die Anwendung ist unter http://localhost:5000 erreichbar."
 echo -e "Container-Name: ${CONTAINER_NAME}"
 echo -e "Port: ${PORT}" 

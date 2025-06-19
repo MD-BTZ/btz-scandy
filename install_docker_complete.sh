@@ -186,6 +186,18 @@ cd "$PROJECT_DIR"
 
 echo -e "${GREEN}Erstelle Projektverzeichnis: $PROJECT_DIR${NC}"
 
+# Erstelle Datenverzeichnisse
+echo -e "${GREEN}Erstelle Datenverzeichnisse...${NC}"
+mkdir -p "${DATA_DIR}/mongodb"
+mkdir -p "${DATA_DIR}/uploads"
+mkdir -p "${DATA_DIR}/backups"
+mkdir -p "${DATA_DIR}/logs"
+mkdir -p "${DATA_DIR}/static"
+
+# Kopiere statische Dateien
+echo -e "${GREEN}Kopiere statische Dateien...${NC}"
+cp -r ../app/static/* "${DATA_DIR}/static/"
+
 # Erstelle docker-compose.yml
 echo -e "${GREEN}Erstelle docker-compose.yml...${NC}"
 cat > docker-compose.yml << EOL
@@ -489,49 +501,15 @@ EOL
 # Setze Berechtigungen
 chmod +x start.sh stop.sh update.sh backup.sh
 
-# Erstelle Datenverzeichnisse
-echo -e "${GREEN}Erstelle Datenverzeichnisse...${NC}"
-mkdir -p "${DATA_DIR}/mongodb"
-mkdir -p "${DATA_DIR}/uploads"
-mkdir -p "${DATA_DIR}/backups"
-mkdir -p "${DATA_DIR}/logs"
-mkdir -p "${DATA_DIR}/static"
-
-# Kopiere aktuelle Anwendung
-echo -e "${GREEN}Kopiere Anwendung...${NC}"
-cp -r ../app .
-cp ../requirements.txt .
-cp ../package.json .
-cp ../tailwind.config.js .
-
 # Baue und starte Container
-echo -e "${GREEN}Baue Docker-Container...${NC}"
-docker-compose build
+echo -e "${GREEN}Baue und starte Container...${NC}"
+docker-compose down --volumes --remove-orphans
+docker-compose up -d --build
 
-echo -e "${GREEN}Starte Container...${NC}"
-docker-compose up -d
-
-# Warte auf Container-Start
-echo -e "${GREEN}Warte auf Container-Start...${NC}"
-sleep 15
-
-# Zeige Status
-echo -e "${GREEN}Container-Status:${NC}"
-docker-compose ps
-
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}   Installation abgeschlossen!${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Scandy ist verfügbar unter:${NC}"
-echo -e "${BLUE}App:${NC} http://localhost:${APP_PORT}"
-echo -e "${BLUE}Mongo Express:${NC} http://localhost:${MONGO_EXPRESS_PORT}"
-echo -e "${BLUE}MongoDB:${NC} localhost:${MONGO_PORT}"
-echo ""
-echo -e "${GREEN}Verfügbare Skripte:${NC}"
-echo -e "${BLUE}start.sh${NC} - Container starten"
-echo -e "${BLUE}stop.sh${NC} - Container stoppen"
-echo -e "${BLUE}update.sh${NC} - Container aktualisieren"
-echo -e "${BLUE}backup.sh${NC} - Backup erstellen"
-echo ""
-echo -e "${GREEN}Daten werden gespeichert in:${NC} ${DATA_DIR}"
-echo -e "${GREEN}========================================${NC}" 
+echo "========================================"
+echo -e "${GREEN}Installation abgeschlossen!${NC}"
+echo "Die Anwendung ist unter http://localhost:${APP_PORT} erreichbar"
+echo "Container-Name: ${CONTAINER_NAME}"
+echo "MongoDB Port: ${MONGO_PORT}"
+echo "Mongo Express Port: ${MONGO_EXPRESS_PORT}"
+echo "========================================" 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Scandy Einrichtung - Grundeinstellungen{% endblock %}
+{% block title %}Scandy Einrichtung - Systemeinstellungen{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -17,7 +17,7 @@
     <form method="POST" action="{{ url_for('setup.settings') }}">
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
-                <h2 class="card-title mb-4">Grundeinstellungen</h2>
+                <h2 class="card-title mb-4">Systemeinstellungen</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Verleihgegenstände -->
                     <div class="card bg-base-200">
@@ -73,11 +73,34 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Tickets -->
+                    <div class="card bg-base-200">
+                        <div class="card-body">
+                            <h3 class="text-lg font-semibold mb-4">Tickets</h3>
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text">Name</span>
+                                </label>
+                                <input type="text" name="label_tickets_name" class="input input-bordered" value="{{ label_tickets_name|default('Tickets') }}" placeholder="z.B. Tickets, Aufträge, Anfragen">
+                            </div>
+                            <div class="form-control relative">
+                                <label class="label flex items-center gap-2">
+                                    <span class="label-text">Icon</span>
+                                </label>
+                                <input type="hidden" name="label_tickets_icon" id="tickets-icon-input" value="{{ label_tickets_icon|default('fas fa-ticket-alt') }}">
+                                <button type="button" class="flex items-center gap-2 border rounded px-3 py-2 bg-base-100 hover:bg-base-300 w-48 justify-between" onclick="toggleIconDropdown('tickets')">
+                                    <span><i id="tickets-icon-preview" class="fas fa-ticket-alt text-xl"></i></span>
+                                    <span class="ml-2">Icon wählen</span>
+                                    <i class="fas fa-chevron-down ml-auto"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-actions justify-end mt-6">
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-arrow-right mr-2"></i>
-                        Weiter
+                        <i class="fas fa-save mr-2"></i>
+                        Speichern
                     </button>
                 </div>
             </div>

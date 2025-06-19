@@ -103,20 +103,113 @@ cd "%PROJECT_DIR%"
 
 echo Erstelle Projektverzeichnis: %PROJECT_DIR%
 
-REM Kopiere Template-Dateien
-echo Kopiere Template-Dateien...
-copy "..\docker-compose.template.yml" "." >nul
-copy "..\process_template.py" "." >nul
+REM Erstelle Datenverzeichnisse
+echo Erstelle Datenverzeichnisse...
+if not exist "%DATA_DIR%\mongodb" mkdir "%DATA_DIR%\mongodb"
+if not exist "%DATA_DIR%\uploads" mkdir "%DATA_DIR%\uploads"
+if not exist "%DATA_DIR%\backups" mkdir "%DATA_DIR%\backups"
+if not exist "%DATA_DIR%\logs" mkdir "%DATA_DIR%\logs"
+if not exist "%DATA_DIR%\static" mkdir "%DATA_DIR%\static"
 
-REM Verarbeite Template
-echo Verarbeite Template...
-python process_template.py %CONTAINER_NAME% %APP_PORT% %MONGO_PORT% %MONGO_EXPRESS_PORT% %MONGO_USER% %MONGO_PASS% %DATA_DIR%
+REM Kopiere statische Dateien
+echo Kopiere statische Dateien...
+xcopy /E /I /Y "..\app\static\*" "%DATA_DIR%\static\"
 
-if errorlevel 1 (
-    echo FEHLER: Template-Verarbeitung fehlgeschlagen!
-    pause
-    exit /b 1
-)
+REM Erstelle docker-compose.yml
+echo Erstelle docker-compose.yml...
+(
+echo version: '3.8'
+echo.
+echo services:
+echo   %CONTAINER_NAME%-mongodb:
+echo     image: mongo:7.0
+echo     container_name: %CONTAINER_NAME%-mongodb
+echo     restart: unless-stopped
+echo     environment:
+echo       MONGO_INITDB_ROOT_USERNAME: %MONGO_USER%
+echo       MONGO_INITDB_ROOT_PASSWORD: %MONGO_PASS%
+echo       MONGO_INITDB_DATABASE: scandy
+echo     ports:
+echo       - "%MONGO_PORT%:27017"
+echo     volumes:
+echo       - %DATA_DIR%/mongodb:/data/db
+echo       - ./mongo-init:/docker-entrypoint-initdb.d
+echo     networks:
+echo       - %CONTAINER_NAME%-network
+echo     command: mongod --auth --bind_ip_all
+echo     healthcheck:
+echo       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+echo       interval: 30s
+echo       timeout: 10s
+echo       retries: 3
+echo       start_period: 40s
+echo.
+echo   %CONTAINER_NAME%-mongo-express:
+echo     image: mongo-express:1.0.0
+echo     container_name: %CONTAINER_NAME%-mongo-express
+echo     restart: unless-stopped
+echo     environment:
+echo       ME_CONFIG_MONGODB_ADMINUSERNAME: %MONGO_USER%
+echo       ME_CONFIG_MONGODB_ADMINPASSWORD: %MONGO_PASS%
+echo       ME_CONFIG_MONGODB_URL: mongodb://%MONGO_USER%:%MONGO_PASS%@%CONTAINER_NAME%-mongodb:27017/
+echo       ME_CONFIG_BASICAUTH_USERNAME: %MONGO_USER%
+echo       ME_CONFIG_BASICAUTH_PASSWORD: %MONGO_PASS%
+echo     ports:
+echo       - "%MONGO_EXPRESS_PORT%:8081"
+echo     depends_on:
+echo       %CONTAINER_NAME%-mongodb:
+echo         condition: service_healthy
+echo     networks:
+echo       - %CONTAINER_NAME%-network
+echo.
+echo   %CONTAINER_NAME%-app:
+echo     build: .
+echo     container_name: %CONTAINER_NAME%-app
+echo     restart: unless-stopped
+echo     environment:
+echo       - DATABASE_MODE=mongodb
+echo       - MONGODB_URI=mongodb://%MONGO_USER%:%MONGO_PASS%@%CONTAINER_NAME%-mongodb:27017/
+echo       - MONGODB_DB=scandy
+echo       - FLASK_ENV=production
+echo       - SECRET_KEY=scandy-secret-key-%RANDOM%
+echo       - SYSTEM_NAME=Scandy
+echo       - TICKET_SYSTEM_NAME=Aufgaben
+echo       - TOOL_SYSTEM_NAME=Werkzeuge
+echo       - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+echo       - CONTAINER_NAME=%CONTAINER_NAME%
+echo       - TZ=Europe/Berlin
+echo     ports:
+echo       - "%APP_PORT%:5000"
+echo     volumes:
+echo       - %DATA_DIR%/uploads:/app/app/uploads
+echo       - %DATA_DIR%/backups:/app/app/backups
+echo       - %DATA_DIR%/logs:/app/app/logs
+echo       - %DATA_DIR%/static:/app/app/static
+echo     depends_on:
+echo       %CONTAINER_NAME%-mongodb:
+echo         condition: service_healthy
+echo     networks:
+echo       - %CONTAINER_NAME%-network
+echo     healthcheck:
+echo       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+echo       interval: 30s
+echo       timeout: 10s
+echo       retries: 3
+echo       start_period: 60s
+echo     logging:
+echo       driver: "json-file"
+echo       options:
+echo         max-size: "10m"
+echo         max-file: "3"
+echo.
+echo volumes:
+echo   %CONTAINER_NAME%-mongodb-data:
+echo     driver: local
+echo.
+echo networks:
+echo   %CONTAINER_NAME%-network:
+echo     driver: bridge
+) > docker-compose.yml
 
 REM Erstelle Dockerfile
 echo Erstelle Dockerfile...
@@ -327,47 +420,17 @@ echo echo Backup erstellt: !BACKUP_DIR!
 echo pause
 ) > backup.bat
 
-REM Erstelle Datenverzeichnisse
-echo Erstelle Datenverzeichnisse...
-if not exist "%DATA_DIR%/mongodb" mkdir "%DATA_DIR%/mongodb"
-if not exist "%DATA_DIR%/uploads" mkdir "%DATA_DIR%/uploads"
-if not exist "%DATA_DIR%/backups" mkdir "%DATA_DIR%/backups"
-if not exist "%DATA_DIR%/logs" mkdir "%DATA_DIR%/logs"
-if not exist "%DATA_DIR%/static" mkdir "%DATA_DIR%/static"
-
-REM Kopiere aktuelle Anwendung
-echo Kopiere Anwendung...
-REM Das Template-System übernimmt das Kopieren und CSS-Build
-
 REM Baue und starte Container
-echo Baue Docker-Container...
-docker-compose build
-
-echo Starte Container...
-docker-compose up -d
-
-REM Warte auf Container-Start
-echo Warte auf Container-Start...
-timeout /t 15 /nobreak >nul
-
-REM Zeige Status
-echo Container-Status:
-docker-compose ps
+echo Baue und starte Container...
+docker-compose down --volumes --remove-orphans
+docker-compose up -d --build
 
 echo ========================================
-echo    Installation abgeschlossen!
+echo Installation abgeschlossen!
+echo Die Anwendung ist unter http://localhost:%APP_PORT% erreichbar
+echo Container-Name: %CONTAINER_NAME%
+echo MongoDB Port: %MONGO_PORT%
+echo Mongo Express Port: %MONGO_EXPRESS_PORT%
 echo ========================================
-echo Scandy ist verfügbar unter:
-echo App: http://localhost:%APP_PORT%
-echo Mongo Express: http://localhost:%MONGO_EXPRESS_PORT%
-echo MongoDB: localhost:%MONGO_PORT%
-echo.
-echo Verfügbare Skripte:
-echo start.bat - Container starten
-echo stop.bat - Container stoppen
-echo update.bat - Container aktualisieren
-echo backup.bat - Backup erstellen
-echo.
-echo Daten werden gespeichert in: %DATA_DIR%
-echo ========================================
+
 pause 

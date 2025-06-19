@@ -27,6 +27,26 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 mongodb = MongoDB()
 
+def ensure_default_settings():
+    """Stellt sicher, dass die Standard-Label-Einstellungen vorhanden sind"""
+    default_settings = [
+        {'key': 'label_tickets_name', 'value': 'Tickets'},
+        {'key': 'label_tickets_icon', 'value': 'fas fa-ticket-alt'},
+        {'key': 'label_tools_name', 'value': 'Werkzeuge'},
+        {'key': 'label_tools_icon', 'value': 'fas fa-tools'},
+        {'key': 'label_consumables_name', 'value': 'Verbrauchsmaterial'},
+        {'key': 'label_consumables_icon', 'value': 'fas fa-box-open'}
+    ]
+    
+    for setting in default_settings:
+        mongodb.update_one('settings', 
+                         {'key': setting['key']}, 
+                         {'$setOnInsert': setting}, 
+                         upsert=True)
+
+# Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
+ensure_default_settings()
+
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
     # TODO: Implementiere MongoDB-Version
@@ -1294,7 +1314,8 @@ def delete_user(user_id):
 
 @bp.app_context_processor
 def inject_app_labels():
-    return dict(app_labels=get_app_labels())
+    """Injiziert die App-Labels in alle Templates"""
+    return {'app_labels': get_app_labels()}
 
 @bp.route('/upload-icon', methods=['POST'])
 @login_required
@@ -1902,9 +1923,24 @@ def create_mongodb_backup():
 @login_required
 @admin_required
 def tickets():
-    """Ticket-Übersicht"""
-    tickets = mongodb.find('tickets', {})
-    return render_template('admin/tickets.html', tickets=tickets)
+    """Zeigt die Ticket-Verwaltungsseite an."""
+    # Hole alle Tickets aus der Datenbank
+    tickets = list(mongodb.db.tickets.find({}).sort('created_at', -1))
+    
+    # Formatiere die Tickets für die Anzeige
+    for ticket in tickets:
+        ticket['id'] = str(ticket['_id'])
+        ticket['created_at'] = ticket['created_at'].strftime('%d.%m.%Y %H:%M')
+        if 'last_update' in ticket:
+            ticket['last_update'] = ticket['last_update'].strftime('%d.%m.%Y %H:%M')
+    
+    # Hole alle Kategorien
+    categories = list(mongodb.db.ticket_categories.find())
+    
+    return render_template('admin/tickets.html', 
+                         tickets=tickets,
+                         categories=categories,
+                         title="Ticket-Verwaltung")
 
 @bp.route('/manage_users')
 @admin_required

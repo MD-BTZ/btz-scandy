@@ -54,18 +54,22 @@ def settings():
             label_tools_icon = request.form.get('label_tools_icon', '').strip()
             label_consumables_name = request.form.get('label_consumables_name', '').strip()
             label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
+            label_tickets_name = request.form.get('label_tickets_name', '').strip()
+            label_tickets_icon = request.form.get('label_tickets_icon', '').strip()
             
-            logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
+            logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}, label_tickets_name={label_tickets_name}, label_tickets_icon={label_tickets_icon}")
             
             # Lösche alte Einstellungen
-            mongodb.delete_many('settings', {'key': {'$in': ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon']}})
+            mongodb.delete_many('settings', {'key': {'$in': ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']}})
             
             # Füge neue Einstellungen hinzu
             settings_data = [
                 {'key': 'label_tools_name', 'value': label_tools_name or 'Werkzeuge', 'description': 'Anzeigename für Werkzeuge'},
                 {'key': 'label_tools_icon', 'value': label_tools_icon or 'fas fa-tools', 'description': 'Icon für Werkzeuge'},
                 {'key': 'label_consumables_name', 'value': label_consumables_name or 'Verbrauchsmaterial', 'description': 'Anzeigename für Verbrauchsmaterial'},
-                {'key': 'label_consumables_icon', 'value': label_consumables_icon or 'fas fa-box-open', 'description': 'Icon für Verbrauchsmaterial'}
+                {'key': 'label_consumables_icon', 'value': label_consumables_icon or 'fas fa-box-open', 'description': 'Icon für Verbrauchsmaterial'},
+                {'key': 'label_tickets_name', 'value': label_tickets_name or 'Tickets', 'description': 'Anzeigename für Tickets'},
+                {'key': 'label_tickets_icon', 'value': label_tickets_icon or 'fas fa-ticket-alt', 'description': 'Icon für Tickets'}
             ]
             
             for setting in settings_data:
@@ -90,7 +94,9 @@ def settings():
             label_tools_name=settings.get('label_tools_name', 'Werkzeuge'),
             label_tools_icon=settings.get('label_tools_icon', 'fas fa-tools'),
             label_consumables_name=settings.get('label_consumables_name', 'Verbrauchsmaterial'),
-            label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'))
+            label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'),
+            label_tickets_name=settings.get('label_tickets_name', 'Tickets'),
+            label_tickets_icon=settings.get('label_tickets_icon', 'fas fa-ticket-alt'))
             
     except Exception as e:
         logger.error(f"Fehler beim Laden der Einstellungen: {str(e)}")
