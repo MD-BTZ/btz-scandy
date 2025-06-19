@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
     npm \
     curl \
     build-essential \
-    libsqlite3-dev \
     zip \
     unzip \
     && rm -rf /var/lib/apt/lists/*

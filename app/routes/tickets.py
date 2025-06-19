@@ -1,34 +1,39 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string
-from app.models.ticket_db import TicketDatabase
-from app.models.database import Database
+from app.models.mongodb_models import MongoDBTicket
+from app.models.mongodb_database import mongodb
 from app.utils.decorators import login_required, admin_required
 import logging
 from datetime import datetime
 from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
-from app.models.user import User
+from bson import ObjectId
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
-ticket_db = TicketDatabase()
 
 @bp.route('/')
 @login_required
 def index():
     """Zeigt die Ticket-Übersicht für den Benutzer."""
     # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
-    my_tickets = ticket_db.query(
-        """
-        SELECT t.*, COUNT(tm.id) as message_count
-        FROM tickets t
-        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.created_by = ? AND t.status != 'geschlossen'
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
-        """,
-        [current_user.username]
-    )
+    my_tickets = mongodb.find('tickets', {
+        'created_by': current_user.username,
+        'status': {'$ne': 'geschlossen'}
+    })
+    my_tickets = list(my_tickets)
+    
+    # Füge Nachrichtenanzahl hinzu
+    for ticket in my_tickets:
+        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
+        ticket['message_count'] = message_count
+    
+    # Sortiere nach Erstellungsdatum (neueste zuerst)
+    my_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
             
+    # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
+    for ticket in my_tickets:
+        ticket['id'] = str(ticket['_id'])
+    
     return render_template('tickets/index.html', tickets=my_tickets)
 
 @bp.route('/create', methods=['GET', 'POST'])
@@ -43,7 +48,6 @@ def create():
                 title = data.get('title')
                 description = data.get('description')
                 priority = data.get('priority', 'normal')
-                # Kategorie-Logik
                 category = data.get('category')
                 new_category = data.get('new_category')
             else:
@@ -55,11 +59,9 @@ def create():
 
             # Wenn eine neue Kategorie eingegeben wurde, prüfe und füge sie ggf. hinzu
             if category:
-                with ticket_db.get_connection() as db:
-                    exists = db.execute("SELECT 1 FROM ticket_categories WHERE name = ?", (category,)).fetchone()
-                    if not exists:
-                        db.execute("INSERT INTO ticket_categories (name) VALUES (?)", (category,))
-                        db.commit()
+                existing_category = mongodb.find_one('ticket_categories', {'name': category})
+                if not existing_category:
+                    mongodb.insert_one('ticket_categories', {'name': category})
 
             due_date = data.get('due_date') if request.is_json else request.form.get('due_date')
             estimated_time = data.get('estimated_time') if request.is_json else request.form.get('estimated_time')
@@ -68,7 +70,6 @@ def create():
             if due_date:
                 try:
                     due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
-                    due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
                 except ValueError:
                     due_date = None
 
@@ -78,16 +79,22 @@ def create():
                 flash('Titel ist erforderlich.', 'error')
                 return redirect(url_for('tickets.create'))
 
-            # Erstelle das Ticket mit der korrekten Datenbankverbindung
-            ticket_id = ticket_db.create_ticket(
-                title=title,
-                description=description,
-                priority=priority,
-                created_by=current_user.username,
-                category=category,
-                due_date=due_date,
-                estimated_time=estimated_time
-            )
+            # Erstelle das Ticket
+            ticket_data = {
+                'title': title,
+                'description': description,
+                'priority': priority,
+                'created_by': current_user.username,
+                'category': category,
+                'due_date': due_date,
+                'estimated_time': estimated_time,
+                'status': 'offen',
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
+            
+            result = mongodb.insert_one('tickets', ticket_data)
+            ticket_id = str(result)
 
             if request.is_json:
                 return jsonify({
@@ -108,47 +115,60 @@ def create():
             return redirect(url_for('tickets.create'))
     
     # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
-    my_tickets = ticket_db.query(
-        """
-        SELECT t.*, COUNT(tm.id) as message_count
-        FROM tickets t
-        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.created_by = ? AND t.status != 'geschlossen'
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
-        """,
-        [current_user.username]
-    )
+    my_tickets = mongodb.find('tickets', {
+        'created_by': current_user.username,
+        'status': {'$ne': 'geschlossen'}
+    })
+    my_tickets = list(my_tickets)
+    
+    # Füge Nachrichtenanzahl hinzu
+    for ticket in my_tickets:
+        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
+        ticket['message_count'] = message_count
 
     # Hole die zugewiesenen Tickets (nur nicht geschlossene)
-    assigned_tickets = ticket_db.query(
-        """
-        SELECT t.*, COUNT(tm.id) as message_count
-        FROM tickets t
-        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE t.assigned_to = ? AND t.status != 'geschlossen'
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
-        """,
-        [current_user.username]
-    )
+    assigned_tickets = mongodb.find('tickets', {
+        'assigned_to': current_user.username,
+        'status': {'$ne': 'geschlossen'}
+    })
+    assigned_tickets = list(assigned_tickets)
+    
+    # Füge Nachrichtenanzahl hinzu
+    for ticket in assigned_tickets:
+        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
+        ticket['message_count'] = message_count
 
     # Hole offene Tickets (nur nicht geschlossene)
-    open_tickets = ticket_db.query(
-        """
-        SELECT t.*, COUNT(tm.id) as message_count
-        FROM tickets t
-        LEFT JOIN ticket_messages tm ON t.id = tm.ticket_id
-        WHERE (t.assigned_to IS NULL OR t.assigned_to = '') 
-        AND t.status = 'offen'
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
-        """
-    )
+    open_tickets = mongodb.find('tickets', {
+        '$or': [
+            {'assigned_to': None},
+            {'assigned_to': ''}
+        ],
+        'status': 'offen'
+    })
+    open_tickets = list(open_tickets)
     
-    # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    # Füge Nachrichtenanzahl hinzu
+    for ticket in open_tickets:
+        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
+        ticket['message_count'] = message_count
+    
+    # Hole alle Kategorien
+    categories = mongodb.find('ticket_categories', {})
     categories = [c['name'] for c in categories]
+    
+    # Sortiere alle Listen nach Erstellungsdatum (neueste zuerst)
+    my_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    assigned_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    open_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    
+    # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
+    for ticket in my_tickets:
+        ticket['id'] = str(ticket['_id'])
+    for ticket in assigned_tickets:
+        ticket['id'] = str(ticket['_id'])
+    for ticket in open_tickets:
+        ticket['id'] = str(ticket['_id'])
             
     return render_template('tickets/create.html', 
                          my_tickets=my_tickets,
@@ -169,13 +189,20 @@ def create():
                              'dringend': 'error'
                          })
 
-@bp.route('/view/<int:ticket_id>')
+@bp.route('/view/<ticket_id>')
 @login_required
 def view(ticket_id):
     """Zeigt die Details eines Tickets für den Benutzer."""
     logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
     
-    ticket = ticket_db.get_ticket(ticket_id)
+    # Konvertiere ticket_id zu ObjectId
+    try:
+        object_id = ObjectId(ticket_id)
+    except:
+        flash('Ungültige Ticket-ID.', 'error')
+        return redirect(url_for('tickets.create'))
+    
+    ticket = mongodb.find_one('tickets', {'_id': object_id})
     
     if not ticket:
         logging.error(f"Ticket {ticket_id} nicht gefunden")
@@ -192,64 +219,40 @@ def view(ticket_id):
     logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
     
     try:
-        # Verwende ticket_db für die Nachrichtenabfrage
-        messages = ticket_db.get_ticket_messages(ticket_id)
-        logging.info(f"Nachrichtenabfrage ergab {len(messages)} Nachrichten")
+        messages = mongodb.find('ticket_messages', {'ticket_id': object_id})
+        messages = list(messages)
+        
+        # Sortiere Nachrichten nach Datum (älteste zuerst)
+        messages.sort(key=lambda x: x.get('created_at', datetime.min))
         
         # Formatiere Datum für jede Nachricht
         for msg in messages:
-            if msg['created_at']:
-                try:
-                    created_at = datetime.strptime(msg['created_at'], '%Y-%m-%d %H:%M:%S')
-                    msg['created_at'] = created_at.strftime('%d.%m.%Y, %H:%M')
-                    logging.info(f"Nachricht {msg['id']} formatiert: {msg['created_at']}")
-                except ValueError as e:
-                    logging.error(f"Fehler beim Formatieren des Datums für Nachricht {msg['id']}: {str(e)}")
+            if isinstance(msg.get('created_at'), datetime):
+                msg['formatted_date'] = msg['created_at'].strftime('%d.%m.%Y %H:%M')
+            else:
+                msg['formatted_date'] = str(msg.get('created_at', ''))
+        
+        logging.info(f"Nachrichtenabfrage ergab {len(messages)} Nachrichten")
+        
+        # Füge id-Feld hinzu (für Template-Kompatibilität)
+        ticket['id'] = str(ticket['_id'])
+        
+        return render_template('tickets/view.html', 
+                             ticket=ticket, 
+                             messages=messages)
+                             
     except Exception as e:
         logging.error(f"Fehler beim Laden der Nachrichten: {str(e)}")
-        messages = []
-    
-    message_count = len(messages)
-    logging.info(f"Nachrichtenanzahl: {message_count}")
-    
-    # Hole die Notizen für das Ticket
-    notes = ticket_db.get_ticket_notes(ticket_id)
+        flash('Fehler beim Laden der Nachrichten.', 'error')
+        return redirect(url_for('tickets.create'))
 
-    # Hole die Liste der verfügbaren Mitarbeiter
-    try:
-        workers = ticket_db.query(
-            """
-            SELECT username, username as name
-            FROM users
-            WHERE is_active = 1
-            ORDER BY username
-            """
-        )
-        logging.info(f"Gefundene Mitarbeiter: {workers}")
-    except Exception as e:
-        logging.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}")
-        workers = []
-
-    # Hole die Kategorien für das Formular
-    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
-    categories = [c['name'] for c in categories]
-
-    return render_template('tickets/view.html',
-                         ticket=ticket,
-                         messages=messages,
-                         notes=notes,
-                         message_count=message_count,
-                         workers=workers,
-                         now=datetime.now(),
-                         categories=categories)
-
-@bp.route('/<int:ticket_id>/message', methods=['POST'])
+@bp.route('/<ticket_id>/message', methods=['POST'])
 @login_required
 def add_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu"""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = ticket_db.get_ticket(ticket_id)
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
         if not ticket:
             logging.error(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
@@ -267,14 +270,15 @@ def add_message(ticket_id):
 
         logging.info(f"Versuche Nachricht zu speichern: Ticket {ticket_id}, Benutzer {current_user.username}, Nachricht: {message}")
 
-        # Verwende ticket_db.add_ticket_message statt direkter SQL-Abfragen
-        is_admin = current_user.is_admin if hasattr(current_user, 'is_admin') else False
-        ticket_db.add_ticket_message(
-            ticket_id=ticket_id, 
-            message=message, 
-            sender=current_user.username, 
-            is_admin=is_admin
-        )
+        # Verwende mongodb.insert_one für die Nachrichtenspeicherung
+        message_data = {
+            'ticket_id': ObjectId(ticket_id),
+            'message': message,
+            'sender': current_user.username,
+            'created_at': datetime.now()
+        }
+        
+        result = mongodb.insert_one('ticket_messages', message_data)
         
         logging.info(f"Nachricht erfolgreich gespeichert")
 
@@ -287,8 +291,7 @@ def add_message(ticket_id):
             'message': {
                 'text': message,
                 'sender': current_user.username,
-                'created_at': formatted_date,
-                'is_admin': is_admin
+                'created_at': formatted_date
             }
         })
 
@@ -296,23 +299,18 @@ def add_message(ticket_id):
         logging.error(f"Fehler beim Hinzufügen der Nachricht: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': 'Ein Fehler ist aufgetreten'}), 500
 
-@bp.route('/<int:id>')
+@bp.route('/<id>')
 @admin_required
 def detail(id):
     """Zeigt die Details eines Tickets für Administratoren."""
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ?
-        """,
-        [id],
-        one=True
-    )
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
     
     if not ticket:
         return render_template('404.html'), 404
-        
+    
+    # Füge id-Feld hinzu (für Template-Kompatibilität)
+    ticket['id'] = str(ticket['_id'])
+    
     # Konvertiere alle Datumsfelder zu datetime-Objekten
     date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
     for field in date_fields:
@@ -323,32 +321,28 @@ def detail(id):
                 ticket[field] = None
         
     # Hole die Notizen für das Ticket
-    notes = ticket_db.get_ticket_notes(id)
+    notes = mongodb.find('ticket_notes', {'ticket_id': ObjectId(id)})
 
     # Hole die Nachrichten für das Ticket
-    messages = ticket_db.get_ticket_messages(id)
+    messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(id)})
 
     # Hole die Auftragsdetails
-    auftrag_details = ticket_db.get_auftrag_details(id)
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
     logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
     
     # Hole die Materialliste
-    material_list = ticket_db.get_auftrag_material(id)
+    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)})
 
     # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
-    with Database.get_db() as db:
-        users = db.execute(
-            """
-            SELECT username FROM users WHERE is_active = 1 ORDER BY username
-            """
-        ).fetchall()
-        users = [dict(row) for row in users]
+    with mongodb.get_connection() as db:
+        users = db.find('users', {'is_active': True})
+        users = [dict(user) for user in users]
 
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-    assigned_users = ticket_db.get_ticket_assignments(id)
+    assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(id)})
 
     # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
+    categories = mongodb.find('ticket_categories', {})
     categories = [c['name'] for c in categories]
 
     return render_template('tickets/detail.html', 
@@ -362,7 +356,7 @@ def detail(id):
                          categories=categories,
                          now=datetime.now())
 
-@bp.route('/<int:id>/update', methods=['POST'])
+@bp.route('/<id>/update', methods=['POST'])
 @login_required
 def update(id):
     """Aktualisiert ein Ticket"""
@@ -394,12 +388,12 @@ def update(id):
         }
         
         # Aktualisiere die Auftragsdetails
-        if not ticket_db.update_auftrag_details(id, **auftrag_details):
+        if not mongodb.update_one('auftrag_details', {'_id': ObjectId(id)}, {'$set': auftrag_details}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Auftragsdetails'})
         
         # Aktualisiere die Materialliste
         material_list = data.get('material_list', [])
-        if not ticket_db.update_auftrag_material(id, material_list):
+        if not mongodb.update_many('auftrag_material', {'_id': {'$in': [ObjectId(m['_id']) for m in material_list]}}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Materialliste'})
         
         return jsonify({'success': True})
@@ -408,19 +402,13 @@ def update(id):
         logging.error(f"Fehler beim Aktualisieren des Tickets {id}: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
 
-@bp.route('/<int:id>/delete', methods=['POST'])
+@bp.route('/<id>/delete', methods=['POST'])
 @admin_required
 def delete(id):
     """Löscht ein Ticket."""
     try:
         # Prüfe ob Ticket existiert
-        ticket = ticket_db.query(
-            """
-            SELECT * FROM tickets WHERE id = ?
-            """,
-            [id],
-            one=True
-        )
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
         
         if not ticket:
             return jsonify({
@@ -429,12 +417,11 @@ def delete(id):
             }), 404
             
         # Lösche das Ticket
-        ticket_db.query(
-            """
-            DELETE FROM tickets WHERE id = ?
-            """,
-            [id]
-        )
+        if not mongodb.delete_one('tickets', {'_id': ObjectId(id)}):
+            return jsonify({
+                'success': False,
+                'message': 'Fehler beim Löschen des Tickets'
+            }), 500
         
         return jsonify({
             'success': True,
@@ -448,22 +435,17 @@ def delete(id):
             'message': 'Fehler beim Löschen des Tickets'
         }), 500
 
-@bp.route('/<int:id>/auftrag-details-modal')
+@bp.route('/<id>/auftrag-details-modal')
 @login_required
 def auftrag_details_modal(id):
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ?
-        """,
-        [id],
-        one=True
-    )
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
     
     if not ticket:
         return render_template('404.html'), 404
-        
+    
+    # Füge id-Feld hinzu (für Template-Kompatibilität)
+    ticket['id'] = str(ticket['_id'])
+    
     # Konvertiere alle Datumsfelder zu datetime-Objekten
     date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
     for field in date_fields:
@@ -474,17 +456,17 @@ def auftrag_details_modal(id):
                 ticket[field] = None
         
     # Hole die Notizen für das Ticket
-    notes = ticket_db.get_ticket_notes(id)
+    notes = mongodb.find('ticket_notes', {'ticket_id': ObjectId(id)})
 
     # Hole die Nachrichten für das Ticket
-    messages = ticket_db.get_ticket_messages(id)
+    messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(id)})
 
     # Hole die Auftragsdetails
-    auftrag_details = ticket_db.get_auftrag_details(id)
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
     logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
     
     # Hole die Materialliste
-    material_list = ticket_db.get_auftrag_material(id)
+    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)})
 
     return render_template('tickets/auftrag_details_modal.html', 
                          ticket=ticket, 
@@ -493,7 +475,7 @@ def auftrag_details_modal(id):
                          auftrag_details=auftrag_details,
                          material_list=material_list)
 
-@bp.route('/<int:id>/update-status', methods=['POST'])
+@bp.route('/<id>/update-status', methods=['POST'])
 @login_required
 def update_status(id):
     """Aktualisiert den Status eines Tickets"""
@@ -508,11 +490,8 @@ def update_status(id):
             return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
 
         # Aktualisiere den Status
-        ticket_db.update_ticket(
-            id=id,
-            status=new_status,
-            last_modified_by=current_user.username
-        )
+        if not mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': {'status': new_status, 'updated_at': datetime.now()}}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
 
         return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
 
@@ -520,7 +499,7 @@ def update_status(id):
         logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/<int:id>/update-assignment', methods=['POST'])
+@bp.route('/<id>/update-assignment', methods=['POST'])
 @login_required
 def update_assignment(id):
     """Aktualisiert die Zuweisung eines Tickets"""
@@ -537,7 +516,8 @@ def update_assignment(id):
             assigned_to = []
 
         # Aktualisiere die Zuweisungen in ticket_assignments
-        ticket_db.set_ticket_assignments(id, assigned_to)
+        if not mongodb.update_many('ticket_assignments', {'ticket_id': ObjectId(id)}, {'$set': {'assigned_to': {'$in': [ObjectId(t) for t in assigned_to]}}} if isinstance(assigned_to, list) else {'$set': {'assigned_to': assigned_to}}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
 
@@ -545,7 +525,7 @@ def update_assignment(id):
         logging.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/<int:id>/update-details', methods=['POST'])
+@bp.route('/<id>/update-details', methods=['POST'])
 @login_required
 def update_details(id):
     """Aktualisiert die Details eines Tickets (Kategorie, Fälligkeitsdatum, geschätzte Zeit)"""
@@ -556,7 +536,7 @@ def update_details(id):
         data = request.get_json()
         
         # Hole das aktuelle Ticket
-        ticket = ticket_db.get_ticket(id)
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
@@ -565,20 +545,19 @@ def update_details(id):
         if due_date:
             try:
                 due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
-                due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
             except ValueError:
                 due_date = None
 
         # Aktualisiere die Ticket-Details, behalte bestehende Werte bei wenn nicht im Request
-        ticket_db.update_ticket(
-            id=id,
-            status=ticket['status'],  # Behalte den aktuellen Status bei
-            assigned_to=ticket['assigned_to'],  # Behalte die aktuelle Zuweisung bei
-            category=data.get('category', ticket['category']),  # Behalte bestehende Kategorie wenn nicht im Request
-            due_date=due_date if due_date else ticket['due_date'],  # Behalte bestehendes Datum wenn nicht im Request
-            estimated_time=data.get('estimated_time', ticket['estimated_time']),  # Behalte bestehende Zeit wenn nicht im Request
-            last_modified_by=current_user.username
-        )
+        if not mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': {
+            'status': ticket['status'],  # Behalte den aktuellen Status bei
+            'assigned_to': ticket['assigned_to'],  # Behalte die aktuelle Zuweisung bei
+            'category': data.get('category', ticket['category']),  # Behalte bestehende Kategorie wenn nicht im Request
+            'due_date': due_date if due_date else ticket['due_date'],  # Behalte bestehendes Datum wenn nicht im Request
+            'estimated_time': data.get('estimated_time', ticket['estimated_time']),  # Behalte bestehende Zeit wenn nicht im Request
+            'updated_at': datetime.now()
+        }}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Ticket-Details'})
 
         return jsonify({'success': True, 'message': 'Ticket-Details erfolgreich aktualisiert'})
 
@@ -586,15 +565,15 @@ def update_details(id):
         logging.error(f"Fehler beim Aktualisieren der Ticket-Details: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@bp.route('/<int:id>/export')
+@bp.route('/<id>/export')
 @login_required
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
-    ticket = ticket_db.get_ticket(id)
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
     if not ticket:
         return abort(404)
-    auftrag_details = ticket_db.get_auftrag_details(id) or {}
-    material_list = ticket_db.get_auftrag_material(id) or []
+    auftrag_details = mongodb.find_one('auftrag_details', {'_id': ObjectId(id)}) or {}
+    material_list = mongodb.find('auftrag_material', {'_id': {'$in': [ObjectId(m['_id']) for m in material_list]}}) or []
 
     # --- Auftragnehmer (Vorname Nachname) ---
     auftragnehmer_user = None
@@ -650,85 +629,153 @@ def export_ticket(id):
     mwst = zwischensumme * 0.07
     gesamtsumme = zwischensumme + mwst
 
-    def safe(val):
-        return val if val is not None else ''
-
-    # Formatiere das Datum
-    def format_date(date_val):
-        if not date_val:
-            return ''
-        if isinstance(date_val, datetime):
-            return date_val.strftime('%d.%m.%Y')
-        if isinstance(date_val, str):
-            # Versuche verschiedene Formate
-            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
-                try:
-                    return datetime.strptime(date_val, fmt).strftime('%d.%m.%Y')
-                except ValueError:
-                    continue
-            return date_val  # Fallback: gib den String zurück
-        return str(date_val)
-
+    # --- Kontext für docxtpl bauen ---
     context = {
         'auftragnehmer': auftragnehmer_name,
-        'auftragnummer': safe(ticket.get('id', '')),
-        'datum': format_date(ticket.get('created_at', '')),
-        'bereich': safe(auftrag_details.get('bereich', '')),
-        'auftraggebername': safe(auftrag_details.get('auftraggeber_name', '')),
-        'auftraggebermail': safe(auftrag_details.get('kontakt', '')),
-        'auftragsbeschreibung': safe(auftrag_details.get('auftragsbeschreibung', ticket.get('description', ''))),
-        'summematerial': f"{summe_material:.2f}".replace('.', ',') if summe_material else '',
-        'ubertrag': f"{ubertrag:.2f}".replace('.', ',') if ubertrag else '',
-        'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ',') if arbeitspausch else '',
-        'zwischensumme': f"{zwischensumme:.2f}".replace('.', ',') if zwischensumme else '',
-        'mwst': f"{mwst:.2f}".replace('.', ',') if mwst else '',
-        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',') if gesamtsumme else '',
-        'duedate': format_date(auftrag_details.get('fertigstellungstermin', '')),
-        'internchk': intern_checkbox,
-        'externchk': extern_checkbox
+        'intern_checkbox': intern_checkbox,
+        'extern_checkbox': extern_checkbox,
+        'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
+        'kontakt': auftrag_details.get('kontakt', ''),
+        'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
+        'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
+        'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
+        'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
+        'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
+        'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
+        'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
+        'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
+        'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
+        'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
+        'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
+        'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
+        'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
+        'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
+        'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
+        'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
+        'material_1': material_rows[0]['material'],
+        'materialmenge_1': material_rows[0]['materialmenge'],
+        'materialpreis_1': material_rows[0]['materialpreis'],
+        'materialpreisges_1': material_rows[0]['materialpreisges'],
+        'material_2': material_rows[1]['material'],
+        'materialmenge_2': material_rows[1]['materialmenge'],
+        'materialpreis_2': material_rows[1]['materialpreis'],
+        'materialpreisges_2': material_rows[1]['materialpreisges'],
+        'material_3': material_rows[2]['material'],
+        'materialmenge_3': material_rows[2]['materialmenge'],
+        'materialpreis_3': material_rows[2]['materialpreis'],
+        'materialpreisges_3': material_rows[2]['materialpreisges'],
+        'material_4': material_rows[3]['material'],
+        'materialmenge_4': material_rows[3]['materialmenge'],
+        'materialpreis_4': material_rows[3]['materialpreis'],
+        'materialpreisges_4': material_rows[3]['materialpreisges'],
+        'material_5': material_rows[4]['material'],
+        'materialmenge_5': material_rows[4]['materialmenge'],
+        'materialpreis_5': material_rows[4]['materialpreis'],
+        'materialpreisges_5': material_rows[4]['materialpreisges'],
+        'summe_material': f"{summe_material:.2f}".replace('.', ','),
+        'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
+        'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
+        'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
+        'mwst': f"{mwst:.2f}".replace('.', ','),
+        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
     }
-    # Arbeiten (ausgefarbeiten1, arst1, lstkat1, ...)
-    for i in range(1, 9):
-        context[f'ausgefarbeiten{i}'] = arbeiten_zeilen[i-1]['arbeiten'] if i-1 < len(arbeiten_zeilen) else ''
-        context[f'arst{i}'] = arbeiten_zeilen[i-1]['arbeitsstunden'] if i-1 < len(arbeiten_zeilen) else ''
-        context[f'lstkat{i}'] = arbeiten_zeilen[i-1]['leistungskategorie'] if i-1 < len(arbeiten_zeilen) else ''
 
-    # Material (material1, mmeng1, mpreis1, mgesp1, ...)
-    for i in range(1, 9):
-        context[f'material{i}'] = material_rows[i-1]['material'] if i-1 < len(material_rows) else ''
-        context[f'mmeng{i}'] = material_rows[i-1]['materialmenge'] if i-1 < len(material_rows) else ''
-        context[f'mpreis{i}'] = material_rows[i-1]['materialpreis'] if i-1 < len(material_rows) else ''
-        context[f'mgesp{i}'] = material_rows[i-1]['materialpreisges'] if i-1 < len(material_rows) else ''
+    # --- Word-Dokument generieren ---
+    try:
+        # Lade das Template
+        template_path = os.path.join(app.static_folder, 'word', 'btzauftrag.docx')
+        doc = DocxTemplate(template_path)
+        
+        # Rendere das Dokument
+        doc.render(context)
+        
+        # Speichere das generierte Dokument
+        output_path = os.path.join(app.static_folder, 'uploads', f'ticket_{id}_export.docx')
+        doc.save(output_path)
+        
+        # Sende das Dokument
+        return send_file(output_path, as_attachment=True, download_name=f'ticket_{id}_export.docx')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}")
+        flash('Fehler beim Generieren des Dokuments.', 'error')
+        return redirect(url_for('tickets.detail', id=id))
 
-    # Summen
-    context['matsum'] = f"{summe_material:.2f}".replace('.', ',') if summe_material else ''
-    context['utrag'] = f"{ubertrag:.2f}".replace('.', ',') if ubertrag else ''
-    context['arpausch'] = f"{arbeitspausch:.2f}".replace('.', ',') if arbeitspausch else ''
-    context['zwsum'] = f"{zwischensumme:.2f}".replace('.', ',') if zwischensumme else ''
-    context['mwst'] = f"{mwst:.2f}".replace('.', ',') if mwst else ''
-    context['gesamtsumme'] = f"{gesamtsumme:.2f}".replace('.', ',') if gesamtsumme else ''
-
-    # Arbeiten-Block
-    context['arbeitenblock'] = '\n'.join([a['arbeiten'] for a in arbeiten_zeilen])
-    context['stundenblock'] = '\n'.join([a['arbeitsstunden'] for a in arbeiten_zeilen])
-    context['kategorieblock'] = '\n'.join([a['leistungskategorie'] for a in arbeiten_zeilen])
-
-    # Material-Block
-    context['materialblock'] = '\n'.join([m['material'] for m in material_rows])
-    context['mengenblock'] = '\n'.join([m['materialmenge'] for m in material_rows])
-    context['preisblock'] = '\n'.join([m['materialpreis'] for m in material_rows])
-    context['gesamtblock'] = '\n'.join([m['materialpreisges'] for m in material_rows])
-
-    template_path = os.path.join('app', 'static', 'word', 'btzauftrag.docx')
-    doc = DocxTemplate(template_path)
-    doc.render(context)
+@bp.route('/debug-auftrag-details/<ticket_id>')
+@login_required
+def debug_auftrag_details(ticket_id):
+    """Debug-Route für Auftragsdetails"""
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+    if not ticket:
+        return jsonify({'error': 'Ticket nicht gefunden'}), 404
     
-    # Verwende tempfile für plattformunabhängige temporäre Dateien
-    import tempfile
-    temp_dir = tempfile.gettempdir()
-    output_path = os.path.join(temp_dir, f'auftrag_{id}.docx')
-    doc.save(output_path)
-    return send_file(output_path, as_attachment=True, download_name=f"auftrag_{id}.docx")
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
+    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(ticket_id)}))
+    
+    return jsonify({
+        'ticket': ticket,
+        'auftrag_details': auftrag_details,
+        'material_list': material_list
+    })
+
+@bp.route('/<id>/note', methods=['POST'])
+@login_required
+@admin_required
+def add_note(id):
+    """Fügt eine neue Notiz zu einem Ticket hinzu"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        note_text = data.get('note', '').strip()
+        
+        if not note_text:
+            return jsonify({'success': False, 'message': 'Notiz darf nicht leer sein'}), 400
+
+        # Erstelle die Notiz
+        note_data = {
+            'ticket_id': ObjectId(id),
+            'note': note_text,
+            'created_by': current_user.username,
+            'created_at': datetime.now()
+        }
+        
+        result = mongodb.insert_one('ticket_notes', note_data)
+        
+        if not result:
+            return jsonify({'success': False, 'message': 'Fehler beim Speichern der Notiz'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Notiz erfolgreich hinzugefügt',
+            'note': {
+                'id': str(result),
+                'text': note_text,
+                'created_by': current_user.username,
+                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
+            }
+        })
+
+    except Exception as e:
+        logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+def get_unassigned_ticket_count():
+    count = mongodb.count_documents('tickets', {
+        '$or': [
+            {'assigned_to': {'$exists': False}},
+            {'assigned_to': None},
+            {'assigned_to': ''}
+        ]
+    })
+    return count
+
+# Kontextprozessor für alle Templates
+@bp.app_context_processor
+def inject_unread_tickets_count():
+    count = get_unassigned_ticket_count()
+    return dict(unread_tickets_count=count)
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
@@ -757,15 +804,21 @@ def public_create_order():
                 return redirect(url_for('tickets.public_create_order'))
             
             # Erstelle das Ticket
-            ticket_id = ticket_db.create_ticket(
-                title=title,
-                description=description,
-                priority=priority,
-                created_by='Gast',  # Öffentliche Tickets werden als "Gast" erstellt
-                category=category,
-                due_date=due_date,
-                estimated_time=estimated_time
-            )
+            ticket_data = {
+                'title': title,
+                'description': description,
+                'priority': priority,
+                'created_by': 'Gast',  # Öffentliche Tickets werden als "Gast" erstellt
+                'category': category,
+                'due_date': due_date,
+                'estimated_time': estimated_time,
+                'status': 'offen',
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
+            
+            result = mongodb.insert_one('tickets', ticket_data)
+            ticket_id = str(result)
             
             flash('Ihr Auftrag wurde erfolgreich erstellt. Wir werden uns schnellstmöglich bei Ihnen melden.', 'success')
             return redirect(url_for('tickets.public_create_order'))
@@ -776,8 +829,8 @@ def public_create_order():
             return redirect(url_for('tickets.public_create_order'))
     
     # Hole die Kategorien für das Formular
-    categories = ticket_db.query("SELECT name FROM categories")
-    categories = [c[0] for c in categories]  # Extrahiere nur die Namen aus den Tupeln
+    categories = mongodb.find('categories', {})
+    categories = [c['name'] for c in categories]  # Extrahiere nur die Namen aus den Tupeln
     
     return render_template('auftrag_public.html', 
                          categories=categories,
@@ -786,57 +839,4 @@ def public_create_order():
                              'normal': 'primary',
                              'hoch': 'error',
                              'dringend': 'error'
-                         })
-
-def get_unassigned_ticket_count():
-    result = ticket_db.query("SELECT COUNT(*) as cnt FROM tickets WHERE assigned_to IS NULL OR assigned_to = ''")
-    return result[0]['cnt'] if result and len(result) > 0 else 0
-
-# Kontextprozessor für alle Templates
-@bp.app_context_processor
-def inject_unread_tickets_count():
-    count = get_unassigned_ticket_count()
-    return dict(unread_tickets_count=count)
-
-@bp.route('/debug-auftrag-details/<int:ticket_id>')
-@login_required
-def debug_auftrag_details(ticket_id):
-    """Temporäre Debug-Route zum Anzeigen der Auftragsdetails"""
-    auftrag_details = ticket_db.get_auftrag_details(ticket_id)
-    return jsonify({
-        'auftrag_details': auftrag_details,
-        'raw_data': ticket_db.query(
-            "SELECT * FROM auftrag_details WHERE ticket_id = ?",
-            [ticket_id],
-            one=True
-        )
-    })
-
-@bp.route('/<int:id>/note', methods=['POST'])
-@login_required
-@admin_required
-def add_note(id):
-    """Fügt eine neue Notiz zu einem Ticket hinzu"""
-    try:
-        if not request.is_json:
-            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
-
-        data = request.get_json()
-        note = data.get('note')
-        
-        if not note or not note.strip():
-            return jsonify({'success': False, 'message': 'Notiz ist erforderlich'}), 400
-
-        # Füge die Notiz hinzu
-        ticket_db.add_note(
-            ticket_id=id,
-            note=note.strip(),
-            author_name=current_user.username,
-            is_private=False  # Alle Notizen sind öffentlich
-        )
-
-        return jsonify({'success': True, 'message': 'Notiz wurde gespeichert'})
-
-    except Exception as e:
-        logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500 
+                         }) 

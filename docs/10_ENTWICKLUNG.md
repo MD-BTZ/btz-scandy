@@ -10,13 +10,19 @@
 6. [Deployment](#deployment)
 7. [Erweiterungen](#erweiterungen)
 
+## Technologie-Stack
+
+- **Backend:** Python 3, Flask
+- **Datenbank:** MongoDB
+- **Frontend:** HTML, Tailwind CSS, DaisyUI, JavaScript
+- **Server:** Gunicorn (Produktion)
+
 ## Entwicklungsumgebung
 
 ### Voraussetzungen
 - Python 3.x
 - Git
 - Virtualenv
-- SQLite
 - Node.js (für Frontend-Entwicklung)
 
 ### Setup

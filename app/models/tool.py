@@ -1,76 +1,191 @@
-from .database import BaseModel, Database
+from .mongodb_models import BaseModel
+from datetime import datetime
+from bson import ObjectId
 
 class Tool(BaseModel):
-    TABLE_NAME = 'tools'
+    collection_name = 'tools'
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.name = kwargs.get('name', '')
+        self.barcode = kwargs.get('barcode', '')
+        self.category = kwargs.get('category', '')
+        self.location = kwargs.get('location', '')
+        self.description = kwargs.get('description', '')
+        self.image_path = kwargs.get('image_path', '')
+        self.deleted = kwargs.get('deleted', False)
+        self.created_at = kwargs.get('created_at', datetime.now())
+        self.updated_at = kwargs.get('updated_at', datetime.now())
 
     @staticmethod
     def get_all_with_status():
-        sql = '''
-        SELECT t.*, 
-               l.worker_barcode,
-               strftime('%d.%m.%Y %H:%M', l.lent_at, 'localtime') as formatted_lent_at,
-               strftime('%d.%m.%Y %H:%M', l.returned_at, 'localtime') as formatted_returned_at,
-               w.firstname || ' ' || w.lastname as current_borrower,
-               t.location,
-               t.category
-        FROM tools t
-        LEFT JOIN (
-            SELECT tool_barcode, worker_barcode, lent_at, returned_at
-            FROM lendings l1
-            WHERE NOT EXISTS (
-                SELECT 1 FROM lendings l2
-                WHERE l2.tool_barcode = l1.tool_barcode
-                AND l2.lent_at > l1.lent_at
-            )
-            AND returned_at IS NULL
-        ) l ON t.barcode = l.tool_barcode
-        LEFT JOIN workers w ON l.worker_barcode = w.barcode
-        WHERE t.deleted = 0
-        ORDER BY t.name
-        '''
-        return Database.query(sql)
+        """Holt alle Werkzeuge mit aktuellem Ausleihstatus"""
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        tools_collection = db['tools']
+        lendings_collection = db['lendings']
+        workers_collection = db['workers']
+        
+        # Alle nicht gelöschten Werkzeuge holen
+        tools = list(tools_collection.find({'deleted': False}))
+        
+        for tool in tools:
+            # Aktuelle Ausleihe finden (ohne Rückgabedatum)
+            current_lending = lendings_collection.find_one({
+                'tool_barcode': tool['barcode'],
+                'returned_at': None
+            })
+            
+            if current_lending:
+                # Worker-Informationen holen
+                worker = workers_collection.find_one({'barcode': current_lending['worker_barcode']})
+                if worker:
+                    tool['current_borrower'] = f"{worker.get('firstname', '')} {worker.get('lastname', '')}"
+                    tool['worker_barcode'] = current_lending['worker_barcode']
+                    tool['formatted_lent_at'] = current_lending['lent_at'].strftime('%d.%m.%Y %H:%M') if current_lending.get('lent_at') else ''
+                else:
+                    tool['current_borrower'] = 'Unbekannt'
+                    tool['worker_barcode'] = current_lending['worker_barcode']
+                    tool['formatted_lent_at'] = current_lending['lent_at'].strftime('%d.%m.%Y %H:%M') if current_lending.get('lent_at') else ''
+            else:
+                tool['current_borrower'] = None
+                tool['worker_barcode'] = None
+                tool['formatted_lent_at'] = None
+                tool['formatted_returned_at'] = None
+        
+        # Nach Namen sortieren
+        tools.sort(key=lambda x: x.get('name', ''))
+        return tools
 
     @staticmethod
     def get_lending_history(barcode):
         """Holt die Ausleihhistorie für ein Werkzeug"""
-        sql = '''
-            WITH lending_history AS (
-                SELECT 
-                    l.*,
-                    w.firstname || ' ' || w.lastname as worker_name,
-                    CASE
-                        WHEN l.returned_at IS NULL THEN 'Ausgeliehen'
-                        ELSE 'Zurückgegeben'
-                    END as action,
-                    'Ausleihe/Rückgabe' as action_type,
-                    strftime('%d.%m.%Y %H:%M', l.lent_at, 'localtime') as formatted_lent_at,
-                    strftime('%d.%m.%Y %H:%M', l.returned_at, 'localtime') as formatted_returned_at,
-                    l.lent_at as raw_lent_at,
-                    l.returned_at as raw_returned_at
-                FROM lendings l
-                LEFT JOIN workers w ON w.barcode = l.worker_barcode
-                WHERE l.tool_barcode = ?
-                ORDER BY 
-                    CASE 
-                        WHEN l.returned_at IS NULL THEN l.lent_at
-                        ELSE l.returned_at 
-                    END DESC
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        lendings_collection = db['lendings']
+        workers_collection = db['workers']
+        
+        # Alle Ausleihungen für das Werkzeug holen
+        lendings = list(lendings_collection.find({'tool_barcode': barcode}).sort([('lent_at', -1)]))
+        
+        history = []
+        for lending in lendings:
+            # Worker-Informationen holen
+            worker = workers_collection.find_one({'barcode': lending['worker_barcode']})
+            worker_name = f"{worker.get('firstname', '')} {worker.get('lastname', '')}" if worker else 'Unbekannt'
+            
+            # Ausleihe-Eintrag
+            history.append({
+                'action_type': 'Ausleihe/Rückgabe',
+                'action_date': lending['lent_at'].strftime('%d.%m.%Y %H:%M') if lending.get('lent_at') else '',
+                'worker': worker_name,
+                'action': 'Ausgeliehen',
+                'reason': None,
+                'raw_date': lending.get('lent_at'),
+                'lent_at': lending['lent_at'].strftime('%d.%m.%Y %H:%M') if lending.get('lent_at') else '',
+                'returned_at': None
+            })
+            
+            # Rückgabe-Eintrag (falls vorhanden)
+            if lending.get('returned_at'):
+                history.append({
+                    'action_type': 'Ausleihe/Rückgabe',
+                    'action_date': lending['returned_at'].strftime('%d.%m.%Y %H:%M'),
+                    'worker': worker_name,
+                    'action': 'Zurückgegeben',
+                    'reason': None,
+                    'raw_date': lending.get('returned_at'),
+                    'lent_at': lending['lent_at'].strftime('%d.%m.%Y %H:%M') if lending.get('lent_at') else '',
+                    'returned_at': lending['returned_at'].strftime('%d.%m.%Y %H:%M')
+                })
+        
+        # Nach Datum sortieren (neueste zuerst)
+        history.sort(key=lambda x: x['raw_date'] if x['raw_date'] else datetime.min, reverse=True)
+        return history
+
+    @staticmethod
+    def get_by_barcode(barcode):
+        """Holt ein Werkzeug anhand des Barcodes"""
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        tools_collection = db['tools']
+        
+        tool_data = tools_collection.find_one({'barcode': barcode, 'deleted': False})
+        if tool_data:
+            return Tool(**tool_data)
+        return None
+
+    @staticmethod
+    def get_by_id(tool_id):
+        """Holt ein Werkzeug anhand der ID"""
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        tools_collection = db['tools']
+        
+        if isinstance(tool_id, str):
+            tool_id = ObjectId(tool_id)
+            
+        tool_data = tools_collection.find_one({'_id': tool_id, 'deleted': False})
+        if tool_data:
+            return Tool(**tool_data)
+        return None
+
+    def save(self):
+        """Speichert das Werkzeug in der Datenbank"""
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        tools_collection = db['tools']
+        
+        if not hasattr(self, '_id') or not self._id:
+            # Neues Werkzeug
+            self.created_at = datetime.now()
+            self.updated_at = datetime.now()
+            result = tools_collection.insert_one(self.to_dict())
+            self._id = result.inserted_id
+        else:
+            # Bestehendes Werkzeug aktualisieren
+            self.updated_at = datetime.now()
+            tools_collection.update_one(
+                {'_id': self._id},
+                {'$set': self.to_dict()}
             )
-            SELECT 
-                action_type,
-                CASE 
-                    WHEN action = 'Ausgeliehen' THEN formatted_lent_at
-                    ELSE formatted_returned_at
-                END as action_date,
-                worker_name as worker,
-                action,
-                NULL as reason,
-                CASE 
-                    WHEN action = 'Ausgeliehen' THEN raw_lent_at
-                    ELSE raw_returned_at
-                END as raw_date,
-                formatted_lent_at as lent_at,
-                formatted_returned_at as returned_at
-            FROM lending_history
-        '''
-        return Database.query(sql, [barcode])
+        
+        return self
+
+    def delete(self):
+        """Markiert das Werkzeug als gelöscht (Soft Delete)"""
+        from .mongodb_database import get_database
+        
+        db = get_database()
+        tools_collection = db['tools']
+        
+        self.deleted = True
+        self.updated_at = datetime.now()
+        tools_collection.update_one(
+            {'_id': self._id},
+            {'$set': {'deleted': True, 'updated_at': self.updated_at}}
+        )
+
+    def to_dict(self):
+        """Konvertiert das Werkzeug in ein Dictionary"""
+        data = {
+            'name': self.name,
+            'barcode': self.barcode,
+            'category': self.category,
+            'location': self.location,
+            'description': self.description,
+            'image_path': self.image_path,
+            'deleted': self.deleted,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+        
+        if hasattr(self, '_id') and self._id:
+            data['_id'] = self._id
+            
+        return data

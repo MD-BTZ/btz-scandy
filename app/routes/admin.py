@@ -1,20 +1,14 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app, abort
-from app.models.database import Database
-from app.utils.decorators import admin_required, mitarbeiter_required
+from flask_login import current_user
+from app.utils.decorators import admin_required, mitarbeiter_required, login_required
+from app.models.mongodb_models import MongoDBUser
 from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 from flask import current_app
-from app.utils.db_schema import SchemaManager, validate_input, truncate_field
 import colorsys
 import logging
 from datetime import datetime, timedelta
-from app.models.models import Tool, Consumable, Worker
-from app.models.user import User
-import sqlite3
-from app.utils.error_handler import handle_errors, safe_db_query
-from flask_login import login_required, current_user
-from app.models.settings import Settings
 from app.utils.backup_manager import backup_manager
 import openpyxl
 from io import BytesIO
@@ -22,81 +16,31 @@ import time
 from PIL import Image
 import io
 from app.config.config import Config
-from app.models.ticket_db import TicketDatabase
-import subprocess
-from docx import Document
+from app.models.mongodb_database import MongoDB
+from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
+from bson import ObjectId
+from werkzeug.security import generate_password_hash
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
-ticket_db = TicketDatabase()
+mongodb = MongoDB()
 
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
-    return Database.query('''
-        SELECT 
-            'Ausleihe' as type,
-            t.name as item_name,
-            w.firstname || ' ' || w.lastname as worker_name,
-            l.lent_at as action_date
-        FROM lendings l
-        JOIN tools t ON l.tool_barcode = t.barcode
-        JOIN workers w ON l.worker_barcode = w.barcode
-        WHERE l.returned_at IS NULL
-        LIMIT 6
-        
-        UNION ALL
-        
-        SELECT 
-            'Verbrauch' as type,
-            c.name as item_name,
-            w.firstname || ' ' || w.lastname as worker_name,
-            cu.used_at as action_date
-        FROM consumable_usages cu
-        JOIN consumables c ON cu.consumable_barcode = c.barcode
-        JOIN workers w ON cu.worker_barcode = w.barcode
-        ORDER BY action_date DESC
-        LIMIT 10
-    ''')
+    # TODO: Implementiere MongoDB-Version
+    return []
 
 def get_material_usage():
     """Hole die Materialnutzung"""
-    return Database.query('''
-        SELECT 
-            c.name,
-            SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-        FROM consumable_usages cu
-        JOIN consumables c ON cu.consumable_barcode = c.barcode
-        GROUP BY c.name
-        ORDER BY total_quantity DESC
-        LIMIT 5
-    ''')
+    # TODO: Implementiere MongoDB-Version
+    return []
 
 def get_warnings():
     """Hole aktuelle Warnungen"""
-    return Database.query('''
-        SELECT 
-            'Werkzeug defekt' as type,
-            name as message,
-            'error' as severity
-        FROM tools 
-        WHERE status = 'defekt' AND deleted = 0
-        
-        UNION ALL
-        
-        SELECT 
-            'Material niedrig' as type,
-            name || ' (Bestand: ' || quantity || ')' as message,
-            CASE 
-                WHEN quantity < min_quantity * 0.5 THEN 'error'
-                ELSE 'warning'
-            END as severity
-        FROM consumables
-        WHERE quantity < min_quantity AND deleted = 0
-        ORDER BY severity DESC
-        LIMIT 5
-    ''')
+    # TODO: Implementiere MongoDB-Version
+    return []
 
 def get_backup_info():
     """Hole Informationen über vorhandene Backups"""
@@ -104,17 +48,18 @@ def get_backup_info():
     backup_dir = Path(__file__).parent.parent.parent / 'backups'
     
     if backup_dir.exists():
-        for backup_file in sorted(backup_dir.glob('*.db'), reverse=True):
+        for backup_file in sorted(backup_dir.glob('*.json'), reverse=True):
             # Backup-Statistiken aus der Datei lesen
             stats = None
             try:
-                with sqlite3.connect(str(backup_file)) as conn:
-                    cursor = conn.cursor()
+                with open(backup_file, 'r', encoding='utf-8') as f:
+                    import json
+                    data = json.load(f)
                     stats = {
-                        'tools': cursor.execute('SELECT COUNT(*) FROM tools WHERE deleted = 0').fetchone()[0],
-                        'consumables': cursor.execute('SELECT COUNT(*) FROM consumables WHERE deleted = 0').fetchone()[0],
-                        'workers': cursor.execute('SELECT COUNT(*) FROM workers WHERE deleted = 0').fetchone()[0],
-                        'active_lendings': cursor.execute('SELECT COUNT(*) FROM lendings WHERE returned_at IS NULL').fetchone()[0]
+                        'tools': len(data.get('tools', [])),
+                        'consumables': len(data.get('consumables', [])),
+                        'workers': len(data.get('workers', [])),
+                        'active_lendings': len([l for l in data.get('lendings', []) if not l.get('returned_at')])
                     }
             except:
                 stats = None
@@ -134,36 +79,81 @@ def get_backup_info():
 
 def get_consumables_forecast():
     """Berechnet die Bestandsprognose für Verbrauchsmaterialien"""
-    return Database.query('''
-        WITH avg_usage AS (
-            SELECT 
-                c.barcode,
-                c.name,
-                c.quantity as current_amount,
-                COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0) as avg_daily_usage
-            FROM consumables c
-            LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
-                AND cu.used_at >= date('now', '-30 days')
-            WHERE c.deleted = 0
-            GROUP BY c.barcode, c.name, c.quantity
-        )
-        SELECT 
-            name,
-            current_amount,
-            ROUND(avg_daily_usage, 2) as avg_daily_usage,
-            CASE 
-                WHEN avg_daily_usage > 0 THEN ROUND(current_amount / avg_daily_usage)
-                ELSE 999
-            END as days_remaining
-        FROM avg_usage
-        WHERE current_amount > 0
-        ORDER BY 
-            CASE 
-                WHEN avg_daily_usage > 0 THEN current_amount / avg_daily_usage
-                ELSE 999
-            END ASC
-        LIMIT 6
-    ''')
+    # MongoDB-Version der Prognose
+    pipeline = [
+        {
+            '$lookup': {
+                'from': 'consumable_usages',
+                'localField': 'barcode',
+                'foreignField': 'consumable_barcode',
+                'as': 'usages'
+            }
+        },
+        {
+            '$addFields': {
+                'recent_usages': {
+                    '$filter': {
+                        'input': '$usages',
+                        'cond': {
+                            '$gte': [
+                                '$$this.used_at',
+                                datetime.now() - timedelta(days=30)
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        {
+            '$addFields': {
+                'avg_daily_usage': {
+                    '$cond': {
+                        'if': {'$gt': [{'$size': '$recent_usages'}, 0]},
+                        'then': {
+                            '$divide': [
+                                {'$sum': '$recent_usages.quantity'},
+                                30
+                            ]
+                        },
+                        'else': 0
+                    }
+                }
+            }
+        },
+        {
+            '$addFields': {
+                'days_remaining': {
+                    '$cond': {
+                        'if': {'$gt': ['$avg_daily_usage', 0]},
+                        'then': {'$divide': ['$quantity', '$avg_daily_usage']},
+                        'else': 999
+                    }
+                }
+            }
+        },
+        {
+            '$match': {
+                'deleted': {'$ne': True},
+                'quantity': {'$gt': 0}
+            }
+        },
+        {
+            '$sort': {'days_remaining': 1}
+        },
+        {
+            '$limit': 6
+        },
+        {
+            '$project': {
+                'name': 1,
+                'current_amount': '$quantity',
+                'avg_daily_usage': {'$round': ['$avg_daily_usage', 2]},
+                'days_remaining': {'$round': ['$days_remaining']}
+            }
+        }
+    ]
+    
+    return list(mongodb.db.consumables.aggregate(pipeline))
 
 def create_excel(data, columns):
     """Erstellt eine Excel-Datei aus den gegebenen Daten"""
@@ -308,178 +298,199 @@ def create_multi_sheet_excel(data_dict):
 
 @bp.route('/')
 @mitarbeiter_required
+def index():
+    """Admin Dashboard"""
+    return redirect(url_for('admin.dashboard'))
+
+@bp.route('/dashboard')
+@mitarbeiter_required
 def dashboard():
-    # Werkzeug-Statistiken
-    tool_stats = Database.query('''
-        WITH valid_tools AS (
-            SELECT id, barcode
-            FROM tools
-            WHERE deleted = 0
-        )
-        SELECT
-            COUNT(*) as total,
-            SUM(CASE
-                WHEN NOT EXISTS (
-                    SELECT 1 FROM lendings l
-                    WHERE l.tool_barcode = t.barcode
-                    AND l.returned_at IS NULL
-                ) AND status = 'verfügbar' THEN 1
-                ELSE 0
-            END) as available,
-            (
-                SELECT COUNT(DISTINCT l.tool_barcode)
-                FROM lendings l
-                JOIN valid_tools vt ON l.tool_barcode = vt.barcode
-                WHERE l.returned_at IS NULL
-            ) as lent,
-            SUM(CASE WHEN status = 'defekt' THEN 1 ELSE 0 END) as defect
-        FROM tools t
-        WHERE t.deleted = 0
-    ''', one=True)
+    """Admin Dashboard"""
+    # Werkzeug-Statistiken mit MongoDB-Aggregation
+    tool_pipeline = [
+        {'$match': {'deleted': {'$ne': True}}},
+        {
+            '$lookup': {
+                'from': 'lendings',
+                'localField': 'barcode',
+                'foreignField': 'tool_barcode',
+                'as': 'active_lendings'
+            }
+        },
+        {
+            '$addFields': {
+                'has_active_lending': {
+                    '$gt': [
+                        {'$size': {'$filter': {'input': '$active_lendings', 'cond': {'$eq': ['$$this.returned_at', None]}}}},
+                        0
+                    ]
+                }
+            }
+        },
+        {
+            '$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'available': {
+                    '$sum': {
+                        '$cond': [
+                            {'$and': [{'$eq': ['$status', 'verfügbar']}, {'$not': '$has_active_lending'}]},
+                            1,
+                            0
+                        ]
+                    }
+                },
+                'lent': {
+                    '$sum': {
+                        '$cond': ['$has_active_lending', 1, 0]
+                    }
+                },
+                'defect': {
+                    '$sum': {
+                        '$cond': [{'$eq': ['$status', 'defekt']}, 1, 0]
+                    }
+                }
+            }
+        }
+    ]
+    
+    tool_stats_result = list(mongodb.db.tools.aggregate(tool_pipeline))
+    tool_stats = tool_stats_result[0] if tool_stats_result else {'total': 0, 'available': 0, 'lent': 0, 'defect': 0}
     
     # Verbrauchsmaterial-Statistiken
-    consumable_stats = {
-        'total': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0', one=True)['count'],
-        'sufficient': Database.query('''
-            SELECT COUNT(*) as count 
-            FROM consumables c
-            WHERE deleted = 0 
-            AND quantity > min_quantity
-            AND (
-                SELECT COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0)
-                FROM consumable_usages cu
-                WHERE cu.consumable_barcode = c.barcode
-                AND cu.used_at >= date('now', '-30 days')
-            ) * 7 <= (quantity - min_quantity)
-        ''', one=True)['count'],
-        'warning': Database.query('''
-            SELECT COUNT(*) as count 
-            FROM consumables c
-            WHERE deleted = 0 
-            AND quantity > min_quantity
-            AND (
-                SELECT COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0)
-                FROM consumable_usages cu
-                WHERE cu.consumable_barcode = c.barcode
-                AND cu.used_at >= date('now', '-30 days')
-            ) * 7 > (quantity - min_quantity)
-        ''', one=True)['count'],
-        'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity <= min_quantity', one=True)['count']
-    }
+    consumable_pipeline = [
+        {'$match': {'deleted': {'$ne': True}}},
+        {
+            '$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'sufficient': {
+                    '$sum': {
+                        '$cond': [{'$gt': ['$quantity', '$min_quantity']}, 1, 0]
+                    }
+                },
+                'critical': {
+                    '$sum': {
+                        '$cond': [{'$lte': ['$quantity', '$min_quantity']}, 1, 0]
+                    }
+                }
+            }
+        }
+    ]
+    
+    consumable_stats_result = list(mongodb.db.consumables.aggregate(consumable_pipeline))
+    consumable_stats = consumable_stats_result[0] if consumable_stats_result else {'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0}
     
     # Mitarbeiter-Statistiken
+    worker_pipeline = [
+        {'$match': {'deleted': {'$ne': True}}},
+        {
+            '$group': {
+                '_id': '$department',
+                'count': {'$sum': 1}
+            }
+        },
+        {'$match': {'_id': {'$ne': None}}},
+        {'$sort': {'_id': 1}},
+        {
+            '$project': {
+                'name': '$_id',
+                'count': 1,
+                '_id': 0
+            }
+        }
+    ]
+    
+    worker_by_department = list(mongodb.db.workers.aggregate(worker_pipeline))
+    worker_total = mongodb.db.workers.count_documents({'deleted': {'$ne': True}})
+    
     worker_stats = {
-        'total': Database.query('SELECT COUNT(*) as count FROM workers WHERE deleted = 0', one=True)['count'],
-        'by_department': Database.query('''
-            SELECT department as name, COUNT(*) as count 
-            FROM workers 
-            WHERE deleted = 0 AND department IS NOT NULL 
-            GROUP BY department 
-            ORDER BY department
-        ''')
+        'total': worker_total,
+        'by_department': worker_by_department
     }
     
     # Warnungen für defekte Werkzeuge und überfällige Ausleihen
-    tool_warnings = Database.query('''
-        SELECT 
-            name,
-            CASE 
-                WHEN status = 'defekt' THEN 'defekt'
-                ELSE 'überfällig'
-            END as status,
-            CASE 
-                WHEN status = 'defekt' THEN 'error'
-                ELSE 'warning'
-            END as severity,
-            CASE
-                WHEN status = 'defekt' THEN 'Werkzeug ist defekt'
-                ELSE 'Ausleihe seit ' || ROUND((julianday('now') - julianday(lent_at))) || ' Tagen überfällig'
-            END as description
-        FROM tools t
-        LEFT JOIN lendings l ON t.barcode = l.tool_barcode AND l.returned_at IS NULL
-        WHERE (t.status = 'defekt' AND t.deleted = 0)
-           OR (l.lent_at IS NOT NULL AND julianday('now') - julianday(lent_at) > 5)
-        ORDER BY 
-            CASE 
-                WHEN status = 'defekt' THEN 0
-                ELSE 1
-            END,
-            name
-    ''')
+    tool_warnings = []
+    
+    # Defekte Werkzeuge
+    defect_tools = list(mongodb.find('tools', {'status': 'defekt', 'deleted': {'$ne': True}}))
+    for tool in defect_tools:
+        tool_warnings.append({
+            'name': tool['name'],
+            'status': 'defekt',
+            'severity': 'error',
+            'description': 'Werkzeug ist defekt'
+        })
+    
+    # Überfällige Ausleihen
+    overdue_date = datetime.now() - timedelta(days=5)
+    overdue_lendings = list(mongodb.find('lendings', {
+        'returned_at': None,
+        'lent_at': {'$lt': overdue_date}
+    }))
+    
+    for lending in overdue_lendings:
+        tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+        if tool:
+            days_overdue = (datetime.now() - lending['lent_at']).days
+            tool_warnings.append({
+                'name': tool['name'],
+                'status': 'überfällig',
+                'severity': 'warning',
+                'description': f'Ausleihe seit {days_overdue} Tagen überfällig'
+            })
     
     # Warnungen für niedrigen Materialbestand
-    consumable_warnings = Database.query('''
-        WITH avg_usage AS (
-            SELECT 
-                c.barcode,
-                c.name,
-                c.quantity,
-                c.min_quantity,
-                COALESCE(CAST(SUM(cu.quantity) AS FLOAT) / 30, 0) as avg_daily_usage
-            FROM consumables c
-            LEFT JOIN consumable_usages cu ON c.barcode = cu.consumable_barcode
-                AND cu.used_at >= date('now', '-30 days')
-            WHERE c.deleted = 0
-            GROUP BY c.barcode, c.name, c.quantity, c.min_quantity
-        )
-        SELECT
-            name as message,
-            CASE
-                WHEN quantity <= min_quantity THEN 'error'
-                ELSE 'warning'
-            END as type,
-            CASE
-                WHEN quantity <= min_quantity THEN 'exclamation-triangle'
-                ELSE 'exclamation'
-            END as icon,
-            CASE
-                WHEN quantity <= min_quantity THEN 'Kritischer Bestand'
-                ELSE 'Warnung: Bestand wird in ' || 
-                     ROUND((quantity - min_quantity) / NULLIF(avg_daily_usage, 0)) || 
-                     ' Tagen unter Mindestbestand fallen'
-            END as description
-        FROM avg_usage
-        WHERE quantity <= min_quantity 
-           OR (avg_daily_usage > 0 AND (quantity - min_quantity) / avg_daily_usage <= 7)
-        ORDER BY 
-            CASE 
-                WHEN quantity <= min_quantity THEN 0
-                ELSE 1
-            END,
-            quantity / min_quantity ASC
-        LIMIT 5
-    ''')
+    consumable_warnings = []
+    low_stock_consumables = list(mongodb.find('consumables', {
+        'deleted': {'$ne': True},
+        '$expr': {'$lte': ['$quantity', '$min_quantity']}
+    }))
+    
+    for consumable in low_stock_consumables:
+        consumable_warnings.append({
+            'message': consumable['name'],
+            'type': 'error',
+            'icon': 'exclamation-triangle',
+            'description': 'Kritischer Bestand'
+        })
     
     # Materialverbrauch-Trend
     consumable_trend = get_consumable_trend()
     
     # Aktuelle Ausleihen
-    current_lendings = Database.query('''
-        SELECT 
-            l.*, 
-            t.name as tool_name, 
-            w.firstname || ' ' || w.lastname as worker_name,
-            datetime(l.lent_at) as lent_at
-        FROM lendings l
-        JOIN tools t ON l.tool_barcode = t.barcode
-        JOIN workers w ON l.worker_barcode = w.barcode
-        WHERE l.returned_at IS NULL
-        ORDER BY l.lent_at DESC
-    ''')
+    current_lendings = []
+    active_lendings = mongodb.find('lendings', {'returned_at': None})
+    # Sortiere die Ausleihen nach Datum (neueste zuerst)
+    active_lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
+    
+    for lending in active_lendings:
+        tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+        worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+        if tool and worker:
+            current_lendings.append({
+                **lending,
+                'tool_name': tool['name'],
+                'worker_name': f"{worker['firstname']} {worker['lastname']}"
+            })
     
     # Letzte Materialentnahmen
-    recent_consumable_usage = Database.query('''
-        SELECT
-            c.name as consumable_name,
-            cu.quantity,
-            w.firstname || ' ' || w.lastname as worker_name,
-            cu.used_at
-        FROM consumable_usages cu
-        JOIN consumables c ON cu.consumable_barcode = c.barcode
-        JOIN workers w ON cu.worker_barcode = w.barcode
-        ORDER BY cu.used_at DESC
-        LIMIT 10
-    ''')
+    recent_consumable_usage = []
+    recent_usages = mongodb.find('consumable_usages')
+    # Sortiere und limitiere die Verwendungen
+    recent_usages.sort(key=lambda x: x.get('used_at', datetime.min), reverse=True)
+    recent_usages = recent_usages[:10]
+    
+    for usage in recent_usages:
+        consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
+        worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
+        if consumable and worker:
+            recent_consumable_usage.append({
+                'consumable_name': consumable['name'],
+                'quantity': usage['quantity'],
+                'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                'used_at': usage['used_at']
+            })
     
     # Bestandsprognose
     consumables_forecast = get_consumables_forecast()
@@ -497,81 +508,113 @@ def dashboard():
 
 def get_consumable_trend():
     """Hole die Top 5 Materialverbrauch der letzten 7 Tage"""
-    trend_data = Database.query('''
-        WITH daily_usage AS (
-            SELECT 
-                c.name,
-                date(cu.used_at) as date,
-                SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as daily_quantity
-            FROM consumable_usages cu
-            JOIN consumables c ON cu.consumable_barcode = c.barcode
-            WHERE cu.used_at >= date('now', '-6 days')
-            GROUP BY c.name, date(cu.used_at)
-        ),
-        dates AS (
-            SELECT date('now', '-' || n || ' days') as date
-            FROM (SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 
-                 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6)
-        ),
-        top_consumables AS (
-            SELECT 
-                c.name,
-                SUM(CASE WHEN cu.quantity > 0 THEN cu.quantity ELSE 0 END) as total_quantity
-            FROM consumable_usages cu
-            JOIN consumables c ON cu.consumable_barcode = c.barcode
-            WHERE cu.used_at >= date('now', '-6 days')
-            GROUP BY c.name
-            ORDER BY total_quantity DESC
-            LIMIT 5
-        )
-        SELECT 
-            dates.date as label,
-            tc.name,
-            COALESCE(du.daily_quantity, 0) as count
-        FROM dates
-        CROSS JOIN top_consumables tc
-        LEFT JOIN daily_usage du ON dates.date = du.date AND tc.name = du.name
-        ORDER BY tc.name, dates.date
-    ''')
-    
-    # Daten für das Chart aufbereiten
-    labels = []
-    datasets = []
-    current_name = None
-    current_data = []
-    
-    for row in trend_data:
-        if row['label'] not in labels:
-            labels.append(row['label'])
+    try:
+        # Hole die letzten 7 Tage
+        seven_days_ago = datetime.now() - timedelta(days=6)
         
-        if current_name != row['name']:
-            if current_name is not None:
-                datasets.append({
-                    'label': current_name,
-                    'data': current_data,
-                    'fill': False,
-                    'borderColor': f'hsl({(len(datasets) * 60) % 360}, 70%, 50%)',
-                    'tension': 0.1
-                })
-            current_name = row['name']
-            current_data = []
-        current_data.append(row['count'])
+        # Top 5 Verbrauchsmaterialien der letzten 7 Tage
+        top_consumables_pipeline = [
+            {
+                '$match': {
+                    'used_at': {'$gte': seven_days_ago},
+                    'quantity': {'$gt': 0}
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'consumables',
+                    'localField': 'consumable_barcode',
+                    'foreignField': 'barcode',
+                    'as': 'consumable'
+                }
+            },
+            {
+                '$unwind': '$consumable'
+            },
+            {
+                '$group': {
+                    '_id': '$consumable.name',
+                    'total_quantity': {'$sum': '$quantity'}
+                }
+            },
+            {'$sort': {'total_quantity': -1}},
+            {'$limit': 5}
+        ]
+        
+        top_consumables = list(mongodb.db.consumable_usages.aggregate(top_consumables_pipeline))
+        
+        # Tägliche Daten für die Top 5
+        labels = []
+        datasets = []
+        
+        # Generiere Datums-Labels für die letzten 7 Tage
+        for i in range(7):
+            date = datetime.now() - timedelta(days=6-i)
+            labels.append(date.strftime('%Y-%m-%d'))
+        
+        # Für jedes Top-Verbrauchsmaterial
+        for i, consumable in enumerate(top_consumables):
+            consumable_name = consumable['_id']
+            data = []
+            
+            # Für jeden Tag
+            for j in range(7):
+                date = datetime.now() - timedelta(days=6-j)
+                start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+                
+                # Finde Verbrauch für diesen Tag
+                daily_usage = mongodb.db.consumable_usages.aggregate([
+                    {
+                        '$match': {
+                            'used_at': {'$gte': start_of_day, '$lte': end_of_day},
+                            'quantity': {'$gt': 0}
+                        }
+                    },
+                    {
+                        '$lookup': {
+                            'from': 'consumables',
+                            'localField': 'consumable_barcode',
+                            'foreignField': 'barcode',
+                            'as': 'consumable'
+                        }
+                    },
+                    {
+                        '$unwind': '$consumable'
+                    },
+                    {
+                        '$match': {'consumable.name': consumable_name}
+                    },
+                    {
+                        '$group': {
+                            '_id': None,
+                            'daily_quantity': {'$sum': '$quantity'}
+                        }
+                    }
+                ])
+                
+                daily_result = list(daily_usage)
+                data.append(daily_result[0]['daily_quantity'] if daily_result else 0)
+            
+            datasets.append({
+                'label': consumable_name,
+                'data': data,
+                'fill': False,
+                'borderColor': f'hsl({(i * 60) % 360}, 70%, 50%)',
+                'tension': 0.1
+            })
     
-    if current_name is not None:
-        datasets.append({
-            'label': current_name,
-            'data': current_data,
-            'fill': False,
-            'borderColor': f'hsl({(len(datasets) * 60) % 360}, 70%, 50%)',
-            'tension': 0.1
-        })
-    
-    return {
-        'labels': labels,
-        'datasets': datasets
-    }
+        return {
+            'labels': labels,
+            'datasets': datasets
+        }
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des Materialverbrauch-Trends: {str(e)}")
+        return {
+            'labels': [],
+            'datasets': []
+        }
 
-# Manuelle Ausleihe
 @bp.route('/manual-lending', methods=['GET', 'POST'])
 @mitarbeiter_required
 def manual_lending():
@@ -610,173 +653,141 @@ def manual_lending():
                 }), 400
             
             try:
-                with Database.get_db() as db:
-                    # Prüfe ob der Mitarbeiter existiert
-                    if worker_barcode:
-                        worker = db.execute('''
-                            SELECT * FROM workers 
-                            WHERE barcode = ? AND deleted = 0
-                        ''', [worker_barcode]).fetchone()
-                        
-                        if not worker:
-                            return jsonify({
-                                'success': False,
-                                'message': 'Mitarbeiter nicht gefunden'
-                            }), 404
-                    
-                    # Prüfe ob es ein Verbrauchsmaterial ist
-                    consumable = db.execute('''
-                        SELECT * FROM consumables 
-                        WHERE barcode = ? AND deleted = 0
-                    ''', [item_barcode]).fetchone()
-                    
-                    if consumable:  # Verbrauchsmaterial-Logik
-                        if not quantity or quantity <= 0:
-                            return jsonify({
-                                'success': False,
-                                'message': 'Ungültige Menge'
-                            }), 400
-                            
-                        if quantity > consumable['quantity']:
-                            return jsonify({
-                                'success': False,
-                                'message': 'Nicht genügend Bestand'
-                            }), 400
-                            
-                        # Neue Verbrauchsmaterial-Ausgabe erstellen
-                        db.execute('''
-                            INSERT INTO consumable_usages 
-                            (consumable_barcode, worker_barcode, quantity, used_at, updated_at, sync_status)
-                            VALUES (?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), 'pending')
-                        ''', [item_barcode, worker_barcode, quantity])
-                        
-                        # Bestand aktualisieren
-                        db.execute('''
-                            UPDATE consumables
-                            SET quantity = quantity - ?,
-                                updated_at = datetime('now', 'localtime'),
-                                sync_status = 'pending'
-                            WHERE barcode = ?
-                        ''', [quantity, item_barcode])
-                        
-                        db.commit()
-                        return jsonify({
-                            'success': True,
-                            'message': f'{quantity}x {consumable["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgegeben'
-                        })
-                    
-                    # Werkzeug-Logik
-                    tool = db.execute('''
-                        SELECT t.*, 
-                               CASE 
-                                   WHEN EXISTS (
-                                       SELECT 1 FROM lendings l 
-                                       WHERE l.tool_barcode = t.barcode 
-                                       AND l.returned_at IS NULL
-                                   ) THEN 'ausgeliehen'
-                                   ELSE t.status
-                               END as current_status,
-                               (
-                                   SELECT w.firstname || ' ' || w.lastname
-                                   FROM lendings l
-                                   JOIN workers w ON l.worker_barcode = w.barcode
-                                   WHERE l.tool_barcode = t.barcode
-                                   AND l.returned_at IS NULL
-                                   LIMIT 1
-                               ) as current_worker_name,
-                               (
-                                   SELECT l.worker_barcode
-                                   FROM lendings l
-                                   WHERE l.tool_barcode = t.barcode
-                                   AND l.returned_at IS NULL
-                                   LIMIT 1
-                               ) as current_worker_barcode
-                        FROM tools t
-                        WHERE t.barcode = ? AND t.deleted = 0
-                    ''', [item_barcode]).fetchone()
-                    
-                    if not tool:
+                # Prüfe ob der Mitarbeiter existiert
+                if worker_barcode:
+                    worker = mongodb.find_one('workers', {'barcode': worker_barcode, 'deleted': {'$ne': True}})
+                    if not worker:
                         return jsonify({
                             'success': False,
-                            'message': 'Werkzeug nicht gefunden'
+                            'message': 'Mitarbeiter nicht gefunden'
                         }), 404
-                    
-                    if action == 'lend':
-                        if tool['current_status'] == 'ausgeliehen':
-                            return jsonify({
-                                'success': False,
-                                'message': f'Dieses Werkzeug ist bereits an {tool["current_worker_name"]} ausgeliehen'
-                            }), 400
-                            
-                        if tool['current_status'] == 'defekt':
-                            return jsonify({
-                                'success': False,
-                                'message': 'Dieses Werkzeug ist als defekt markiert'
-                            }), 400
-                        
-                        # Neue Ausleihe erstellen (OHNE modified_at und sync_status)
-                        db.execute('''
-                            INSERT INTO lendings 
-                            (tool_barcode, worker_barcode, lent_at)
-                            VALUES (?, ?, datetime('now'))
-                        ''', [item_barcode, worker_barcode])
-                        
-                        # Status des Werkzeugs aktualisieren
-                        db.execute('''
-                            UPDATE tools 
-                            SET status = 'ausgeliehen',
-                                modified_at = datetime('now'),
-                                sync_status = 'pending'
-                            WHERE barcode = ?
-                        ''', [item_barcode])
-                        
-                        db.commit()
+
+                # Prüfe ob es ein Verbrauchsmaterial ist
+                consumable = mongodb.find_one('consumables', {'barcode': item_barcode, 'deleted': {'$ne': True}})
+                if consumable:  # Verbrauchsmaterial-Logik
+                    if not quantity or quantity <= 0:
                         return jsonify({
-                            'success': True,
-                            'message': f'Werkzeug {tool["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgeliehen'
-                        })
-                        
-                    else:  # action == 'return'
-                        if tool['current_status'] != 'ausgeliehen':
-                            return jsonify({
-                                'success': False,
-                                'message': 'Dieses Werkzeug ist nicht ausgeliehen'
-                            }), 400
-                        
-                        # Wenn ein Mitarbeiter angegeben wurde, prüfe ob er berechtigt ist
-                        if worker_barcode and tool['current_worker_barcode'] != worker_barcode:
-                            return jsonify({
-                                'success': False,
-                                'message': f'Dieses Werkzeug wurde von {tool["current_worker_name"]} ausgeliehen'
-                            }), 403
-                        
-                        # Rückgabe verarbeiten (OHNE modified_at)
-                        db.execute('''
-                            UPDATE lendings 
-                            SET returned_at = datetime('now')
-                            WHERE tool_barcode = ? 
-                            AND returned_at IS NULL
-                        ''', [item_barcode])
-                        
-                        # Status des Werkzeugs aktualisieren
-                        db.execute('''
-                            UPDATE tools 
-                            SET status = 'verfügbar',
-                                modified_at = datetime('now'),
-                                sync_status = 'pending'
-                            WHERE barcode = ?
-                        ''', [item_barcode])
-                        
-                        db.commit()
+                            'success': False,
+                            'message': 'Ungültige Menge'
+                        }), 400
+                    if quantity > consumable['quantity']:
                         return jsonify({
-                            'success': True,
-                            'message': f'Werkzeug {tool["name"]} wurde zurückgegeben'
-                        })
-                    
+                            'success': False,
+                            'message': 'Nicht genügend Bestand'
+                        }), 400
+                    # Neue Verbrauchsmaterial-Ausgabe erstellen
+                    usage_data = {
+                        'consumable_barcode': item_barcode,
+                        'worker_barcode': worker_barcode,
+                        'quantity': quantity,
+                        'used_at': datetime.now(),
+                        'updated_at': datetime.now(),
+                        'sync_status': 'pending'
+                    }
+                    mongodb.insert_one('consumable_usages', usage_data)
+                    # Bestand aktualisieren
+                    mongodb.update_one('consumables',
+                        {'barcode': item_barcode},
+                        {
+                            '$inc': {'quantity': -quantity},
+                            '$set': {
+                                'updated_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
+                    return jsonify({
+                        'success': True,
+                        'message': f'{quantity}x {consumable["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgegeben'
+                    })
+
+                # Werkzeug-Logik
+                tool = mongodb.find_one('tools', {'barcode': item_barcode, 'deleted': {'$ne': True}})
+                if not tool:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Werkzeug nicht gefunden'
+                    }), 404
+                # Prüfe aktuellen Status des Werkzeugs
+                active_lending = mongodb.find_one('lendings', {
+                    'tool_barcode': item_barcode,
+                    'returned_at': None
+                })
+                current_status = 'ausgeliehen' if active_lending else tool.get('status', 'verfügbar')
+                current_worker = None
+                if active_lending:
+                    current_worker = mongodb.find_one('workers', {'barcode': active_lending['worker_barcode']})
+                if action == 'lend':
+                    if current_status == 'ausgeliehen':
+                        worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "unbekannt"
+                        return jsonify({
+                            'success': False,
+                            'message': f'Dieses Werkzeug ist bereits an {worker_name} ausgeliehen'
+                        }), 400
+                    if current_status == 'defekt':
+                        return jsonify({
+                            'success': False,
+                            'message': 'Dieses Werkzeug ist als defekt markiert'
+                        }), 400
+                    # Neue Ausleihe erstellen
+                    lending_data = {
+                        'tool_barcode': item_barcode,
+                        'worker_barcode': worker_barcode,
+                        'lent_at': datetime.now()
+                    }
+                    mongodb.insert_one('lendings', lending_data)
+                    # Status des Werkzeugs aktualisieren
+                    mongodb.update_one('tools',
+                        {'barcode': item_barcode},
+                        {
+                            '$set': {
+                                'status': 'ausgeliehen',
+                                'modified_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
+                    return jsonify({
+                        'success': True,
+                        'message': f'Werkzeug {tool["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgeliehen'
+                    })
+                elif action == 'return':
+                    if current_status != 'ausgeliehen':
+                        return jsonify({
+                            'success': False,
+                            'message': 'Dieses Werkzeug ist nicht ausgeliehen'
+                        }), 400
+                    # Wenn ein Mitarbeiter angegeben wurde, prüfe ob er berechtigt ist
+                    if worker_barcode and active_lending and active_lending['worker_barcode'] != worker_barcode:
+                        worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "unbekannt"
+                        return jsonify({
+                            'success': False,
+                            'message': f'Dieses Werkzeug wurde von {worker_name} ausgeliehen'
+                        }), 403
+                    # Rückgabe verarbeiten
+                    mongodb.update_one('lendings',
+                        {'tool_barcode': item_barcode, 'returned_at': None},
+                        {'$set': {'returned_at': datetime.now()}}
+                    )
+                    # Status des Werkzeugs aktualisieren
+                    mongodb.update_one('tools',
+                        {'barcode': item_barcode},
+                        {
+                            '$set': {
+                                'status': 'verfügbar',
+                                'modified_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
+                    return jsonify({
+                        'success': True,
+                        'message': f'Werkzeug {tool["name"]} wurde zurückgegeben'
+                    })
             except Exception as e:
                 print("Fehler bei der Ausleihe:", str(e))
                 return jsonify({
-                    'success': False, 
+                    'success': False,
                     'message': f'Fehler: {str(e)}'
                 }), 500
             
@@ -788,146 +799,82 @@ def manual_lending():
             }), 500
             
     # GET request - zeige das Formular
-    tools = Database.query('''
-        SELECT t.*,
-               CASE 
-                   WHEN EXISTS (
-                       SELECT 1 FROM lendings l 
-                       WHERE l.tool_barcode = t.barcode 
-                       AND l.returned_at IS NULL
-                   ) THEN 'ausgeliehen'
-                   WHEN t.status = 'defekt' THEN 'defekt'
-                   ELSE 'verfügbar'
-               END as current_status,
-               (
-                   SELECT w.firstname || ' ' || w.lastname
-                   FROM lendings l
-                   JOIN workers w ON l.worker_barcode = w.barcode
-                   WHERE l.tool_barcode = t.barcode
-                   AND l.returned_at IS NULL
-                   LIMIT 1
-               ) as current_worker,
-               (
-                   SELECT l.lent_at
-                   FROM lendings l
-                   WHERE l.tool_barcode = t.barcode
-                   AND l.returned_at IS NULL
-                   LIMIT 1
-               ) as lending_date
-        FROM tools t
-        WHERE t.deleted = 0
-        ORDER BY t.name
-    ''')
+    try:
+        # Hole alle verfügbaren Werkzeuge
+        tools_pipeline = [
+            {'$match': {'deleted': {'$ne': True}}},
+            {
+                '$lookup': {
+                    'from': 'lendings',
+                    'localField': 'barcode',
+                    'foreignField': 'tool_barcode',
+                    'as': 'active_lendings'
+                }
+            },
+            {
+                '$addFields': {
+                    'current_status': {
+                        '$cond': [
+                            {'$gt': [{'$size': {'$filter': {'input': '$active_lendings', 'cond': {'$eq': ['$$this.returned_at', None]}}}}, 0]},
+                            'ausgeliehen',
+                            '$status'
+                        ]
+                    }
+                }
+            },
+            {'$sort': {'name': 1}}
+        ]
+        
+        tools = list(mongodb.aggregate('tools', tools_pipeline))
+        
+        # Hole alle Mitarbeiter
+        workers = mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('firstname', 1)])
+        
+        # Verbrauchsmaterialien laden
+        consumables = mongodb.find('consumables', {'deleted': {'$ne': True}}, sort=[('name', 1)])
 
-    workers = Database.query('''
-        SELECT * FROM workers WHERE deleted = 0
-        ORDER BY lastname, firstname
-    ''')
-
-    consumables = Database.query('''
-        SELECT c.*,
-               CASE 
-                   WHEN quantity <= 0 THEN 'nicht_verfügbar'
-                   WHEN quantity <= min_quantity THEN 'kritisch'
-                   WHEN quantity <= min_quantity * 2 THEN 'niedrig'
-                   ELSE 'verfügbar'
-               END as status
-        FROM consumables c 
-        WHERE deleted = 0
-        ORDER BY name
-    ''')
-
-    # Aktuelle Ausleihen (Werkzeuge und Verbrauchsmaterial)
-    current_lendings = Database.query('''
-        WITH RECURSIVE current_tool_lendings AS (
-            SELECT 
-                l.id,
-                t.name as item_name,
-                t.barcode as item_barcode,
-                w.firstname || ' ' || w.lastname as worker_name,
-                w.barcode as worker_barcode,
-                'Werkzeug' as category,
-                l.lent_at as action_date,
-                NULL as amount
-            FROM lendings l
-            JOIN tools t ON l.tool_barcode = t.barcode
-            JOIN workers w ON l.worker_barcode = w.barcode
-            WHERE l.returned_at IS NULL
-            AND t.deleted = 0
-            AND w.deleted = 0
-        ),
-        current_consumable_usages AS (
-            SELECT 
-                cu.id,
-                c.name as item_name,
-                c.barcode as item_barcode,
-                w.firstname || ' ' || w.lastname as worker_name,
-                w.barcode as worker_barcode,
-                'Verbrauchsmaterial' as category,
-                cu.used_at as action_date,
-                cu.quantity as amount
-            FROM consumable_usages cu
-            JOIN consumables c ON cu.consumable_barcode = c.barcode
-            JOIN workers w ON cu.worker_barcode = w.barcode
-            WHERE DATE(cu.used_at) >= DATE('now', '-7 days')
-            AND c.deleted = 0
-            AND w.deleted = 0
-        )
-        SELECT * FROM current_tool_lendings
-        UNION ALL
-        SELECT * FROM current_consumable_usages
-        ORDER BY action_date DESC
-    ''')
-
-    return render_template('admin/manual_lending.html', 
-                          tools=tools,
-                          workers=workers,
-                          consumables=consumables,
-                          current_lendings=current_lendings)
+        return render_template('admin/manual_lending.html', 
+                              tools=tools,
+                              workers=workers,
+                              consumables=consumables)
+    except Exception as e:
+        print(f"Fehler beim Laden der Daten: {e}")
+        flash('Fehler beim Laden der Daten', 'error')
+        return render_template('admin/manual_lending.html', 
+                              tools=[], 
+                              workers=[], 
+                              consumables=[])
 
 @bp.route('/trash')
 @mitarbeiter_required
 def trash():
     """Papierkorb mit gelöschten Einträgen"""
     try:
-        with Database.get_db() as conn:
-            # Gelöschte Werkzeuge
-            tools = conn.execute('''
-                SELECT * FROM tools 
-                WHERE deleted = 1 
-                ORDER BY deleted_at DESC
-            ''').fetchall()
-            
-            logger.debug(f"Gelöschte Werkzeuge gefunden: {len(tools)}")
-            for tool in tools:
-                logger.debug(f"Tool: {dict(tool)}")
-            
-            # Gelöschte Verbrauchsmaterialien
-            consumables = conn.execute('''
-                SELECT * FROM consumables 
-                WHERE deleted = 1 
-                ORDER BY deleted_at DESC
-            ''').fetchall()
-            
-            logger.debug(f"Gelöschte Verbrauchsmaterialien gefunden: {len(consumables)}")
-            for consumable in consumables:
-                logger.debug(f"Consumable: {dict(consumable)}")
-            
-            # Gelöschte Mitarbeiter
-            workers = conn.execute('''
-                SELECT * FROM workers 
-                WHERE deleted = 1 
-                ORDER BY deleted_at DESC
-            ''').fetchall()
-            
-            logger.debug(f"Gelöschte Mitarbeiter gefunden: {len(workers)}")
-            for worker in workers:
-                logger.debug(f"Worker: {dict(worker)}")
-            
-            return render_template('admin/trash.html',
-                               tools=tools,
-                               consumables=consumables,
-                               workers=workers)
+        # Gelöschte Werkzeuge
+        tools = mongodb.find('tools', {'deleted': True}, sort=[('deleted_at', -1)])
+        
+        logger.debug(f"Gelöschte Werkzeuge gefunden: {len(tools)}")
+        for tool in tools:
+            logger.debug(f"Tool: {tool}")
+        
+        # Gelöschte Verbrauchsmaterialien
+        consumables = mongodb.find('consumables', {'deleted': True}, sort=[('deleted_at', -1)])
+        
+        logger.debug(f"Gelöschte Verbrauchsmaterialien gefunden: {len(consumables)}")
+        for consumable in consumables:
+            logger.debug(f"Consumable: {consumable}")
+        
+        # Gelöschte Mitarbeiter
+        workers = mongodb.find('workers', {'deleted': True}, sort=[('deleted_at', -1)])
+        
+        logger.debug(f"Gelöschte Mitarbeiter gefunden: {len(workers)}")
+        for worker in workers:
+            logger.debug(f"Worker: {worker}")
+        
+        return render_template('admin/trash.html',
+                           tools=tools,
+                           consumables=consumables,
+                           workers=workers)
     except Exception as e:
         logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
         flash('Fehler beim Laden des Papierkorbs', 'error')
@@ -938,85 +885,61 @@ def trash():
 def restore_item(type, barcode):
     """Stellt einen gelöschten Eintrag wieder her"""
     try:
-        with Database.get_db() as conn:
-            if type == 'tool':
-                # Prüfe ob das Werkzeug existiert
-                tool = conn.execute('''
-                    SELECT * FROM tools 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not tool:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Werkzeug nicht gefunden'
-                    }), 404
-                    
-                # Stelle das Werkzeug wieder her
-                conn.execute('''
-                    UPDATE tools 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-                
-            elif type == 'consumable':
-                # Prüfe ob das Verbrauchsmaterial existiert
-                consumable = conn.execute('''
-                    SELECT * FROM consumables 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not consumable:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Verbrauchsmaterial nicht gefunden'
-                    }), 404
-                    
-                # Stelle das Verbrauchsmaterial wieder her
-                conn.execute('''
-                    UPDATE consumables 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-                
-            elif type == 'worker':
-                # Prüfe ob der Mitarbeiter existiert
-                worker = conn.execute('''
-                    SELECT * FROM workers 
-                    WHERE barcode = ? AND deleted = 1
-                ''', [barcode]).fetchone()
-                
-                if not worker:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Mitarbeiter nicht gefunden'
-                    }), 404
-                    
-                # Stelle den Mitarbeiter wieder her
-                conn.execute('''
-                    UPDATE workers 
-                    SET deleted = 0,
-                        deleted_at = NULL,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [barcode])
-            else:
+        if type == 'tool':
+            # Prüfe ob das Werkzeug existiert
+            tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': True})
+            
+            if not tool:
                 return jsonify({
                     'success': False,
-                    'message': 'Ungültiger Typ'
-                }), 400
+                    'message': 'Werkzeug nicht gefunden'
+                }), 404
                 
-            conn.commit()
+            # Stelle das Werkzeug wieder her
+            mongodb.update_one('tools', 
+                             {'barcode': barcode}, 
+                             {'$set': {'deleted': False, 'deleted_at': None}})
             
+        elif type == 'consumable':
+            # Prüfe ob das Verbrauchsmaterial existiert
+            consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': True})
+            
+            if not consumable:
+                return jsonify({
+                    'success': False,
+                    'message': 'Verbrauchsmaterial nicht gefunden'
+                }), 404
+                
+            # Stelle das Verbrauchsmaterial wieder her
+            mongodb.update_one('consumables', 
+                             {'barcode': barcode}, 
+                             {'$set': {'deleted': False, 'deleted_at': None}})
+            
+        elif type == 'worker':
+            # Prüfe ob der Mitarbeiter existiert
+            worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': True})
+            
+            if not worker:
+                return jsonify({
+                    'success': False,
+                    'message': 'Mitarbeiter nicht gefunden'
+                }), 404
+                
+            # Stelle den Mitarbeiter wieder her
+            mongodb.update_one('workers', 
+                             {'barcode': barcode}, 
+                             {'$set': {'deleted': False, 'deleted_at': None}})
+        else:
             return jsonify({
-                'success': True,
-                'message': 'Eintrag wurde wiederhergestellt'
-            })
+                'success': False,
+                'message': 'Ungültiger Typ'
+            }), 400
             
+        return jsonify({
+            'success': True,
+            'message': 'Eintrag wurde wiederhergestellt'
+        })
+        
     except Exception as e:
         logger.error(f"Fehler beim Wiederherstellen des Eintrags: {str(e)}", exc_info=True)
         return jsonify({
@@ -1025,17 +948,16 @@ def restore_item(type, barcode):
         }), 500
 
 def get_label_setting(key, default):
-    """Hole eine Label-Einstellung aus der tickets.db"""
+    """Hole eine Label-Einstellung aus MongoDB"""
     try:
-        ticket_db = TicketDatabase()
-        value = ticket_db.query('SELECT value FROM settings WHERE key = ?', [key], one=True)
-        return value['value'] if value and value['value'] else default
+        setting = mongodb.find_one('settings', {'key': key})
+        return setting['value'] if setting and setting.get('value') else default
     except Exception as e:
         logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
         return default
 
 def get_app_labels():
-    """Hole alle Label-Einstellungen aus der tickets.db"""
+    """Hole alle Label-Einstellungen aus MongoDB"""
     return {
         'tools': {
             'name': get_label_setting('label_tools_name', 'Werkzeuge'),
@@ -1052,28 +974,12 @@ def get_app_labels():
     }
 
 def get_all_users():
-    """Hole alle aktiven Benutzer für die Ticket-Zuweisung"""
-    return ticket_db.query('''
-        SELECT id, username, role
-        FROM users
-        WHERE is_active = 1
-        ORDER BY username
-    ''')
+    """Gibt alle aktiven Benutzer zurück"""
+    return mongodb.find('users', {'is_active': True}, sort=[('username', 1)])
 
 def get_categories():
-    """Lädt alle verfügbaren Kategorien aus der Datenbank."""
-    try:
-        with Database.get_db() as conn:
-            categories = conn.execute('''
-                SELECT name 
-                FROM categories 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()
-            return [cat['name'] for cat in categories]
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Kategorien: {e}")
-        return []
+    """Gibt alle Kategorien zurück"""
+    return mongodb.find('categories', {'deleted': {'$ne': True}}, sort=[('name', 1)])
 
 @bp.route('/server-settings', methods=['GET', 'POST'])
 @admin_required
@@ -1091,80 +997,85 @@ def server_settings():
         label_tickets_name = request.form.get('label_tickets_name', 'Tickets')
         label_tickets_icon = request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
         
-        # Speichere die Einstellungen in der Datenbank
-        ticket_db.query('''
-            INSERT OR REPLACE INTO settings (key, value) VALUES 
-            (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)
-        ''', [
-            'label_tools_name', label_tools_name,
-            'label_tools_icon', label_tools_icon,
-            'label_consumables_name', label_consumables_name,
-            'label_consumables_icon', label_consumables_icon,
-            'label_tickets_name', label_tickets_name,
-            'label_tickets_icon', label_tickets_icon
-        ])
+        # Speichere die Einstellungen in MongoDB
+        settings_to_update = [
+            {'key': 'label_tools_name', 'value': label_tools_name},
+            {'key': 'label_tools_icon', 'value': label_tools_icon},
+            {'key': 'label_consumables_name', 'value': label_consumables_name},
+            {'key': 'label_consumables_icon', 'value': label_consumables_icon},
+            {'key': 'label_tickets_name', 'value': label_tickets_name},
+            {'key': 'label_tickets_icon', 'value': label_tickets_icon},
+            {'key': 'server_mode', 'value': '1' if server_mode else '0'},
+            {'key': 'server_url', 'value': server_url}
+        ]
         
-        # Speichere Server-Einstellungen in inventory.db
-        Database.query('''
-            INSERT OR REPLACE INTO settings (key, value) VALUES 
-            (?, ?), (?, ?)
-        ''', [
-            'server_mode', '1' if server_mode else '0',
-            'server_url', server_url
-        ])
+        for setting in settings_to_update:
+            mongodb.update_one('settings', 
+                             {'key': setting['key']}, 
+                             {'$set': setting}, 
+                             upsert=True)
         
         flash('Einstellungen wurden gespeichert', 'success')
         return redirect(url_for('admin.server_settings'))
     
     # Hole aktuelle Einstellungen
-    server_mode = Database.query('SELECT value FROM settings WHERE key = ?', ['server_mode']).fetchone()
-    server_url = Database.query('SELECT value FROM settings WHERE key = ?', ['server_url']).fetchone()
+    server_mode_setting = mongodb.find_one('settings', {'key': 'server_mode'})
+    server_url_setting = mongodb.find_one('settings', {'key': 'server_url'})
     
     return render_template('admin/system.html',
-                         server_mode=server_mode['value'] if server_mode else '0',
-                         server_url=server_url['value'] if server_url else '')
+                         server_mode=server_mode_setting['value'] if server_mode_setting else '0',
+                         server_url=server_url_setting['value'] if server_url_setting else '')
 
 @bp.route('/export/all')
 @mitarbeiter_required
 def export_all_data():
-    """Exportiert alle relevanten Tabellen in eine Excel-Datei mit mehreren Sheets"""
+    """Exportiert alle relevanten Collections in eine Excel-Datei mit mehreren Sheets"""
     try:
-        with Database.get_db() as conn:
-            # Daten abrufen (ähnlich wie in der alten export_table Funktion)
-            tools_data = [dict(row) for row in conn.execute("""
-                SELECT barcode, name, category, location, status, description 
-                FROM tools WHERE deleted = 0 ORDER BY name
-            """).fetchall()]
-            
-            workers_data = [dict(row) for row in conn.execute("""
-                SELECT barcode, firstname, lastname, department, email 
-                FROM workers WHERE deleted = 0 ORDER BY lastname, firstname
-            """).fetchall()]
-            
-            consumables_data = [dict(row) for row in conn.execute("""
-                SELECT barcode, name, category, location, quantity, min_quantity, 
-                       description 
-                FROM consumables WHERE deleted = 0 ORDER BY name
-            """).fetchall()]
-            
-            history_data = [dict(row) for row in conn.execute("""
-                SELECT 
-                    l.lent_at, l.returned_at, t.name as tool_name, t.barcode as tool_barcode,
-                    w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
-                    'Werkzeug Ausleihe' as type, NULL as quantity
-                FROM lendings l
-                JOIN tools t ON l.tool_barcode = t.barcode
-                JOIN workers w ON l.worker_barcode = w.barcode
-                UNION ALL
-                SELECT 
-                    cu.used_at as lent_at, NULL as returned_at, c.name as consumable_name, c.barcode as consumable_barcode, 
-                    w.firstname || ' ' || w.lastname as worker_name, w.barcode as worker_barcode,
-                    'Material Verbrauch' as type, cu.quantity
-                FROM consumable_usages cu
-                JOIN consumables c ON cu.consumable_barcode = c.barcode
-                JOIN workers w ON cu.worker_barcode = w.barcode
-                ORDER BY lent_at DESC
-            """).fetchall()]
+        # Daten abrufen aus MongoDB
+        tools_data = mongodb.find('tools', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+        workers_data = mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('lastname', 1), ('firstname', 1)])
+        consumables_data = mongodb.find('consumables', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+        
+        # Lendings und Verbrauchsmaterial-Entnahmen
+        lendings = mongodb.find('lendings', sort=[('lent_at', -1)])
+        
+        # Verbrauchsmaterial-Entnahmen
+        consumable_usages = mongodb.find('consumable_usages', sort=[('used_at', -1)])
+        
+        # Verlauf-Daten zusammenstellen
+        history_data = []
+        
+        # Werkzeug-Ausleihen
+        for lending in lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+            if tool and worker:
+                history_data.append({
+                    'lent_at': lending['lent_at'],
+                    'returned_at': lending.get('returned_at'),
+                    'tool_name': tool['name'],
+                    'tool_barcode': tool['barcode'],
+                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                    'worker_barcode': worker['barcode'],
+                    'type': 'Werkzeug Ausleihe',
+                    'quantity': None
+                })
+        
+        # Material-Verbrauch
+        for usage in consumable_usages:
+            consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
+            if consumable and worker:
+                history_data.append({
+                    'lent_at': usage['used_at'],
+                    'returned_at': None,
+                    'consumable_name': consumable['name'],
+                    'consumable_barcode': consumable['barcode'],
+                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                    'worker_barcode': worker['barcode'],
+                    'type': 'Material Verbrauch',
+                    'quantity': usage['quantity']
+                })
 
             # Daten für die Excel-Funktion vorbereiten
             export_data = {
@@ -1185,11 +1096,9 @@ def export_all_data():
             )
 
     except Exception as e:
-        logger.error(f"Fehler beim Gesamtexport: {str(e)}", exc_info=True)
-        flash(f'Fehler beim Erstellen des Gesamtexports: {str(e)}', 'error')
-        # Leitet zur Systemseite zurück, falls ein Fehler auftritt
-        # Alternativ könnte man zum Dashboard oder einer Fehlerseite leiten
-        return redirect(url_for('admin.system')) 
+        logger.error(f"Fehler beim Exportieren der Daten: {str(e)}", exc_info=True)
+        flash(f'Fehler beim Exportieren: {str(e)}', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/import/all', methods=['POST'])
 @mitarbeiter_required
@@ -1236,11 +1145,20 @@ def import_all_data():
                             loc = row_data.get('location')
                             status = row_data.get('status', 'verfügbar') # Default-Status
 
-                            Database.query('''
-                                INSERT OR REPLACE INTO tools
-                                (barcode, name, description, category, location, status, deleted)
-                                VALUES (?, ?, ?, ?, ?, ?, 0)
-                            ''', [row_data['barcode'], row_data['name'], desc, cat, loc, status])
+                            tool_data = {
+                                'barcode': row_data['barcode'],
+                                'name': row_data['name'],
+                                'description': desc,
+                                'category': cat,
+                                'location': loc,
+                                'status': status,
+                                'deleted': False
+                            }
+                            
+                            mongodb.update_one('tools', 
+                                             {'barcode': tool_data['barcode']}, 
+                                             {'$set': tool_data}, 
+                                             upsert=True)
                             imported_counts["Werkzeuge"] += 1
                     except Exception as e:
                         errors.append(f"Fehler in Werkzeuge Zeile {row_idx}: {e}")
@@ -1262,11 +1180,19 @@ def import_all_data():
                             dept = row_data.get('department')
                             email = row_data.get('email')
 
-                            Database.query('''
-                                INSERT OR REPLACE INTO workers
-                                (barcode, firstname, lastname, department, email, deleted)
-                                VALUES (?, ?, ?, ?, ?, 0)
-                            ''', [row_data['barcode'], row_data['firstname'], row_data['lastname'], dept, email])
+                            worker_data = {
+                                'barcode': row_data['barcode'],
+                                'firstname': row_data['firstname'],
+                                'lastname': row_data['lastname'],
+                                'department': dept,
+                                'email': email,
+                                'deleted': False
+                            }
+                            
+                            mongodb.update_one('workers', 
+                                             {'barcode': worker_data['barcode']}, 
+                                             {'$set': worker_data}, 
+                                             upsert=True)
                             imported_counts["Mitarbeiter"] += 1
                     except Exception as e:
                         errors.append(f"Fehler in Mitarbeiter Zeile {row_idx}: {e}")
@@ -1277,1102 +1203,106 @@ def import_all_data():
         if "Verbrauchsmaterial" in wb.sheetnames:
             ws_consumables = wb["Verbrauchsmaterial"]
             headers_consumables = [cell.value for cell in ws_consumables[1]]
-            required_consumables_cols = ['barcode', 'name', 'quantity', 'min_quantity']
+            required_consumables_cols = ['barcode', 'name']
             if not all(col in headers_consumables for col in required_consumables_cols):
                  errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften.")
             else:
                 for row_idx, row in enumerate(ws_consumables.iter_rows(min_row=2), start=2):
                     row_data = {headers_consumables[i]: cell.value for i, cell in enumerate(row)}
                     try:
-                        # Prüfe, ob notwendige Spalten vorhanden sind und konvertiere Typen
-                        barcode = row_data.get('barcode')
-                        name = row_data.get('name')
-                        quantity_val = row_data.get('quantity')
-                        min_quantity_val = row_data.get('min_quantity')
-
-                        if barcode and name and quantity_val is not None and min_quantity_val is not None:
-                            quantity = int(quantity_val) if str(quantity_val).strip().isdigit() else 0
-                            min_quantity = int(min_quantity_val) if str(min_quantity_val).strip().isdigit() else 0
+                        if row_data.get('barcode') and row_data.get('name'):
                             desc = row_data.get('description', '')
                             cat = row_data.get('category')
                             loc = row_data.get('location')
+                            quantity = row_data.get('quantity', 0)
+                            unit = row_data.get('unit', 'Stück')
 
-                            Database.query('''
-                                INSERT OR REPLACE INTO consumables
-                                (barcode, name, description, quantity, min_quantity, category, location, deleted)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-                            ''', [barcode, name, desc, quantity, min_quantity, cat, loc])
+                            consumable_data = {
+                                'barcode': row_data['barcode'],
+                                'name': row_data['name'],
+                                'description': desc,
+                                'category': cat,
+                                'location': loc,
+                                'quantity': quantity,
+                                'unit': unit,
+                                'deleted': False
+                            }
+                            
+                            mongodb.update_one('consumables', 
+                                             {'barcode': consumable_data['barcode']}, 
+                                             {'$set': consumable_data}, 
+                                             upsert=True)
                             imported_counts["Verbrauchsmaterial"] += 1
-                    except ValueError:
-                        errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: Menge oder Mindestmenge ist keine Zahl.")
                     except Exception as e:
                         errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: {e}")
         else:
             errors.append("Arbeitsblatt 'Verbrauchsmaterial' nicht gefunden.")
 
-        # Feedback geben
-        if not errors:
-            flash(f'Gesamtimport erfolgreich! '
-                  f'{imported_counts["Werkzeuge"]} Werkzeuge, '
-                  f'{imported_counts["Mitarbeiter"]} Mitarbeiter, '
-                  f'{imported_counts["Verbrauchsmaterial"]} Verbrauchsmaterialien importiert/aktualisiert.', 'success')
-        else:
-            # Zeige nur eine allgemeine Fehlermeldung und spezifische Fehler im Log
-            flash(f'Import teilweise fehlgeschlagen. {len(errors)} Fehler aufgetreten (siehe Logs für Details). '
-                   f'{imported_counts["Werkzeuge"]} Werkzeuge, '
-                   f'{imported_counts["Mitarbeiter"]} Mitarbeiter, '
-                   f'{imported_counts["Verbrauchsmaterial"]} Verbrauchsmaterialien importiert/aktualisiert.', 'warning')
+        # Erfolgs- und Fehlermeldungen anzeigen
+        if errors:
             for error in errors:
-                logger.error(f"Gesamtimport Fehler: {error}")
-
+                flash(error, 'error')
+        
+        if any(count > 0 for count in imported_counts.values()):
+            success_msg = f"Import abgeschlossen: "
+            success_parts = []
+            for item_type, count in imported_counts.items():
+                if count > 0:
+                    success_parts.append(f"{count} {item_type}")
+            success_msg += ", ".join(success_parts)
+            flash(success_msg, 'success')
+        return redirect(url_for('admin.system'))
     except Exception as e:
-        logger.error(f"Schwerwiegender Fehler beim Gesamtimport: {str(e)}", exc_info=True)
-        flash(f'Schwerwiegender Fehler beim Import: {str(e)}', 'error')
+        logger.error(f"Fehler beim Importieren der Daten: {str(e)}", exc_info=True)
+        flash(f'Fehler beim Importieren: {str(e)}', 'error')
+        return redirect(url_for('admin.system'))
 
-    return redirect(url_for('admin.system'))
-
-@bp.route('/backup/create', methods=['POST'])
-@login_required
-@admin_required
-def create_backup():
-    """Erstelle ein manuelles Backup"""
-    try:
-        success = backup_manager.create_backup()
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': 'Backup wurde erfolgreich erstellt'
-            })
-        else:
-            logger.error(f"backup_manager.create_backup() returned False in route")
-            return jsonify({
-                'status': 'error',
-                'message': 'Fehler beim Erstellen des Backups. Prüfen Sie die Logs.'
-            }), 500
-    except Exception as e:
-        logger.error(f"Fehler beim Erstellen des Backups in Route: {str(e)}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': f'Interner Serverfehler: {str(e)}'
-        }), 500
-
-@bp.route('/backup/restore/<filename>', methods=['POST'])
-@admin_required
-def restore_backup(filename):
-    """Backup wiederherstellen und Neustart-Trigger setzen."""
-    try:
-        logger.info(f"Versuche Backup wiederherzustellen: {filename}")
-        backup_path = backup_manager.backup_dir / filename
-        if not backup_path.exists():
-            error_msg = 'Backup-Datei nicht gefunden'
-            logger.error(f"{error_msg}: {backup_path}")
-            return jsonify({'status': 'error', 'message': error_msg}), 404
-
-        # Datenbank wiederherstellen
-        success = backup_manager.restore_backup(filename)
-        if success:
-            success_msg = 'Backup wurde erfolgreich wiederhergestellt.'
-            logger.info(success_msg)
-
-            # Neustart-Trigger setzen
-            try:
-                project_root = Path(current_app.root_path).parent
-                restart_trigger_file = project_root / 'tmp' / 'needs_restart'
-                restart_trigger_file.touch()
-                logger.info(f"Neustart-Trigger-Datei berührt: {restart_trigger_file}")
-                success_msg += " Neustart wurde ausgelöst (erfordert Prozessüberwachung)."
-            except Exception as touch_err:
-                logger.error(f"Konnte Neustart-Trigger-Datei nicht berühren: {touch_err}")
-                success_msg += " Automatischer Neustart konnte nicht ausgelöst werden (Trigger-Datei-Fehler)."
-
-            return jsonify({'status': 'success', 'message': success_msg})
-        else:
-            error_msg = 'Fehler bei der Wiederherstellung des Backups'
-            logger.error(error_msg)
-            return jsonify({'status': 'error', 'message': error_msg}), 500
-    except Exception as e:
-        error_msg = f'Fehler beim Löschen des Backups: {str(e)}'
-        logger.error(error_msg, exc_info=True) # exc_info=True hinzugefügt
-        # flash(error_msg, 'error') # Entfernt
-        # return redirect(url_for('admin.dashboard')) # Entfernt
-        return jsonify({'status': 'error', 'message': error_msg}), 500
-
-@bp.route('/departments', methods=['GET'])
-@login_required
-@mitarbeiter_required
-def list_departments():
-    """Listet alle Abteilungen auf"""
-    try:
-        with Database.get_db() as conn:
-            departments = conn.execute('''
-                SELECT name
-                FROM departments
-                WHERE deleted = 0
-                ORDER BY name
-            ''').fetchall()
-            
-            return jsonify({
-                'success': True,
-                'departments': [{'name': d['name']} for d in departments]
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Abteilungen: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Abteilungen'
-        }), 500
-
-@bp.route('/departments/add', methods=['POST'])
-@login_required
-@mitarbeiter_required
-def add_department():
-    """Fügt eine neue Abteilung hinzu"""
-    try:
-        name = request.form.get('department', '').strip()
-        if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein'
-            }), 400
-            
-        with Database.get_db() as conn:
-            # Prüfe ob die Abteilung bereits existiert
-            existing = conn.execute('''
-                SELECT 1 FROM departments 
-                WHERE name = ? AND deleted = 0
-            ''', [name]).fetchone()
-            
-            if existing:
-                return jsonify({
-                    'success': False,
-                    'message': 'Diese Abteilung existiert bereits'
-                }), 400
-                
-            # Füge die neue Abteilung hinzu
-            conn.execute('''
-                INSERT INTO departments (name)
-                VALUES (?)
-            ''', [name])
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Abteilung erfolgreich hinzugefügt'
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Hinzufügen der Abteilung: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Hinzufügen der Abteilung'
-        }), 500
-
-@bp.route('/departments/delete', methods=['POST'])
-@login_required
-@mitarbeiter_required
-def delete_department():
-    """Löscht eine Abteilung"""
-    try:
-        name = request.form.get('department', '').strip()
-        if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein'
-            }), 400
-            
-        with Database.get_db() as conn:
-            # Prüfe ob die Abteilung verwendet wird
-            used = conn.execute('''
-                SELECT 1 FROM workers 
-                WHERE department = ? AND deleted = 0
-            ''', [name]).fetchone()
-            
-            if used:
-                return jsonify({
-                    'success': False,
-                    'message': 'Diese Abteilung wird noch verwendet und kann nicht gelöscht werden'
-                }), 400
-                
-            # Markiere die Abteilung als gelöscht
-            conn.execute('''
-                UPDATE departments 
-                SET deleted = 1 
-                WHERE name = ?
-            ''', [name])
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Abteilung erfolgreich gelöscht'
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen der Abteilung: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Löschen der Abteilung'
-        }), 500
-
-@bp.route('/locations', methods=['GET'])
-@login_required
-@mitarbeiter_required
-def list_locations():
-    """Listet alle Standorte auf"""
-    try:
-        with Database.get_db() as conn:
-            locations = conn.execute('''
-                SELECT name
-                FROM locations
-                WHERE deleted = 0
-                ORDER BY name
-            ''').fetchall()
-            
-            return jsonify({
-                'success': True,
-                'locations': [{'name': l['name']} for l in locations]
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Standorte: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Standorte'
-        }), 500
-
-@bp.route('/locations/add', methods=['POST'])
-@login_required
-@mitarbeiter_required
-def add_location():
-    """Fügt einen neuen Standort hinzu"""
-    try:
-        name = request.form.get('location', '').strip()
-        if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein'
-            }), 400
-            
-        with Database.get_db() as conn:
-            # Prüfe ob der Standort bereits existiert
-            existing = conn.execute('''
-                SELECT 1 FROM locations 
-                WHERE name = ? AND deleted = 0
-            ''', [name]).fetchone()
-            
-            if existing:
-                return jsonify({
-                    'success': False,
-                    'message': 'Dieser Standort existiert bereits'
-                }), 400
-                
-            # Füge den neuen Standort hinzu
-            conn.execute('''
-                INSERT INTO locations (name)
-                VALUES (?)
-            ''', [name])
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Standort erfolgreich hinzugefügt'
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Hinzufügen des Standorts: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Hinzufügen des Standorts'
-        }), 500
-
-@bp.route('/locations/delete', methods=['POST'])
-@login_required
-@mitarbeiter_required
-def delete_location():
-    """Löscht einen Standort"""
-    try:
-        name = request.form.get('location', '').strip()
-        if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein'
-            }), 400
-            
-        with Database.get_db() as conn:
-            # Prüfe ob der Standort verwendet wird
-            used = conn.execute('''
-                SELECT 1 FROM (
-                    SELECT location FROM tools WHERE deleted = 0
-                    UNION ALL
-                    SELECT location FROM consumables WHERE deleted = 0
-                ) WHERE location = ?
-            ''', [name]).fetchone()
-            
-            if used:
-                return jsonify({
-                    'success': False,
-                    'message': 'Dieser Standort wird noch verwendet und kann nicht gelöscht werden'
-                }), 400
-                
-            # Markiere den Standort als gelöscht
-            conn.execute('''
-                UPDATE locations 
-                SET deleted = 1 
-                WHERE name = ?
-            ''', [name])
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Standort erfolgreich gelöscht'
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Standorts: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Löschen des Standorts'
-        }), 500
-
-@bp.route('/categories', methods=['GET'])
-@login_required
-@mitarbeiter_required
-def list_categories():
-    """Listet alle Kategorien auf"""
-    try:
-        with Database.get_db() as conn:
-            categories = conn.execute('''
-                SELECT name
-                FROM categories
-                WHERE deleted = 0
-                ORDER BY name
-            ''').fetchall()
-            
-            return jsonify({
-                'success': True,
-                'categories': [{'name': c['name']} for c in categories]
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Kategorien'
-        }), 500
-
-@bp.route('/categories/add', methods=['POST'])
-@login_required
-@admin_required
-def add_category():
-    """Fügt eine neue Kategorie hinzu"""
-    try:
-        new_category = request.form.get('category')
-        if not new_category:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie eine Kategorie ein.'
-            }), 400
-        
-        with Database.get_db() as conn:
-            # Prüfen, ob die Kategorie bereits existiert
-            existing = conn.execute('SELECT 1 FROM categories WHERE name = ? AND deleted = 0', (new_category,)).fetchone()
-            if existing:
-                return jsonify({
-                    'success': False,
-                    'message': 'Diese Kategorie existiert bereits.'
-                }), 409
-            else:
-                conn.execute('INSERT INTO categories (name) VALUES (?)', (new_category,))
-                conn.commit()
-                return jsonify({
-                    'success': True,
-                    'message': 'Kategorie erfolgreich hinzugefügt.'
-                })
-    except Exception as e:
-        logger.error(f"Fehler beim Hinzufügen der Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Hinzufügen der Kategorie.'
-        }), 500
-
-@bp.route('/categories/delete', methods=['POST'])
-@login_required
-@mitarbeiter_required
-def delete_category():
-    """Löscht eine Kategorie"""
-    try:
-        data = request.get_json()
-        name = data.get('name')
-        
-        if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Kein Name angegeben'
-            }), 400
-            
-        with Database.get_db() as conn:
-            # Prüfe ob die Kategorie noch verwendet wird
-            in_use = conn.execute('''
-                SELECT COUNT(*) as count 
-                FROM tools 
-                WHERE category = ? AND deleted = 0
-            ''', [name]).fetchone()
-            
-            if in_use['count'] > 0:
-                return jsonify({
-                    'success': False,
-                    'message': f'Diese Kategorie wird noch von {in_use["count"]} Werkzeugen verwendet'
-                }), 409
-                
-            # Führe ein Soft-Delete durch
-            conn.execute('''
-                UPDATE categories 
-                SET deleted = 1, deleted_at = CURRENT_TIMESTAMP
-                WHERE name = ?
-            ''', [name])
-            conn.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Kategorie erfolgreich gelöscht'
-            })
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen der Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Löschen der Kategorie'
-        }), 500
-
-@bp.route('/cleanup-database', methods=['POST'])
-@admin_required
-def cleanup_database():
-    """Bereinigt die Datenbank von ungültigen Einträgen"""
-    try:
-        print("Starte Datenbankbereinigung...")
-        with Database.get_db() as db:
-            # Finde Ausleihungen für nicht existierende Werkzeuge
-            invalid_lendings = db.execute('''
-                SELECT l.*, t.barcode as tool_exists
-                FROM lendings l
-                LEFT JOIN tools t ON l.tool_barcode = t.barcode
-                WHERE t.barcode IS NULL
-                AND l.returned_at IS NULL
-            ''').fetchall()
-            
-            print(f"Gefundene ungültige Ausleihungen: {len(invalid_lendings)}")
-            for lending in invalid_lendings:
-                print(f"Ungültige Ausleihe gefunden: {dict(lending)}")
-            
-            # Lösche ungültige Ausleihungen
-            if invalid_lendings:
-                db.execute('''
-                    DELETE FROM lendings
-                    WHERE id IN (
-                        SELECT l.id
-                        FROM lendings l
-                        LEFT JOIN tools t ON l.tool_barcode = t.barcode
-                        WHERE t.barcode IS NULL
-                        AND l.returned_at IS NULL
-                    )
-                ''')
-                db.commit()
-                print(f"{len(invalid_lendings)} Ausleihungen wurden gelöscht")
-                
-            return jsonify({
-                'success': True,
-                'message': f'{len(invalid_lendings)} ungültige Ausleihungen wurden bereinigt'
-            })
-            
-    except Exception as e:
-        print(f"Fehler bei der Bereinigung: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Fehler bei der Bereinigung: {str(e)}'
-        }), 500
-
-@bp.route('/backup/list')
-@admin_required
-def list_backups():
-    """Liste alle verfügbaren Backups auf"""
-    try:
-        backups = []
-        backup_dir = backup_manager.backup_dir
-        
-        if backup_dir.exists():
-            for backup_file in sorted(backup_dir.glob('*.db'), reverse=True):
-                backups.append({
-                    'name': backup_file.name,
-                    'size': backup_file.stat().st_size,
-                    'created': backup_file.stat().st_mtime
-                })
-        
-        return jsonify({
-            'status': 'success',
-            'backups': backups
-        })
-    except Exception as e:
-        logger.error(f"Fehler beim Auflisten der Backups: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/backup/download/backup/<filename>')
-@login_required
-@admin_required
-def download_backup(filename):
-    """Lade ein bestimmtes Backup herunter"""
-    try:
-        backup_path = backup_manager.backup_dir / filename
-        
-        if not backup_path.exists():
-            return jsonify({
-                'status': 'error',
-                'message': 'Backup nicht gefunden'
-            }), 404
-        
-        return send_file(
-            backup_path,
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        logger.error(f"Fehler beim Herunterladen des Backups: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/backup/download/db')
-@admin_required
-def download_current_database():
-    """Lade die aktuelle Datenbank herunter"""
-    try:
-        # Verwende den Datenbankpfad aus dem DatabaseBackup Manager
-        db_path = backup_manager.db_path
-        
-        if not os.path.exists(db_path):
-            return jsonify({
-                'status': 'error',
-                'message': 'Datenbank nicht gefunden'
-            }), 404
-        
-        # Erstelle einen temporären Dateinamen mit Zeitstempel
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'inventory_{timestamp}.db'
-        
-        return send_file(
-            db_path,
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        logger.error(f"Fehler beim Herunterladen der Datenbank: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/backup/upload', methods=['POST'])
-@admin_required
-def upload_backup():
-    """Lade ein Backup hoch"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({
-                'status': 'error',
-                'message': 'Keine Datei ausgewählt'
-            }), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({
-                'status': 'error',
-                'message': 'Keine Datei ausgewählt'
-            }), 400
-        
-        if not file.filename.endswith('.db'):
-            return jsonify({
-                'status': 'error',
-                'message': 'Nur .db-Dateien sind erlaubt'
-            }), 400
-        
-        # Erstelle ein Backup der aktuellen Datenbank
-        try:
-            backup_manager.create_backup()
-            logger.info("Backup der aktuellen Datenbank wurde erstellt")
-        except Exception as e:
-            logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Fehler beim Erstellen des Backups: {str(e)}'
-            }), 500
-        
-        # Speichere die neue Datenbank
-        filename = secure_filename(file.filename)
-        file_path = backup_manager.backup_dir / filename
-        file.save(str(file_path))
-        
-        # Aktiviere die neue Datenbank
-        try:
-            backup_manager.restore_backup(filename)
-            logger.info(f"Neue Datenbank {filename} wurde aktiviert")
-        except Exception as e:
-            logger.error(f"Fehler beim Aktivieren der neuen Datenbank: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Fehler beim Aktivieren der neuen Datenbank: {str(e)}'
-            }), 500
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Backup erfolgreich hochgeladen und aktiviert'
-        })
-    except Exception as e:
-        logger.error(f"Fehler beim Hochladen des Backups: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/notices')
-@admin_required
-def notices():
-    """Zeigt die Verwaltungsseite für Startseiten-Hinweise"""
-    with Database.get_db() as db:
-        notices = db.execute('''
-            SELECT * FROM homepage_notices 
-            ORDER BY priority ASC, created_at DESC
-        ''').fetchall()
-    
-    return render_template('admin/notices.html', notices=notices)
-
-@bp.route('/notices/create', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def create_notice():
-    """Erstellt einen neuen Hinweis"""
-    if request.method == 'POST':
-        try:
-            title = request.form['title']
-            content = request.form['content']
-            priority_str = request.form.get('priority', '0')
-            priority = int(priority_str) if str(priority_str).strip().isdigit() else 0
-            is_active = 'is_active' in request.form
-            
-            with Database.get_db() as db:
-                db.execute('''
-                    INSERT INTO homepage_notices (title, content, priority, is_active)
-                    VALUES (?, ?, ?, ?)
-                ''', [title, content, priority, is_active])
-                db.commit()
-            
-            flash('Hinweis wurde erfolgreich erstellt', 'success')
-            return redirect(url_for('admin.notices'))
-        except Exception as e:
-            flash(f'Fehler beim Erstellen des Hinweises: {str(e)}', 'error')
-    
-    return render_template('admin/notice_form.html')
-
-@bp.route('/notices/<int:id>/edit', methods=['GET', 'POST'])
-@admin_required
-def edit_notice(id):
-    """Bearbeitet einen bestehenden Hinweis"""
-    with Database.get_db() as db:
-        notice = db.execute('SELECT * FROM homepage_notices WHERE id = ?', [id]).fetchone()
-        
-        if not notice:
-            flash('Hinweis nicht gefunden', 'error')
-            return redirect(url_for('admin.notices'))
-        
-        if request.method == 'POST':
-            try:
-                title = request.form['title']
-                content = request.form['content']
-                priority_str = request.form.get('priority', '0')
-                priority = int(priority_str) if str(priority_str).strip().isdigit() else 0
-                is_active = 'is_active' in request.form
-                
-                db.execute('''
-                    UPDATE homepage_notices 
-                    SET title = ?, content = ?, priority = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', [title, content, priority, is_active, id])
-                db.commit()
-                
-                flash('Hinweis wurde erfolgreich aktualisiert', 'success')
-                return redirect(url_for('admin.notices'))
-            except Exception as e:
-                flash(f'Fehler beim Aktualisieren des Hinweises: {str(e)}', 'error')
-        
-        return render_template('admin/notice_form.html', notice=notice)
-
-@bp.route('/notices/<int:id>/delete', methods=['POST'])
-@admin_required
-def delete_notice(id):
-    """Löscht einen Hinweis"""
-    try:
-        with Database.get_db() as db:
-            db.execute('DELETE FROM homepage_notices WHERE id = ?', [id])
-            db.commit()
-        
-        flash('Hinweis wurde erfolgreich gelöscht', 'success')
-    except Exception as e:
-        flash(f'Fehler beim Löschen des Hinweises: {str(e)}', 'error')
-    
-    return redirect(url_for('admin.notices'))
-
-@bp.route('/tickets')
-@login_required
-@admin_required
-def tickets():
-    from app.models.ticket_db import TicketDatabase
-    ticket_db = TicketDatabase()
-    
-    # Filter aus Query-Parametern
-    status = request.args.get('status')
-    priority = request.args.get('priority')
-    assigned_to = request.args.get('assigned_to')
-    created_by = request.args.get('created_by')
-    
-    # Basis-Query
-    query = """
-        SELECT 
-            t.*,
-            datetime(t.created_at) as created_at,
-            datetime(t.updated_at) as updated_at,
-            t.due_date
-        FROM tickets t
-        WHERE 1=1
-    """
-    params = []
-    
-    # Filter anwenden
-    if status and status != 'alle':
-        query += " AND status = ?"
-        params.append(status)
-    if priority and priority != 'alle':
-        query += " AND priority = ?"
-        params.append(priority)
-    if assigned_to:
-        query += " AND assigned_to = ?"
-        params.append(assigned_to)
-    if created_by:
-        query += " AND created_by = ?"
-        params.append(created_by)
-    
-    query += " ORDER BY t.created_at DESC"
-    
-    tickets = ticket_db.query(query, params)
-    
-    # Konvertiere due_date in datetime-Objekte
-    for ticket in tickets:
-        if ticket['due_date']:
-            try:
-                ticket['due_date'] = datetime.strptime(ticket['due_date'], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                ticket['due_date'] = None
-    
-    # Hole alle Benutzer aus der Ticket-Datenbank
-    users = ticket_db.query(
-        """
-        SELECT username FROM users WHERE is_active = 1 ORDER BY username
-        """
-    )
-    # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
-    categories = [c['name'] for c in categories]
-
-    return render_template('admin/tickets.html', 
-                         tickets=tickets, 
-                         categories=categories)
-
-@bp.route('/system', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def system():
-    """Zeigt die Systemeinstellungen an."""
-    ticket_db = TicketDatabase()
-    
-    if request.method == 'POST':
-        try:
-            # Verarbeite Logo-Upload
-            if 'logo' in request.files:
-                file = request.files['logo']
-                if file and file.filename and allowed_file(file.filename):
-                    filename = secure_filename(file.filename)
-                    file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
-                    Database.query('''INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)''', ['custom_logo', filename])
-                    flash('Logo erfolgreich hochgeladen', 'success')
-                else:
-                    flash('Ungültiges Dateiformat. Erlaubt sind: PNG, JPG, JPEG, GIF', 'error')
-            
-            # Hole Formulardaten
-            label_tools_name = request.form.get('label_tools_name', '').strip()
-            label_tools_icon = request.form.get('label_tools_icon', '').strip()
-            label_consumables_name = request.form.get('label_consumables_name', '').strip()
-            label_consumables_icon = request.form.get('label_consumables_icon', '').strip()
-            system_name = request.form.get('system_name', '').strip()
-            
-            logger.info(f"[ADMIN] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}, system_name={system_name}")
-            
-            # Lösche alte Einstellungen
-            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?, ?)',
-                ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon', 'system_name'])
-            
-            # Füge neue Einstellungen hinzu
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['system_name', system_name or 'Scandy', 'Name des Systems'])
-            
-            flash('Einstellungen erfolgreich gespeichert', 'success')
-            return redirect(url_for('admin.system'))
-            
-        except Exception as e:
-            logger.error(f"Fehler beim Speichern der Einstellungen: {e}")
-            flash('Fehler beim Speichern der Einstellungen', 'error')
-    
-    # GET: Zeige Einstellungen
-    try:
-        settings = {}
-        rows = ticket_db.query('SELECT key, value FROM settings')
-        for row in rows:
-            settings[row['key']] = row['value']
-            
-        return render_template('admin/system.html',
-            label_tools_name=settings.get('label_tools_name', 'Werkzeuge'),
-            label_tools_icon=settings.get('label_tools_icon', 'fas fa-tools'),
-            label_consumables_name=settings.get('label_consumables_name', 'Verbrauchsmaterial'),
-            label_consumables_icon=settings.get('label_consumables_icon', 'fas fa-box-open'))
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Einstellungen: {str(e)}")
-        flash('Fehler beim Laden der Einstellungen', 'error')
-        return redirect(url_for('main.index'))
-
-@bp.route('/users')
-@admin_required
-def manage_users():
-    """Zeigt die Benutzerverwaltungsseite."""
-    try:
-        # Hole alle Benutzer aus der Ticket-Datenbank
-        users = ticket_db.query("SELECT id, username, email, role, is_active FROM users ORDER BY username")
-        return render_template('admin/users.html', users=users)
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Benutzerliste: {e}", exc_info=True)
-        flash("Fehler beim Laden der Benutzerliste.", "error")
-        return redirect(url_for('admin.dashboard'))
-
-@bp.route('/users/add', methods=['GET', 'POST'])
-@admin_required
-def add_user():
-    """Zeigt das Formular zum Hinzufügen eines Benutzers oder verarbeitet es."""
-    if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        password_confirm = request.form.get('password_confirm')
-        role = request.form.get('role')
-        firstname = request.form.get('firstname')
-        lastname = request.form.get('lastname')
-
-        # Validierung
-        if not all([username, password, password_confirm, role]):
-            flash("Bitte alle erforderlichen Felder ausfüllen.", "error")
-            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender']) # Form erneut anzeigen
-
-        if password != password_confirm:
-            flash("Passwörter stimmen nicht überein.", "error")
-            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender']) # Form erneut anzeigen
-            
-        if role not in ['admin', 'mitarbeiter', 'anwender']:
-             flash("Ungültige Rolle ausgewählt.", "error")
-             return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
-
-        try:
-            # User.create prüft bereits auf existierenden Usernamen/Email
-            new_user = User.create(username=username, password=password, role=role, email=email or None, firstname=firstname, lastname=lastname)
-            if new_user:
-                flash(f"Benutzer '{username}' erfolgreich erstellt.", 'success')
-                return redirect(url_for('admin.manage_users'))
-            else:
-                 # Sollte durch Prüfungen in User.create abgedeckt sein, aber sicherheitshalber
-                 flash("Benutzer konnte nicht erstellt werden (unbekannter Fehler).", 'error')
-        except ValueError as e:
-            # Fehler von User.create (z.B. Benutzer existiert)
-            flash(str(e), 'error')
-        except Exception as e:
-            logger.error(f"Fehler beim Erstellen von Benutzer {username}: {e}", exc_info=True)
-            flash("Ein unerwarteter Fehler ist aufgetreten.", 'error')
-        
-        # Bei Fehler: Formular erneut anzeigen mit eingegebenen Daten (außer Passwort)
-        return render_template('admin/user_form.html', 
-                               roles=['admin', 'mitarbeiter', 'anwender'],
-                               username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-
-    # GET Request: Formular anzeigen
-    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
-
-@bp.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
-@admin_required
-def edit_user(user_id):
-    """Zeigt das Formular zum Bearbeiten eines Benutzers oder verarbeitet es."""
-    user = User.get_by_id(user_id)
-    if not user:
-        flash('Benutzer nicht gefunden.', 'error')
-        return redirect(url_for('admin.manage_users'))
-
-    if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        password_confirm = request.form.get('password_confirm')
-        role = request.form.get('role')
-        firstname = request.form.get('firstname')
-        lastname = request.form.get('lastname')
-
-        # Validierung
-        if not all([username, role]):
-            flash("Bitte Benutzername und Rolle ausfüllen.", "error")
-            return render_template('admin/user_form.html', 
-                                   user=user,
-                                   roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-
-        if password and password != password_confirm:
-            flash("Passwörter stimmen nicht überein.", "error")
-            return render_template('admin/user_form.html', 
-                                   user=user,
-                                   roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-        
-        if role not in ['admin', 'mitarbeiter', 'anwender']:
-             flash("Ungültige Rolle ausgewählt.", "error")
-             return render_template('admin/user_form.html', 
-                                   user=user,
-                                   roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-
-        try:
-            # Prüfen, ob der Benutzername bereits von einem *anderen* Benutzer verwendet wird
-            existing_user_by_name = User.get_by_username(username)
-            if existing_user_by_name and existing_user_by_name.id != user_id:
-                 flash(f"Benutzername '{username}' wird bereits verwendet.", 'error')
-                 return render_template('admin/user_form.html', 
-                                       user=user,
-                                       roles=['admin', 'mitarbeiter', 'anwender'],
-                                       username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-                 
-            # Prüfen, ob die E-Mail bereits von einem *anderen* Benutzer verwendet wird
-            if email:
-                existing_user_by_email = User.get_by_email(email)
-                if existing_user_by_email and existing_user_by_email.id != user_id:
-                    flash(f"E-Mail '{email}' wird bereits verwendet.", 'error')
-                    return render_template('admin/user_form.html', 
-                                           user=user,
-                                           roles=['admin', 'mitarbeiter', 'anwender'],
-                                           username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-
-            # Update der Benutzerdaten
-            update_data = {
-                'username': username,
-                'email': email or None,
-                'role': role,
-                'firstname': firstname,
-                'lastname': lastname
-            }
-            
-            # Passwort nur aktualisieren, wenn es eingegeben wurde
-            if password:
-                user.set_password(password)
-                update_data['password_hash'] = user.password_hash
-
-            # Aktualisiere die Datenbank (Ticketsystem!)
-            ticket_db.query('''
-                UPDATE users 
-                SET username = :username, email = :email, role = :role, firstname = :firstname, lastname = :lastname
-                WHERE id = :id
-            ''', {'username': update_data['username'], 'email': update_data['email'], 'role': update_data['role'], 'firstname': update_data['firstname'], 'lastname': update_data['lastname'], 'id': user_id})
-            
-            # Wenn das Passwort geändert wurde, aktualisiere auch den Hash
-            if 'password_hash' in update_data:
-                 ticket_db.query('''
-                    UPDATE users 
-                    SET password_hash = :password_hash
-                    WHERE id = :id
-                 ''', {'password_hash': update_data['password_hash'], 'id': user_id})
-
-            flash(f"Benutzer '{username}' erfolgreich aktualisiert.", 'success')
-            return redirect(url_for('admin.manage_users'))
-
-        except Exception as e:
-            logger.error(f"Fehler beim Aktualisieren von Benutzer {user_id}: {e}", exc_info=True)
-            flash("Ein unerwarteter Fehler ist aufgetreten.", 'error')
-            return render_template('admin/user_form.html', 
-                                   user=user, 
-                                   roles=['admin', 'mitarbeiter', 'anwender'],
-                                   username=username, email=email, selected_role=role, firstname=firstname, lastname=lastname)
-
-    # GET Request: Formular anzeigen
-    return render_template('admin/user_form.html', user=user, roles=['admin', 'mitarbeiter', 'anwender'])
-
-@bp.route('/users/toggle_active/<int:user_id>', methods=['POST'])
+@bp.route('/users/toggle_active/<user_id>', methods=['POST'])
 @admin_required
 def toggle_user_active(user_id):
-    """Aktiviert oder deaktiviert einen Benutzer."""
-    user_to_toggle = User.get_by_id(user_id)
-
-    if not user_to_toggle:
-        flash("Benutzer nicht gefunden.", "error")
-        return redirect(url_for('admin.manage_users'))
-
-    # Verhindern, dass der aktuell eingeloggte Admin sich selbst deaktiviert
-    if current_user.id == user_to_toggle.id and user_to_toggle.is_active:
-        flash("Sie können sich nicht selbst deaktivieren.", "error")
-        return redirect(url_for('admin.manage_users'))
-
+    """Benutzer aktivieren/deaktivieren"""
     try:
-        new_status = not user_to_toggle.is_active
-        Database.query('''
-            UPDATE users
-            SET is_active = ?
-            WHERE id = ?
-        ''', [new_status, user_id])
+        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+        if not user:
+            flash('Benutzer nicht gefunden', 'error')
+            return redirect(url_for('admin.manage_users'))
         
-        action = "aktiviert" if new_status else "deaktiviert"
-        flash(f"Benutzer '{user_to_toggle.username}' wurde {action}.", 'success')
+        new_status = not user.get('is_active', True)
+        mongodb.update_one('users', 
+                          {'_id': ObjectId(user_id)}, 
+                          {'$set': {'is_active': new_status}})
+        
+        status_text = 'aktiviert' if new_status else 'deaktiviert'
+        flash(f'Benutzer {user["username"]} wurde {status_text}', 'success')
+        
     except Exception as e:
-        logger.error(f"Fehler beim Ändern des Aktivierungsstatus für Benutzer {user_id}: {e}", exc_info=True)
-        flash("Ein Fehler ist beim Ändern des Benutzerstatus aufgetreten.", 'error')
-
+        logger.error(f"Fehler beim Ändern des Benutzerstatus: {e}")
+        flash('Fehler beim Ändern des Benutzerstatus', 'error')
+    
     return redirect(url_for('admin.manage_users'))
 
-@bp.route('/users/delete/<int:user_id>', methods=['POST'])
+@bp.route('/users/delete/<user_id>', methods=['POST'])
 @admin_required
 def delete_user(user_id):
-    """Löscht einen Benutzer."""
-    user_to_delete = User.get_by_id(user_id)
-
-    if not user_to_delete:
-        flash("Benutzer nicht gefunden.", "error")
-        return redirect(url_for('admin.manage_users'))
-
-    # Verhindern, dass der aktuell eingeloggte Admin sich selbst löscht
-    if current_user.id == user_to_delete.id:
-        flash("Sie können sich nicht selbst löschen.", "error")
-        return redirect(url_for('admin.manage_users'))
-
+    """Benutzer löschen"""
     try:
-        ticket_db.query('''
-            DELETE FROM users
-            WHERE id = ?
-        ''', [user_id])
+        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+        if not user:
+            flash('Benutzer nicht gefunden', 'error')
+            return redirect(url_for('admin.manage_users'))
         
-        flash(f"Benutzer '{user_to_delete.username}' wurde erfolgreich gelöscht.", 'success')
+        # Verhindere Löschung des eigenen Accounts
+        if str(user['_id']) == str(current_user.id):
+            flash('Sie können Ihren eigenen Account nicht löschen', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        mongodb.delete_one('users', {'_id': ObjectId(user_id)})
+        flash(f'Benutzer {user["username"]} wurde gelöscht', 'success')
+        
     except Exception as e:
-        logger.error(f"Fehler beim Löschen von Benutzer {user_id}: {e}", exc_info=True)
-        flash("Ein Fehler ist beim Löschen des Benutzers aufgetreten.", 'error')
-
+        logger.error(f"Fehler beim Löschen des Benutzers: {e}")
+        flash('Fehler beim Löschen des Benutzers', 'error')
+    
     return redirect(url_for('admin.manage_users'))
 
 @bp.app_context_processor
@@ -2440,28 +1370,23 @@ def upload_icon():
 def delete_tool_permanent(barcode):
     """Werkzeug endgültig löschen"""
     try:
-        with Database.get_db() as conn:
-            # Prüfe ob das Werkzeug existiert und gelöscht ist
-            tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 1
-            ''', [barcode]).fetchone()
-            
-            if not tool:
-                return jsonify({
-                    'success': False,
-                    'message': 'Werkzeug nicht gefunden oder nicht gelöscht'
-                }), 404
-                
-            # Lösche das Werkzeug endgültig
-            conn.execute('DELETE FROM tools WHERE barcode = ?', [barcode])
-            conn.commit()
-            
+        # Prüfe ob das Werkzeug existiert und gelöscht ist
+        tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': True})
+        
+        if not tool:
             return jsonify({
-                'success': True,
-                'message': 'Werkzeug wurde endgültig gelöscht'
-            })
+                'success': False,
+                'message': 'Werkzeug nicht gefunden oder nicht gelöscht'
+            }), 404
             
+        # Lösche das Werkzeug endgültig
+        mongodb.delete_one('tools', {'barcode': barcode})
+        
+        return jsonify({
+            'success': True,
+            'message': 'Werkzeug wurde endgültig gelöscht'
+        })
+        
     except Exception as e:
         logger.error(f"Fehler beim endgültigen Löschen des Werkzeugs: {str(e)}", exc_info=True)
         return jsonify({
@@ -2482,16 +1407,17 @@ def delete_consumable_soft():
             return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
             
         # Prüfe ob das Verbrauchsmaterial existiert
-        consumable = Database.query('SELECT * FROM consumables WHERE barcode = ?', [barcode])
+        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
         if not consumable:
             return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
             
-        # Prüfe ob das Verbrauchsmaterial bereits gelöscht ist
-        if consumable[0]['deleted'] == 1:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial ist bereits gelöscht'}), 400
-            
         # Führe das Soft-Delete durch
-        Database.query('UPDATE consumables SET deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE barcode = ?', [barcode])
+        mongodb.update_one('consumables', {'barcode': barcode}, {
+            '$set': {
+                'deleted': True, 
+                'deleted_at': datetime.now()
+            }
+        })
         return jsonify({'success': True, 'message': 'Verbrauchsmaterial erfolgreich gelöscht'})
         
     except Exception as e:
@@ -2502,17 +1428,13 @@ def delete_consumable_soft():
 @mitarbeiter_required
 def delete_consumable_permanent(barcode):
     try:
-        # Prüfe ob das Verbrauchsmaterial existiert
-        consumable = Database.query('SELECT * FROM consumables WHERE barcode = ?', [barcode])
+        # Prüfe ob das Verbrauchsmaterial existiert und gelöscht ist
+        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': True})
         if not consumable:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
-            
-        # Prüfe ob das Verbrauchsmaterial bereits gelöscht ist
-        if consumable[0]['deleted'] == 0:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial muss zuerst gelöscht werden'}), 400
+            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden oder nicht gelöscht'}), 404
             
         # Führe das permanente Löschen durch
-        Database.query('DELETE FROM consumables WHERE barcode = ?', [barcode])
+        mongodb.delete_one('consumables', {'barcode': barcode})
         return jsonify({'success': True, 'message': 'Verbrauchsmaterial permanent gelöscht'})
         
     except Exception as e:
@@ -2524,40 +1446,38 @@ def delete_consumable_permanent(barcode):
 def delete_worker_permanent(barcode):
     try:
         # Prüfe ob der Mitarbeiter existiert
-        worker = Database.query('SELECT * FROM workers WHERE barcode = ?', [barcode])
+        worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
         if not worker:
             return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
             
         # Prüfe ob der Mitarbeiter aktive Ausleihen hat
-        active_lendings = Database.query('SELECT COUNT(*) as count FROM lendings WHERE worker_barcode = ? AND returned_at IS NULL', [barcode])
-        if active_lendings[0]['count'] > 0:
+        active_lendings_count = mongodb.count_documents('lendings', {
+            'worker_barcode': barcode, 
+            'returned_at': None
+        })
+        if active_lendings_count > 0:
             return jsonify({'success': False, 'message': 'Mitarbeiter hat noch aktive Ausleihen'}), 400
             
         # Führe das permanente Löschen durch
-        Database.query('DELETE FROM workers WHERE barcode = ?', [barcode])
+        mongodb.delete_one('workers', {'barcode': barcode})
         return jsonify({'success': True, 'message': 'Mitarbeiter permanent gelöscht'})
         
     except Exception as e:
         logger.error(f"Fehler beim permanenten Löschen des Mitarbeiters: {e}")
         return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
 
-@bp.route('/tickets/<int:ticket_id>')
+@bp.route('/tickets/<ticket_id>')
 @login_required
 @admin_required
 def ticket_detail(ticket_id):
     """Zeigt die Details eines Tickets für Administratoren."""
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ?
-        """,
-        [ticket_id],
-        one=True
-    )
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
     
     if not ticket:
         return render_template('404.html'), 404
+    
+    # Füge id-Feld hinzu (für Template-Kompatibilität)
+    ticket['id'] = str(ticket['_id'])
         
     # Konvertiere alle Datumsfelder zu datetime-Objekten
     date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
@@ -2569,30 +1489,29 @@ def ticket_detail(ticket_id):
                 ticket[field] = None
         
     # Hole die Notizen für das Ticket
-    notes = ticket_db.get_ticket_notes(ticket_id)
+    notes = mongodb.find('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
 
     # Hole die Nachrichten für das Ticket
-    messages = ticket_db.get_ticket_messages(ticket_id)
+    messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
 
     # Hole die Auftragsdetails
-    auftrag_details = ticket_db.get_auftrag_details(ticket_id)
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
     logging.info(f"DEBUG: auftrag_details für Ticket {ticket_id}: {auftrag_details}")
     
     # Hole die Materialliste
-    material_list = ticket_db.get_auftrag_material(ticket_id)
+    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
 
-    # Hole alle Benutzer aus der Ticket-Datenbank
-    users = ticket_db.query(
-        """
-        SELECT username FROM users WHERE is_active = 1 ORDER BY username
-        """
-    )
-    # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = ticket_db.query('SELECT name FROM ticket_categories ORDER BY name')
-    categories = [c['name'] for c in categories]
+    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
+    with mongodb.get_connection() as db:
+        users = db.find('users', {'is_active': True})
+        users = [dict(user) for user in users]
 
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-    assigned_users = ticket_db.get_ticket_assignments(ticket_id)
+    assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
+
+    # Hole alle Kategorien aus der ticket_categories Tabelle
+    categories = mongodb.find('ticket_categories', {})
+    categories = [c['name'] for c in categories]
 
     return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
@@ -2605,18 +1524,14 @@ def ticket_detail(ticket_id):
                          categories=categories,
                          now=datetime.now())
 
-@bp.route('/tickets/<int:ticket_id>/message', methods=['POST'])
+@bp.route('/tickets/<ticket_id>/message', methods=['POST'])
 @login_required
 @admin_required
 def add_ticket_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu."""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = ticket_db.query(
-            "SELECT * FROM tickets WHERE id = ?",
-            [ticket_id],
-            one=True
-        )
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
         
         if not ticket:
             return jsonify({
@@ -2641,12 +1556,14 @@ def add_ticket_message(ticket_id):
             }), 400
 
         # Füge die Nachricht zur Datenbank hinzu
-        ticket_db.add_ticket_message(
-            ticket_id=ticket_id,
-            message=message,
-            sender=current_user.username,
-            is_admin=True
-        )
+        message_data = {
+            'ticket_id': ObjectId(ticket_id),
+            'message': message,
+            'sender': current_user.username,
+            'created_at': datetime.now()
+        }
+        
+        result = mongodb.insert_one('ticket_messages', message_data)
 
         return jsonify({
             'success': True,
@@ -2660,23 +1577,15 @@ def add_ticket_message(ticket_id):
             'message': f'Fehler beim Speichern der Nachricht: {str(e)}'
         }), 500
 
-@bp.route('/tickets/<int:ticket_id>/note', methods=['POST'])
+@bp.route('/tickets/<ticket_id>/note', methods=['POST'])
 @login_required
 @admin_required
 def add_ticket_note(ticket_id):
-    """Fügt eine neue Notiz zu einem Ticket hinzu (immer öffentlich, keine Unterscheidung mehr)."""
+    """Fügt eine neue Notiz zu einem Ticket hinzu."""
     try:
         print(f"DEBUG: Notiz-Anfrage für Ticket {ticket_id} erhalten")
         # Hole das Ticket
-        ticket = ticket_db.query(
-            """
-            SELECT *
-            FROM tickets
-            WHERE id = ?
-            """,
-            [ticket_id],
-            one=True
-        )
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
         
         if not ticket:
             print(f"DEBUG: Ticket {ticket_id} nicht gefunden")
@@ -2695,7 +1604,6 @@ def add_ticket_note(ticket_id):
 
         data = request.get_json()
         note = data.get('note')
-        # is_private wird ignoriert, alle Notizen sind öffentlich
         
         if not note or not note.strip():
             print("DEBUG: Notiz ist leer")
@@ -2705,328 +1613,769 @@ def add_ticket_note(ticket_id):
             }), 400
 
         print(f"DEBUG: Notiz hinzufügen: {note}")
-        # Füge die Notiz hinzu (immer is_private=0)
-        with ticket_db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO ticket_notes (ticket_id, note, created_by, is_private, created_at)
-                VALUES (?, ?, ?, 0, datetime('now'))
-                """,
-                [ticket_id, note.strip(), current_user.username]
-            )
-            
-            # Aktualisiere das updated_at Feld des Tickets
-            cursor.execute(
-                """
-                UPDATE tickets
-                SET updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                [ticket_id]
-            )
-            
-            conn.commit()
+        # Füge die Notiz hinzu
+        note_data = {
+            'ticket_id': ObjectId(ticket_id),
+            'note': note.strip(),
+            'created_by': current_user.username,
+            'created_at': datetime.now()
+        }
+        
+        result = mongodb.insert_one('ticket_notes', note_data)
+        
+        # Aktualisiere das updated_at Feld des Tickets
+        mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': {'updated_at': datetime.now()}})
 
-            # Hole die eingefügte Notiz
-            cursor.execute(
-                """
-                SELECT id, note, created_by, is_private, created_at
-                FROM ticket_notes
-                WHERE ticket_id = ? AND created_by = ? AND note = ?
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                [ticket_id, current_user.username, note.strip()]
-            )
-            new_note = cursor.fetchone()
-            columns = [col[0] for col in cursor.description]
-            new_note_dict = dict(zip(columns, new_note))
-
-            if not new_note:
-                print("DEBUG: Fehler beim Abrufen der neuen Notiz")
-                return jsonify({
-                    'success': False,
-                    'message': 'Fehler beim Abrufen der Notiz'
-                }), 500
-
-            print(f"DEBUG: Notiz erfolgreich hinzugefügt: {new_note_dict}")
-            return jsonify({
-                'success': True,
-                'message': 'Notiz wurde gespeichert',
-                'note': new_note_dict
-            })
+        return jsonify({
+            'success': True,
+            'message': 'Notiz wurde gespeichert',
+            'note': {
+                'id': str(result),
+                'note': note.strip(),
+                'created_by': current_user.username,
+                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
+            }
+        })
 
     except Exception as e:
-        print(f"DEBUG: Fehler beim Hinzufügen der Notiz: {e}")
-        logging.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
+        logger.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'Fehler beim Speichern der Notiz: {str(e)}'
+            'message': str(e)
         }), 500
 
-@bp.route('/tickets/<int:ticket_id>/update', methods=['POST'])
+@bp.route('/tickets/<ticket_id>/update', methods=['POST'])
 @login_required
 @admin_required
 def update_ticket(ticket_id):
-    """Aktualisiert ein Ticket."""
+    """Aktualisiert ein Ticket"""
     try:
-        print(f"DEBUG: Update-Ticket-Anfrage für Ticket {ticket_id} erhalten")
-        
-        # Hole die Daten aus dem JSON-Request
         data = request.get_json()
-        status = data.get('status')
-        assigned_to = data.get('assigned_to')
-        category = data.get('category')
-        due_date = data.get('due_date')
-        estimated_time = data.get('estimated_time')
-        actual_time = data.get('actual_time')
+        logging.info(f"Empfangene Daten für Ticket {ticket_id}: {data}")
         
-        print(f"DEBUG: Empfangene Daten: status={status}, assigned_to={assigned_to}, category={category}, due_date={due_date}, estimated_time={estimated_time}, actual_time={actual_time}")
+        # Verarbeite ausgeführte Arbeiten
+        arbeit_list = data.get('arbeit_list', [])
+        ausgefuehrte_arbeiten = '\n'.join([
+            f"{arbeit['arbeit']}|{arbeit['arbeitsstunden']}|{arbeit['leistungskategorie']}"
+            for arbeit in arbeit_list
+        ])
+        logging.info(f"Verarbeitete ausgeführte Arbeiten: {ausgefuehrte_arbeiten}")
         
-        # Konvertiere due_date in datetime wenn vorhanden
-        if due_date:
-            try:
-                # Füge die Uhrzeit 23:59:59 hinzu, wenn nur das Datum angegeben wurde
-                if len(due_date) == 10:  # Format: YYYY-MM-DD
-                    due_date = f"{due_date} 23:59:59"
-                due_date = datetime.strptime(due_date, '%Y-%m-%d %H:%M:%S')
-                print(f"DEBUG: due_date konvertiert: {due_date}")
-            except ValueError as e:
-                print(f"DEBUG: Fehler bei der Konvertierung von due_date: {e}")
-                due_date = None
-        else:
-            due_date = None
-        
-        # Konvertiere Zeitfelder in Integer
-        if estimated_time:
-            try:
-                estimated_time = int(estimated_time)
-                print(f"DEBUG: estimated_time konvertiert: {estimated_time}")
-            except ValueError as e:
-                print(f"DEBUG: Fehler bei der Konvertierung von estimated_time: {e}")
-                estimated_time = None
-        if actual_time:
-            try:
-                actual_time = int(actual_time)
-                print(f"DEBUG: actual_time konvertiert: {actual_time}")
-            except ValueError as e:
-                print(f"DEBUG: Fehler bei der Konvertierung von actual_time: {e}")
-                actual_time = None
-        
-        # Aktualisiere das Ticket
-        with ticket_db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Hole das alte Ticket für die Historie
-            cursor.execute("SELECT * FROM tickets WHERE id = ?", [ticket_id])
-            old_ticket = cursor.fetchone()
-            
-            if not old_ticket:
-                return jsonify({
-                    'success': False,
-                    'message': 'Ticket nicht gefunden'
-                }), 404
-            
-            # Aktualisiere das Ticket
-            cursor.execute("""
-                UPDATE tickets 
-                SET status = ?,
-                    assigned_to = ?,
-                    category = ?,
-                    due_date = ?,
-                    estimated_time = ?,
-                    actual_time = ?,
-                    last_modified_by = ?,
-                    last_modified_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP,
-                    resolved_at = CASE 
-                        WHEN ? = 'gelöst' THEN CURRENT_TIMESTAMP 
-                        ELSE NULL 
-                    END
-                WHERE id = ?
-            """, [status, assigned_to, category, due_date, estimated_time, actual_time, 
-                  current_user.username, status, ticket_id])
-            
-            # Erstelle Historie-Einträge für geänderte Felder
-            changes = []
-            if old_ticket['status'] != status:
-                changes.append(('status', old_ticket['status'], status))
-            if old_ticket['assigned_to'] != assigned_to:
-                changes.append(('assigned_to', old_ticket['assigned_to'], assigned_to))
-            if old_ticket['category'] != category:
-                changes.append(('category', old_ticket['category'], category))
-            if old_ticket['due_date'] != due_date:
-                changes.append(('due_date', old_ticket['due_date'], due_date))
-            if old_ticket['estimated_time'] != estimated_time:
-                changes.append(('estimated_time', old_ticket['estimated_time'], estimated_time))
-            if old_ticket['actual_time'] != actual_time:
-                changes.append(('actual_time', old_ticket['actual_time'], actual_time))
-            
-            # Füge Historie-Einträge hinzu
-            for field_name, old_value, new_value in changes:
-                cursor.execute("""
-                    INSERT INTO ticket_history 
-                    (ticket_id, field_name, old_value, new_value, changed_by)
-                    VALUES (?, ?, ?, ?, ?)
-                """, [ticket_id, field_name, str(old_value), str(new_value), current_user.username])
-            
-            conn.commit()
-        
-        print(f"DEBUG: Ticket {ticket_id} erfolgreich aktualisiert")
-        return jsonify({
-            'success': True,
-            'message': 'Ticket wurde erfolgreich aktualisiert'
-        })
-    except Exception as e:
-        print(f"DEBUG: Fehler beim Aktualisieren des Tickets: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Aktualisieren des Tickets: {str(e)}'
-        }), 500
-
-@bp.route('/tools/add', methods=['POST'])
-@mitarbeiter_required
-def add_tool():
-    """Fügt ein neues Werkzeug hinzu"""
-    try:
-        data = {
-            'barcode': request.form.get('barcode'),
-            'name': request.form.get('name'),
-            'category': request.form.get('category'),
-            'location': request.form.get('location'),
-            'status': request.form.get('status', 'verfügbar'),
-            'description': request.form.get('description')
+        # Bereite die Auftragsdetails vor
+        auftrag_details = {
+            'bereich': data.get('bereich', ''),
+            'auftraggeber_intern': bool(data.get('auftraggeber_intern', False)),
+            'auftraggeber_extern': bool(data.get('auftraggeber_extern', False)),
+            'auftraggeber_name': data.get('auftraggeber_name', ''),
+            'kontakt': data.get('kontakt', ''),
+            'auftragsbeschreibung': data.get('auftragsbeschreibung', ''),
+            'ausgefuehrte_arbeiten': ausgefuehrte_arbeiten,
+            'arbeitsstunden': data.get('arbeitsstunden', ''),
+            'leistungskategorie': data.get('leistungskategorie', ''),
+            'fertigstellungstermin': data.get('fertigstellungstermin', ''),
+            'gesamtsumme': data.get('gesamtsumme', 0)
         }
         
-        # Validiere die Eingabedaten
-        is_valid, error_message = validate_input('tools', data)
-        if not is_valid:
-            flash(error_message, 'error')
-            return redirect(url_for('admin.tools'))
-            
-        # Validiere die Länge des Namens
-        if len(data['name']) > 50:
-            flash('Der Name darf maximal 50 Zeichen lang sein', 'error')
-            return redirect(url_for('admin.tools'))
+        # Aktualisiere die Auftragsdetails
+        if not mongodb.update_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)}, {'$set': auftrag_details}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Auftragsdetails'})
         
-        # Kürze die Felder auf die maximale Länge
-        for field in data:
-            if isinstance(data[field], str):
-                data[field] = truncate_field('tools', field, data[field])
+        # Aktualisiere die Materialliste
+        material_list = data.get('material_list', [])
+        if not mongodb.update_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Materialliste'})
         
-        with Database.get_db() as conn:
-            # Prüfe ob der Barcode bereits existiert
-            existing = conn.execute('''
-                SELECT barcode FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [data['barcode']]).fetchone()
-            
-            if existing:
-                flash('Ein Werkzeug mit diesem Barcode existiert bereits', 'error')
-                return redirect(url_for('admin.tools'))
-            
-            # Füge das Werkzeug hinzu
-            conn.execute('''
-                INSERT INTO tools (
-                    barcode, name, category, location, status, description,
-                    created_at, updated_at, sync_status
-                ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
-            ''', [
-                data['barcode'], data['name'], data['category'],
-                data['location'], data['status'], data['description']
-            ])
-            
-            conn.commit()
-            flash('Werkzeug wurde erfolgreich hinzugefügt', 'success')
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
-        flash(f'Fehler beim Hinzufügen des Werkzeugs: {str(e)}', 'error')
-    
-    return redirect(url_for('admin.tools'))
-
-@bp.route('/tools/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_tool():
-    try:
-        data = request.get_json()
-        if not data or 'barcode' not in data:
-            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
-            
-        barcode = data['barcode']
-        
-        # Validiere Barcode-Länge
-        if len(barcode) > 50:
-            return jsonify({'success': False, 'message': 'Barcode ist zu lang (maximal 50 Zeichen)'}), 400
-            
-        # Prüfe ob das Werkzeug existiert
-        tool = Database.query('SELECT * FROM tools WHERE barcode = ?', [barcode])
-        if not tool:
-            return jsonify({'success': False, 'message': 'Werkzeug nicht gefunden'}), 404
-            
-        # Prüfe ob das Werkzeug ausgeliehen ist
-        if tool[0]['status'] == 'ausgeliehen':
-            return jsonify({'success': False, 'message': 'Werkzeug kann nicht gelöscht werden, da es ausgeliehen ist'}), 400
-            
-        # Führe das Soft-Delete durch
-        Database.query('UPDATE tools SET deleted = 1 WHERE barcode = ?', [barcode])
-        return jsonify({'success': True, 'message': 'Werkzeug erfolgreich gelöscht'})
+        return jsonify({'success': True})
         
     except Exception as e:
-        logger.error(f"Fehler beim Löschen des Werkzeugs: {e}")
-        return jsonify({'success': False, 'message': 'Fehler beim Löschen des Werkzeugs'}), 500
+        logging.error(f"Fehler beim Aktualisieren des Tickets {ticket_id}: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
 
-@bp.route('/workers/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_worker_soft():
-    try:
-        data = request.get_json()
-        if not data or 'barcode' not in data:
-            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
-            
-        barcode = data['barcode']
-        if len(barcode) > 50:
-            return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
-            
-        # Prüfe ob der Mitarbeiter existiert
-        worker = Database.query('SELECT * FROM workers WHERE barcode = ?', [barcode])
-        if not worker:
-            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
-            
-        # Prüfe ob der Mitarbeiter bereits gelöscht ist
-        if worker[0]['deleted'] == 1:
-            return jsonify({'success': False, 'message': 'Mitarbeiter ist bereits gelöscht'}), 400
-            
-        # Prüfe ob der Mitarbeiter aktive Ausleihen hat
-        active_lendings = Database.query('SELECT COUNT(*) as count FROM lendings WHERE worker_barcode = ? AND returned_at IS NULL', [barcode])
-        if active_lendings[0]['count'] > 0:
-            return jsonify({'success': False, 'message': 'Mitarbeiter hat noch aktive Ausleihen'}), 400
-            
-        # Führe das Soft-Delete durch
-        Database.query('UPDATE workers SET deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE barcode = ?', [barcode])
-        return jsonify({'success': True, 'message': 'Mitarbeiter erfolgreich gelöscht'})
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Mitarbeiters: {e}")
-        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
-
-@bp.route('/available-logos')
+@bp.route('/tickets/<id>/export')
 @login_required
 @admin_required
-def available_logos():
+def export_ticket(id):
+    """Exportiert das Ticket als ausgefülltes Word-Dokument."""
+    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
+    if not ticket:
+        return abort(404)
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)}) or {}
+    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}) or []
+
+    # --- Auftragnehmer (Vorname Nachname) ---
+    auftragnehmer_user = None
+    if ticket.get('assigned_to'):
+        auftragnehmer_user = User.get_by_username(ticket['assigned_to'])
+    if auftragnehmer_user:
+        auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+    else:
+        auftragnehmer_name = ''
+
+    # --- Checkboxen für Auftraggeber intern/extern ---
+    intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
+    extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
+
+    # --- Ausgeführte Arbeiten (bis zu 5) ---
+    arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
+    arbeiten_zeilen = []
+    if arbeiten_liste:
+        for zeile in arbeiten_liste.split('\n'):
+            if not zeile.strip():
+                continue
+            teile = [t.strip() for t in zeile.split('|')]
+            eintrag = {
+                'arbeiten': teile[0] if len(teile) > 0 else '',
+                'arbeitsstunden': teile[1] if len(teile) > 1 else '',
+                'leistungskategorie': teile[2] if len(teile) > 2 else ''
+            }
+            arbeiten_zeilen.append(eintrag)
+    # Fülle auf 5 Zeilen auf
+    while len(arbeiten_zeilen) < 5:
+        arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
+
+    # Materialdaten aufbereiten
+    material_rows = []
+    summe_material = 0
+    for m in material_list:
+        menge = float(m.get('menge') or 0)
+        einzelpreis = float(m.get('einzelpreis') or 0)
+        gesamtpreis = menge * einzelpreis
+        summe_material += gesamtpreis
+        material_rows.append({
+            'material': m.get('material', '') or '',
+            'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
+            'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
+            'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
+        })
+    while len(material_rows) < 5:
+        material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
+
+    arbeitspausch = 0
+    ubertrag = 0
+    zwischensumme = summe_material + arbeitspausch + ubertrag
+    mwst = zwischensumme * 0.07
+    gesamtsumme = zwischensumme + mwst
+
+    # --- Kontext für docxtpl bauen ---
+    context = {
+        'auftragnehmer': auftragnehmer_name,
+        'intern_checkbox': intern_checkbox,
+        'extern_checkbox': extern_checkbox,
+        'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
+        'kontakt': auftrag_details.get('kontakt', ''),
+        'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
+        'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
+        'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
+        'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
+        'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
+        'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
+        'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
+        'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
+        'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
+        'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
+        'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
+        'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
+        'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
+        'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
+        'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
+        'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
+        'material_1': material_rows[0]['material'],
+        'materialmenge_1': material_rows[0]['materialmenge'],
+        'materialpreis_1': material_rows[0]['materialpreis'],
+        'materialpreisges_1': material_rows[0]['materialpreisges'],
+        'material_2': material_rows[1]['material'],
+        'materialmenge_2': material_rows[1]['materialmenge'],
+        'materialpreis_2': material_rows[1]['materialpreis'],
+        'materialpreisges_2': material_rows[1]['materialpreisges'],
+        'material_3': material_rows[2]['material'],
+        'materialmenge_3': material_rows[2]['materialmenge'],
+        'materialpreis_3': material_rows[2]['materialpreis'],
+        'materialpreisges_3': material_rows[2]['materialpreisges'],
+        'material_4': material_rows[3]['material'],
+        'materialmenge_4': material_rows[3]['materialmenge'],
+        'materialpreis_4': material_rows[3]['materialpreis'],
+        'materialpreisges_4': material_rows[3]['materialpreisges'],
+        'material_5': material_rows[4]['material'],
+        'materialmenge_5': material_rows[4]['materialmenge'],
+        'materialpreis_5': material_rows[4]['materialpreis'],
+        'materialpreisges_5': material_rows[4]['materialpreisges'],
+        'summe_material': f"{summe_material:.2f}".replace('.', ','),
+        'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
+        'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
+        'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
+        'mwst': f"{mwst:.2f}".replace('.', ','),
+        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
+    }
+
+    # --- Word-Dokument generieren ---
     try:
-        # Stelle sicher, dass der Ordner existiert
-        logos_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
-        os.makedirs(logos_dir, exist_ok=True)
+        # Lade das Template
+        template_path = os.path.join(app.static_folder, 'word', 'btzauftrag.docx')
+        doc = DocxTemplate(template_path)
         
+        # Rendere das Dokument
+        doc.render(context)
+        
+        # Speichere das generierte Dokument
+        output_path = os.path.join(app.static_folder, 'uploads', f'ticket_{id}_export.docx')
+        doc.save(output_path)
+        
+        # Sende das Dokument
+        return send_file(output_path, as_attachment=True, download_name=f'ticket_{id}_export.docx')
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}")
+        flash('Fehler beim Generieren des Dokuments.', 'error')
+        return redirect(url_for('admin.ticket_detail', ticket_id=id))
+
+@bp.route('/tickets/<ticket_id>/update-details', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket_details(ticket_id):
+    """Aktualisiert die Details eines Tickets."""
+    try:
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        
+        if not ticket:
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
+
+        # Hole die Daten aus dem Request
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'message': 'Ungültiges Anfrageformat. JSON erwartet.'
+            }), 400
+
+        data = request.get_json()
+        
+        # Auftragsdetails aktualisieren
+        auftrag_details = {
+            'ticket_id': ObjectId(ticket_id),
+            'auftrag_an': data.get('auftrag_an', ''),
+            'bereich': data.get('bereich', ''),
+            'auftraggeber_intern': data.get('auftraggeber_intern', ''),
+            'auftraggeber_extern': data.get('auftraggeber_extern', ''),
+            'beschreibung': data.get('beschreibung', ''),
+            'prioritaet': data.get('prioritaet', 'normal'),
+            'deadline': data.get('deadline'),
+            'updated_at': datetime.now()
+        }
+        
+        if not mongodb.update_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)}, {'$set': auftrag_details}):
+            mongodb.insert_one('auftrag_details', auftrag_details)
+        
+        # Materialliste aktualisieren
+        material_list = data.get('material_list', [])
+        if material_list:
+            # Lösche alte Materialeinträge
+            mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+            
+            # Füge neue Materialeinträge hinzu
+            for material in material_list:
+                material['ticket_id'] = ObjectId(ticket_id)
+                material['created_at'] = datetime.now()
+                mongodb.insert_one('auftrag_material', material)
+        
+        # Ticket selbst aktualisieren
+        ticket_update = {
+            'title': data.get('title', ticket.get('title', '')),
+            'description': data.get('description', ticket.get('description', '')),
+            'priority': data.get('prioritaet', ticket.get('priority', 'normal')),
+            'updated_at': datetime.now()
+        }
+        
+        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': ticket_update}):
+            return jsonify({
+                'success': False,
+                'message': 'Fehler beim Aktualisieren des Tickets'
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket-Details erfolgreich aktualisiert'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren der Ticket-Details: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Interner Fehler: {str(e)}'
+        }), 500
+
+def create_mongodb_backup():
+    """Erstellt ein MongoDB-Backup (Platzhalter)"""
+    # TODO: Implementiere echtes MongoDB-Backup
+    return True
+
+@bp.route('/tickets')
+@login_required
+@admin_required
+def tickets():
+    """Ticket-Übersicht"""
+    tickets = mongodb.find('tickets', {})
+    return render_template('admin/tickets.html', tickets=tickets)
+
+@bp.route('/manage_users')
+@admin_required
+def manage_users():
+    """Benutzerverwaltung"""
+    try:
+        users = mongodb.find('users', {}, sort=[('username', 1)])
+        return render_template('admin/users.html', users=users)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Benutzer: {e}")
+        flash('Fehler beim Laden der Benutzer', 'error')
+        return render_template('admin/users.html', users=[])
+
+@bp.route('/add_user', methods=['GET', 'POST'])
+@admin_required
+def add_user():
+    """Neuen Benutzer hinzufügen"""
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username', '').strip()
+            email = request.form.get('email', '').strip()
+            password = request.form.get('password', '').strip()
+            password_confirm = request.form.get('password_confirm', '').strip()
+            firstname = request.form.get('firstname', '').strip()
+            lastname = request.form.get('lastname', '').strip()
+            role = request.form.get('role', '').strip()
+            
+            # Validierung
+            if not username or not password or not firstname or not lastname or not role:
+                flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+                return render_template('admin/user_form.html', 
+                                     roles=['admin', 'mitarbeiter', 'anwender'],
+                                     form_data=request.form)
+            
+            if password != password_confirm:
+                flash('Passwörter stimmen nicht überein', 'error')
+                return render_template('admin/user_form.html', 
+                                     roles=['admin', 'mitarbeiter', 'anwender'],
+                                     form_data=request.form)
+            
+            # Prüfe ob Benutzername bereits existiert
+            existing_user = mongodb.find_one('users', {'username': username})
+            if existing_user:
+                flash('Benutzername existiert bereits', 'error')
+                return render_template('admin/user_form.html', 
+                                     roles=['admin', 'mitarbeiter', 'anwender'],
+                                     form_data=request.form)
+            
+            # Benutzer erstellen
+            user_data = {
+                'username': username,
+                'email': email if email else None,
+                'password_hash': generate_password_hash(password),
+                'firstname': firstname,
+                'lastname': lastname,
+                'role': role,
+                'is_active': True,
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
+            
+            mongodb.insert_one('users', user_data)
+            flash(f'Benutzer "{username}" erfolgreich erstellt', 'success')
+            return redirect(url_for('admin.manage_users'))
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
+            flash('Fehler beim Erstellen des Benutzers', 'error')
+            return render_template('admin/user_form.html', 
+                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 form_data=request.form)
+    
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+
+@bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_user(user_id):
+    """Benutzer bearbeiten"""
+    try:
+        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+        if not user:
+            flash('Benutzer nicht gefunden', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        if request.method == 'POST':
+            try:
+                username = request.form.get('username', '').strip()
+                email = request.form.get('email', '').strip()
+                password = request.form.get('password', '').strip()
+                password_confirm = request.form.get('password_confirm', '').strip()
+                firstname = request.form.get('firstname', '').strip()
+                lastname = request.form.get('lastname', '').strip()
+                role = request.form.get('role', '').strip()
+                
+                # Validierung
+                if not username or not firstname or not lastname or not role:
+                    flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+                    return render_template('admin/user_form.html', 
+                                         user=user,
+                                         roles=['admin', 'mitarbeiter', 'anwender'])
+                
+                # Prüfe ob Passwort geändert werden soll
+                if password:
+                    if password != password_confirm:
+                        flash('Passwörter stimmen nicht überein', 'error')
+                        return render_template('admin/user_form.html', 
+                                             user=user,
+                                             roles=['admin', 'mitarbeiter', 'anwender'])
+                    password_hash = generate_password_hash(password)
+                else:
+                    password_hash = user.get('password_hash')
+                
+                # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
+                existing_user = mongodb.find_one('users', {
+                    'username': username,
+                    '_id': {'$ne': ObjectId(user_id)}
+                })
+                if existing_user:
+                    flash('Benutzername existiert bereits', 'error')
+                    return render_template('admin/user_form.html', 
+                                         user=user,
+                                         roles=['admin', 'mitarbeiter', 'anwender'])
+                
+                # Benutzer aktualisieren
+                update_data = {
+                    'username': username,
+                    'email': email if email else None,
+                    'password_hash': password_hash,
+                    'firstname': firstname,
+                    'lastname': lastname,
+                    'role': role,
+                    'updated_at': datetime.now()
+                }
+                
+                mongodb.update_one('users', 
+                                 {'_id': ObjectId(user_id)}, 
+                                 {'$set': update_data})
+                
+                flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
+                return redirect(url_for('admin.manage_users'))
+                
+            except Exception as e:
+                logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
+                flash('Fehler beim Aktualisieren des Benutzers', 'error')
+                return render_template('admin/user_form.html', 
+                                     user=user,
+                                     roles=['admin', 'mitarbeiter', 'anwender'])
+        
+        return render_template('admin/user_form.html', 
+                             user=user,
+                             roles=['admin', 'mitarbeiter', 'anwender'])
+                             
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des Benutzers: {e}")
+        flash('Fehler beim Laden des Benutzers', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+@bp.route('/notices')
+@admin_required
+def notices():
+    """Notizen-Übersicht"""
+    notices = mongodb.find('notices', {})
+    return render_template('admin/notices.html', notices=notices)
+
+@bp.route('/create_notice', methods=['GET', 'POST'])
+@admin_required
+def create_notice():
+    """Neue Notiz erstellen"""
+    if request.method == 'POST':
+        # TODO: Implementiere Notiz-Erstellung
+        flash('Notiz erfolgreich erstellt', 'success')
+        return redirect(url_for('admin.notices'))
+    return render_template('admin/notice_form.html')
+
+@bp.route('/edit_notice/<id>', methods=['GET', 'POST'])
+@admin_required
+def edit_notice(id):
+    """Notiz bearbeiten"""
+    if request.method == 'POST':
+        # TODO: Implementiere Notiz-Bearbeitung
+        flash('Notiz erfolgreich aktualisiert', 'success')
+        return redirect(url_for('admin.notices'))
+    notice = mongodb.find_one('notices', {'_id': ObjectId(id)})
+    return render_template('admin/notice_form.html', notice=notice)
+
+@bp.route('/delete_notice/<id>', methods=['POST'])
+@admin_required
+def delete_notice(id):
+    """Notiz löschen"""
+    # TODO: Implementiere Notiz-Löschung
+    flash('Notiz erfolgreich gelöscht', 'success')
+    return redirect(url_for('admin.notices'))
+
+@bp.route('/upload_logo', methods=['POST'])
+@admin_required
+def upload_logo():
+    """Logo hochladen"""
+    # TODO: Implementiere Logo-Upload
+    flash('Logo erfolgreich hochgeladen', 'success')
+    return redirect(url_for('admin.system'))
+
+@bp.route('/add_ticket_category', methods=['POST'])
+@admin_required
+def add_ticket_category():
+    """Ticket-Kategorie hinzufügen"""
+    # TODO: Implementiere Kategorie-Erstellung
+    flash('Kategorie erfolgreich hinzugefügt', 'success')
+    return redirect(url_for('admin.tickets'))
+
+@bp.route('/delete_ticket_category/<category>', methods=['POST'])
+@admin_required
+def delete_ticket_category(category):
+    """Ticket-Kategorie löschen"""
+    # TODO: Implementiere Kategorie-Löschung
+    flash('Kategorie erfolgreich gelöscht', 'success')
+    return redirect(url_for('admin.tickets'))
+
+@bp.route('/system')
+@admin_required
+def system():
+    """System-Einstellungen"""
+    return render_template('admin/system.html')
+
+# Abteilungsverwaltung
+@bp.route('/departments')
+@mitarbeiter_required
+def get_departments():
+    """Gibt alle Abteilungen zurück"""
+    try:
+        departments = mongodb.find('departments', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+        return jsonify({
+            'success': True,
+            'departments': [{'name': dept['name']} for dept in departments]
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Abteilungen: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Abteilungen'}), 500
+
+@bp.route('/departments/add', methods=['POST'])
+@mitarbeiter_required
+def add_department():
+    """Fügt eine neue Abteilung hinzu"""
+    try:
+        name = request.form.get('department', '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Abteilungsname ist erforderlich'}), 400
+        
+        # Prüfe ob die Abteilung bereits existiert
+        existing = mongodb.find_one('departments', {'name': name, 'deleted': {'$ne': True}})
+        if existing:
+            return jsonify({'success': False, 'message': 'Diese Abteilung existiert bereits'}), 400
+        
+        # Füge die Abteilung hinzu
+        mongodb.insert_one('departments', {
+            'name': name,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        })
+        
+        return jsonify({'success': True, 'message': 'Abteilung erfolgreich hinzugefügt'})
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Abteilung: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Hinzufügen der Abteilung'}), 500
+
+@bp.route('/departments/delete/<name>', methods=['POST'])
+@mitarbeiter_required
+def delete_department(name):
+    """Löscht eine Abteilung (Soft-Delete)"""
+    try:
+        # Prüfe ob Mitarbeiter in dieser Abteilung sind
+        workers_count = mongodb.count_documents('workers', {
+            'department': name,
+            'deleted': {'$ne': True}
+        })
+        
+        if workers_count > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Abteilung kann nicht gelöscht werden, da {workers_count} Mitarbeiter zugeordnet sind'
+            }), 400
+        
+        # Soft-Delete der Abteilung
+        mongodb.update_one('departments', 
+                          {'name': name}, 
+                          {'$set': {'deleted': True, 'deleted_at': datetime.now()}})
+        
+        return jsonify({'success': True, 'message': 'Abteilung erfolgreich gelöscht'})
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Abteilung: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Löschen der Abteilung'}), 500
+
+# Kategorienverwaltung
+@bp.route('/categories')
+@mitarbeiter_required
+def get_categories_admin():
+    """Gibt alle Kategorien zurück"""
+    try:
+        categories = mongodb.find('categories', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+        return jsonify({
+            'success': True,
+            'categories': [{'name': cat['name']} for cat in categories]
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Kategorien: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'}), 500
+
+@bp.route('/categories/add', methods=['POST'])
+@mitarbeiter_required
+def add_category():
+    """Fügt eine neue Kategorie hinzu"""
+    try:
+        name = request.form.get('category', '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Kategoriename ist erforderlich'}), 400
+        
+        # Prüfe ob die Kategorie bereits existiert
+        existing = mongodb.find_one('categories', {'name': name, 'deleted': {'$ne': True}})
+        if existing:
+            return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits'}), 400
+        
+        # Füge die Kategorie hinzu
+        mongodb.insert_one('categories', {
+            'name': name,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        })
+        
+        return jsonify({'success': True, 'message': 'Kategorie erfolgreich hinzugefügt'})
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Kategorie: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Hinzufügen der Kategorie'}), 500
+
+@bp.route('/categories/delete/<name>', methods=['POST'])
+@mitarbeiter_required
+def delete_category(name):
+    """Löscht eine Kategorie (Soft-Delete)"""
+    try:
+        # Prüfe ob Werkzeuge oder Verbrauchsmaterialien in dieser Kategorie sind
+        tools_count = mongodb.count_documents('tools', {
+            'category': name,
+            'deleted': {'$ne': True}
+        })
+        
+        consumables_count = mongodb.count_documents('consumables', {
+            'category': name,
+            'deleted': {'$ne': True}
+        })
+        
+        if tools_count > 0 or consumables_count > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Kategorie kann nicht gelöscht werden, da {tools_count} Werkzeuge und {consumables_count} Verbrauchsmaterialien zugeordnet sind'
+            }), 400
+        
+        # Soft-Delete der Kategorie
+        mongodb.update_one('categories', 
+                          {'name': name}, 
+                          {'$set': {'deleted': True, 'deleted_at': datetime.now()}})
+        
+        return jsonify({'success': True, 'message': 'Kategorie erfolgreich gelöscht'})
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Kategorie: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Löschen der Kategorie'}), 500
+
+# Standortverwaltung
+@bp.route('/locations')
+@mitarbeiter_required
+def get_locations():
+    """Gibt alle Standorte zurück"""
+    try:
+        locations = mongodb.find('locations', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+        return jsonify({
+            'success': True,
+            'locations': [{'name': loc['name']} for loc in locations]
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Standorte: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Standorte'}), 500
+
+@bp.route('/locations/add', methods=['POST'])
+@mitarbeiter_required
+def add_location():
+    """Fügt einen neuen Standort hinzu"""
+    try:
+        name = request.form.get('location', '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Standortname ist erforderlich'}), 400
+        
+        # Prüfe ob der Standort bereits existiert
+        existing = mongodb.find_one('locations', {'name': name, 'deleted': {'$ne': True}})
+        if existing:
+            return jsonify({'success': False, 'message': 'Dieser Standort existiert bereits'}), 400
+        
+        # Füge den Standort hinzu
+        mongodb.insert_one('locations', {
+            'name': name,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        })
+        
+        return jsonify({'success': True, 'message': 'Standort erfolgreich hinzugefügt'})
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen des Standorts: {e}")
+        return jsonify({'success': False, 'message': 'Fehler beim Hinzufügen des Standorts'}), 500
+
+@bp.route('/locations/delete/<name>', methods=['POST'])
+@mitarbeiter_required
+def delete_location(name):
+    """Löscht einen Standort"""
+    try:
+        # Prüfe ob Standort noch verwendet wird
+        tools_using_location = mongodb.find_one('tools', {'location': name, 'deleted': {'$ne': True}})
+        if tools_using_location:
+            flash(f'Standort "{name}" kann nicht gelöscht werden, da er noch von Werkzeugen verwendet wird.', 'error')
+            return redirect(url_for('admin.get_locations'))
+        
+        # Soft-Delete
+        mongodb.update_one('locations', {'name': name}, {'$set': {'deleted': True, 'deleted_at': datetime.now()}})
+        flash(f'Standort "{name}" erfolgreich gelöscht.', 'success')
+        
+    except Exception as e:
+        flash(f'Fehler beim Löschen des Standorts: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.get_locations'))
+
+@bp.route('/backup/list')
+@mitarbeiter_required
+def backup_list():
+    """Gibt eine Liste der verfügbaren Backups zurück"""
+    try:
+        backups = get_backup_info()
+        return jsonify({
+            'success': True,
+            'backups': backups
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Backups: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Laden der Backups'
+        }), 500
+
+@bp.route('/available-logos')
+@mitarbeiter_required
+def available_logos():
+    """Gibt eine Liste der verfügbaren Logos zurück"""
+    try:
+        logo_dir = Path(current_app.static_folder) / 'uploads' / 'logos'
         logos = []
-        if os.path.exists(logos_dir):
-            for filename in os.listdir(logos_dir):
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
+        
+        if logo_dir.exists():
+            for logo_file in logo_dir.glob('*'):
+                if logo_file.is_file() and logo_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.svg']:
                     logos.append({
-                        'name': filename,
-                        'path': f'uploads/logos/{filename}'
+                        'name': logo_file.name,
+                        'path': f'/static/uploads/logos/{logo_file.name}',
+                        'size': logo_file.stat().st_size,
+                        'modified': datetime.fromtimestamp(logo_file.stat().st_mtime)
                     })
         
         return jsonify({
@@ -3037,373 +2386,5 @@ def available_logos():
         logger.error(f"Fehler beim Laden der Logos: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'Fehler beim Laden der Logos: {str(e)}'
+            'message': 'Fehler beim Laden der Logos'
         }), 500
-
-@bp.route('/select-logo', methods=['POST'])
-@login_required
-@admin_required
-def select_logo():
-    data = request.get_json()
-    if not data or 'path' not in data:
-        return jsonify({'success': False, 'message': 'Kein Logo-Pfad angegeben'})
-    
-    logo_path = data['path']
-    # Speichere den Pfad in der Datenbank
-    Database.query('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-                  ['custom_logo', logo_path])
-    
-    return jsonify({
-        'success': True,
-        'message': 'Logo erfolgreich ausgewählt'
-    })
-
-@bp.route('/upload-logo', methods=['POST'])
-@login_required
-@admin_required
-def upload_logo():
-    if 'logo' not in request.files:
-        return jsonify({'success': False, 'message': 'Keine Datei hochgeladen'}), 400
-        
-    file = request.files['logo']
-    if file.filename == '':
-        return jsonify({'success': False, 'message': 'Keine Datei ausgewählt'}), 400
-        
-    if file and allowed_file(file.filename):
-        try:
-            # Erstelle den Logos-Ordner, falls er nicht existiert
-            logos_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
-            os.makedirs(logos_dir, exist_ok=True)
-            
-            # Generiere einen eindeutigen Dateinamen
-            filename = secure_filename(file.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{timestamp}_{filename}"
-            
-            # Speichere die Datei
-            file_path = os.path.join(logos_dir, filename)
-            file.save(file_path)
-            
-            # Gib den relativen Pfad zurück
-            relative_path = f"uploads/logos/{filename}"
-            return jsonify({
-                'success': True,
-                'message': 'Logo erfolgreich hochgeladen',
-                'path': relative_path
-            })
-            
-        except Exception as e:
-            current_app.logger.error(f'Fehler beim Hochladen des Logos: {str(e)}')
-            return jsonify({'success': False, 'message': 'Fehler beim Hochladen des Logos'}), 500
-            
-    return jsonify({'success': False, 'message': 'Ungültiges Dateiformat'}), 400
-
-@bp.route('/delete-logo', methods=['POST'])
-@login_required
-@admin_required
-def delete_logo():
-    try:
-        data = request.get_json()
-        if not data or 'path' not in data:
-            return jsonify({'success': False, 'message': 'Kein Logo-Pfad angegeben'}), 400
-            
-        logo_path = data['path']
-        
-        # Verhindere das Löschen des BTZ-Logos
-        if logo_path == 'uploads/logos/btz-logo.png':
-            return jsonify({'success': False, 'message': 'Das BTZ-Logo kann nicht gelöscht werden'}), 400
-            
-        # Konstruiere den vollständigen Pfad
-        full_path = os.path.join(current_app.root_path, 'static', logo_path)
-        
-        # Prüfe ob die Datei existiert
-        if not os.path.exists(full_path):
-            return jsonify({'success': False, 'message': 'Logo nicht gefunden'}), 404
-            
-        # Lösche die Datei
-        os.remove(full_path)
-        
-        return jsonify({'success': True, 'message': 'Logo erfolgreich gelöscht'})
-        
-    except Exception as e:
-        current_app.logger.error(f'Fehler beim Löschen des Logos: {str(e)}')
-        return jsonify({'success': False, 'message': 'Fehler beim Löschen des Logos'}), 500
-
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@bp.route('/updates')
-@login_required
-@admin_required
-def updates():
-    """Zeigt die Update-Seite an"""
-    return render_template('admin/updates.html')
-
-@bp.route('/updates/check', methods=['POST'])
-@login_required
-@admin_required
-def check_updates():
-    """Prüft auf verfügbare Updates"""
-    try:
-        # Git Status im Container prüfen
-        result = subprocess.run(['git', 'fetch', 'origin'], 
-                              capture_output=True, 
-                              text=True, 
-                              cwd=current_app.root_path)
-        
-        # Prüfen ob Updates verfügbar sind
-        result = subprocess.run(['git', 'rev-list', 'HEAD..origin/main', '--count'],
-                              capture_output=True,
-                              text=True,
-                              cwd=current_app.root_path)
-        
-        commits_behind = int(result.stdout.strip())
-        
-        if commits_behind > 0:
-            return jsonify({
-                'status': 'success',
-                'updates_available': True,
-                'commits_behind': commits_behind
-            })
-        else:
-            return jsonify({
-                'status': 'success',
-                'updates_available': False
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/updates/apply', methods=['POST'])
-@login_required
-@admin_required
-def apply_updates():
-    """Führt das Update durch"""
-    try:
-        # Backup erstellen
-        from app.models.backup import DatabaseBackup
-        backup = DatabaseBackup(
-            base_dir=current_app.root_path,
-            db_path=os.path.join(current_app.root_path, 'database', 'inventory.db'),
-            backup_dir=os.path.join(current_app.root_path, 'backups')
-        )
-        backup.create_backup()
-        
-        # Update im Container durchführen
-        update_script = os.path.join(current_app.root_path, 'update.sh')
-        result = subprocess.run(['bash', update_script],
-                              capture_output=True,
-                              text=True,
-                              cwd=current_app.root_path)
-        
-        if result.returncode == 0:
-            return jsonify({
-                'status': 'success',
-                'message': 'Update erfolgreich durchgeführt'
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': result.stderr
-            }), 500
-            
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@bp.route('/tickets/categories/add', methods=['POST'])
-@login_required
-@admin_required
-def add_ticket_category():
-    """Fügt eine neue Ticket-Kategorie hinzu."""
-    category = request.form.get('category')
-    if not category:
-        flash('Bitte geben Sie einen Kategorienamen ein.', 'error')
-        return redirect(url_for('admin.tickets'))
-        
-    ticket_db = TicketDatabase()
-    with ticket_db.get_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            # Prüfe ob Kategorie bereits existiert
-            cursor.execute('SELECT 1 FROM ticket_categories WHERE name = ?', [category])
-            if cursor.fetchone():
-                flash('Diese Kategorie existiert bereits.', 'error')
-                return redirect(url_for('admin.tickets'))
-                
-            # Füge neue Kategorie hinzu
-            cursor.execute('INSERT INTO ticket_categories (name) VALUES (?)', [category])
-            conn.commit()
-            flash('Kategorie wurde erfolgreich hinzugefügt.', 'success')
-        except Exception as e:
-            conn.rollback()
-            flash('Fehler beim Hinzufügen der Kategorie.', 'error')
-            logging.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
-            
-    return redirect(url_for('admin.tickets'))
-
-@bp.route('/tickets/categories/delete/<category>', methods=['POST'])
-@login_required
-@admin_required
-def delete_ticket_category(category):
-    """Löscht eine Ticket-Kategorie."""
-    ticket_db = TicketDatabase()
-    with ticket_db.get_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute('DELETE FROM ticket_categories WHERE name = ?', [category])
-            conn.commit()
-            flash('Kategorie wurde erfolgreich gelöscht.', 'success')
-        except Exception as e:
-            conn.rollback()
-            flash('Fehler beim Löschen der Kategorie.', 'error')
-            logging.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
-            
-    return redirect(url_for('admin.tickets'))
-
-@bp.route('/tickets/<int:id>/export')
-@login_required
-@admin_required
-def export_ticket(id):
-    """Exportiert ein Ticket als Word-Dokument."""
-    ticket = ticket_db.query(
-        """
-        SELECT *
-        FROM tickets
-        WHERE id = ?
-        """,
-        [id],
-        one=True
-    )
-    
-    if not ticket:
-        return render_template('404.html'), 404
-        
-    # Hole die Auftragsdetails
-    auftrag_details = ticket_db.get_auftrag_details(id)
-    
-    # Hole die Materialliste
-    material_list = ticket_db.get_auftrag_material(id)
-    
-    # Erstelle das Word-Dokument
-    doc = Document()
-    
-    # Füge den Titel hinzu
-    doc.add_heading(f'Auftrag #{ticket["id"]}: {ticket["title"]}', 0)
-    
-    # Füge die Ticket-Details hinzu
-    doc.add_heading('Auftragsdetails', level=1)
-    doc.add_paragraph(f'Status: {ticket["status"]}')
-    doc.add_paragraph(f'Priorität: {ticket["priority"]}')
-    doc.add_paragraph(f'Kategorie: {ticket["category"]}')
-    doc.add_paragraph(f'Erstellt von: {ticket["created_by"]}')
-    doc.add_paragraph(f'Erstellt am: {ticket["created_at"]}')
-    if ticket["due_date"]:
-        doc.add_paragraph(f'Fällig am: {ticket["due_date"]}')
-    
-    # Füge die Beschreibung hinzu
-    doc.add_heading('Beschreibung', level=1)
-    doc.add_paragraph(ticket["description"])
-    
-    # Füge die Auftragsdetails hinzu, falls vorhanden
-    if auftrag_details:
-        doc.add_heading('Weitere Details', level=1)
-        doc.add_paragraph(f'Bereich: {auftrag_details["bereich"]}')
-        if auftrag_details["auftraggeber_intern"]:
-            doc.add_paragraph('Auftraggeber: Intern')
-        elif auftrag_details["auftraggeber_extern"]:
-            doc.add_paragraph(f'Auftraggeber: Extern - {auftrag_details["auftraggeber_name"]}')
-        if auftrag_details["kontakt"]:
-            doc.add_paragraph(f'Kontakt: {auftrag_details["kontakt"]}')
-        if auftrag_details["fertigstellungstermin"]:
-            doc.add_paragraph(f'Fertigstellungstermin: {auftrag_details["fertigstellungstermin"]}')
-        if auftrag_details["arbeitsstunden"]:
-            doc.add_paragraph(f'Arbeitsstunden: {auftrag_details["arbeitsstunden"]}')
-        if auftrag_details["leistungskategorie"]:
-            doc.add_paragraph(f'Leistungskategorie: {auftrag_details["leistungskategorie"]}')
-    
-    # Füge die Materialliste hinzu, falls vorhanden
-    if material_list:
-        doc.add_heading('Materialliste', level=1)
-        table = doc.add_table(rows=1, cols=3)
-        table.style = 'Table Grid'
-        
-        # Füge die Tabellenüberschriften hinzu
-        header_cells = table.rows[0].cells
-        header_cells[0].text = 'Material'
-        header_cells[1].text = 'Menge'
-        header_cells[2].text = 'Einzelpreis'
-        
-        # Füge die Materialien hinzu
-        for material in material_list:
-            row_cells = table.add_row().cells
-            row_cells[0].text = material["material"]
-            row_cells[1].text = str(material["menge"])
-            row_cells[2].text = f'{material["einzelpreis"]:.2f} €'
-    
-    # Speichere das Dokument
-    filename = f'auftrag_{ticket["id"]}.docx'
-    doc.save(filename)
-    
-    return send_file(
-        filename,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    )
-
-@bp.route('/tickets/<int:ticket_id>/update-details', methods=['POST'])
-@login_required
-@admin_required
-def update_ticket_details(ticket_id):
-    """Aktualisiert die Details eines Tickets (Kategorie, Fälligkeitsdatum, geschätzte Zeit) im Admin-Bereich."""
-    try:
-        if not request.is_json:
-            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
-
-        data = request.get_json()
-        
-        # Hole das aktuelle Ticket
-        ticket = ticket_db.query(
-            """
-            SELECT * FROM tickets WHERE id = ?
-            """,
-            [ticket_id],
-            one=True
-        )
-        if not ticket:
-            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
-
-        # Formatiere das Fälligkeitsdatum
-        due_date = data.get('due_date')
-        if due_date:
-            try:
-                due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
-                due_date = due_date.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                due_date = None
-
-        # Aktualisiere die Ticket-Details, behalte bestehende Werte bei wenn nicht im Request
-        ticket_db.update_ticket(
-            id=ticket_id,
-            status=ticket['status'],
-            assigned_to=ticket['assigned_to'],
-            category=data.get('category', ticket['category']),
-            due_date=due_date if due_date else ticket['due_date'],
-            estimated_time=data.get('estimated_time', ticket['estimated_time']),
-            last_modified_by=current_user.username
-        )
-
-        return jsonify({'success': True, 'message': 'Ticket-Details erfolgreich aktualisiert'})
-
-    except Exception as e:
-        import logging
-        logging.error(f"Fehler beim Aktualisieren der Ticket-Details (Admin): {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500

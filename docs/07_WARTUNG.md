@@ -97,8 +97,8 @@
 ### Wöchentliche Aufgaben
 1. **Datenbank-Optimierung**
    ```bash
-   # VACUUM ausführen
-   sqlite3 inventory.db "VACUUM;"
+   # MongoDB-Optimierung
+   mongo scandy --eval "db.runCommand('compact')"
    ```
 
 2. **Log-Rotation**
@@ -133,31 +133,31 @@
 
 ### Optimierung
 1. **Indizes**
-   ```sql
-   -- Indizes analysieren
-   ANALYZE;
+   ```bash
+   # MongoDB-Indizes analysieren
+   mongo scandy --eval "db.collection.getIndexes()"
    
-   -- Indizes neu aufbauen
-   REINDEX;
+   # MongoDB-Indizes neu aufbauen
+   mongo scandy --eval "db.collection.reIndex()"
    ```
 
 2. **Statistiken**
-   ```sql
-   -- Statistiken aktualisieren
-   ANALYZE;
+   ```bash
+   # MongoDB-Statistiken aktualisieren
+   mongo scandy --eval "db.runCommand('dbStats')"
    ```
 
 3. **Integrität**
-   ```sql
-   -- Integrität prüfen
-   PRAGMA integrity_check;
+   ```bash
+   # MongoDB-Integrität prüfen
+   mongo scandy --eval "db.runCommand('dbStats')"
    ```
 
 ### Reparatur
 1. **Fehlerbehebung**
    ```bash
-   # Datenbank reparieren
-   sqlite3 inventory.db ".recover"
+   # MongoDB reparieren
+   mongo scandy --eval "db.repairDatabase()"
    ```
 
 2. **Wiederherstellung**
@@ -171,6 +171,18 @@
    # Schema aktualisieren
    python app/db_migration.py
    ```
+
+### MongoDB-Wartung
+```bash
+# MongoDB-Status prüfen
+sudo systemctl status mongod
+
+# MongoDB-Optimierung
+mongo scandy --eval "db.runCommand('compact')"
+
+# MongoDB-Backup
+mongodump --db scandy --out /backup/
+```
 
 ## System-Updates
 

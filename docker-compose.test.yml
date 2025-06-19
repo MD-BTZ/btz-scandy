@@ -4,29 +4,40 @@ services:
   scandy_test:
     build: .
     ports:
-      - "5002:5000"
+      - "5001:5000"
     environment:
-      - DATABASE_URL=sqlite:////app/database/inventory.db
-      - TICKETS_DATABASE_URL=sqlite:////app/database/tickets.db
-      - SYSTEM_NAME=Scandy Test
-      - TICKET_SYSTEM_NAME=Aufgaben Test
-      - TOOL_SYSTEM_NAME=Werkzeuge Test
-      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter Test
+      - FLASK_ENV=testing
+      - DATABASE_URL=mongodb://mongodb_test:27017/scandy_test
+      - TICKETS_DATABASE_URL=mongodb://mongodb_test:27017/scandy_tickets_test
+      - SECRET_KEY=test-secret-key
+      - MONGODB_URI=mongodb://mongodb_test:27017/
     volumes:
-      - ./uploads_test:/app/uploads
-      - ./backups_test:/app/backups
+      - ./app/static:/app/app/static
+      - ./app/uploads:/app/app/uploads
+      - ./app/logs:/app/app/logs
+      - ./app/backups:/app/app/backups
     depends_on:
-      - scandy_db_test
+      - mongodb_test
+    restart: unless-stopped
+    command: >
+      sh -c "
+      mkdir -p /app/database &&
+      python -m flask run --host=0.0.0.0 --port=5000
+      "
+
+  mongodb_test:
+    image: mongo:6.0
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_test_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
     restart: unless-stopped
 
-  scandy_db_test:
-    build: .
-    command: >
-      bash -c "mkdir -p /app/database && 
-               touch /app/database/inventory.db /app/database/tickets.db && 
-               chmod 666 /app/database/inventory.db /app/database/tickets.db && 
-               tail -f /dev/null"
-    restart: unless-stopped
+volumes:
+  mongodb_test_data:
 
 networks:
   scandy_test_network:

@@ -1,22 +1,20 @@
 from flask import current_app, g
-from app.models.database import Database
 from app.constants import Routes
 from app.config.version import VERSION
 import traceback
 import logging
+from app.models.mongodb_database import mongodb
 
 logger = logging.getLogger(__name__)
 
 def get_colors():
-    """Holt die Farbeinstellungen aus der Datenbank"""
+    """Holt die Farbeinstellungen aus der MongoDB"""
     try:
-        db = Database.get_db()
-        cursor = db.cursor()
-        cursor.execute('SELECT key, value FROM settings WHERE key LIKE "color_%"')
         colors = {}
-        for row in cursor.fetchall():
-            key = row['key'].replace('color_', '')
-            colors[key] = row['value']
+        color_docs = mongodb.find('settings', {'key': {'$regex': '^color_'}})
+        for doc in color_docs:
+            key = doc['key'].replace('color_', '')
+            colors[key] = doc['value']
         return colors
     except Exception as e:
         current_app.logger.error(f"Fehler beim Laden der Farben: {str(e)}")
@@ -29,35 +27,25 @@ def get_colors():
         }
 
 def inject_colors():
-    """Injiziert die Farbeinstellungen aus der Datenbank in alle Templates"""
+    """Injiziert die Farbeinstellungen aus MongoDB in alle Templates"""
     try:
         print("\n=== Color Injection Debug ===")
-        
-        # Direkte DB-Abfrage mit Fehlerprüfung
-        with Database.get_db() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'color_%'")
-            colors = cursor.fetchall()
-            
-            print(f"SQL: SELECT key, value FROM settings WHERE key LIKE 'color_%'")
-            print(f"Raw colors from DB:", colors)
-            
-            if colors:
-                color_dict = {}
-                for row in colors:
-                    key = row['key'].replace('color_', '')
-                    value = row['value']
-                    color_dict[key] = value
-                    print(f"Loaded color: {key} = {value}")
-                
-                print("Final color dict:", color_dict)
-                print("========================\n")
-                return {'colors': color_dict}
-                
+        color_docs = mongodb.find('settings', {'key': {'$regex': '^color_'}})
+        print(f"MongoDB Query: settings, key ^color_")
+        print(f"Raw colors from DB:", color_docs)
+        if color_docs:
+            color_dict = {}
+            for doc in color_docs:
+                key = doc['key'].replace('color_', '')
+                value = doc['value']
+                color_dict[key] = value
+                print(f"Loaded color: {key} = {value}")
+            print("Final color dict:", color_dict)
+            print("========================\n")
+            return {'colors': color_dict}
     except Exception as e:
         print(f"Fehler beim Laden der Farben: {e}")
         print(traceback.format_exc())
-        
     print("Using fallback colors")
     print("========================\n")
     return {
@@ -88,18 +76,13 @@ def inject_version():
 def inject_app_labels():
     """Fügt die App-Labels in alle Templates ein"""
     try:
-        with Database.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'label_%'")
-            rows = cursor.fetchall()
-            
-            label_dict = {}
-            for row in rows:
-                key = row['key'].replace('label_', '')
-                value = row['value']
-                label_dict[key] = value
-            
-            return {'app_labels': label_dict}
+        label_docs = mongodb.find('settings', {'key': {'$regex': '^label_'}})
+        label_dict = {}
+        for doc in label_docs:
+            key = doc['key'].replace('label_', '')
+            value = doc['value']
+            label_dict[key] = value
+        return {'app_labels': label_dict}
     except Exception as e:
         print(f"Fehler beim Laden der App-Labels: {str(e)}")
         return {'app_labels': {}}

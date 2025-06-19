@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import render_template, flash, jsonify, request, current_app
-import sqlite3
+from pymongo.errors import PyMongoError
 import logging
 import traceback
 import sys
@@ -108,7 +108,7 @@ def safe_db_query(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except sqlite3.Error as e:
+        except PyMongoError as e:
             logger.error(f"Datenbankfehler in {func.__name__}: {str(e)}")
             logger.error(f"Stacktrace: {traceback.format_exc()}")
             return []  # Leere Liste bei Datenbankfehlern

@@ -1,5 +1,5 @@
 """
-Konfigurationsmodul für Scandy
+Konfigurationsmodul für Scandy - MongoDB-only
 """
 import os
 from pathlib import Path
@@ -10,12 +10,10 @@ class Config:
     # Basis-Verzeichnis der Anwendung
     BASE_DIR = Path(__file__).parent.parent.parent
     
-    # Datenbank-Verzeichnis
-    DATABASE_DIR = os.path.join(BASE_DIR, 'app', 'database')
-    
-    # Datenbank-Pfade
-    DATABASE = os.path.join(DATABASE_DIR, 'inventory.db')
-    TICKET_DATABASE = os.path.join(DATABASE_DIR, 'tickets.db')
+    # MongoDB Konfiguration
+    MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/')
+    MONGODB_DB = os.environ.get('MONGODB_DB', 'scandy')
+    MONGODB_COLLECTION_PREFIX = os.environ.get('MONGODB_COLLECTION_PREFIX', '')
     
     # Upload-Verzeichnis
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'app', 'uploads')
@@ -25,7 +23,7 @@ class Config:
     
     # Flask-Session
     SESSION_TYPE = 'filesystem'
-    SESSION_FILE_DIR = os.path.join(BASE_DIR, 'app', 'database', 'flask_session')
+    SESSION_FILE_DIR = os.path.join(BASE_DIR, 'app', 'flask_session')
     SESSION_PERMANENT = True
     PERMANENT_SESSION_LIFETIME = 86400  # 24 Stunden
     
@@ -51,15 +49,17 @@ class DevelopmentConfig(Config):
     SECRET_KEY = 'dev-key-not-for-production'
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
+    SESSION_COOKIE_HTTPONLY = False  # Erlaubt JavaScript-Zugriff für Debugging
 
 class TestingConfig(Config):
     """Test-Konfiguration"""
     DEBUG = True
     TESTING = True
-    DATABASE = ':memory:'
     SECRET_KEY = 'test-key-not-for-production'
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
+    # MongoDB für Tests
+    MONGODB_DB = 'scandy_test'
 
 class ProductionConfig(Config):
     """Produktions-Konfiguration"""

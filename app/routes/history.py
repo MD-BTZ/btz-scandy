@@ -1,41 +1,74 @@
-from flask import Blueprint, render_template
-from app.models.database import Database
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBLending
+from app.models.mongodb_database import MongoDB
 
 bp = Blueprint('history', __name__)
+mongodb = MongoDB()
 
 @bp.route('/history')
 def history():
     """Zeigt die Historie der Ausleihen an"""
-    with Database.get_db_connection() as conn:
-        cursor = conn.cursor()
-        
+    try:
         # Hole die letzten 50 Ausleihen mit Details
-        cursor.execute("""
-            SELECT 
-                l.id,
-                l.lent_at,
-                l.returned_at,
-                t.name as tool_name,
-                t.barcode as tool_barcode,
-                w.firstname || ' ' || w.lastname as worker_name,
-                w.barcode as worker_barcode
-            FROM lendings l
-            JOIN tools t ON l.tool_barcode = t.barcode
-            JOIN workers w ON l.worker_barcode = w.barcode
-            ORDER BY l.lent_at DESC
-            LIMIT 50
-        """)
+        pipeline = [
+            {
+                '$lookup': {
+                    'from': 'tools',
+                    'localField': 'tool_barcode',
+                    'foreignField': 'barcode',
+                    'as': 'tool'
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'workers',
+                    'localField': 'worker_barcode',
+                    'foreignField': 'barcode',
+                    'as': 'worker'
+                }
+            },
+            {
+                '$unwind': '$tool'
+            },
+            {
+                '$unwind': '$worker'
+            },
+            {
+                '$project': {
+                    'id': '$_id',
+                    'lent_at': 1,
+                    'returned_at': 1,
+                    'tool_name': '$tool.name',
+                    'tool_barcode': '$tool.barcode',
+                    'worker_name': {'$concat': ['$worker.firstname', ' ', '$worker.lastname']},
+                    'worker_barcode': '$worker.barcode'
+                }
+            },
+            {
+                '$sort': {'lent_at': -1}
+            },
+            {
+                '$limit': 50
+            }
+        ]
         
+        history_data = list(mongodb.aggregate('lendings', pipeline))
+        
+        # Konvertiere MongoDB-Objekte in das erwartete Format
         history = []
-        for row in cursor.fetchall():
+        for item in history_data:
             history.append({
-                'id': row[0],
-                'lent_at': row[1],
-                'returned_at': row[2],
-                'tool_name': row[3],
-                'tool_barcode': row[4],
-                'worker_name': row[5],
-                'worker_barcode': row[6]
+                'id': str(item['id']),
+                'lent_at': item['lent_at'],
+                'returned_at': item.get('returned_at'),
+                'tool_name': item['tool_name'],
+                'tool_barcode': item['tool_barcode'],
+                'worker_name': item['worker_name'],
+                'worker_barcode': item['worker_barcode']
             })
+            
+    except Exception as e:
+        print(f"Fehler beim Laden der Historie: {e}")
+        history = []
             
     return render_template('history.html', history=history) 

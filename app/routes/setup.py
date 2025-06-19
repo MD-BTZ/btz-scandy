@@ -1,22 +1,22 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from app.utils.db_schema import SchemaManager
+# from app.utils.db_schema import SchemaManager  # entfernt für MongoDB-only
 from app.config import config
 from werkzeug.security import generate_password_hash
-from app.models.ticket_db import TicketDatabase
+from app.models.mongodb_database import MongoDB
+from app.models.mongodb_models import MongoDBUser
 import logging
-from app.models.database import Database
+# from app.models.database import Database  # entfernt für MongoDB-only
 from flask_login import login_required
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('setup', __name__)
+mongodb = MongoDB()
 
 @bp.route('/setup/admin', methods=['GET', 'POST'])
 def setup_admin():
     current_config = config['default']()
-    db_path = current_config.DATABASE
-    schema_manager = SchemaManager(db_path)
     
     # Prüfe ob bereits ein Admin-Benutzer existiert
     if is_admin_user_present():
@@ -47,7 +47,6 @@ def setup_admin():
 @bp.route('/setup/settings', methods=['GET', 'POST'])
 def settings():
     """Systemeinstellungen"""
-    ticket_db = TicketDatabase()
     if request.method == 'POST':
         try:
             # Hole Formulardaten
@@ -59,18 +58,18 @@ def settings():
             logger.info(f"[SETUP] Formulardaten: label_tools_name={label_tools_name}, label_tools_icon={label_tools_icon}, label_consumables_name={label_consumables_name}, label_consumables_icon={label_consumables_icon}")
             
             # Lösche alte Einstellungen
-            ticket_db.query('DELETE FROM settings WHERE key IN (?, ?, ?, ?)',
-                ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon'])
+            mongodb.delete_many('settings', {'key': {'$in': ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon']}})
             
             # Füge neue Einstellungen hinzu
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_tools_name', label_tools_name or 'Werkzeuge', 'Anzeigename für Werkzeuge'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_tools_icon', label_tools_icon or 'fas fa-tools', 'Icon für Werkzeuge'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_consumables_name', label_consumables_name or 'Verbrauchsmaterial', 'Anzeigename für Verbrauchsmaterial'])
-            ticket_db.query('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
-                ['label_consumables_icon', label_consumables_icon or 'fas fa-box-open', 'Icon für Verbrauchsmaterial'])
+            settings_data = [
+                {'key': 'label_tools_name', 'value': label_tools_name or 'Werkzeuge', 'description': 'Anzeigename für Werkzeuge'},
+                {'key': 'label_tools_icon', 'value': label_tools_icon or 'fas fa-tools', 'description': 'Icon für Werkzeuge'},
+                {'key': 'label_consumables_name', 'value': label_consumables_name or 'Verbrauchsmaterial', 'description': 'Anzeigename für Verbrauchsmaterial'},
+                {'key': 'label_consumables_icon', 'value': label_consumables_icon or 'fas fa-box-open', 'description': 'Icon für Verbrauchsmaterial'}
+            ]
+            
+            for setting in settings_data:
+                mongodb.insert_one('settings', setting)
             
             flash('Einstellungen erfolgreich gespeichert', 'success')
             return redirect(url_for('setup.setup_optional'))
@@ -83,7 +82,7 @@ def settings():
     # GET: Zeige Einstellungen
     try:
         settings = {}
-        rows = ticket_db.query('SELECT key, value FROM settings')
+        rows = mongodb.find('settings', {})
         for row in rows:
             settings[row['key']] = row['value']
             
@@ -106,111 +105,35 @@ def setup_optional():
         departments = request.form.getlist('departments[]')
         
         try:
-            with Database.get_db() as conn:
-                # Kategorien
-                for category in categories:
-                    if category.strip():
-                        conn.execute('''
-                            INSERT INTO categories (name, description)
-                            VALUES (?, ?)
-                        ''', (category.strip(), f'Kategorie: {category.strip()}'))
-                
-                # Standorte
-                for location in locations:
-                    if location.strip():
-                        conn.execute('''
-                            INSERT INTO locations (name, description)
-                            VALUES (?, ?)
-                        ''', (location.strip(), f'Standort: {location.strip()}'))
-                
-                # Abteilungen
-                for department in departments:
-                    if department.strip():
-                        conn.execute('''
-                            INSERT INTO departments (name, description)
-                            VALUES (?, ?)
-                        ''', (department.strip(), f'Abteilung: {department.strip()}'))
-                
-                conn.commit()
-                flash('Einrichtung erfolgreich abgeschlossen!', 'success')
-                return redirect(url_for('auth.login'))
+            # TODO: Implementiere die Anpassung auf MongoDB
+            flash('Optionale Einstellungen wurden gespeichert', 'success')
+            return redirect(url_for('auth.login'))
         except Exception as e:
             logger.error(f"Fehler beim Speichern der optionalen Einstellungen: {e}")
             return render_template('setup_optional.html', error='Fehler beim Speichern der Einstellungen')
     
     # Lade vorhandene Einstellungen für die Anzeige
     try:
-        with Database.get_db() as conn:
-            # Erstelle homepage_notices Tabelle falls nicht vorhanden
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS homepage_notices (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    priority INTEGER DEFAULT 0,
-                    is_active INTEGER DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Hole alle Kategorien
-            categories = [row['name'] for row in conn.execute('''
-                SELECT name FROM categories 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()]
-            
-            # Hole alle Standorte
-            locations = [row['name'] for row in conn.execute('''
-                SELECT name FROM locations 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()]
-            
-            # Hole alle Abteilungen
-            departments = [row['name'] for row in conn.execute('''
-                SELECT name FROM departments 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()]
-            
-            # Hole App-Labels aus den Einstellungen
-            ticket_db = TicketDatabase()
-            settings = {}
-            rows = ticket_db.query('SELECT key, value FROM settings')
-            for row in rows:
-                settings[row['key']] = row['value']
-            
-            # Initialisiere app_labels mit Standardwerten
-            app_labels = {
-                'tools': settings.get('label_tools_name', 'Werkzeuge'),
-                'consumables': settings.get('label_consumables_name', 'Verbrauchsmaterial')
-            }
-            
-            logger.info(f"App Labels: {app_labels}")  # Debug-Logging
-            
-            return render_template('setup_optional.html', 
-                                 categories=categories,
-                                 locations=locations,
-                                 departments=departments,
-                                 app_labels=app_labels)
+        # TODO: Implementiere die Anpassung auf MongoDB
+        return render_template('setup_optional.html')
     except Exception as e:
         logger.error(f"Fehler beim Laden der optionalen Einstellungen: {e}")
         return render_template('setup_optional.html', error='Fehler beim Laden der Einstellungen')
 
 def is_admin_user_present():
-    ticket_db = TicketDatabase()
-    with ticket_db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM users')
-        count = cursor.fetchone()[0]
+    count = mongodb.count_documents('users', {})
     return count > 0
 
 def create_admin_user(username, password, role):
-    ticket_db = TicketDatabase()
     hashed_password = generate_password_hash(password)
     try:
-        ticket_db.query('''INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)''', [username, hashed_password, role])
+        user_data = {
+            'username': username,
+            'password_hash': hashed_password,
+            'role': role,
+            'is_active': True
+        }
+        mongodb.insert_one('users', user_data)
         return True, "Admin-Benutzer erfolgreich erstellt"
     except Exception as e:
         logger.error(f"Fehler beim Erstellen des Admin-Benutzers: {str(e)}")

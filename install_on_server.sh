@@ -65,7 +65,7 @@ docker run -d \
   -v "$PWD/$DATA_DIR:/app/data" \
   python:3.9-slim \
   bash -c "
-    apt-get update && apt-get install -y git build-essential libsqlite3-dev && \
+    apt-get update && apt-get install -y git build-essential && \
     cd /app && \
     pip install -r requirements.txt && \
     export FLASK_DEBUG=1 && \

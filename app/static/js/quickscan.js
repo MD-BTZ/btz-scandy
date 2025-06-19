@@ -18,14 +18,21 @@ const QuickScan = {
     },
             
     init() {
-        if (this.isInitialized) {
-            this.reset();
-        } else {
-            this.setupEventListeners();
-            this.isInitialized = true;
-        }
-        this.focusCurrentInput();
-        console.log('QuickScan initialisiert');
+        console.log("QuickScan.init() aufgerufen");
+        this.scannedItem = null;
+        this.scannedWorker = null;
+        this.activeInputType = null;
+        this.currentProcess = {};
+        this.setupEventListeners();
+        
+        // Button-Status sofort initialisieren
+        setTimeout(() => {
+            this.updateConfirmButtonState();
+            console.log("Button-Status nach Init:", {
+                scannedItem: !!this.scannedItem,
+                scannedWorker: !!this.scannedWorker
+            });
+        }, 100);
     },
 
     setupEventListeners() {
@@ -469,27 +476,52 @@ const QuickScan = {
 
     async handleItemScan(barcode) {
         try {
-            const response = await fetch(`/api/inventory/tools/${barcode}`);
-            const data = await response.json();
-            if (!data.success) {
-                this.showError("Artikel nicht gefunden", 'item');
-                this.setCardState('item', 'active');
-                return;
+            // Zuerst versuchen, ein Werkzeug zu finden
+            let response = await fetch(`/api/inventory/tools/${barcode}`);
+            let data = await response.json();
+            
+            let item = null;
+            let itemType = 'tool';
+            
+            if (data.success) {
+                item = data.tool;
+            } else {
+                // Wenn kein Werkzeug gefunden, versuche Verbrauchsmaterial
+                response = await fetch(`/api/inventory/consumables/${barcode}`);
+                data = await response.json();
+                
+                if (data.success) {
+                    item = data.consumable;
+                    itemType = 'consumable';
+                } else {
+                    this.showError("Artikel nicht gefunden", 'item');
+                    this.setCardState('item', 'active');
+                    return;
+                }
             }
-            const item = data.data;
+            
             this.scannedItem = item;
             // Bestandswert robust ermitteln
             let quantity = (typeof item.quantity === 'number') ? item.quantity :
                            (typeof item.current_stock === 'number') ? item.current_stock :
                            (typeof item.current_amount === 'number') ? item.current_amount : 0;
             let min_quantity = (typeof item.min_quantity === 'number') ? item.min_quantity : 0;
+            
+            // Status-Text generieren
+            let statusText = '';
+            if (itemType === 'consumable') {
+                statusText = quantity > 0 ? 'Verfügbar' : 'Fehlt';
+            } else {
+                statusText = item.status || 'Unbekannt';
+            }
+            
             // Anzeige auf Karte aktualisieren
             const itemCardContent = document.getElementById('itemCardContent');
             if (itemCardContent) {
                 let html = `<div class='font-bold mb-1'>${item.name || 'Unbek. Artikel'}</div>`;
-                html += `<div class='badge badge-lg ${item.type === 'consumable' ? 'badge-info' : 'badge-neutral'} mb-1'>${item.type === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug'}</div>`;
-                html += `<div class='badge badge-lg mb-1'>${item.status_text || (item.type === 'consumable' ? (quantity > 0 ? 'Verfügbar' : 'Fehlt') : 'Unbekannt')}</div>`;
-                if (item.type === 'consumable') {
+                html += `<div class='badge badge-lg ${itemType === 'consumable' ? 'badge-info' : 'badge-neutral'} mb-1'>${itemType === 'consumable' ? 'Verbrauchsmaterial' : 'Werkzeug'}</div>`;
+                html += `<div class='badge badge-lg mb-1'>${statusText}</div>`;
+                if (itemType === 'consumable') {
                     html += `<div class='text-sm mt-1'>Bestand: <span class='font-mono'>${quantity}</span> / <span class='font-mono'>${min_quantity}</span> (min)</div>`;
                 }
                 html += `<div class='text-xs text-gray-400 mt-2'>(erneut klicken zum Ändern)</div>`;
@@ -497,12 +529,16 @@ const QuickScan = {
             }
             this.setCardState('item', 'success');
             this.setCardState('worker', this.activeInputType === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
-            this.updateConfirmButtonState();
+            
+            // Button-Status sofort aktualisieren
+            setTimeout(() => this.updateConfirmButtonState(), 100);
+            
             // Mengen-Modal für Verbrauchsgüter anzeigen
-            if (item.type === 'consumable') {
+            if (itemType === 'consumable') {
                 this.showQuantityModal();
             }
         } catch (error) {
+            console.error("Fehler beim Abrufen des Artikels:", error);
             this.showError("Fehler beim Abrufen des Artikels", 'item');
         }
     },
@@ -516,7 +552,7 @@ const QuickScan = {
                 this.setCardState('worker', 'active');
                 return;
             }
-            const worker = result.data;
+            const worker = result.worker;
             this.scannedWorker = worker;
             // Anzeige auf Karte aktualisieren
             const workerCardContent = document.getElementById('workerCardContent');
@@ -528,8 +564,11 @@ const QuickScan = {
             }
             this.setCardState('worker', 'success');
             this.setCardState('item', this.activeInputType === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
-            this.updateConfirmButtonState();
+            
+            // Button-Status sofort aktualisieren
+            setTimeout(() => this.updateConfirmButtonState(), 100);
         } catch (error) {
+            console.error("Fehler beim Abrufen des Mitarbeiters:", error);
             this.showError("Fehler beim Abrufen des Mitarbeiters", 'worker');
         }
     },
@@ -593,26 +632,40 @@ const QuickScan = {
     },
 
     reset() {
+        console.log("QuickScan.reset() aufgerufen");
         this.scannedItem = null;
         this.scannedWorker = null;
-        this.keyBuffer = '';
         this.activeInputType = null;
+        this.currentProcess = {};
+        
         // Karten zurücksetzen
         const itemCardContent = document.getElementById('itemCardContent');
-        if (itemCardContent) {
-            itemCardContent.innerHTML = `<p class='text-base opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
-        }
         const workerCardContent = document.getElementById('workerCardContent');
-        if (workerCardContent) {
-            workerCardContent.innerHTML = `<p class='text-base opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
+        if (itemCardContent) {
+            itemCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
         }
+        if (workerCardContent) {
+            workerCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
+        }
+        
         // Kartenfarben zurücksetzen
         this.setCardState('item', 'default');
         this.setCardState('worker', 'default');
-        // Eingabefeld ausblenden
+        
+        // Eingabefeld verstecken
         const inputContainer = document.getElementById('quickScanActiveInputContainer');
-        if (inputContainer) inputContainer.classList.add('hidden');
-        this.updateConfirmButtonState();
+        if (inputContainer) {
+            inputContainer.classList.add('hidden');
+        }
+        
+        // Button-Status zurücksetzen
+        setTimeout(() => {
+            this.updateConfirmButtonState();
+            console.log("Button-Status nach Reset:", {
+                scannedItem: !!this.scannedItem,
+                scannedWorker: !!this.scannedWorker
+            });
+        }, 100);
     },
 
     goToStep(step) {
@@ -875,6 +928,7 @@ const QuickScan = {
     },
 
     activateInput(type) {
+        console.log("activateInput aufgerufen:", type);
         // Zeige das sichtbare Eingabefeld an und setze Typ
         this.activeInputType = type;
         const inputContainer = document.getElementById('quickScanActiveInputContainer');
@@ -888,24 +942,54 @@ const QuickScan = {
         // Kartenfarben setzen
         this.setCardState('item', type === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
         this.setCardState('worker', type === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
+        
+        // Button-Status nach Kartenwechsel aktualisieren
+        setTimeout(() => {
+            this.updateConfirmButtonState();
+        }, 50);
     },
 
     // Button-Status aktualisieren
     updateConfirmButtonState() {
         const btn = document.getElementById('quickScanConfirmBtn');
+        const hasItem = !!(this.scannedItem && this.scannedItem.barcode);
+        const hasWorker = !!(this.scannedWorker && this.scannedWorker.barcode);
+        const shouldEnable = hasItem && hasWorker;
+        
+        console.log("UpdateConfirmButtonState:", {
+            buttonFound: !!btn,
+            scannedItem: hasItem,
+            scannedWorker: hasWorker,
+            shouldEnable: shouldEnable,
+            itemBarcode: this.scannedItem?.barcode,
+            workerBarcode: this.scannedWorker?.barcode
+        });
+        
         if (btn) {
-            btn.disabled = !(this.scannedItem && this.scannedWorker);
+            btn.disabled = !shouldEnable;
+            console.log("Button enabled:", shouldEnable, "Button disabled:", btn.disabled);
+            
+            // Zusätzliche visuelle Rückmeldung
+            if (shouldEnable) {
+                btn.classList.remove('btn-disabled');
+                btn.classList.add('btn-primary');
+            } else {
+                btn.classList.add('btn-disabled');
+                btn.classList.remove('btn-primary');
+            }
+        } else {
+            console.error("Bestätigen-Button nicht gefunden! ID: quickScanConfirmBtn");
         }
     },
 
-    // Bestätigen-Button (hier nur Demo)
+    // Bestätigen-Button
     async confirm() {
         if (this.scannedItem && this.scannedWorker) {
             try {
                 // Bestimme Aktion für Werkzeuge: 'lend' oder 'return'
                 let action = 'lend';
                 if (this.scannedItem.type !== 'consumable') {
-                    if (this.scannedItem.current_status === 'ausgeliehen') {
+                    if (this.scannedItem.status === 'ausgeliehen') {
                         action = 'return';
                     }
                 } else {
@@ -949,9 +1033,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Listener für das 'close'-Event des Modals
         modal.addEventListener('close', () => {
             QuickScan.reset();
-            // WORKAROUND: Seite neu laden...
-            // TODO: Ursache finden...
-            window.location.reload(); 
         });
     }
 
@@ -963,16 +1044,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 QuickScan.init(); 
             } else {
                 console.error("Cannot open QuickScan modal - modal not found!");
-            }
-        });
-    }
-
-    // Event listener to open the modal when the trigger is clicked
-    const quickScanTrigger = document.getElementById('quickScanTrigger');
-    if (quickScanTrigger) {
-        quickScanTrigger.addEventListener('click', () => {
-            if (modal) {
-                QuickScan.openModal();
             }
         });
     }
@@ -1000,4 +1071,35 @@ function showToast(type, message) {
     setTimeout(() => {
         toast.remove();
     }, 3000);
-} 
+}
+
+// Globale Funktion für Button-Status-Update
+function updateQuickScanButton() {
+    const btn = document.getElementById('quickScanConfirmBtn');
+    if (!btn) {
+        console.error("Button nicht gefunden!");
+        return;
+    }
+    
+    const hasItem = !!(QuickScan.scannedItem && QuickScan.scannedItem.barcode);
+    const hasWorker = !!(QuickScan.scannedWorker && QuickScan.scannedWorker.barcode);
+    const shouldEnable = hasItem && hasWorker;
+    
+    console.log("updateQuickScanButton:", {
+        hasItem: hasItem,
+        hasWorker: hasWorker,
+        shouldEnable: shouldEnable,
+        itemBarcode: QuickScan.scannedItem?.barcode,
+        workerBarcode: QuickScan.scannedWorker?.barcode
+    });
+    
+    btn.disabled = !shouldEnable;
+    
+    if (shouldEnable) {
+        btn.classList.remove('btn-disabled');
+        btn.classList.add('btn-primary');
+    } else {
+        btn.classList.add('btn-disabled');
+        btn.classList.remove('btn-primary');
+    }
+}

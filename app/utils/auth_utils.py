@@ -1,29 +1,35 @@
-from app.models.ticket_db import TicketDatabase
+from functools import wraps
+from flask import session, redirect, url_for, flash, request, g
+import logging
 from werkzeug.security import check_password_hash
-# Hinweis: get_auth_db_connection wird nicht mehr benötigt
+from app.models.mongodb_database import MongoDB
+
+logger = logging.getLogger(__name__)
+mongodb = MongoDB()
 
 def needs_setup():
-    """Überprüft, ob ein Admin-Benutzer in der Hauptdatenbank existiert.
+    """Überprüft, ob ein Admin-Benutzer in der MongoDB existiert.
 
     Returns:
         bool: True, wenn kein Admin-Benutzer gefunden wurde oder ein Fehler auftrat,
               andernfalls False.
     """
-    # Importiere hier nicht mehr
     try:
         # Prüfe, ob mindestens ein Admin existiert
-        ticket_db = TicketDatabase()
-        admin_user = ticket_db.query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1", one=True)
-        return admin_user is None # True wenn kein Admin gefunden wurde
+        admin_count = mongodb.count_documents('users', {'role': 'admin'})
+        return admin_count == 0  # True wenn kein Admin gefunden wurde
     except Exception as e:
-        # Wenn Tabelle oder DB nicht existiert oder anderer Fehler, ist Setup nötig
+        # Wenn Collection oder DB nicht existiert oder anderer Fehler, ist Setup nötig
         print(f"Fehler beim Prüfen auf Admin-Benutzer für Setup: {e}")
         return True
 
 def is_admin_user_present():
-    ticket_db = TicketDatabase()
-    admin_user = ticket_db.query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1", one=True)
-    return admin_user is not None
+    try:
+        admin_count = mongodb.count_documents('users', {'role': 'admin'})
+        return admin_count > 0
+    except Exception as e:
+        print(f"Fehler beim Prüfen auf Admin-Benutzer: {e}")
+        return False
 
 # Entferne die veraltete check_password Funktion
 # def check_password(username, password):

@@ -1,10 +1,12 @@
 from flask import Blueprint, render_template, current_app, redirect, url_for
-from ..models.database import Database
-from ..utils.system_structure import get_system_structure
+from flask_login import current_user
 from ..utils.auth_utils import needs_setup
+from ..models.mongodb_database import MongoDB
+from datetime import datetime
 
 # Kein URL-Präfix für den Main-Blueprint
 bp = Blueprint('main', __name__, url_prefix='')
+mongodb = MongoDB()
 
 @bp.route('/')
 def index():
@@ -14,60 +16,131 @@ def index():
         return redirect(url_for('setup.setup_admin'))
         
     try:
-        # Werkzeug-Statistiken mit verbesserter Abfrage
-        tool_stats = Database.query('''
-            WITH valid_tools AS (
-                SELECT barcode 
-                FROM tools 
-                WHERE deleted = 0
-            )
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE 
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM lendings l 
-                        WHERE l.tool_barcode = t.barcode 
-                        AND l.returned_at IS NULL
-                    ) AND status = 'verfügbar' THEN 1 
-                    ELSE 0 
-                END) as available,
-                (
-                    SELECT COUNT(DISTINCT l.tool_barcode) 
-                    FROM lendings l
-                    JOIN valid_tools vt ON l.tool_barcode = vt.barcode
-                    WHERE l.returned_at IS NULL
-                ) as lent,
-                SUM(CASE WHEN status = 'defekt' THEN 1 ELSE 0 END) as defect
-            FROM tools t
-            WHERE t.deleted = 0
-        ''', one=True)
+        # Werkzeug-Statistiken mit MongoDB-Aggregation
+        tool_pipeline = [
+            {'$match': {'deleted': {'$ne': True}}},
+            {
+                '$lookup': {
+                    'from': 'lendings',
+                    'localField': 'barcode',
+                    'foreignField': 'tool_barcode',
+                    'as': 'active_lendings'
+                }
+            },
+            {
+                '$addFields': {
+                    'has_active_lending': {
+                        '$gt': [
+                            {'$size': {'$filter': {'input': '$active_lendings', 'cond': {'$eq': ['$$this.returned_at', None]}}}},
+                            0
+                        ]
+                    }
+                }
+            },
+            {
+                '$group': {
+                    '_id': None,
+                    'total': {'$sum': 1},
+                    'available': {
+                        '$sum': {
+                            '$cond': [
+                                {'$and': [{'$eq': ['$status', 'verfügbar']}, {'$not': '$has_active_lending'}]},
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    'lent': {
+                        '$sum': {
+                            '$cond': ['$has_active_lending', 1, 0]
+                        }
+                    },
+                    'defect': {
+                        '$sum': {
+                            '$cond': [{'$eq': ['$status', 'defekt']}, 1, 0]
+                        }
+                    }
+                }
+            }
+        ]
+        
+        tool_stats_result = list(mongodb.db.tools.aggregate(tool_pipeline))
+        tool_stats = tool_stats_result[0] if tool_stats_result else {'total': 0, 'available': 0, 'lent': 0, 'defect': 0}
         
         # Verbrauchsmaterial-Statistiken
-        consumable_stats = {
-            'total': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0', one=True)['count'],
-            'sufficient': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity >= min_quantity', one=True)['count'],
-            'warning': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity AND quantity >= min_quantity * 0.5', one=True)['count'],
-            'critical': Database.query('SELECT COUNT(*) as count FROM consumables WHERE deleted = 0 AND quantity < min_quantity * 0.5', one=True)['count']
-        }
+        consumable_pipeline = [
+            {'$match': {'deleted': {'$ne': True}}},
+            {
+                '$group': {
+                    '_id': None,
+                    'total': {'$sum': 1},
+                    'sufficient': {
+                        '$sum': {
+                            '$cond': [{'$gte': ['$quantity', '$min_quantity']}, 1, 0]
+                        }
+                    },
+                    'warning': {
+                        '$sum': {
+                            '$cond': [
+                                {
+                                    '$and': [
+                                        {'$lt': ['$quantity', '$min_quantity']},
+                                        {'$gte': ['$quantity', {'$multiply': ['$min_quantity', 0.5]}]}
+                                    ]
+                                },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    'critical': {
+                        '$sum': {
+                            '$cond': [
+                                {'$lt': ['$quantity', {'$multiply': ['$min_quantity', 0.5]}]},
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+        
+        consumable_stats_result = list(mongodb.db.consumables.aggregate(consumable_pipeline))
+        consumable_stats = consumable_stats_result[0] if consumable_stats_result else {'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0}
 
         # Mitarbeiter-Statistiken
+        worker_pipeline = [
+            {'$match': {'deleted': {'$ne': True}}},
+            {
+                '$group': {
+                    '_id': '$department',
+                    'count': {'$sum': 1}
+                }
+            },
+            {'$match': {'_id': {'$ne': None}}},
+            {'$sort': {'_id': 1}},
+            {
+                '$project': {
+                    'name': '$_id',
+                    'count': 1,
+                    '_id': 0
+                }
+            }
+        ]
+        
+        worker_by_department = list(mongodb.db.workers.aggregate(worker_pipeline))
+        worker_total = mongodb.db.workers.count_documents({'deleted': {'$ne': True}})
+        
         worker_stats = {
-            'total': Database.query('SELECT COUNT(*) as count FROM workers WHERE deleted = 0', one=True)['count'],
-            'by_department': Database.query('''
-                SELECT department as name, COUNT(*) as count 
-                FROM workers 
-                WHERE deleted = 0 AND department IS NOT NULL 
-                GROUP BY department 
-                ORDER BY department
-            ''')
+            'total': worker_total,
+            'by_department': worker_by_department
         }
 
         # Lade aktive Hinweise aus der Datenbank
-        notices = Database.query('''
-            SELECT * FROM homepage_notices 
-            WHERE is_active = 1 
-            ORDER BY priority DESC, created_at DESC
-        ''')
+        notices = mongodb.find('homepage_notices', {'is_active': True})
+        # Sortiere die Hinweise nach Priorität und Erstellungsdatum
+        notices.sort(key=lambda x: (x.get('priority', 0), x.get('created_at', datetime.min)), reverse=True)
         
         return render_template('index.html',
                            tool_stats=tool_stats,

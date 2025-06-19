@@ -49,7 +49,7 @@ docker run -d \
   --restart unless-stopped \
   python:3.9-slim \
   bash -c "
-    apt-get update && apt-get install -y git build-essential libsqlite3-dev && \
+    apt-get update && apt-get install -y git build-essential && \
     git clone https://github.com/woschj/scandy2.git /app && \
     cd /app && \
     pip install --no-cache-dir -r requirements.txt && \

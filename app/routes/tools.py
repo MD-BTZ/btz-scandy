@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import current_user
-from app.models.database import Database
+from app.models.mongodb_models import MongoDBTool
+from app.models.mongodb_database import mongodb
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required
 from datetime import datetime
 import logging
@@ -15,63 +16,24 @@ def index():
     """Zeigt alle aktiven Werkzeuge"""
     logger.debug(f"[ROUTE] tools.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
     try:
-        with Database.get_db() as conn:
-            # Hole alle nicht-gelöschten Werkzeuge
-            tools = conn.execute('''
-                SELECT t.*, 
-                       CASE 
-                           WHEN EXISTS (
-                               SELECT 1 FROM lendings l 
-                               WHERE l.tool_barcode = t.barcode 
-                               AND l.returned_at IS NULL
-                           ) THEN 'ausgeliehen'
-                           ELSE t.status
-                       END as current_status,
-                       (
-                           SELECT w.firstname || ' ' || w.lastname
-                           FROM lendings l
-                           JOIN workers w ON l.worker_barcode = w.barcode
-                           WHERE l.tool_barcode = t.barcode
-                           AND l.returned_at IS NULL
-                           LIMIT 1
-                       ) as current_worker_name,
-                       (
-                           SELECT l.worker_barcode
-                           FROM lendings l
-                           WHERE l.tool_barcode = t.barcode
-                           AND l.returned_at IS NULL
-                           LIMIT 1
-                       ) as current_worker_barcode
-                FROM tools t
-                WHERE t.deleted = 0
-                ORDER BY t.name
-            ''').fetchall()
-            
-            # Hole vordefinierte Kategorien aus den Einstellungen
-            categories = conn.execute('''
-                SELECT name 
-                FROM categories 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()
-            
-            # Hole vordefinierte Standorte aus den Einstellungen
-            locations = conn.execute('''
-                SELECT name 
-                FROM locations 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''').fetchall()
-            
-            logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
-            
-            print(f"[DEBUG] User Info in tools.index: ID={current_user.id}, Role={current_user.role}, IsAdmin={current_user.is_admin}, IsAuthenticated={current_user.is_authenticated}")
-            
-            return render_template('tools/index.html',
-                               tools=tools,
-                               categories=[c['name'] for c in categories],
-                               locations=[l['name'] for l in locations],
-                               is_admin=current_user.is_admin)
+        # Hole alle aktiven Werkzeuge mit MongoDB
+        tools = MongoDBTool.get_all_with_status()
+        
+        # Hole vordefinierte Kategorien
+        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+        categories = [c['name'] for c in categories]
+        
+        # Hole vordefinierte Standorte
+        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+        locations = [l['name'] for l in locations]
+        
+        logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
+        
+        return render_template('tools/index.html',
+                           tools=tools,
+                           categories=categories,
+                           locations=locations,
+                           is_admin=current_user.is_admin)
                                
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True)
@@ -89,38 +51,28 @@ def add():
             description = request.form.get('description')
             category = request.form.get('category')
             location = request.form.get('location')
-            status = request.form.get('status', 'verfügbar')  # Status aus dem Formular holen
+            status = request.form.get('status', 'verfügbar')
             
             if not name or not barcode:
                 flash('Name und Barcode sind erforderlich', 'error')
                 return redirect(url_for('tools.add'))
             
             # Prüfe ob der Barcode bereits existiert
-            exists_count = Database.query('''
-                SELECT COUNT(*) as count 
-                FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode], one=True)['count']
+            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
             
-            if exists_count > 0:
+            if existing_tool:
                 flash('Dieser Barcode existiert bereits', 'error')
                 # Hole Kategorien und Standorte für das Template
-                categories = Database.query('''
-                    SELECT name FROM categories 
-                    WHERE deleted = 0 
-                    ORDER BY name
-                ''')
+                categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+                categories = [c['name'] for c in categories]
                 
-                locations = Database.query('''
-                    SELECT name FROM locations 
-                    WHERE deleted = 0 
-                    ORDER BY name
-                ''')
+                locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+                locations = [l['name'] for l in locations]
                 
                 # Gebe die Formulardaten zurück an das Template
                 return render_template('tools/add.html',
-                                   categories=[c['name'] for c in categories],
-                                   locations=[l['name'] for l in locations],
+                                   categories=categories,
+                                   locations=locations,
                                    form_data={
                                        'name': name,
                                        'barcode': barcode,
@@ -131,11 +83,19 @@ def add():
                                    })
             
             # Wenn Barcode eindeutig ist, füge das Werkzeug hinzu
-            Database.query('''
-                INSERT INTO tools 
-                (name, barcode, description, category, location, status)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', [name, barcode, description, category, location, status])
+            tool_data = {
+                'name': name,
+                'barcode': barcode,
+                'description': description,
+                'category': category,
+                'location': location,
+                'status': status,
+                'created_at': datetime.now(),
+                'modified_at': datetime.now(),
+                'deleted': False
+            }
+            
+            mongodb.insert_one('tools', tool_data)
             
             flash('Werkzeug erfolgreich hinzugefügt', 'success')
             return redirect(url_for('tools.index'))
@@ -144,22 +104,16 @@ def add():
             print(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
             flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
             # Hole Kategorien und Standorte für das Template
-            categories = Database.query('''
-                SELECT name FROM categories 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''')
+            categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+            categories = [c['name'] for c in categories]
             
-            locations = Database.query('''
-                SELECT name FROM locations 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''')
+            locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+            locations = [l['name'] for l in locations]
             
             # Gebe die Formulardaten zurück an das Template
             return render_template('tools/add.html',
-                               categories=[c['name'] for c in categories],
-                               locations=[l['name'] for l in locations],
+                               categories=categories,
+                               locations=locations,
                                form_data={
                                    'name': name,
                                    'barcode': barcode,
@@ -171,78 +125,70 @@ def add():
             
     else:
         # GET: Zeige Formular
-        categories = Database.query('''
-            SELECT name FROM categories 
-            WHERE deleted = 0 
-            ORDER BY name
-        ''')
+        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+        categories = [c['name'] for c in categories]
         
-        locations = Database.query('''
-            SELECT name FROM locations 
-            WHERE deleted = 0 
-            ORDER BY name
-        ''')
+        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+        locations = [l['name'] for l in locations]
         
         return render_template('tools/add.html',
-                           categories=[c['name'] for c in categories],
-                           locations=[l['name'] for l in locations])
+                           categories=categories,
+                           locations=locations)
 
 @bp.route('/<barcode>')
 @login_required
 def detail(barcode):
     """Zeigt die Details eines Werkzeugs"""
-    tool = Database.query('''
-        SELECT t.*, 
-               l.worker_barcode as lent_to,
-               l.lent_at as lending_date,
-               w.firstname || ' ' || w.lastname as current_borrower
-        FROM tools t
-        LEFT JOIN (
-            SELECT * FROM lendings 
-            WHERE returned_at IS NULL
-        ) l ON t.barcode = l.tool_barcode
-        LEFT JOIN workers w ON l.worker_barcode = w.barcode
-        WHERE t.barcode = ? AND t.deleted = 0
-    ''', [barcode], one=True)
+    tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
     
     if not tool:
         flash('Werkzeug nicht gefunden', 'error')
         return redirect(url_for('tools.index'))
     
+    # Hole aktuelle Ausleihe
+    current_lending = mongodb.find_one('lendings', {
+        'tool_barcode': barcode,
+        'returned_at': None
+    })
+    
+    if current_lending:
+        worker = mongodb.find_one('workers', {'barcode': current_lending['worker_barcode']})
+        if worker:
+            tool['current_borrower'] = f"{worker['firstname']} {worker['lastname']}"
+            tool['lending_date'] = current_lending['lent_at']
+    
     # Hole Kategorien und Standorte
-    categories = Database.get_categories()
-    locations = Database.get_locations()
+    categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+    categories = [c['name'] for c in categories]
     
-    # Hole kombinierten Verlauf aus Ausleihen und Statusänderungen
-    history = Database.query('''
-        SELECT 
-            'Ausleihe/Rückgabe' as action_type,
-            datetime(l.lent_at) as action_date,
-            w.firstname || ' ' || w.lastname as worker,
-            CASE 
-                WHEN l.returned_at IS NULL THEN 'Ausgeliehen'
-                ELSE 'Zurückgegeben'
-            END as action,
-            NULL as reason
-        FROM lendings l
-        LEFT JOIN workers w ON l.worker_barcode = w.barcode
-        WHERE l.tool_barcode = ?
-        UNION ALL
-        SELECT 
-            'Statusänderung' as action_type,
-            datetime(modified_at) as action_date,
-            NULL as worker,
-            status as action,
-            NULL as reason
-        FROM tools
-        WHERE barcode = ? AND status != 'verfügbar'
-        ORDER BY action_date DESC
-    ''', [barcode, barcode])
+    locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+    locations = [l['name'] for l in locations]
     
-    return render_template('tools/details.html',
+    # Hole Verlauf aus Ausleihen
+    lendings = mongodb.find('lendings', {'tool_barcode': barcode})
+    lendings = list(lendings)
+    
+    # Sortiere nach Datum (neueste zuerst)
+    lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
+    
+    # Erstelle Verlaufsliste
+    history = []
+    for lending in lendings:
+        worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+        worker_name = f"{worker['firstname']} {worker['lastname']}" if worker else "Unbekannt"
+        
+        history.append({
+            'action_type': 'Ausleihe/Rückgabe',
+            'action_date': lending['lent_at'],
+            'worker': worker_name,
+            'action': 'Zurückgegeben' if lending.get('returned_at') else 'Ausgeliehen',
+            'reason': None
+        })
+    
+    return render_template('tools/detail.html',
                          tool=tool,
-                         categories=[c['name'] for c in categories],
-                         locations=[l['name'] for l in locations],
+                         categories=categories,
+                         locations=locations,
                          history=history)
 
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
@@ -255,8 +201,8 @@ def edit(barcode):
             description = request.form.get('description')
             category = request.form.get('category')
             location = request.form.get('location')
-            new_barcode = request.form.get('barcode')  # Neuer Barcode aus dem Formular
-            new_status = request.form.get('status')  # Neuer Status aus dem Formular
+            new_barcode = request.form.get('barcode')
+            new_status = request.form.get('status')
             
             if not name:
                 flash('Name ist erforderlich', 'error')
@@ -268,77 +214,69 @@ def edit(barcode):
                 return redirect(url_for('tools.edit', barcode=barcode))
             
             # Hole den aktuellen Status des Werkzeugs
-            current_tool = Database.query('''
-                SELECT status, 
-                       EXISTS (
-                           SELECT 1 FROM lendings 
-                           WHERE tool_barcode = ? AND returned_at IS NULL
-                       ) as is_borrowed
-                FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode, barcode], one=True)
+            current_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
             
             if not current_tool:
                 flash('Werkzeug nicht gefunden', 'error')
                 return redirect(url_for('tools.index'))
             
-            # Wenn das Werkzeug ausgeliehen ist, darf der Status nicht geändert werden
-            if current_tool['is_borrowed'] and new_status != current_tool['status']:
-                flash('Der Status kann nicht geändert werden, solange das Werkzeug ausgeliehen ist', 'error')
+            # Prüfe ob das Werkzeug ausgeliehen ist
+            current_lending = mongodb.find_one('lendings', {
+                'tool_barcode': barcode,
+                'returned_at': None
+            })
+            
+            if current_lending and new_status == 'defekt':
+                flash('Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden', 'error')
                 return redirect(url_for('tools.edit', barcode=barcode))
-                
-            with Database.get_db() as conn:
-                # Aktualisiere das Werkzeug
-                conn.execute('''
-                    UPDATE tools 
-                    SET name = ?,
-                        description = ?,
-                        category = ?,
-                        location = ?,
-                        barcode = ?,
-                        status = ?,
-                        sync_status = 'pending'
-                    WHERE barcode = ?
-                ''', [name, description, category, location, new_barcode, new_status, barcode])
-                
-                conn.commit()
-                
-                flash('Werkzeug erfolgreich aktualisiert', 'success')
-                return redirect(url_for('tools.detail', barcode=new_barcode))
-                
+            
+            # Aktualisiere das Werkzeug
+            update_data = {
+                'name': name,
+                'description': description,
+                'category': category,
+                'location': location,
+                'status': new_status,
+                'modified_at': datetime.now()
+            }
+            
+            # Wenn der Barcode geändert wurde, prüfe ob der neue Barcode bereits existiert
+            if new_barcode and new_barcode != barcode:
+                existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
+                if existing_tool:
+                    flash('Dieser Barcode existiert bereits', 'error')
+                    return redirect(url_for('tools.edit', barcode=barcode))
+                update_data['barcode'] = new_barcode
+            
+            mongodb.update_one('tools', {'barcode': barcode}, {'$set': update_data})
+            
+            flash('Werkzeug erfolgreich aktualisiert', 'success')
+            return redirect(url_for('tools.detail', barcode=new_barcode if new_barcode else barcode))
+            
         else:
             # GET: Zeige Bearbeitungsformular
-            tool = Database.query('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode], one=True)
+            tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
             
             if not tool:
                 flash('Werkzeug nicht gefunden', 'error')
                 return redirect(url_for('tools.index'))
-                
-            # Hole vordefinierte Kategorien und Standorte
-            categories = Database.query('''
-                SELECT name FROM categories 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''')
             
-            locations = Database.query('''
-                SELECT name FROM locations 
-                WHERE deleted = 0 
-                ORDER BY name
-            ''')
+            # Hole Kategorien und Standorte
+            categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+            categories = [c['name'] for c in categories]
+            
+            locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+            locations = [l['name'] for l in locations]
             
             return render_template('tools/edit.html',
                                tool=tool,
-                               categories=[c['name'] for c in categories],
-                               locations=[l['name'] for l in locations])
+                               categories=categories,
+                               locations=locations)
                                
     except Exception as e:
-        print(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}")
+        logger.error(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}", exc_info=True)
         flash('Fehler beim Bearbeiten des Werkzeugs', 'error')
-        return redirect(url_for('tools.detail', barcode=barcode))
+        return redirect(url_for('tools.index'))
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required
@@ -346,37 +284,31 @@ def change_status(barcode):
     """Ändert den Status eines Werkzeugs"""
     try:
         new_status = request.form.get('status')
-        if not new_status:
-            flash('Kein Status angegeben', 'error')
-            return redirect(url_for('tools.detail', barcode=barcode))
-            
-        with Database.get_db() as conn:
-            # Prüfe ob das Werkzeug existiert
-            tool = conn.execute('''
-                SELECT * FROM tools 
-                WHERE barcode = ? AND deleted = 0
-            ''', [barcode]).fetchone()
-            
-            if not tool:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-                
-            # Aktualisiere den Status
-            conn.execute('''
-                UPDATE tools 
-                SET status = ?,
-                    sync_status = 'pending'
-                WHERE barcode = ?
-            ''', [new_status, barcode])
-            
-            conn.commit()
-            
-            flash('Status erfolgreich aktualisiert', 'success')
-            return redirect(url_for('tools.detail', barcode=barcode))
-            
+        
+        if new_status not in ['verfügbar', 'defekt']:
+            return jsonify({'success': False, 'message': 'Ungültiger Status'}), 400
+        
+        # Prüfe ob das Werkzeug ausgeliehen ist
+        current_lending = mongodb.find_one('lendings', {
+            'tool_barcode': barcode,
+            'returned_at': None
+        })
+        
+        if current_lending and new_status == 'defekt':
+            return jsonify({
+                'success': False, 
+                'message': 'Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden'
+            }), 400
+        
+        # Aktualisiere den Status
+        mongodb.update_one('tools', 
+                          {'barcode': barcode}, 
+                          {'$set': {'status': new_status, 'modified_at': datetime.now()}})
+        
+        return jsonify({'success': True, 'message': 'Status erfolgreich geändert'})
+        
     except Exception as e:
-        print(f"Fehler beim Status-Update: {str(e)}")
-        flash('Fehler beim Aktualisieren des Status', 'error')
-        return redirect(url_for('tools.detail', barcode=barcode))
+        logger.error(f"Fehler beim Ändern des Status: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Fehler beim Ändern des Status'}), 500
 
 # Weitere Tool-Routen...

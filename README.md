@@ -35,7 +35,7 @@ Die Anwendung ermöglicht es, einen Inventarbestand von Werkzeugen und Verbrauch
 ## Technologie-Stack
 
 - **Backend:** Python 3, Flask
-- **Datenbank:** SQLite
+- **Datenbank:** MongoDB
 - **Frontend:** HTML, Tailwind CSS, DaisyUI, JavaScript (mit Jinja2 Templating)
 - **Server:** Gunicorn (für Produktion empfohlen)
 
@@ -47,12 +47,11 @@ Die Anwendung ermöglicht es, einen Inventarbestand von Werkzeugen und Verbrauch
     *   Windows: `.\venv\Scripts\activate`
     *   Linux/macOS: `source venv/bin/activate`
 4.  **Abhängigkeiten installieren:** `pip install -r requirements.txt`
-5.  **Datenbank initialisieren/prüfen:**
-    *   Die Hauptdatenbank (`app/database/inventory.db`) und die Benutzerdatenbank (`app/database/users.db`) sollten im Repository enthalten sein oder beim ersten Start initialisiert werden.
-    *   Das Skript `app/db_migration.py` enthält Datenbankschema-Änderungen. Führen Sie es bei Bedarf aus, um das Schema zu aktualisieren: `python app/db_migration.py`
-    *   **WICHTIG:** Die mitgelieferte `inventory.db` enthält Demodaten. Für einen Produktiveinsatz sollten die Daten gelöscht und neu eingegeben werden.
-6.  **(Optional) Ersten Admin-Benutzer anlegen:** Falls die Benutzerdatenbank leer ist, verwenden Sie das (ggf. aus `_potentially_unused` wiederhergestellte) Skript `create_admin.py` (Details zur Nutzung siehe Skript).
-7.  **Entwicklungsserver starten:** `flask run` (oder `python run.py`)
+5.  **MongoDB einrichten:**
+    *   Stellen Sie sicher, dass MongoDB installiert und läuft
+    *   Die Anwendung verwendet standardmäßig die Datenbank `scandy` und `scandy_tickets`
+    *   Für Docker-Installationen ist MongoDB bereits in der docker-compose.yml konfiguriert
+6.  **Entwicklungsserver starten:** `flask run` (oder `python run.py`)
 
 Die Anwendung ist standardmäßig unter `http://127.0.0.1:5000` erreichbar.
 
@@ -60,14 +59,13 @@ Die Anwendung ist standardmäßig unter `http://127.0.0.1:5000` erreichbar.
 
 ```
 scandy/
-├── _potentially_unused/  # Isolierte, wahrscheinlich ungenutzte Dateien (kann gelöscht werden)
 ├── app/                  # Hauptverzeichnis der Flask-Anwendung
-│   ├── database/         # Enthält SQLite-DBs (inventory.db, users.db)
 │   ├── models/           # Datenbankschicht
-│   │   ├── database.py   # Zentrale Klasse für DB-Abfragen (meist rohes SQL)
-│   │   ├── tool.py       # (Optional) Modellklasse für Werkzeuge
-│   │   ├── worker.py     # (Optional) Modellklasse für Mitarbeiter
-│   │   ├── consumable.py # (Optional) Modellklasse für Verbrauchsmaterial
+│   │   ├── mongodb_database.py # Zentrale MongoDB-Verbindungsklasse
+│   │   ├── mongodb_models.py   # MongoDB-Modelle
+│   │   ├── tool.py       # Modellklasse für Werkzeuge
+│   │   ├── worker.py     # Modellklasse für Mitarbeiter
+│   │   ├── consumable.py # Modellklasse für Verbrauchsmaterial
 │   │   ├── user.py       # Modellklasse für Benutzer (verwendet von Flask-Login)
 │   │   └── ...           # Weitere Modelle (settings.py etc.)
 │   ├── routes/           # Flask Blueprints (Controller)
@@ -93,14 +91,11 @@ scandy/
 │   │   └── ...           # Weitere Utilities (Filter, Logger etc.)
 │   ├── __init__.py       # App Factory (`create_app`), registriert Blueprints & Erweiterungen
 │   ├── config.py         # Konfigurationsklassen (Development, Production)
-│   ├── db_migration.py   # Skript zur Anwendung von DB-Schemaänderungen
-│   ├── schema.sql        # (Referenz) SQL-Schema der Haupt-DB
 │   └── wsgi.py           # WSGI-Einstiegspunkt für Produktionsserver
 ├── backups/              # Verzeichnis für DB-Backups (ignoriert von Git)
 ├── instance/             # Instanz-Daten (z.B. Sessions, ignoriert von Git)
 ├── venv/                 # Virtuelle Python-Umgebung (ignoriert von Git)
 ├── .gitignore            # Definiert von Git zu ignorierende Dateien/Ordner
-├── backup.py             # Skript für Backup-Logik (wird in __init__.py verwendet)
 ├── Dockerfile            # (Optional) Docker-Konfiguration
 ├── gunicorn.conf.py      # (Optional) Gunicorn-Konfiguration
 ├── LICENSE               # Lizenzdatei
@@ -111,17 +106,14 @@ scandy/
 
 ## Datenbank
 
-- **Technologie:** SQLite
-- **Speicherorte:**
-    - `app/database/inventory.db`: Hauptdatenbank für Werkzeuge, Material, Mitarbeiter, Ausleihen, Einstellungen etc.
-    - `app/database/users.db`: Separate Datenbank nur für Benutzerdaten (Username, Passwort-Hash). Wird von `app/routes/auth.py` und `app/utils/auth_utils.py` verwendet.
-- **Schema & Migration:**
-    - Das ursprüngliche Schema für `inventory.db` kann in `app/schema.sql` eingesehen werden.
-    - Schemaänderungen werden durch das Skript `app/db_migration.py` verwaltet und angewendet. Dieses Skript enthält `ALTER TABLE`-Befehle und sollte nach Codeänderungen, die neue Spalten erfordern, ausgeführt werden (`python app/db_migration.py`).
-- **Datenzugriff:** Erfolgt primär über die Klasse `Database` in `app/models/database.py`. Diese Klasse bietet Methoden (`query`, `execute`, `get_db`, `get_db_connection`), die meist direkt SQL-Abfragen ausführen.
+- **Technologie:** MongoDB
+- **Datenbanken:**
+    - `scandy`: Hauptdatenbank für Werkzeuge, Material, Mitarbeiter, Ausleihen, Einstellungen etc.
+    - `scandy_tickets`: Separate Datenbank für Ticket-System
+- **Datenzugriff:** Erfolgt über die Klasse `MongoDBDatabase` in `app/models/mongodb_database.py`. Diese Klasse bietet Methoden für alle MongoDB-Operationen (find, find_one, insert_one, update_one, delete_one, etc.).
 - **Modelle (`app/models/`):**
-    - Definieren teilweise Klassen (`User`, `Tool`, `Worker`, `Consumable`), die aber nicht als vollwertiges ORM (wie SQLAlchemy) genutzt werden. Sie dienen eher der Strukturierung und teilweise der Datenvalidierung oder einfachen Abfragen (`User.get_by_id`).
-    - Die meiste Logik findet in den Routen (`app/routes/`) statt, die direkt `Database.query` aufrufen.
+    - Definieren Klassen (`User`, `Tool`, `Worker`, `Consumable`), die mit MongoDB interagieren
+    - Die meiste Logik findet in den Routen (`app/routes/`) statt, die direkt MongoDB-Methoden aufrufen
 
 ## Konfiguration
 

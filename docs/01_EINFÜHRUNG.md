@@ -64,19 +64,20 @@ Scandy ist eine webbasierte Anwendung zur Verwaltung von Werkzeugen und Verbrauc
    - Erweiterbare Funktionalität
    - Responsive Design für mobile Nutzung
 
-## Systemanforderungen
+## Technische Anforderungen
 
-### Server
-- Python 3.x
-- SQLite-Datenbank
-- Webserver (z.B. Gunicorn)
-- Mindestens 1GB RAM
-- 10GB Festplattenspeicher
+### Server-Anforderungen
+- **Betriebssystem:** Linux (empfohlen), Windows, macOS
+- **Python:** Version 3.8 oder höher
+- **Datenbank:** MongoDB 4.4 oder höher
+- **RAM:** Mindestens 2 GB (4 GB empfohlen)
+- **Speicher:** Mindestens 10 GB freier Speicherplatz
+- **Netzwerk:** Internetverbindung für Updates
 
-### Client
-- Moderner Webbrowser (Chrome, Firefox, Safari, Edge)
-- Internetverbindung
-- Optional: Barcode-Scanner
+### Client-Anforderungen
+- **Browser:** Chrome, Firefox, Safari, Edge (aktuelle Versionen)
+- **JavaScript:** Aktiviert
+- **Auflösung:** Mindestens 1024x768 (responsive Design)
 
 ## Lizenzierung
 

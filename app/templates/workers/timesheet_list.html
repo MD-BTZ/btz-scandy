@@ -82,8 +82,8 @@
                     <td>{{ ts.created_at_de }}</td>
                     <td>{{ ts.updated_at_de }}</td>
                     <td>
-                        <a href="{{ url_for('workers.timesheet_edit', ts_id=ts.id) }}" class="btn btn-sm btn-secondary">Bearbeiten</a>
-                        <a href="{{ url_for('workers.timesheet_download', ts_id=ts.id) }}" class="btn btn-sm btn-accent ml-2">Download</a>
+                        <a href="{{ url_for('workers.timesheet_edit', ts_id=ts._id) }}" class="btn btn-sm btn-secondary">Bearbeiten</a>
+                        <a href="{{ url_for('workers.timesheet_download', ts_id=ts._id) }}" class="btn btn-sm btn-accent ml-2">Download</a>
                     </td>
                 </tr>
                 {% endfor %}

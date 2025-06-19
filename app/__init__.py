@@ -6,34 +6,18 @@ import os
 from datetime import datetime, timedelta
 from app.utils.filters import register_filters, status_color, priority_color
 import logging
-from app.models.database import Database
 from app.utils.error_handler import handle_errors
-from app.utils.db_schema import SchemaManager
 from flask_compress import Compress
-from app.models.settings import Settings
 from app.utils.auth_utils import needs_setup
-from app.models.init_db import init_db
 from pathlib import Path
 import sys
 from flask_login import LoginManager, current_user
-from app.models.user import User
-from app.models.init_ticket_db import init_ticket_db
 from app.utils.context_processors import register_context_processors
-from app.routes import auth, tools, consumables, workers, setup, backup
 from app.config import Config
 from app.routes import init_app
-import sqlite3
-from app.utils.schema_validator import validate_and_migrate_databases
-
-# Backup-System importieren
-sys.path.append(str(Path(__file__).parent.parent))
-from backup import DatabaseBackup
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
-
-# Backup-Manager initialisieren
-backup_manager = DatabaseBackup(str(Path(__file__).parent.parent))
 
 # Backup-Verzeichnisse erstellen
 backup_dir = Path(__file__).parent.parent / 'backups'
@@ -63,116 +47,24 @@ def ensure_directories_exist():
     """Stellt sicher, dass alle benötigten Verzeichnisse existieren"""
     from app.config import config
     current_config = config['default']()
-    project_root = Path(current_config.DATABASE).parent.parent # Annahme: DB ist in app/database/
+    project_root = Path(current_config.BASE_DIR)
 
     # Liste der zu erstellenden Verzeichnisse
     directories = [
-        os.path.dirname(current_config.DATABASE),
         current_config.BACKUP_DIR,
         current_config.UPLOAD_FOLDER,
-        project_root / 'tmp' # Hinzugefügt
+        project_root / 'tmp',
+        current_config.SESSION_FILE_DIR
     ]
     
     # Verzeichnisse erstellen
     for directory in directories:
-        dir_path = Path(directory) # Sicherstellen, dass es ein Path-Objekt ist
+        dir_path = Path(directory)
         if not dir_path.exists():
-            dir_path.mkdir(parents=True, exist_ok=True) # parents=True hinzugefügt
+            dir_path.mkdir(parents=True, exist_ok=True)
             logging.info(f"Verzeichnis erstellt: {dir_path}")
         else:
             logging.info(f"Verzeichnis existiert bereits: {dir_path}")
-
-def cleanup_database():
-    """Führt regelmäßige Wartungsaufgaben für die Datenbank durch"""
-    try:
-        # Konfiguration laden
-        from app.config import config
-        current_config = config['default']
-        
-        db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
-        
-        # Führe Bereinigungen in einer Transaktion durch
-        with sqlite3.connect(db_path) as db:
-            cursor = db.cursor()
-            
-            # Lösche ungültige Ausleihen
-            cursor.execute('''
-                DELETE FROM lendings 
-                WHERE tool_barcode NOT IN (SELECT barcode FROM tools WHERE deleted = 0)
-                OR worker_barcode NOT IN (SELECT barcode FROM workers WHERE deleted = 0)
-            ''')
-            
-            # Lösche verwaiste Verbrauchsmaterial-Einträge
-            cursor.execute('''
-                DELETE FROM consumable_usages 
-                WHERE consumable_barcode NOT IN (SELECT barcode FROM consumables WHERE deleted = 0)
-                OR worker_barcode NOT IN (SELECT barcode FROM workers WHERE deleted = 0)
-            ''')
-            
-            # Lösche alte gelöschte Einträge
-            cursor.execute('''
-                DELETE FROM tools 
-                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
-            ''')
-            
-            cursor.execute('''
-                DELETE FROM workers 
-                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
-            ''')
-            
-            cursor.execute('''
-                DELETE FROM consumables 
-                WHERE deleted = 1 AND deleted_at < datetime('now', '-1 year')
-            ''')
-            
-            db.commit()
-            logger.info("Datenbankbereinigung erfolgreich durchgeführt")
-        
-        # Führe VACUUM außerhalb der Transaktion durch
-        with sqlite3.connect(db_path) as db:
-            cursor = db.cursor()
-            cursor.execute('VACUUM')
-            logger.info("Datenbank-VACUUM erfolgreich durchgeführt")
-            
-    except Exception as e:
-        logger.error(f"Fehler bei der Datenbankbereinigung: {str(e)}")
-        if 'db' in locals():
-            db.rollback()
-
-def initialize_and_migrate_databases():
-    """Initialisiert die Datenbanken nur beim ersten Start"""
-    try:
-        # Konfiguration laden
-        from app.config import config
-        current_config = config['default']
-        
-        # Definiere Datenbankpfade
-        inventory_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'inventory.db')
-        tickets_db_path = os.path.join(current_config.BASE_DIR, 'app', 'database', 'tickets.db')
-        
-        # Stelle sicher, dass die Verzeichnisse existieren
-        os.makedirs(os.path.dirname(inventory_db_path), exist_ok=True)
-        os.makedirs(os.path.dirname(tickets_db_path), exist_ok=True)
-        
-        # Initialisiere Hauptdatenbank
-        logger.info("Initialisiere Hauptdatenbank...")
-        schema_manager = SchemaManager(inventory_db_path)
-        if not schema_manager.initialize():
-            logger.error("Fehler bei der Initialisierung der Hauptdatenbank")
-            return False
-        logger.info("Hauptdatenbank erfolgreich initialisiert")
-        
-        # Initialisiere Ticket-Datenbank
-        logger.info("Initialisiere Ticket-Datenbank...")
-        from app.models.init_ticket_db import init_ticket_db
-        init_ticket_db()
-        logger.info("Ticket-Datenbank erfolgreich initialisiert")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Fehler bei der Datenbankinitialisierung: {str(e)}")
-        return False
 
 def create_app(test_config=None):
     """Erstellt und konfiguriert die Flask-Anwendung"""
@@ -198,23 +90,35 @@ def create_app(test_config=None):
     # Verzeichnisse erstellen
     ensure_directories_exist()
     
-    # Datenbanken nur einmal beim Start initialisieren
-    if not hasattr(app, '_database_initialized'):
-        initialize_and_migrate_databases()
-        app._database_initialized = True
-    
-    # Validiere und migriere Datenbanken beim Start
-    if not validate_and_migrate_databases():
-        logging.error("Datenbankvalidierung und -migration fehlgeschlagen. Bitte überprüfen Sie die Datenbankstruktur.")
-        # Hier könnten wir auch die App beenden, aber das wäre zu drastisch
-        # sys.exit(1)
+    # MongoDB-Initialisierung
+    try:
+        from app.models.mongodb_models import create_mongodb_indexes
+        with app.app_context():
+            create_mongodb_indexes()
+            logging.info("MongoDB-Indizes erstellt")
+    except Exception as e:
+        logging.error(f"Fehler bei MongoDB-Initialisierung: {e}")
     
     # Flask-Login initialisieren
     login_manager.init_app(app)
     
+    # Flask-Session initialisieren
+    Session(app)
+    
     @login_manager.user_loader
     def load_user(user_id):
-        return User.get_by_id(user_id)
+        try:
+            from app.models.mongodb_models import MongoDBUser
+            from app.models.user import User
+            
+            user_data = MongoDBUser.get_by_id(user_id)
+            if user_data:
+                user = User(user_data)
+                return user
+            return None
+        except Exception as e:
+            logging.error(f"Fehler beim Laden des Benutzers {user_id}: {e}")
+            return None
     
     # Context Processors registrieren
     register_context_processors(app)
@@ -230,25 +134,7 @@ def create_app(test_config=None):
         }
     
     # Blueprints registrieren
-    from app.routes import (
-        main, auth, admin, tools, workers, 
-        consumables, lending, dashboard, history, 
-        quick_scan, api, tickets, setup, backup
-    )
-    app.register_blueprint(main.bp)
-    app.register_blueprint(auth.bp)
-    app.register_blueprint(admin.bp)
-    app.register_blueprint(tools.bp)
-    app.register_blueprint(workers.bp)
-    app.register_blueprint(consumables.bp)
-    app.register_blueprint(lending.bp, url_prefix='/lending')
-    app.register_blueprint(dashboard.bp)
-    app.register_blueprint(history.bp)
-    app.register_blueprint(quick_scan.bp)
-    app.register_blueprint(api.bp)
-    app.register_blueprint(tickets.bp, url_prefix='/tickets')
-    app.register_blueprint(setup.bp)
-    app.register_blueprint(backup.bp)
+    init_app(app)
     
     # Fehlerbehandlung registrieren
     handle_errors(app)
@@ -263,67 +149,9 @@ def create_app(test_config=None):
     # Komprimierung aktivieren
     Compress(app)
     
-    # Wenn auf Render, lade Demo-Daten
-    if os.environ.get('RENDER') == 'true':
-        with app.app_context():
-            demo_data_lock = os.path.join(app.instance_path, 'demo_data.lock')
-            if not os.path.exists(demo_data_lock):
-                # Lösche vorhandene Benutzer
-                with Database.get_db() as db:
-                    db.execute("DELETE FROM users")
-                    db.commit()
-                    print("Vorhandene Benutzer gelöscht")
-                
-                # Demo-Daten laden
-                from app.models.demo_data import load_demo_data
-                load_demo_data()
-                print("Demo-Daten wurden geladen")
-                
-                # Erstelle Lock-Datei
-                os.makedirs(app.instance_path, exist_ok=True)
-                with open(demo_data_lock, 'w') as f:
-                    f.write('1')
-            else:
-                # Versuche das letzte Backup wiederherzustellen
-                backup = DatabaseBackup(app_path=Path(__file__).parent.parent)
-                latest_backup = "inventory_20250110_190000.db"
-                if backup.restore_backup(latest_backup):
-                    print(f"Backup {latest_backup} erfolgreich wiederhergestellt")
-                else:
-                    print("Konnte Backup nicht wiederherstellen, initialisiere neue Datenbank")
-    
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():
-        # Berechne unausgefüllte Tage für alle Wochen
-        unfilled_days = 0
-        if current_user.is_authenticated and current_user.is_mitarbeiter:
-            today = datetime.now()
-            # Verwende die Ticket-Datenbank für Timesheet-Abfragen
-            tickets_db_path = os.path.join(current_app.config['BASE_DIR'], 'app', 'database', 'tickets.db')
-            with sqlite3.connect(tickets_db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                timesheets = conn.execute('''
-                    SELECT * FROM timesheets 
-                    WHERE user_id = ?
-                ''', [current_user.id]).fetchall()
-                
-                for ts in timesheets:
-                    # Berechne den Wochenstart
-                    week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
-                    days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
-                    
-                    for i, day in enumerate(days):
-                        # Berechne das Datum für den aktuellen Tag
-                        current_day = week_start + timedelta(days=i)
-                        
-                        # Prüfe nur vergangene Tage
-                        if current_day.date() < today.date():
-                            has_times = ts[f'{day}_start'] or ts[f'{day}_end']
-                            has_tasks = ts[f'{day}_tasks']
-                            if not (has_times and has_tasks):
-                                unfilled_days += 1
-
         return {
             'status_colors': {
                 'offen': 'danger',
@@ -337,8 +165,7 @@ def create_app(test_config=None):
                 'normal': 'primary',
                 'hoch': 'warning',
                 'kritisch': 'error'
-            },
-            'unfilled_timesheet_days': unfilled_days
+            }
         }
 
     return app

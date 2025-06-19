@@ -6,27 +6,38 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=sqlite:////app/database/inventory.db
-      - TICKETS_DATABASE_URL=sqlite:////app/database/tickets.db
-      - SYSTEM_NAME=Scandy
-      - TICKET_SYSTEM_NAME=Aufgaben
-      - TOOL_SYSTEM_NAME=Werkzeuge
-      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - FLASK_ENV=production
+      - DATABASE_URL=mongodb://mongodb:27017/scandy
+      - TICKETS_DATABASE_URL=mongodb://mongodb:27017/scandy_tickets
+      - SECRET_KEY=your-secret-key-here
+      - MONGODB_URI=mongodb://mongodb:27017/
     volumes:
-      - ./uploads:/app/uploads
-      - ./backups:/app/backups
+      - ./app/static:/app/app/static
+      - ./app/uploads:/app/app/uploads
+      - ./app/logs:/app/app/logs
+      - ./app/backups:/app/app/backups
     depends_on:
-      - scandy_db
+      - mongodb
+    restart: unless-stopped
+    command: >
+      sh -c "
+      mkdir -p /app/database &&
+      python -m flask run --host=0.0.0.0 --port=5000
+      "
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
     restart: unless-stopped
 
-  scandy_db:
-    build: .
-    command: >
-      bash -c "mkdir -p /app/database && 
-               touch /app/database/inventory.db /app/database/tickets.db && 
-               chmod 666 /app/database/inventory.db /app/database/tickets.db && 
-               tail -f /dev/null"
-    restart: unless-stopped
+volumes:
+  mongodb_data:
 
 networks:
   scandy_network:

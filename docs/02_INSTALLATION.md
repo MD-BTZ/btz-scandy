@@ -38,17 +38,14 @@ Dieses Dokument beschreibt die Installation von Scandy in verschiedenen Umgebung
    pip install -r requirements.txt
    ```
 
-4. **Datenbank initialisieren**
+4. **MongoDB einrichten**
    ```bash
-   python app/db_migration.py
+   # Stellen Sie sicher, dass MongoDB läuft
+   sudo systemctl start mongod
+   sudo systemctl enable mongod
    ```
 
-5. **Ersten Admin-Benutzer anlegen**
-   ```bash
-   python create_admin.py
-   ```
-
-6. **Entwicklungsserver starten**
+5. **Entwicklungsserver starten**
    ```bash
    flask run
    ```
@@ -153,6 +150,45 @@ Die Anwendung ist nun unter `http://127.0.0.1:5000` erreichbar.
 
 Die Anwendung ist nun unter `http://localhost:5000` erreichbar.
 
+## Datenbank-Setup
+
+Die Anwendung verwendet MongoDB als Datenbank. Für die Installation stehen folgende Optionen zur Verfügung:
+
+### Option 1: Lokale MongoDB-Installation
+
+1. **MongoDB installieren:**
+   - **Ubuntu/Debian:** `sudo apt-get install mongodb`
+   - **CentOS/RHEL:** `sudo yum install mongodb-org`
+   - **macOS:** `brew install mongodb-community`
+   - **Windows:** Download von [mongodb.com](https://www.mongodb.com/try/download/community)
+
+2. **MongoDB starten:**
+   ```bash
+   sudo systemctl start mongod
+   sudo systemctl enable mongod
+   ```
+
+3. **Datenbanken erstellen:**
+   ```bash
+   mongo
+   use scandy
+   use scandy_tickets
+   ```
+
+### Option 2: Docker (Empfohlen)
+
+Die Anwendung enthält bereits eine `docker-compose.yml` Datei mit MongoDB-Konfiguration:
+
+```bash
+docker-compose up -d
+```
+
+### Option 3: MongoDB Atlas (Cloud)
+
+1. Konto bei [MongoDB Atlas](https://www.mongodb.com/atlas) erstellen
+2. Cluster erstellen
+3. Verbindungsstring in der Konfiguration verwenden
+
 ## Konfiguration
 
 ### Umgebungsvariablen
@@ -164,7 +200,7 @@ Wichtige Umgebungsvariablen:
 
 ### Datenbank
 
-Die Anwendung verwendet standardmäßig SQLite. Für Produktionsumgebungen kann eine andere Datenbank konfiguriert werden.
+Die Anwendung verwendet standardmäßig MongoDB. Für Produktionsumgebungen kann eine andere Datenbank konfiguriert werden.
 
 ### Backup-Konfiguration
 

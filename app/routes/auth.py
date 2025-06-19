@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
-from app.models.user import User
 from urllib.parse import urlparse
+from app.models.mongodb_models import MongoDBUser
+from werkzeug.security import check_password_hash
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -16,11 +17,17 @@ def login():
         password = request.form.get('password')
         remember = request.form.get('remember') == 'on'
         
-        user = User.get_by_username(username)
+        # MongoDB User-Logik
+        user_data = MongoDBUser.get_by_username(username)
             
-        if user and user.check_password(password):
-            if user.is_active:
+        if user_data and check_password_hash(user_data['password_hash'], password):
+            if user_data.get('is_active', True):
+                # Erstelle ein User-Objekt für Flask-Login
+                from app.models.user import User
+                user = User(user_data)
+                
                 login_user(user, remember=remember) 
+                
                 flash('Anmeldung erfolgreich!', 'success')
                 next_page = request.args.get('next')
                 if not next_page or urlparse(next_page).netloc != '' and urlparse(next_page).netloc != request.host:

@@ -201,12 +201,8 @@ async function loadCategories() {
 async function deleteDepartment(name) {
     if (confirm(`Möchten Sie die Abteilung "${name}" wirklich löschen?`)) {
         try {
-            const response = await fetch('/admin/departments/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `department=${encodeURIComponent(name)}`
+            const response = await fetch(`/admin/departments/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             if (data.success) {
@@ -225,12 +221,8 @@ async function deleteDepartment(name) {
 async function deleteLocation(name) {
     if (confirm(`Möchten Sie den Standort "${name}" wirklich löschen?`)) {
         try {
-            const response = await fetch('/admin/locations/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `location=${encodeURIComponent(name)}`
+            const response = await fetch(`/admin/locations/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             if (data.success) {
@@ -249,12 +241,8 @@ async function deleteLocation(name) {
 async function deleteCategory(name) {
     if (confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
         try {
-            const response = await fetch('/admin/categories/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ name: name })
+            const response = await fetch(`/admin/categories/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             if (data.success) {

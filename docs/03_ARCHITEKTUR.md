@@ -2,14 +2,14 @@
 
 ## Übersicht
 
-Scandy ist eine moderne Webanwendung mit einer klaren Trennung zwischen Frontend und Backend. Die Anwendung folgt dem Model-View-Controller (MVC) Muster und verwendet eine SQLite-Datenbank für die Datenspeicherung.
+Scandy ist eine moderne Webanwendung mit einer klaren Trennung zwischen Frontend und Backend. Die Anwendung folgt dem Model-View-Controller (MVC) Muster und verwendet eine MongoDB-Datenbank für die Datenspeicherung.
 
 ## Technologie-Stack
 
 ### Backend
 - **Programmiersprache**: Python 3.x
 - **Web-Framework**: Flask
-- **Datenbank**: SQLite
+- **Datenbank**: MongoDB
 - **WSGI-Server**: Gunicorn (Produktion)
 - **Template-Engine**: Jinja2
 
@@ -23,62 +23,99 @@ Scandy ist eine moderne Webanwendung mit einer klaren Trennung zwischen Frontend
 
 ### 1. Datenbank
 
-#### Struktur
-- **inventory.db**: Hauptdatenbank
-  - Werkzeuge
-  - Verbrauchsmaterial
-  - Mitarbeiter
-  - Ausleihen
-  - Einstellungen
+#### Collections (Hauptdatenbank)
 
-- **users.db**: Benutzerdatenbank
-  - Benutzerkonten
-  - Berechtigungen
-  - Sessions
+#### Werkzeuge (tools)
+- `barcode`: Eindeutiger Barcode
+- `name`: Name des Werkzeugs
+- `description`: Beschreibung
+- `status`: Status (verfügbar, ausgeliehen, defekt, etc.)
+- `category`: Kategorie
+- `location`: Standort
+- `condition`: Zustand
+- `purchase_date`: Kaufdatum
+- `next_maintenance`: Nächste Wartung
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
 
-#### Tabellen (inventory.db)
-```sql
--- Werkzeuge
-CREATE TABLE tools (
-    id INTEGER PRIMARY KEY,
-    barcode TEXT UNIQUE,
-    name TEXT,
-    category TEXT,
-    location TEXT,
-    status TEXT,
-    notes TEXT
-);
+#### Verbrauchsmaterialien (consumables)
+- `barcode`: Eindeutiger Barcode
+- `name`: Name des Materials
+- `description`: Beschreibung
+- `quantity`: Aktuelle Menge
+- `min_quantity`: Mindestbestand
+- `category`: Kategorie
+- `location`: Standort
+- `unit`: Einheit
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
 
--- Verbrauchsmaterial
-CREATE TABLE consumables (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    category TEXT,
-    quantity INTEGER,
-    min_quantity INTEGER,
-    location TEXT
-);
+#### Mitarbeiter (workers)
+- `barcode`: Eindeutiger Barcode
+- `firstname`: Vorname
+- `lastname`: Nachname
+- `department`: Abteilung
+- `email`: E-Mail
+- `phone`: Telefonnummer
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
 
--- Mitarbeiter
-CREATE TABLE workers (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    department TEXT,
-    active BOOLEAN
-);
+#### Ausleihen (lendings)
+- `tool_barcode`: Barcode des Werkzeugs
+- `worker_barcode`: Barcode des Mitarbeiters
+- `lent_at`: Ausleihdatum
+- `returned_at`: Rückgabedatum
+- `notes`: Notizen
+- `created_at`: Erstellungsdatum
 
--- Ausleihen
-CREATE TABLE lendings (
-    id INTEGER PRIMARY KEY,
-    tool_id INTEGER,
-    worker_id INTEGER,
-    start_date TEXT,
-    end_date TEXT,
-    status TEXT,
-    FOREIGN KEY(tool_id) REFERENCES tools(id),
-    FOREIGN KEY(worker_id) REFERENCES workers(id)
-);
-```
+#### Verbrauchsmaterial-Nutzung (consumable_usages)
+- `consumable_barcode`: Barcode des Materials
+- `worker_barcode`: Barcode des Mitarbeiters
+- `quantity`: Verbrauchte Menge
+- `used_at`: Verbrauchsdatum
+- `created_at`: Erstellungsdatum
+
+#### Benutzer (users)
+- `username`: Benutzername
+- `password_hash`: Gehashtes Passwort
+- `email`: E-Mail
+- `firstname`: Vorname
+- `lastname`: Nachname
+- `role`: Rolle (admin, mitarbeiter)
+- `is_active`: Aktiv-Status
+- `created_at`: Erstellungsdatum
+- `last_login`: Letzter Login
+
+#### Einstellungen (settings)
+- `key`: Einstellungsschlüssel
+- `value`: Einstellungswert
+- `description`: Beschreibung
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
+
+#### Kategorien (categories)
+- `name`: Kategoriename
+- `description`: Beschreibung
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
+
+#### Standorte (locations)
+- `name`: Standortname
+- `description`: Beschreibung
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
+
+#### Abteilungen (departments)
+- `name`: Abteilungsname
+- `description`: Beschreibung
+- `deleted`: Soft-Delete-Flag
+- `created_at`: Erstellungsdatum
+- `updated_at`: Aktualisierungsdatum
 
 ### 2. Backend
 
