@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  scandy-mongodb:
+    image: mongo:7.0
+    container_name: scandy-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: scandy123
+      MONGO_INITDB_DATABASE: scandy
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - scandy-network
+    command: mongod --auth --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scandy-mongo-express:
+    image: mongo-express:1.0.0
+    container_name: scandy-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: scandy123
+    ports:
+      - "8081:8081"
+    depends_on:
+      scandy-mongodb:
+        condition: service_healthy
+    networks:
+      - scandy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scandy-app:
+    build: .
+    container_name: scandy-app
+    restart: unless-stopped
+    environment:
+      - DATABASE_MODE=mongodb
+      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
+      - MONGODB_DB=scandy
+      - FLASK_ENV=production
+      - SECRET_KEY=scandy-secret-key-production
+      - SYSTEM_NAME=Scandy
+      - TICKET_SYSTEM_NAME=Aufgaben
+      - TOOL_SYSTEM_NAME=Werkzeuge
+      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - CONTAINER_NAME=scandy
+      - TZ=Europe/Berlin
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/uploads:/app/app/uploads
+      - ./data/backups:/app/app/backups
+      - ./data/logs:/app/app/logs
+      - ./data/static:/app/app/static
+    depends_on:
+      scandy-mongodb:
+        condition: service_healthy
+    networks:
+      - scandy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  scandy-network:
+    driver: bridge 

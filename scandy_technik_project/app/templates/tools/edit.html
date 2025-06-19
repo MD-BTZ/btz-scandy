@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-4">
+        <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zur Übersicht
+        </a>
+    </div>
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Werkzeug bearbeiten</h2>
+            
+            <form method="POST" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Name (max. 50 Zeichen)</span>
+                    </label>
+                    <input type="text" name="name" class="input input-bordered" required maxlength="50" value="{{ tool.name }}">
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Barcode (max. 50 Zeichen)</span>
+                    </label>
+                    <input type="text" name="barcode" class="input input-bordered" required maxlength="50" value="{{ tool.barcode }}">
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Kategorie</span>
+                    </label>
+                    <select name="category" class="select select-bordered">
+                        <option value="">Keine Kategorie</option>
+                        {% for category in categories %}
+                        <option value="{{ category }}" {% if category == tool.category %}selected{% endif %}>
+                            {{ category }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Standort</span>
+                    </label>
+                    <select name="location" class="select select-bordered">
+                        <option value="">Kein Standort</option>
+                        {% for location in locations %}
+                        <option value="{{ location }}" {% if location == tool.location %}selected{% endif %}>
+                            {{ location }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Status</span>
+                    </label>
+                    <select name="status" class="select select-bordered">
+                        <option value="verfügbar" {% if tool.status == 'verfügbar' %}selected{% endif %}>Verfügbar</option>
+                        <option value="defekt" {% if tool.status == 'defekt' %}selected{% endif %}>Defekt</option>
+                    </select>
+                </div>
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Beschreibung</span>
+                    </label>
+                    <textarea name="description" class="textarea textarea-bordered" rows="3">{{ tool.description }}</textarea>
+                </div>
+                
+                <div class="flex justify-end gap-4">
+                    <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="btn">Abbrechen</a>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

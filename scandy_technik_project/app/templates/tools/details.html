@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tool.name }}{% endblock %}
+
+{% block page_content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Werkzeug-Details -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="flex justify-between items-start">
+                <h2 class="card-title">{{ tool.name }}</h2>
+                <div class="badge badge-lg {{ 'badge-success' if tool.status == 'verfügbar' else 'badge-warning' if tool.status == 'ausgeliehen' else 'badge-error' }}">
+                    {{ tool.status }}
+                </div>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Grundinformationen -->
+            <div class="space-y-2">
+                <p><strong>Barcode:</strong> {{ tool.barcode }}</p>
+                <p><strong>Kategorie:</strong> {{ tool.category or 'Keine Kategorie' }}</p>
+                <p><strong>Standort:</strong> {{ tool.location or 'Kein Standort' }}</p>
+                {% if tool.description %}
+                <p><strong>Beschreibung:</strong> {{ tool.description }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Aktuelle Ausleihe -->
+            {% if tool.current_borrower %}
+            <div class="mt-4">
+                <h3 class="font-bold mb-2">Aktuelle Ausleihe</h3>
+                <p>Ausgeliehen an: {{ tool.current_borrower }}</p>
+                <p>Seit: {{ tool.lending_date|format_datetime }}</p>
+            </div>
+            {% endif %}
+            
+            <!-- Aktionen -->
+            <div class="card-actions justify-end mt-4">
+                <button class="btn btn-primary" onclick="showEditModal()">
+                    <i class="fas fa-edit mr-2"></i>Bearbeiten
+                </button>
+                {% if not tool.current_borrower %}
+                <button class="btn btn-danger" 
+                        onclick="deleteItem('tool', '{{ tool.barcode }}')"
+                        data-barcode="{{ tool.barcode }}">
+                    <i class="fas fa-trash"></i> In den Papierkorb
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Ausleihhistorie -->
+    <div class="card bg-base-100 shadow-xl col-span-2">
+        <div class="card-body">
+            <h2 class="card-title">Ausleihhistorie</h2>
+            {% if history %}
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Mitarbeiter</th>
+                            <th>Status</th>
+                            <th>Rückgabe</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in history %}
+                        <tr>
+                            <td>{{ entry.action_date|format_datetime }}</td>
+                            <td>{{ entry.worker or '-' }}</td>
+                            <td>
+                                {% if entry.action_type == 'Ausleihe/Rückgabe' %}
+                                <span class="badge {{ 'badge-warning' if entry.action == 'Ausgeliehen' else 'badge-success' }}">
+                                    {{ entry.action }}
+                                </span>
+                                {% else %}
+                                <span class="badge badge-ghost">{{ entry.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ entry.reason or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-base-content/60">Keine Ausleihvorgänge vorhanden</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<dialog id="editModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">{{ app_labels.tools.name }} bearbeiten</h3>
+        <form id="editForm" method="POST" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Name</span>
+                </label>
+                <input type="text" name="name" class="input input-bordered" value="{{ tool.name }}" required>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Barcode</span>
+                </label>
+                <input type="text" name="barcode" class="input input-bordered" value="{{ tool.barcode }}" required>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Kategorie</span>
+                </label>
+                <select name="category" class="select select-bordered">
+                    <option value="">Keine Kategorie</option>
+                    {% for category in categories %}
+                    <option value="{{ category }}" {{ 'selected' if category == tool.category }}>
+                        {{ category }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Standort</span>
+                </label>
+                <select name="location" class="select select-bordered">
+                    <option value="">Kein Standort</option>
+                    {% for location in locations %}
+                    <option value="{{ location }}" {{ 'selected' if location == tool.location }}>
+                        {{ location }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Status</span>
+                </label>
+                <select name="status" class="select select-bordered">
+                    <option value="verfügbar" {{ 'selected' if tool.status == 'verfügbar' }}>Verfügbar</option>
+                    <option value="defekt" {{ 'selected' if tool.status == 'defekt' }}>Defekt</option>
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Beschreibung</span>
+                </label>
+                <textarea name="description" class="textarea textarea-bordered" rows="3">{{ tool.description or '' }}</textarea>
+            </div>
+            
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">Speichern</button>
+                <button type="button" class="btn" onclick="closeEditModal()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+function showEditModal() {
+    document.getElementById('editModal').showModal();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+document.getElementById('editForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch(this.action, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.redirected) {
+            window.location.href = response.url;
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.reload();
+        } else {
+            alert(result.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler beim Speichern:', error);
+        alert('Ein Fehler ist aufgetreten');
+    }
+});
+</script>
+{% endblock %} 

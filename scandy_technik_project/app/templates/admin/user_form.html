@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ 'Benutzer bearbeiten' if user else 'Benutzer hinzufügen' }} - Scandy{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <h1 class="text-3xl font-bold mb-6">{{ 'Benutzer bearbeiten' if user else 'Neuen Benutzer hinzufügen' }}</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} shadow-lg mb-4">
+                    <div>
+                        {% if category == 'success' %}<i class="fas fa-check-circle"></i>
+                        {% elif category == 'error' %}<i class="fas fa-times-circle"></i>
+                        {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                        <span>{{ message }}</span>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" class="bg-base-100 p-6 rounded-lg shadow space-y-4">
+        {# Falls user übergeben wird, ist es der Bearbeiten-Modus #}
+        {% set current_user_data = user or None %}
+
+        <div class="form-control">
+            <label class="label" for="username">
+                <span class="label-text">Benutzername <span class="text-error">*</span></span>
+            </label>
+            <input type="text" id="username" name="username" value="{{ request.form.username or (current_user_data.username if current_user_data) or '' }}" required class="input input-bordered w-full" />
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="email">
+                <span class="label-text">E-Mail (optional)</span>
+            </label>
+            <input type="email" id="email" name="email" value="{{ request.form.email or (current_user_data.email if current_user_data) or '' }}" class="input input-bordered w-full" />
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="password">
+                <span class="label-text">Passwort {% if not current_user_data %}<span class="text-error">*</span>{% else %}(leer lassen für keine Änderung){% endif %}</span>
+            </label>
+            <input type="password" id="password" name="password" class="input input-bordered w-full" {% if not current_user_data %}required{% endif %} />
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="password_confirm">
+                <span class="label-text">Passwort bestätigen {% if not current_user_data %}<span class="text-error">*</span>{% else %}(leer lassen für keine Änderung){% endif %}</span>
+            </label>
+            <input type="password" id="password_confirm" name="password_confirm" class="input input-bordered w-full" {% if not current_user_data %}required{% endif %} />
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="firstname">
+                <span class="label-text">Vorname <span class="text-error">*</span></span>
+            </label>
+            <input type="text" id="firstname" name="firstname" value="{{ request.form.firstname or (current_user_data.firstname if current_user_data) or '' }}" required class="input input-bordered w-full" />
+        </div>
+        <div class="form-control">
+            <label class="label" for="lastname">
+                <span class="label-text">Nachname <span class="text-error">*</span></span>
+            </label>
+            <input type="text" id="lastname" name="lastname" value="{{ request.form.lastname or (current_user_data.lastname if current_user_data) or '' }}" required class="input input-bordered w-full" />
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="role">
+                <span class="label-text">Rolle <span class="text-error">*</span></span>
+            </label>
+            <select id="role" name="role" class="select select-bordered w-full" required>
+                <option value="" disabled {% if not (request.form.role or (current_user_data.role if current_user_data)) %}selected{% endif %}>Rolle auswählen...</option>
+                {% for role_option in roles %}
+                    <option value="{{ role_option }}" 
+                            {% if (request.form.role or (current_user_data.role if current_user_data)) == role_option %}selected{% endif %}>
+                        {{ role_option|capitalize }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="flex justify-end space-x-3 pt-4">
+            <a href="{{ url_for('admin.manage_users') }}" class="btn btn-ghost">Abbrechen</a>
+            <button type="submit" class="btn btn-primary">{{ 'Änderungen speichern' if current_user_data else 'Benutzer erstellen' }}</button>
+        </div>
+
+    </form>
+</div>
+{% endblock %} 

@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Auftrag #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Zurück Button -->
+    <div class="mb-6">
+        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zur Übersicht
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte -->
+        <div class="lg:col-span-2">
+            <!-- Auftrag Details -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="card-title">Auftrag #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <p class="text-sm opacity-70">Erstellt von</p>
+                            <p>{{ ticket.created_by }}</p>
+                            <p class="text-sm opacity-70 mt-2">Erstellt am</p>
+                            <p>{{ ticket.created_at }}</p>
+                            <p class="text-sm opacity-70 mt-2">Priorität</p>
+                            <p>{{ ticket.priority }}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Kategorie</p>
+                            <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
+                                <option value="">Keine Kategorie</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-sm opacity-70 mt-2">Fällig am</p>
+                            <p>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else 'Nicht gesetzt' }}</p>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div>
+                        <h3 class="font-bold mb-2">Beschreibung:</h3>
+                        <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kommunikation -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Kommunikation</h3>
+                    <div class="messages-container mb-4" style="max-height: 400px; overflow-y: auto;">
+                        {% if messages %}
+                            {% for message in messages %}
+                            <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
+                                <div class="chat-header">
+                                    {{ message.sender }}
+                                    <time class="text-xs opacity-50">{{ message.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
+                                    {{ message.message }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
+                        {% endif %}
+                    </div>
+                    <form id="messageForm" class="mt-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Nachricht</span>
+                            </label>
+                            <textarea name="message" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Nachricht hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Nachricht senden
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Notizen Historie (Admin-Notizen) -->
+            {% if current_user.is_admin %}
+            <div class="card bg-base-100 shadow-xl mt-6">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Admin-Notizen</h3>
+                    <form id="noteForm" class="mb-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Notiz</span>
+                            </label>
+                            <textarea name="note" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Notiz hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-sticky-note mr-2"></i>
+                            Notiz hinzufügen
+                        </button>
+                    </form>
+                    <div class="notes-container mt-4">
+                        {% if notes %}
+                            {% for note in notes %}
+                            <div class="chat chat-start">
+                                <div class="chat-header">
+                                    {{ note.created_by }}
+                                    <time class="text-xs opacity-50">{{ note.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble chat-bubble-info">
+                                    {{ note.note }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Notizen vorhanden.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Rechte Spalte -->
+        <div class="lg:col-span-1">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Ticket Details</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm opacity-70">Status</p>
+                            {% if current_user.is_admin %}
+                                <form method="POST" action="{{ url_for('tickets.update_status', id=ticket.id) }}" id="statusForm">
+                                    <select name="status" class="select select-bordered w-full mb-2">
+                                        <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                        <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                        <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                        <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                        <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-primary btn-sm w-full mb-2">Status speichern</button>
+                                </form>
+                            {% else %}
+                                <span class="font-medium">{{ ticket.status }}</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Zugewiesen an</p>
+                            {% if current_user.is_admin %}
+                                <form method="POST" action="{{ url_for('tickets.update_assignment', id=ticket.id) }}" id="assignmentForm">
+                                    <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
+                                        {% for user in users %}
+                                            <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
+                                                <input type="checkbox" 
+                                                       name="assigned_to" 
+                                                       value="{{ user['username'] }}" 
+                                                       class="checkbox checkbox-primary"
+                                                       {% if user['username'] in assigned_users %}checked{% endif %}>
+                                                <span>{{ user['username'] }}</span>
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-sm w-full mb-2">Zuweisung speichern</button>
+                                </form>
+                            {% else %}
+                                <span class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Letzte Aktualisierung</p>
+                            <p class="font-medium">{{ ticket.updated_at }}</p>
+                        </div>
+                        {% if ticket.resolved_at %}
+                        <div>
+                            <p class="text-sm opacity-70">Gelöst am</p>
+                            <p class="font-medium">{{ ticket.resolved_at }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Status-Formular
+    const statusForm = document.getElementById('statusForm');
+    if (statusForm) {
+        statusForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const status = this.querySelector('select[name="status"]').value;
+            
+            try {
+                const response = await fetch(`/tickets/{{ ticket.id }}/update-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: status })
+                });
+                
+                if (response.ok) {
+                    showToast('Status erfolgreich aktualisiert', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const data = await response.json();
+                    showToast(data.message || 'Fehler beim Aktualisieren des Status', 'error');
+                }
+            } catch (error) {
+                showToast('Fehler beim Aktualisieren des Status', 'error');
+            }
+        });
+    }
+
+    // Zuweisungs-Formular
+    const assignmentForm = document.getElementById('assignmentForm');
+    if (assignmentForm) {
+        assignmentForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const checkboxes = this.querySelectorAll('input[name="assigned_to"]:checked');
+            const assignedUsers = Array.from(checkboxes).map(cb => cb.value);
+            
+            try {
+                const response = await fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ assigned_to: assignedUsers })
+                });
+                
+                if (response.ok) {
+                    showToast('Zuweisung erfolgreich aktualisiert', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const data = await response.json();
+                    showToast(data.message || 'Fehler beim Aktualisieren der Zuweisung', 'error');
+                }
+            } catch (error) {
+                showToast('Fehler beim Aktualisieren der Zuweisung', 'error');
+            }
+        });
+    }
+
+    // Nachrichten-Formular
+    const messageForm = document.getElementById('messageForm');
+    if (messageForm) {
+        messageForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const message = this.querySelector('textarea[name="message"]').value;
+            
+            try {
+                const response = await fetch(`/tickets/{{ ticket.id }}/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('success', 'Nachricht erfolgreich gesendet');
+                    // Füge die neue Nachricht zum Container hinzu
+                    const messagesContainer = document.querySelector('.messages-container');
+                    const newMessage = document.createElement('div');
+                    newMessage.className = 'chat chat-end';
+                    newMessage.innerHTML = `
+                        <div class="chat-header">
+                            {{ current_user.username }}
+                            <time class="text-xs opacity-50">${new Date().toLocaleString()}</time>
+                        </div>
+                        <div class="chat-bubble chat-bubble-primary">
+                            ${message}
+                        </div>
+                    `;
+                    messagesContainer.appendChild(newMessage);
+                    // Leere das Formular
+                    this.reset();
+                    // Scrolle zum Ende des Containers
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                } else {
+                    showToast('error', result.message || 'Fehler beim Senden der Nachricht');
+                }
+            } catch (error) {
+                showToast('error', 'Fehler beim Senden der Nachricht');
+            }
+        });
+    }
+
+    // Notizen-Formular
+    const noteForm = document.getElementById('noteForm');
+    if (noteForm) {
+        noteForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const note = this.querySelector('textarea[name="note"]').value;
+            
+            try {
+                const response = await fetch(`/tickets/{{ ticket.id }}/note`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: note })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('success', 'Notiz erfolgreich hinzugefügt');
+                    // Füge die neue Notiz zum Container hinzu
+                    const notesContainer = document.querySelector('.notes-container');
+                    const newNote = document.createElement('div');
+                    newNote.className = 'chat chat-start';
+                    newNote.innerHTML = `
+                        <div class="chat-header">
+                            {{ current_user.username }}
+                            <time class="text-xs opacity-50">${new Date().toLocaleString()}</time>
+                        </div>
+                        <div class="chat-bubble chat-bubble-info">
+                            ${note}
+                        </div>
+                    `;
+                    notesContainer.appendChild(newNote);
+                    // Leere das Formular
+                    this.reset();
+                } else {
+                    showToast('error', result.message || 'Fehler beim Hinzufügen der Notiz');
+                }
+            } catch (error) {
+                showToast('error', 'Fehler beim Hinzufügen der Notiz');
+            }
+        });
+    }
+});
+
+function updateTicketCategory(newCategory) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            category: newCategory
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Kategorie erfolgreich aktualisiert', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.message || 'Fehler beim Aktualisieren der Kategorie', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie', 'error');
+    });
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
+    toast.innerHTML = `
+        <div class="alert alert-${type}">
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // Toast nach 3 Sekunden ausblenden
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %} 

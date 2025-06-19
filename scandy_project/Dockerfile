@@ -1,0 +1,47 @@
+FROM python:3.11-slim
+
+# Installiere System-Abhängigkeiten
+RUN apt-get update && apt-get install -y \
+    git \
+    nodejs \
+    npm \
+    curl \
+    build-essential \
+    zip \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Erstelle nicht-root Benutzer
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# Kopiere Requirements zuerst für besseres Caching
+COPY requirements.txt .
+
+# Installiere Python-Abhängigkeiten
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Kopiere den Rest der Anwendung
+COPY . .
+
+# Installiere und baue CSS
+RUN npm install && npm run build:css
+
+# Erstelle notwendige Verzeichnisse und setze Berechtigungen
+RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app
+
+# Wechsle zu nicht-root Benutzer
+USER appuser
+
+# Exponiere Port
+EXPOSE 5000
+
+# Health Check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Starte die Anwendung
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]

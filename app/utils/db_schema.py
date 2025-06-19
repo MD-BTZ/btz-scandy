@@ -1,1 +1,0 @@
-# Datei ist für MongoDB-only nicht mehr relevant. Inhalt ggf. löschen.

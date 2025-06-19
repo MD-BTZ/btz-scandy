@@ -1,2 +1,0 @@
-Dies ist eine Testdatei für das Update-System.
-Erstellt am: $(date) 

@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  {{CONTAINER_NAME}}-mongodb:
+    image: mongo:7.0
+    container_name: {{CONTAINER_NAME}}-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: {{MONGO_USER}}
+      MONGO_INITDB_ROOT_PASSWORD: {{MONGO_PASS}}
+      MONGO_INITDB_DATABASE: scandy
+    ports:
+      - "{{MONGO_PORT}}:27017"
+    volumes:
+      - {{DATA_DIR}}/mongodb:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - {{CONTAINER_NAME}}-network
+    command: mongod --auth --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  {{CONTAINER_NAME}}-mongo-express:
+    image: mongo-express:1.0.0
+    container_name: {{CONTAINER_NAME}}-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: {{MONGO_USER}}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: {{MONGO_PASS}}
+      ME_CONFIG_MONGODB_URL: mongodb://{{MONGO_USER}}:{{MONGO_PASS}}@{{CONTAINER_NAME}}-mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: {{MONGO_USER}}
+      ME_CONFIG_BASICAUTH_PASSWORD: {{MONGO_PASS}}
+    ports:
+      - "{{MONGO_EXPRESS_PORT}}:8081"
+    depends_on:
+      - {{CONTAINER_NAME}}-mongodb
+    networks:
+      - {{CONTAINER_NAME}}-network
+
+  {{CONTAINER_NAME}}-app:
+    build: .
+    container_name: {{CONTAINER_NAME}}-app
+    restart: unless-stopped
+    environment:
+      - DATABASE_MODE=mongodb
+      - MONGODB_URI=mongodb://{{MONGO_USER}}:{{MONGO_PASS}}@{{CONTAINER_NAME}}-mongodb:27017/
+      - MONGODB_DB=scandy
+      - FLASK_ENV=production
+      - SECRET_KEY=scandy-secret-key-{{RANDOM_KEY}}
+      - SYSTEM_NAME=Scandy
+      - TICKET_SYSTEM_NAME=Aufgaben
+      - TOOL_SYSTEM_NAME=Werkzeuge
+      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - CONTAINER_NAME={{CONTAINER_NAME}}
+      - TZ=Europe/Berlin
+    ports:
+      - "{{APP_PORT}}:5000"
+    volumes:
+      - {{DATA_DIR}}/uploads:/app/app/uploads
+      - {{DATA_DIR}}/backups:/app/app/backups
+      - {{DATA_DIR}}/logs:/app/app/logs
+      - {{DATA_DIR}}/static:/app/app/static
+    depends_on:
+      - {{CONTAINER_NAME}}-mongodb
+    networks:
+      - {{CONTAINER_NAME}}-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  {{CONTAINER_NAME}}-mongodb-data:
+    driver: local
+
+networks:
+  {{CONTAINER_NAME}}-network:
+    driver: bridge 

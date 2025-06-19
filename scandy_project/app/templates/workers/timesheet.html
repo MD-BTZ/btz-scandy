@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <h1 class="text-2xl font-bold mb-6">{{ ts and 'Wochenplan bearbeiten' or 'Neuen Wochenplan anlegen' }}</h1>
+    <div class="mb-4 flex flex-col md:flex-row md:items-center md:gap-8 gap-2">
+        <div>
+            <span class="font-semibold">Woche:</span>
+            <span class="badge badge-primary text-lg align-middle">{{ ts and ts.year ~ '-W' ~ '%02d'|format(ts.kw) or '' }}</span>
+        </div>
+        <div>
+            <span class="font-semibold">Benutzer:</span>
+            <span class="badge badge-secondary text-lg align-middle">{{ current_user.username }}</span>
+        </div>
+    </div>
+    <div class="flex flex-row gap-2 mb-4">
+        {% for day in ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag'] %}
+            {% set has_times = (ts and (ts[day ~ '_start'] or ts[day ~ '_end'])) or (not ts and (request.form['start_' ~ day] or request.form['end_' ~ day])) %}
+            {% set has_tasks = (ts and ts[day ~ '_tasks']) or (not ts and request.form['tasks_' ~ day]) %}
+            {% set is_past = ts and (ts.year < now.year or (ts.year == now.year and ts.kw < now.isocalendar()[1]) or (ts.year == now.year and ts.kw == now.isocalendar()[1] and loop.index0 < now.weekday())) %}
+            {% set badge_class = 'badge-success' if has_times and has_tasks else 'badge-error' if is_past else 'badge-outline' %}
+            <span class="badge {{ badge_class }}">{{ day|title }} {% if has_times and has_tasks %}✔{% elif has_times or has_tasks %}!{% else %}–{% endif %}</span>
+        {% endfor %}
+    </div>
+    <form method="POST" class="space-y-6">
+        <div class="form-control mb-4">
+            <label class="label">
+                <span class="label-text">Woche auswählen</span>
+            </label>
+            <input type="week" name="week" class="input input-bordered w-full max-w-xs" required value="{{ ts and ts.year ~ '-W' ~ '%02d'|format(ts.kw) or '' }}">
+        </div>
+        <style>
+            /* Aktives Tab einfärben */
+            input[name="tab-days"]:checked + label.tab {
+                background-color: #2563eb; /* Tailwind bg-primary */
+                color: #fff;
+                border-color: #2563eb;
+            }
+            label.tab {
+                transition: background 0.2s, color 0.2s;
+            }
+            label.tab:hover {
+                background-color: #dbeafe; /* Tailwind bg-primary/20 */
+            }
+        </style>
+        <div role="tablist" class="tabs tabs-boxed mb-4">
+            {% for day in ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag'] %}
+            <input type="radio" name="tab-days" id="tab-{{ day }}" class="hidden" {% if loop.first %}checked{% endif %}>
+            <label for="tab-{{ day }}" role="tab" class="tab tab-bordered cursor-pointer">{{ day|title }}</label>
+            {% endfor %}
+        </div>
+        <div>
+            {% for day in ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag'] %}
+            <div id="panel-{{ day }}" class="tab-content" style="display: {% if loop.first %}block{% else %}none{% endif %};">
+                <div class="card bg-base-200 p-4 mb-4">
+                    <h3 class="font-medium mb-2 text-lg flex items-center gap-2">
+                        <i class="fas fa-calendar-day"></i> {{ day|title }}
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Startzeit</span>
+                            </label>
+                            <input type="time" name="start_{{ day }}" class="input input-bordered" value="{{ ts and ts[day ~ '_start'] or '' }}">
+                        </div>
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Endzeit</span>
+                            </label>
+                            <input type="time" name="end_{{ day }}" class="input input-bordered" value="{{ ts and ts[day ~ '_end'] or '' }}">
+                        </div>
+                    </div>
+                    <div class="form-control mt-2">
+                        <label class="label">
+                            <span class="label-text">Tätigkeiten</span>
+                        </label>
+                        <textarea name="tasks_{{ day }}" class="textarea textarea-bordered" rows="2" placeholder="Beschreiben Sie Ihre Tätigkeiten...">{{ ts and ts[day ~ '_tasks'] or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="form-control mt-6 flex flex-row gap-2">
+            <button type="submit" class="btn btn-primary">{{ ts and 'Speichern' or 'Anlegen' }}</button>
+            <a href="{{ url_for('workers.timesheet_list') }}" class="btn btn-ghost">Zurück</a>
+        </div>
+    </form>
+</div>
+<script>
+// Tabs umschalten
+const tabs = document.querySelectorAll('input[name="tab-days"]');
+const panels = document.querySelectorAll('.tab-content');
+tabs.forEach((tab, idx) => {
+    tab.addEventListener('change', () => {
+        panels.forEach((panel, i) => {
+            panel.style.display = (i === idx) ? 'block' : 'none';
+        });
+    });
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <title>Neuer Auftrag</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.0.7/dist/full.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e0e7ff 100%);
+            min-height: 100vh;
+        }
+        .auftrag-card {
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border-radius: 1.5rem;
+            background: white;
+            transition: box-shadow 0.2s;
+        }
+        .auftrag-card:hover {
+            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.22);
+        }
+        .auftrag-title {
+            color: #3730a3;
+        }
+        .auftrag-label {
+            font-weight: 600;
+        }
+        .auftrag-btn {
+            transition: background 0.2s, color 0.2s;
+        }
+        .auftrag-btn:hover {
+            background: #6366f1;
+            color: #fff;
+        }
+        .auftrag-radio:checked {
+            border-color: #6366f1;
+            background: #6366f1;
+        }
+        .auftrag-card form {
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center">
+    <div class="auftrag-card w-full max-w-lg p-6 md:p-10">
+        <h1 class="text-4xl font-extrabold mb-10 auftrag-title text-center flex items-center justify-center gap-3">
+            <i class="fas fa-clipboard-list text-primary"></i>
+            Neuen Auftrag an die Werkstatt senden
+        </h1>
+        {% if error %}
+            <div class="alert alert-error mb-6 text-center">{{ error }}</div>
+        {% endif %}
+        <form method="POST" autocomplete="off">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="label auftrag-label text-primary">Auftragstitel *</label>
+                    <input type="text" name="title" class="input input-bordered w-full text-lg" required placeholder="z.B. Reparatur Stuhl">
+                </div>
+                <div>
+                    <label class="label auftrag-label text-primary">Kategorie</label>
+                    <select name="kategorie" class="select select-bordered w-full text-lg">
+                        <option value="">Keine Kategorie</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="mt-6">
+                <label class="label auftrag-label text-primary">Beschreibung *</label>
+                <textarea name="description" class="textarea textarea-bordered w-full text-lg min-h-[90px]" required placeholder="Beschreibe den Auftrag möglichst genau..."></textarea>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div>
+                    <label class="label auftrag-label text-primary">Ihr Name *</label>
+                    <input type="text" name="name" class="input input-bordered w-full text-lg" required placeholder="Ihr Name">
+                </div>
+                <div>
+                    <label class="label auftrag-label text-primary">Kontakt (E-Mail) *</label>
+                    <input type="email" name="kontakt" class="input input-bordered w-full text-lg" required placeholder="z.B. max@beispiel.de">
+                </div>
+            </div>
+            <div class="mt-6">
+                <label class="label auftrag-label text-primary">Bereich</label>
+                <input type="text" name="bereich" class="input input-bordered w-full text-lg" placeholder="z.B. Metallwerkstatt">
+            </div>
+            <div class="mt-6">
+                <label class="label auftrag-label text-primary">Auftraggeber</label>
+                <div class="flex gap-6 items-center mt-2">
+                    <label class="flex items-center gap-2">
+                        <input type="radio" name="auftraggeber_typ" value="intern" class="radio radio-primary auftrag-radio" required>
+                        <span>Intern</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="radio" name="auftraggeber_typ" value="extern" class="radio radio-primary auftrag-radio" required>
+                        <span>Extern</span>
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                    <b>Was bedeutet "intern" und "extern"?</b><br>
+                    Wähle <b>intern</b>, wenn der Auftrag für die Verwendung im BTZ selbst gedacht ist.<br>
+                    Wähle <b>extern</b>, wenn der Auftrag für den privaten Gebrauch gedacht ist.
+                </p>
+            </div>
+            <div class="flex justify-center mt-10 gap-4">
+                <button type="submit" class="btn btn-primary auftrag-btn text-lg px-8"><i class="fas fa-paper-plane mr-2"></i> Auftrag absenden</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html> 

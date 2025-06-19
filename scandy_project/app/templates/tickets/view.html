@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+
+{% block title %}Auftrag #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Zurück Button -->
+    <div class="mb-6">
+        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zur Übersicht
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte -->
+        <div class="lg:col-span-2">
+            <!-- Auftrag Details -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="card-title">Auftrag #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <p class="text-sm opacity-70">Erstellt von</p>
+                            <p>{{ ticket.created_by }}</p>
+                            <p class="text-sm opacity-70 mt-2">Erstellt am</p>
+                            <p>{{ ticket.created_at }}</p>
+                            <p class="text-sm opacity-70 mt-2">Priorität</p>
+                            <p>{{ ticket.priority }}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Kategorie</p>
+                            <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
+                                <option value="">Keine Kategorie</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-sm opacity-70 mt-2">Fällig am</p>
+                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
+                                   value="{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') if ticket.due_date else '' }}"
+                                   onchange="updateTicketDueDate(this.value)">
+                            <div>
+                                <p class="text-sm opacity-70">Geschätzte Zeit</p>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
+                                           value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
+                                           onchange="updateTicketEstimatedTime(this.value)"
+                                           min="0" step="1">
+                                    <span class="text-sm opacity-70">Minuten</span>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
+                                    <i class="fas fa-save mr-2"></i>Speichern
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div>
+                        <h3 class="font-bold mb-2">Beschreibung:</h3>
+                        <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+                    </div>
+                    {% if auftrag_details %}
+                    <div class="divider"></div>
+                    <div>
+                        <h3 class="font-bold mb-2">Auftragsdetails:</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm opacity-70">Bereich</p>
+                                <p>{{ auftrag_details.bereich or 'Nicht angegeben' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Auftraggeber</p>
+                                <p>
+                                    {% if auftrag_details.auftraggeber_intern %}
+                                        Intern
+                                    {% elif auftrag_details.auftraggeber_extern %}
+                                        Extern: {{ auftrag_details.auftraggeber_name }}
+                                    {% else %}
+                                        Nicht angegeben
+                                    {% endif %}
+                                </p>
+                                <p class="text-sm opacity-70 mt-2">Kontakt</p>
+                                <p>{{ auftrag_details.kontakt or 'Nicht angegeben' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm opacity-70">Fertigstellungstermin</p>
+                                <p>{{ auftrag_details.fertigstellungstermin or 'Nicht gesetzt' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden</p>
+                                <p>{{ auftrag_details.arbeitsstunden or 'Nicht angegeben' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Leistungskategorie</p>
+                                <p>{{ auftrag_details.leistungskategorie or 'Nicht angegeben' }}</p>
+                            </div>
+                        </div>
+                        {% if auftrag_details.ausgefuehrte_arbeiten %}
+                        <div class="mt-4">
+                            <p class="text-sm opacity-70">Ausgeführte Arbeiten</p>
+                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Kommunikation -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Kommunikation</h3>
+                    <div class="messages-container mb-4" style="max-height: 400px; overflow-y: auto;">
+                        {% if messages %}
+                            {% for message in messages %}
+                            <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
+                                <div class="chat-header">
+                                    {{ message.sender }}
+                                    <time class="text-xs opacity-50">{{ message.created_at }}</time>
+                                </div>
+                                <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
+                                    {{ message.message }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
+                        {% endif %}
+                    </div>
+                    <form id="messageForm" class="mt-4">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Neue Nachricht</span>
+                            </label>
+                            <textarea name="message" class="textarea textarea-bordered h-24" 
+                                    placeholder="Ihre Nachricht hier..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-4">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Nachricht senden
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Spalte -->
+        <div class="lg:col-span-1">
+            <!-- Auftrag Status -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">Auftrag Status</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm opacity-70">Status</p>
+                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
+                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
+                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
+                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
+                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
+                            </select>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Zugewiesen an</p>
+                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
+                                <option value="">Nicht zugewiesen</option>
+                                {% for worker in workers %}
+                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
+                                    {{ worker.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-70">Letzte Aktualisierung</p>
+                            <p class="font-medium">{{ ticket.updated_at }}</p>
+                        </div>
+                        {% if ticket.resolved_at %}
+                        <div>
+                            <p class="text-sm opacity-70">Gelöst am</p>
+                            <p class="font-medium">{{ ticket.resolved_at }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export-Button für Word-Dokument -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="btn btn-accent w-full" target="_blank">
+                        <i class="fas fa-file-word mr-2"></i> Auftrag als Word exportieren
+                    </a>
+                </div>
+            </div>
+
+            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
+            <div class="card bg-base-100 shadow-xl mb-6">
+                <div class="card-body">
+                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
+                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Container -->
+            <div id="auftragDetailsModalContainer"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('messageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        message: formData.get('message')
+    };
+    
+    fetch(`/tickets/{{ ticket.id }}/message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Nachricht erfolgreich gesendet
+            const messageInput = this.querySelector('textarea[name="message"]');
+            messageInput.value = ''; // Formular leeren
+            
+            // Neue Nachricht zur UI hinzufügen
+            const messagesContainer = document.querySelector('.messages-container');
+            const newMessage = document.createElement('div');
+            newMessage.className = 'chat chat-end';
+            
+            newMessage.innerHTML = `
+                <div class="chat-header">
+                    ${data.message.sender}
+                    <time class="text-xs opacity-50">${data.message.created_at}</time>
+                </div>
+                <div class="chat-bubble chat-bubble-primary">
+                    ${data.message.text}
+                </div>
+            `;
+            
+            // Wenn keine Nachrichten vorhanden sind, entferne die "Keine Nachrichten" Meldung
+            const noMessages = messagesContainer.querySelector('.text-base-content\\/60');
+            if (noMessages) {
+                noMessages.remove();
+            }
+            
+            messagesContainer.appendChild(newMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+            alert(data.message || 'Fehler beim Senden der Nachricht');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten');
+    });
+});
+
+function loadAuftragDetailsModal() {
+    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
+            const modal = document.getElementById('auftragDetailsModal');
+            modal.showModal();
+            
+            // Event-Listener für das Formular
+            const form = document.getElementById('auftragDetailsForm');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Formulardaten sammeln
+                const formData = new FormData(form);
+                const jsonData = {};
+                
+                // Basis-Formulardaten
+                for (let [key, value] of formData.entries()) {
+                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
+                        jsonData[key] = value === '1';
+                    } else {
+                        jsonData[key] = value;
+                    }
+                }
+                
+                // Materialliste sammeln
+                const materialList = [];
+                document.querySelectorAll('.material-row').forEach(row => {
+                    const material = row.querySelector('.material-input').value;
+                    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
+                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+                    
+                    if (material || menge || einzelpreis) {
+                        materialList.push({
+                            material: material,
+                            menge: menge,
+                            einzelpreis: einzelpreis
+                        });
+                    }
+                });
+                
+                jsonData.material_list = materialList;
+                
+                // AJAX-Request senden
+                fetch(`/tickets/{{ ticket.id }}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(jsonData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        modal.close();
+                        // Optional: Seite neu laden oder UI aktualisieren
+                        window.location.reload();
+                    } else {
+                        alert('Fehler beim Speichern: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Fehler:', error);
+                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden des Modals:', error);
+            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
+        });
+}
+
+function updateTicketStatus(newStatus) {
+    fetch(`/tickets/{{ ticket.id }}/update-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren des Status: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
+    });
+}
+
+function updateTicketAssignment(newAssignee) {
+    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            assigned_to: newAssignee
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+    });
+}
+
+function updateTicketCategory(newCategory) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            category: newCategory
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren der Kategorie: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie.');
+    });
+}
+
+function updateTicketDueDate(newDueDate) {
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            due_date: newDueDate
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren des Fälligkeitsdatums: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Fälligkeitsdatums.');
+    });
+}
+
+function updateTicketEstimatedTime(newEstimatedTime) {
+    // Konvertiere Minuten in Stunden für die Speicherung
+    const hours = parseFloat(newEstimatedTime) / 60;
+    
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            estimated_time: hours
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Geschätzte Zeit wurde aktualisiert');
+        } else {
+            showToast('error', 'Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der geschätzten Zeit.');
+    });
+}
+
+function saveTicketChanges() {
+    const estimatedTime = document.getElementById('estimatedTimeInput').value;
+    const category = document.getElementById('categoryInput').value;
+    const dueDate = document.getElementById('dueDateInput').value;
+    
+    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            estimated_time: parseInt(estimatedTime),
+            category: category,
+            due_date: dueDate
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Änderungen wurden gespeichert');
+        } else {
+            showToast('error', 'Fehler beim Speichern: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten beim Speichern.');
+    });
+}
+
+function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} fixed bottom-4 right-4`;
+    toast.innerHTML = `
+        <div class="alert alert-${type}">
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // Toast nach 3 Sekunden ausblenden
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %} 
