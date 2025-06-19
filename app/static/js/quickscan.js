@@ -27,7 +27,7 @@ const QuickScan = {
         
         // Button-Status sofort initialisieren
         setTimeout(() => {
-            this.updateConfirmButtonState();
+            updateQuickScanButton();
             console.log("Button-Status nach Init:", {
                 scannedItem: !!this.scannedItem,
                 scannedWorker: !!this.scannedWorker
@@ -36,6 +36,37 @@ const QuickScan = {
     },
 
     setupEventListeners() {
+        const input = document.getElementById('quickScanActiveInput');
+        if (input) {
+            // Event-Listener für manuelle Eingaben
+            input.addEventListener('input', function(e) {
+                console.log("Eingabe erkannt:", e.target.value);
+                checkManualInput();
+            });
+            
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    console.log("Enter gedrückt, verarbeite Eingabe:", e.target.value);
+                    QuickScan.handleManualInput(e.target.value);
+                }
+            });
+            
+            // Bestehende Event-Listener beibehalten
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.undoLastInput(this.activeInputType);
+                }
+            });
+        }
+        
+        // Bestehende Event-Listener für Scanner
+        document.addEventListener('keydown', (e) => {
+            if (this.activeInputType && e.key.length === 1) {
+                this.handleKeyInput(e, document.getElementById('quickScanActiveInput'));
+            }
+        });
+
         // Event-Listener für Item-Scan
         const itemInput = document.getElementById('itemScanInput');
         const confirmItemBtnElement = document.getElementById('confirmItemBtn');
@@ -496,11 +527,14 @@ const QuickScan = {
                 } else {
                     this.showError("Artikel nicht gefunden", 'item');
                     this.setCardState('item', 'active');
+                    updateQuickScanButton(); // Button-Status aktualisieren
                     return;
                 }
             }
             
             this.scannedItem = item;
+            console.log("Item gescannt:", item);
+            
             // Bestandswert robust ermitteln
             let quantity = (typeof item.quantity === 'number') ? item.quantity :
                            (typeof item.current_stock === 'number') ? item.current_stock :
@@ -531,7 +565,7 @@ const QuickScan = {
             this.setCardState('worker', this.activeInputType === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
             
             // Button-Status sofort aktualisieren
-            setTimeout(() => this.updateConfirmButtonState(), 100);
+            setTimeout(() => updateQuickScanButton(), 100);
             
             // Mengen-Modal für Verbrauchsgüter anzeigen
             if (itemType === 'consumable') {
@@ -540,6 +574,7 @@ const QuickScan = {
         } catch (error) {
             console.error("Fehler beim Abrufen des Artikels:", error);
             this.showError("Fehler beim Abrufen des Artikels", 'item');
+            updateQuickScanButton(); // Button-Status aktualisieren
         }
     },
 
@@ -550,10 +585,13 @@ const QuickScan = {
             if (!result.success) {
                 this.showError(result.message || 'Mitarbeiter nicht gefunden', 'worker');
                 this.setCardState('worker', 'active');
+                updateQuickScanButton(); // Button-Status aktualisieren
                 return;
             }
             const worker = result.worker;
             this.scannedWorker = worker;
+            console.log("Worker gescannt:", worker);
+            
             // Anzeige auf Karte aktualisieren
             const workerCardContent = document.getElementById('workerCardContent');
             if (workerCardContent) {
@@ -566,10 +604,11 @@ const QuickScan = {
             this.setCardState('item', this.activeInputType === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
             
             // Button-Status sofort aktualisieren
-            setTimeout(() => this.updateConfirmButtonState(), 100);
+            setTimeout(() => updateQuickScanButton(), 100);
         } catch (error) {
             console.error("Fehler beim Abrufen des Mitarbeiters:", error);
             this.showError("Fehler beim Abrufen des Mitarbeiters", 'worker');
+            updateQuickScanButton(); // Button-Status aktualisieren
         }
     },
 
@@ -660,7 +699,7 @@ const QuickScan = {
         
         // Button-Status zurücksetzen
         setTimeout(() => {
-            this.updateConfirmButtonState();
+            updateQuickScanButton();
             console.log("Button-Status nach Reset:", {
                 scannedItem: !!this.scannedItem,
                 scannedWorker: !!this.scannedWorker
@@ -871,7 +910,7 @@ const QuickScan = {
                 itemCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
             }
             this.setCardState('item', 'active');
-            this.updateConfirmButtonState();
+            updateQuickScanButton();
         } else if (type === 'worker') {
             // Nur Worker-Eingabe zurücksetzen
             this.scannedWorker = null;
@@ -880,7 +919,7 @@ const QuickScan = {
                 workerCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
             }
             this.setCardState('worker', 'active');
-            this.updateConfirmButtonState();
+            updateQuickScanButton();
         } else {
             // Fallback: alles zurücksetzen
             this.reset();
@@ -911,7 +950,7 @@ const QuickScan = {
             this.closeQuantityModal();
             // Nach Mengenbestätigung: Karte bleibt grün, kein weiterer Scan nötig
             this.setCardState('item', 'success');
-            this.updateConfirmButtonState();
+            updateQuickScanButton();
         } else {
             showToast('error', 'Bitte eine gültige Menge eingeben.');
         }
@@ -945,45 +984,29 @@ const QuickScan = {
         
         // Button-Status nach Kartenwechsel aktualisieren
         setTimeout(() => {
-            this.updateConfirmButtonState();
+            checkManualInput(); // Prüfe auch manuelle Eingaben
         }, 50);
     },
 
     // Button-Status aktualisieren
     updateConfirmButtonState() {
-        const btn = document.getElementById('quickScanConfirmBtn');
-        const hasItem = !!(this.scannedItem && this.scannedItem.barcode);
-        const hasWorker = !!(this.scannedWorker && this.scannedWorker.barcode);
-        const shouldEnable = hasItem && hasWorker;
-        
-        console.log("UpdateConfirmButtonState:", {
-            buttonFound: !!btn,
-            scannedItem: hasItem,
-            scannedWorker: hasWorker,
-            shouldEnable: shouldEnable,
-            itemBarcode: this.scannedItem?.barcode,
-            workerBarcode: this.scannedWorker?.barcode
-        });
-        
-        if (btn) {
-            btn.disabled = !shouldEnable;
-            console.log("Button enabled:", shouldEnable, "Button disabled:", btn.disabled);
-            
-            // Zusätzliche visuelle Rückmeldung
-            if (shouldEnable) {
-                btn.classList.remove('btn-disabled');
-                btn.classList.add('btn-primary');
-            } else {
-                btn.classList.add('btn-disabled');
-                btn.classList.remove('btn-primary');
-            }
-        } else {
-            console.error("Bestätigen-Button nicht gefunden! ID: quickScanConfirmBtn");
-        }
+        // Diese Funktion wurde durch die globale updateQuickScanButton() Funktion ersetzt
+        updateQuickScanButton();
     },
 
     // Bestätigen-Button
     async confirm() {
+        console.log("confirm() aufgerufen");
+        
+        // Prüfe zuerst, ob manuelle Eingabe vorhanden ist
+        const input = document.getElementById('quickScanActiveInput');
+        if (input && input.value.trim()) {
+            console.log("Manuelle Eingabe gefunden, verarbeite:", input.value);
+            await this.handleManualInput(input.value);
+            return;
+        }
+        
+        // Normale Logik für gescannte Items
         if (this.scannedItem && this.scannedWorker) {
             try {
                 // Bestimme Aktion für Werkzeuge: 'lend' oder 'return'
@@ -1020,8 +1043,39 @@ const QuickScan = {
             } catch (error) {
                 this.showError('Fehler bei der Verarbeitung');
             }
+        } else {
+            console.log("Keine gescannten Items oder manuelle Eingabe vorhanden");
+            showToast('error', 'Bitte geben Sie einen Barcode ein oder scannen Sie Items');
         }
-    }
+    },
+
+    // Neue Funktion für manuelle Eingaben
+    async handleManualInput(inputValue) {
+        if (!inputValue || !this.activeInputType) {
+            console.log("Keine Eingabe oder kein aktiver Typ");
+            return;
+        }
+        
+        console.log("Verarbeite manuelle Eingabe:", inputValue, "Typ:", this.activeInputType);
+        
+        try {
+            if (this.activeInputType === 'item') {
+                await this.handleItemScan(inputValue);
+            } else if (this.activeInputType === 'worker') {
+                await this.handleWorkerScan(inputValue);
+            }
+            
+            // Eingabefeld leeren
+            const input = document.getElementById('quickScanActiveInput');
+            if (input) {
+                input.value = '';
+                checkManualInput(); // Button-Status aktualisieren
+            }
+        } catch (error) {
+            console.error("Fehler bei manueller Eingabe:", error);
+            showToast('error', 'Fehler bei der Verarbeitung der Eingabe');
+        }
+    },
 };
 
 // QuickScan initialisieren wenn Modal geöffnet wird
@@ -1101,5 +1155,34 @@ function updateQuickScanButton() {
     } else {
         btn.classList.add('btn-disabled');
         btn.classList.remove('btn-primary');
+    }
+}
+
+// Neue Funktion für manuelle Eingabe-Validierung
+function checkManualInput() {
+    const input = document.getElementById('quickScanActiveInput');
+    if (!input) return;
+    
+    const inputValue = input.value.trim();
+    const hasInput = inputValue.length > 0;
+    
+    console.log("checkManualInput:", {
+        inputValue: inputValue,
+        hasInput: hasInput,
+        activeInputType: QuickScan.activeInputType
+    });
+    
+    // Wenn Eingabe vorhanden ist, Button aktivieren
+    if (hasInput) {
+        const btn = document.getElementById('quickScanConfirmBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('btn-disabled');
+            btn.classList.add('btn-primary');
+            console.log("Button für manuelle Eingabe aktiviert");
+        }
+    } else {
+        // Wenn keine Eingabe, normale Logik verwenden
+        updateQuickScanButton();
     }
 }
