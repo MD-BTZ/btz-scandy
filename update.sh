@@ -1,30 +1,49 @@
 #!/bin/bash
 
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
 # Farben für die Ausgabe
 GREEN='\033[0;32m'
 RED='\033[0;31m'
-NC='\033[0m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-echo -e "${GREEN}Starte Update-Prozess...${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}   Scandy Auto-Updater${NC}"
+echo -e "${GREEN}   Automatisches Update ohne Abfragen${NC}"
+echo -e "${GREEN}========================================${NC}"
 
-# Git-Repository aktualisieren
-echo -e "${GREEN}Pulling latest changes from git...${NC}"
-git pull origin main
+# Prüfe ob docker-compose.yml existiert
+if [ ! -f "docker-compose.yml" ]; then
+    echo -e "${RED}docker-compose.yml nicht gefunden. Bitte führen Sie zuerst die Installation aus.${NC}"
+    exit 1
+fi
 
-# Docker-Container stoppen
-echo -e "${GREEN}Stopping containers...${NC}"
+# Container stoppen
+echo -e "${GREEN}Stoppe Container...${NC}"
 docker-compose down
 
-# Neue Images pullen
-echo -e "${GREEN}Pulling new images...${NC}"
-docker-compose pull
+# Git-Pull für Updates
+echo -e "${GREEN}Hole Updates...${NC}"
+git pull origin main
 
 # Container neu bauen und starten
-echo -e "${GREEN}Building and starting containers...${NC}"
+echo -e "${GREEN}Baue und starte Container neu...${NC}"
 docker-compose up -d --build
 
-# Prüfen ob alles läuft
-echo -e "${GREEN}Checking container status...${NC}"
+# Warte auf Container-Start
+echo -e "${GREEN}Warte auf Container-Start...${NC}"
+sleep 30
+
+# Prüfe Container-Status
+echo -e "${GREEN}Prüfe Container-Status...${NC}"
 docker-compose ps
 
-echo -e "${GREEN}Update completed!${NC}" 
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}   Update abgeschlossen!${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "Scandy-Anwendung: ${BLUE}http://localhost:5000${NC}"
+echo -e "MongoDB Express: ${BLUE}http://localhost:8081${NC}"
+echo -e "${GREEN}========================================${NC}" 

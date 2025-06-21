@@ -529,7 +529,7 @@ class MongoDBTicket:
         return mongodb.find(cls.COLLECTION_NAME, {'assigned_to': assigned_to, 'deleted': {'$ne': True}})
 
 def create_mongodb_indexes():
-    """Erstellt alle notwendigen MongoDB-Indizes"""
+    """Erstellt alle notwendigen MongoDB-Indizes und initialisiert die Datenbank"""
     try:
         # Werkzeuge-Indizes
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'barcode', unique=True)
@@ -568,14 +568,8 @@ def create_mongodb_indexes():
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'assigned_to')
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'created_at')
         
-        # Abteilungen-Indizes
-        mongodb.create_index('departments', 'name', unique=True)
-        
-        # Kategorien-Indizes
-        mongodb.create_index('categories', 'name', unique=True)
-        
-        # Standorte-Indizes
-        mongodb.create_index('locations', 'name', unique=True)
+        # Settings-Indizes
+        mongodb.create_index('settings', 'key', unique=True)
         
         # Timesheets-Indizes
         mongodb.create_index('timesheets', 'user_id')
@@ -588,6 +582,17 @@ def create_mongodb_indexes():
         mongodb.create_index('homepage_notices', 'created_at')
         
         logger.info("MongoDB-Indizes erfolgreich erstellt")
+        
+        # Datenbankinitialisierung
+        from app.utils.database_helpers import ensure_default_settings, migrate_old_data_to_settings
+        
+        # Stelle sicher, dass die settings Collections existieren
+        ensure_default_settings()
+        
+        # Migriere alte Daten (falls vorhanden)
+        migrate_old_data_to_settings()
+        
+        logger.info("Datenbankinitialisierung abgeschlossen")
         
     except Exception as e:
         logger.error(f"Fehler beim Erstellen der MongoDB-Indizes: {str(e)}")

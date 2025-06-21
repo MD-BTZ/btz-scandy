@@ -51,7 +51,7 @@ services:
       - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-14970
+      - SECRET_KEY=scandy-secret-key-14251
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge

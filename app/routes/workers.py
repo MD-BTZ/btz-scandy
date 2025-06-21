@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.models.mongodb_models import MongoDBWorker
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required
+from app.utils.database_helpers import get_departments_from_settings
 from datetime import datetime, timedelta
 from flask_login import current_user
 import os
@@ -39,8 +40,7 @@ def index():
             print("Erster Datensatz:", workers[0])
         
         # Hole alle Abteilungen
-        departments = mongodb.find('departments', {'deleted': {'$ne': True}})
-        departments = [d['name'] for d in departments]
+        departments = get_departments_from_settings()
         
         print(f"Gefundene Abteilungen: {departments}")
         
@@ -60,8 +60,7 @@ def index():
 @mitarbeiter_required
 def add():
     # Lade Abteilungen
-    departments = mongodb.find('departments', {'deleted': {'$ne': True}})
-    departments = [d['name'] for d in departments]
+    departments = get_departments_from_settings()
     
     if request.method == 'POST':
         barcode = request.form['barcode']
@@ -124,8 +123,7 @@ def add():
 def details(original_barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
-        departments = mongodb.find('departments', {'deleted': {'$ne': True}})
-        departments = [d['name'] for d in departments]
+        departments = get_departments_from_settings()
         
         if request.method == 'POST':
             data = request.form

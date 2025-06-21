@@ -35,6 +35,7 @@ class MongoDBDatabase:
             current_config = config['default']()
             
             # MongoDB-Client mit Authentifizierung erstellen
+            # Verwende die MONGODB_URI direkt, da sie bereits die Authentifizierung enthält
             self._client = MongoClient(
                 current_config.MONGODB_URI,
                 serverSelectionTimeoutMS=10000,  # Erhöhe Timeout für Docker
@@ -47,7 +48,7 @@ class MongoDBDatabase:
             self._client.admin.command('ping')
             
             self._db = self._client[current_config.MONGODB_DB]
-            logger.info(f"MongoDB-Verbindung hergestellt: {current_config.MONGODB_DB}")
+            logger.info(f"MongoDB-Verbindung erfolgreich mit '{current_config.MONGODB_DB}' hergestellt.")
             
         except (ConnectionFailure, ServerSelectionTimeoutError) as e:
             logger.error(f"MongoDB-Verbindungsfehler: {str(e)}")
@@ -138,7 +139,8 @@ class MongoDBDatabase:
         if '$set' in update_dict:
             update_dict['$set']['updated_at'] = datetime.now()
         else:
-            update_dict['updated_at'] = datetime.now()
+            # Erstelle $set Modifier falls nicht vorhanden
+            update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
         result = collection.update_one(filter_dict, update_dict, upsert=upsert)
         return result.modified_count > 0 or result.upserted_id is not None
@@ -152,7 +154,8 @@ class MongoDBDatabase:
         if '$set' in update_dict:
             update_dict['$set']['updated_at'] = datetime.now()
         else:
-            update_dict['updated_at'] = datetime.now()
+            # Erstelle $set Modifier falls nicht vorhanden
+            update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
         result = collection.update_many(filter_dict, update_dict)
         return result.modified_count

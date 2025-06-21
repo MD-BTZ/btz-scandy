@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required
+from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
 
@@ -28,11 +29,8 @@ def index():
                 consumable['current_status'] = 'verfügbar'
         
         # Hole Kategorien und Standorte
-        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-        categories = [c['name'] for c in categories]
-        
-        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-        locations = [l['name'] for l in locations]
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
         
         logger.debug(f"[ROUTE] consumables.index: Preparing template. User is Admin: {current_user.is_admin}")
         return render_template('consumables/index.html',
@@ -71,11 +69,8 @@ def add():
             if existing_tool or existing_consumable or existing_worker:
                 flash('Dieser Barcode existiert bereits', 'error')
                 # Hole Kategorien und Standorte für das Template
-                categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-                categories = [c['name'] for c in categories]
-                
-                locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-                locations = [l['name'] for l in locations]
+                categories = get_categories_from_settings()
+                locations = get_locations_from_settings()
                 
                 # Gebe die Formulardaten zurück an das Template
                 return render_template('consumables/add.html',
@@ -114,11 +109,8 @@ def add():
             logger.error(f"Fehler beim Hinzufügen des Verbrauchsmaterials: {str(e)}", exc_info=True)
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
             # Hole Kategorien und Standorte für das Template
-            categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-            categories = [c['name'] for c in categories]
-            
-            locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-            locations = [l['name'] for l in locations]
+            categories = get_categories_from_settings()
+            locations = get_locations_from_settings()
             
             # Gebe die Formulardaten zurück an das Template
             return render_template('consumables/add.html',
@@ -136,11 +128,8 @@ def add():
             
     else:
         # GET: Zeige Formular
-        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-        categories = [c['name'] for c in categories]
-        
-        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-        locations = [l['name'] for l in locations]
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
         
         return render_template('consumables/add.html',
                            categories=categories,
@@ -214,11 +203,8 @@ def detail(barcode):
         return redirect(url_for('consumables.index'))
     
     # Hole vordefinierte Kategorien und Standorte
-    categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-    categories = [c['name'] for c in categories]
-    
-    locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-    locations = [l['name'] for l in locations]
+    categories = get_categories_from_settings()
+    locations = get_locations_from_settings()
     
     # Hole Bestandsänderungen
     usages = mongodb.find('consumable_usages', {'consumable_barcode': barcode})

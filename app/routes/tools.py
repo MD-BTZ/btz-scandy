@@ -3,6 +3,7 @@ from flask_login import current_user
 from app.models.mongodb_models import MongoDBTool
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required
+from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime
 import logging
 
@@ -20,12 +21,10 @@ def index():
         tools = MongoDBTool.get_all_with_status()
         
         # Hole vordefinierte Kategorien
-        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-        categories = [c['name'] for c in categories]
+        categories = get_categories_from_settings()
         
         # Hole vordefinierte Standorte
-        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-        locations = [l['name'] for l in locations]
+        locations = get_locations_from_settings()
         
         logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
         
@@ -63,11 +62,8 @@ def add():
             if existing_tool:
                 flash('Dieser Barcode existiert bereits', 'error')
                 # Hole Kategorien und Standorte für das Template
-                categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-                categories = [c['name'] for c in categories]
-                
-                locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-                locations = [l['name'] for l in locations]
+                categories = get_categories_from_settings()
+                locations = get_locations_from_settings()
                 
                 # Gebe die Formulardaten zurück an das Template
                 return render_template('tools/add.html',
@@ -104,11 +100,8 @@ def add():
             print(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
             flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
             # Hole Kategorien und Standorte für das Template
-            categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-            categories = [c['name'] for c in categories]
-            
-            locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-            locations = [l['name'] for l in locations]
+            categories = get_categories_from_settings()
+            locations = get_locations_from_settings()
             
             # Gebe die Formulardaten zurück an das Template
             return render_template('tools/add.html',
@@ -125,11 +118,8 @@ def add():
             
     else:
         # GET: Zeige Formular
-        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-        categories = [c['name'] for c in categories]
-        
-        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-        locations = [l['name'] for l in locations]
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
         
         return render_template('tools/add.html',
                            categories=categories,
@@ -158,11 +148,8 @@ def detail(barcode):
             tool['lending_date'] = current_lending['lent_at']
     
     # Hole Kategorien und Standorte
-    categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-    categories = [c['name'] for c in categories]
-    
-    locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-    locations = [l['name'] for l in locations]
+    categories = get_categories_from_settings()
+    locations = get_locations_from_settings()
     
     # Hole Verlauf aus Ausleihen
     lendings = mongodb.find('lendings', {'tool_barcode': barcode})
@@ -262,11 +249,8 @@ def edit(barcode):
                 return redirect(url_for('tools.index'))
             
             # Hole Kategorien und Standorte
-            categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-            categories = [c['name'] for c in categories]
-            
-            locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-            locations = [l['name'] for l in locations]
+            categories = get_categories_from_settings()
+            locations = get_locations_from_settings()
             
             return render_template('tools/edit.html',
                                tool=tool,

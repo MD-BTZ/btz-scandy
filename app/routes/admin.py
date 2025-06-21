@@ -20,12 +20,16 @@ from app.models.mongodb_database import MongoDB
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash
+from app.utils.database_helpers import get_categories_from_settings
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 mongodb = MongoDB()
+
+# Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
+# ensure_default_settings()
 
 def ensure_default_settings():
     """Stellt sicher, dass die Standard-Label-Einstellungen vorhanden sind"""
@@ -43,9 +47,6 @@ def ensure_default_settings():
                          {'key': setting['key']}, 
                          {'$setOnInsert': setting}, 
                          upsert=True)
-
-# Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
-ensure_default_settings()
 
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
@@ -998,7 +999,7 @@ def get_all_users():
 
 def get_categories():
     """Gibt alle Kategorien zurück"""
-    return mongodb.find('categories', {'deleted': {'$ne': True}}, sort=[('name', 1)])
+    return get_categories_from_settings()
 
 @bp.route('/server-settings', methods=['GET', 'POST'])
 @admin_required
