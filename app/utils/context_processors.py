@@ -14,7 +14,9 @@ def get_colors():
         color_docs = mongodb.find('settings', {'key': {'$regex': '^color_'}})
         for doc in color_docs:
             key = doc['key'].replace('color_', '')
-            colors[key] = doc['value']
+            # Prüfe ob das value Feld existiert
+            if 'value' in doc:
+                colors[key] = doc['value']
         return colors
     except Exception as e:
         current_app.logger.error(f"Fehler beim Laden der Farben: {str(e)}")
@@ -37,9 +39,11 @@ def inject_colors():
             color_dict = {}
             for doc in color_docs:
                 key = doc['key'].replace('color_', '')
-                value = doc['value']
-                color_dict[key] = value
-                print(f"Loaded color: {key} = {value}")
+                # Prüfe ob das value Feld existiert
+                if 'value' in doc:
+                    value = doc['value']
+                    color_dict[key] = value
+                    print(f"Loaded color: {key} = {value}")
             print("Final color dict:", color_dict)
             print("========================\n")
             return {'colors': color_dict}
@@ -86,6 +90,9 @@ def inject_app_labels():
         # Labels aus der Datenbank laden
         for doc in label_docs:
             key = doc['key'].replace('label_', '')
+            # Prüfe ob das value Feld existiert
+            if 'value' not in doc:
+                continue
             value = doc['value']
             
             # Label-Typ und Attribut extrahieren (z.B. tools_name -> tools.name)

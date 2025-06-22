@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, session, redirec
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import login_required, admin_required
+from app.utils.database_helpers import get_ticket_categories_from_settings
 import logging
 from datetime import datetime
 from flask_login import current_user
@@ -59,9 +60,16 @@ def create():
 
             # Wenn eine neue Kategorie eingegeben wurde, prüfe und füge sie ggf. hinzu
             if category:
-                existing_category = mongodb.find_one('ticket_categories', {'name': category})
-                if not existing_category:
-                    mongodb.insert_one('ticket_categories', {'name': category})
+                # Prüfe ob die Kategorie bereits in den Settings existiert
+                ticket_categories = get_ticket_categories_from_settings()
+                if category not in ticket_categories:
+                    # Füge die neue Kategorie zu den Settings hinzu
+                    mongodb.update_one(
+                        'settings',
+                        {'key': 'ticket_categories'},
+                        {'$push': {'value': category}},
+                        upsert=True
+                    )
 
             due_date = data.get('due_date') if request.is_json else request.form.get('due_date')
             estimated_time = data.get('estimated_time') if request.is_json else request.form.get('estimated_time')
@@ -153,9 +161,8 @@ def create():
         message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
         ticket['message_count'] = message_count
     
-    # Hole alle Kategorien
-    categories = mongodb.find('ticket_categories', {})
-    categories = [c['name'] for c in categories]
+    # Hole alle Kategorien aus der settings Collection
+    categories = get_ticket_categories_from_settings()
     
     # Sortiere alle Listen nach Erstellungsdatum (neueste zuerst)
     my_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)

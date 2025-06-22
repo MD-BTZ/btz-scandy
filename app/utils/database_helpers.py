@@ -7,6 +7,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def get_ticket_categories_from_settings():
+    """Lädt Ticket-Kategorien aus der settings Collection"""
+    try:
+        settings_doc = mongodb.find_one('settings', {'key': 'ticket_categories'})
+        if settings_doc and 'value' in settings_doc:
+            return settings_doc['value']
+        return []
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Ticket-Kategorien: {e}")
+        return []
+
 def get_categories_from_settings():
     """Lädt Kategorien aus der settings Collection"""
     try:
@@ -69,6 +80,14 @@ def ensure_default_settings():
                 "value": []
             })
             logger.info("Abteilungen-Collection initialisiert")
+        
+        # Prüfe und erstelle leere Ticket-Kategorien-Collection
+        if not mongodb.find_one('settings', {"key": "ticket_categories"}):
+            mongodb.insert_one('settings', {
+                "key": "ticket_categories",
+                "value": []
+            })
+            logger.info("Ticket-Kategorien-Collection initialisiert")
             
     except Exception as e:
         logger.error(f"Fehler beim Initialisieren der Settings Collections: {e}")
@@ -101,6 +120,7 @@ def migrate_old_data_to_settings():
         old_categories = mongodb.find('categories', {})
         old_locations = mongodb.find('locations', {})
         old_departments = mongodb.find('departments', {})
+        old_ticket_categories = mongodb.find('ticket_categories', {})
         
         # Migriere Kategorien
         if old_categories:
@@ -144,6 +164,21 @@ def migrate_old_data_to_settings():
                     'settings',
                     {'key': 'departments'},
                     {'$set': {'value': departments_data}},
+                    upsert=True
+                )
+        
+        # Migriere Ticket-Kategorien
+        if old_ticket_categories:
+            ticket_categories_data = []
+            for cat in old_ticket_categories:
+                if 'name' in cat:
+                    ticket_categories_data.append(cat['name'])
+            
+            if ticket_categories_data:
+                mongodb.update_one(
+                    'settings',
+                    {'key': 'ticket_categories'},
+                    {'$set': {'value': ticket_categories_data}},
                     upsert=True
                 )
                 

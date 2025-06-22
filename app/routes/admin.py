@@ -20,7 +20,7 @@ from app.models.mongodb_database import MongoDB
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash
-from app.utils.database_helpers import get_categories_from_settings
+from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -1518,9 +1518,8 @@ def ticket_detail(ticket_id):
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
 
-    # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = mongodb.find('ticket_categories', {})
-    categories = [c['name'] for c in categories]
+    # Hole alle Kategorien aus der settings Collection
+    categories = get_ticket_categories_from_settings()
 
     return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
@@ -1936,7 +1935,7 @@ def tickets():
             ticket['last_update'] = ticket['last_update'].strftime('%d.%m.%Y %H:%M')
     
     # Hole alle Kategorien
-    categories = list(mongodb.db.ticket_categories.find())
+    categories = get_ticket_categories_from_settings()
     
     return render_template('admin/tickets.html', 
                          tickets=tickets,
@@ -2160,14 +2159,75 @@ def delete_logo(filename):
 @bp.route('/add_ticket_category', methods=['POST'])
 @admin_required
 def add_ticket_category():
-    # TODO: Implementiere MongoDB-Version
-    return jsonify({'success': True})
+    """Fügt eine neue Ticket-Kategorie hinzu"""
+    try:
+        name = request.form.get('category')
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein.'
+            })
+
+        # Prüfen ob Ticket-Kategorie bereits existiert
+        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+        if settings and name in settings.get('value', []):
+            return jsonify({
+                'success': False,
+                'message': 'Diese Ticket-Kategorie existiert bereits.'
+            })
+
+        # Ticket-Kategorie zur Liste hinzufügen
+        if settings:
+            mongodb.db.settings.update_one(
+                {'key': 'ticket_categories'},
+                {'$push': {'value': name}}
+            )
+        else:
+            mongodb.db.settings.insert_one({
+                'key': 'ticket_categories',
+                'value': [name]
+            })
+
+        return jsonify({
+            'success': True,
+            'message': 'Ticket-Kategorie erfolgreich hinzugefügt.'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Ein Fehler ist aufgetreten.'
+        })
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
 def delete_ticket_category(category):
-    # TODO: Implementiere MongoDB-Version
-    return jsonify({'success': True})
+    """Löscht eine Ticket-Kategorie"""
+    try:
+        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
+        tickets_with_category = mongodb.db.tickets.find_one({'category': category})
+        if tickets_with_category:
+            return jsonify({
+                'success': False,
+                'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
+            })
+
+        # Ticket-Kategorie aus der Liste entfernen
+        mongodb.db.settings.update_one(
+            {'key': 'ticket_categories'},
+            {'$pull': {'value': category}}
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket-Kategorie erfolgreich gelöscht.'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Ein Fehler ist aufgetreten.'
+        })
 
 @bp.route('/system')
 @admin_required
