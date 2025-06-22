@@ -21,6 +21,7 @@ from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsuma
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
+from docxtpl import DocxTemplate
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -1844,136 +1845,158 @@ def update_ticket(ticket_id):
 @admin_required
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
-    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
-    if not ticket:
-        return abort(404)
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)}) or {}
-    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}) or []
-
-    # --- Auftragnehmer (Vorname Nachname) ---
-    auftragnehmer_user = None
-    if ticket.get('assigned_to'):
-        auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
-    if auftragnehmer_user:
-        auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
-    else:
-        auftragnehmer_name = ''
-
-    # --- Checkboxen für Auftraggeber intern/extern ---
-    intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
-    extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
-
-    # --- Ausgeführte Arbeiten (bis zu 5) ---
-    arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
-    arbeiten_zeilen = []
-    if arbeiten_liste:
-        for zeile in arbeiten_liste.split('\n'):
-            if not zeile.strip():
-                continue
-            teile = [t.strip() for t in zeile.split('|')]
-            eintrag = {
-                'arbeiten': teile[0] if len(teile) > 0 else '',
-                'arbeitsstunden': teile[1] if len(teile) > 1 else '',
-                'leistungskategorie': teile[2] if len(teile) > 2 else ''
-            }
-            arbeiten_zeilen.append(eintrag)
-    # Fülle auf 5 Zeilen auf
-    while len(arbeiten_zeilen) < 5:
-        arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
-
-    # Materialdaten aufbereiten
-    material_rows = []
-    summe_material = 0
-    for m in material_list:
-        menge = float(m.get('menge') or 0)
-        einzelpreis = float(m.get('einzelpreis') or 0)
-        gesamtpreis = menge * einzelpreis
-        summe_material += gesamtpreis
-        material_rows.append({
-            'material': m.get('material', '') or '',
-            'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
-            'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
-            'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
-        })
-    while len(material_rows) < 5:
-        material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
-
-    arbeitspausch = 0
-    ubertrag = 0
-    zwischensumme = summe_material + arbeitspausch + ubertrag
-    mwst = zwischensumme * 0.07
-    gesamtsumme = zwischensumme + mwst
-
-    # --- Kontext für docxtpl bauen ---
-    context = {
-        'auftragnehmer': auftragnehmer_name,
-        'intern_checkbox': intern_checkbox,
-        'extern_checkbox': extern_checkbox,
-        'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
-        'kontakt': auftrag_details.get('kontakt', ''),
-        'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
-        'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
-        'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
-        'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
-        'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
-        'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
-        'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
-        'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
-        'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
-        'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
-        'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
-        'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
-        'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
-        'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
-        'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
-        'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
-        'material_1': material_rows[0]['material'],
-        'materialmenge_1': material_rows[0]['materialmenge'],
-        'materialpreis_1': material_rows[0]['materialpreis'],
-        'materialpreisges_1': material_rows[0]['materialpreisges'],
-        'material_2': material_rows[1]['material'],
-        'materialmenge_2': material_rows[1]['materialmenge'],
-        'materialpreis_2': material_rows[1]['materialpreis'],
-        'materialpreisges_2': material_rows[1]['materialpreisges'],
-        'material_3': material_rows[2]['material'],
-        'materialmenge_3': material_rows[2]['materialmenge'],
-        'materialpreis_3': material_rows[2]['materialpreis'],
-        'materialpreisges_3': material_rows[2]['materialpreisges'],
-        'material_4': material_rows[3]['material'],
-        'materialmenge_4': material_rows[3]['materialmenge'],
-        'materialpreis_4': material_rows[3]['materialpreis'],
-        'materialpreisges_4': material_rows[3]['materialpreisges'],
-        'material_5': material_rows[4]['material'],
-        'materialmenge_5': material_rows[4]['materialmenge'],
-        'materialpreis_5': material_rows[4]['materialpreis'],
-        'materialpreisges_5': material_rows[4]['materialpreisges'],
-        'summe_material': f"{summe_material:.2f}".replace('.', ','),
-        'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
-        'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
-        'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
-        'mwst': f"{mwst:.2f}".replace('.', ','),
-        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
-    }
-
-    # --- Word-Dokument generieren ---
     try:
+        # Prüfe ob die ID gültig ist
+        try:
+            ticket_id = ObjectId(id)
+        except Exception as e:
+            logging.error(f"Ungültige Ticket-ID: {id}")
+            flash('Ungültige Ticket-ID.', 'error')
+            return redirect(url_for('admin.tickets'))
+        
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+        if not ticket:
+            logging.error(f"Ticket nicht gefunden: {id}")
+            flash('Ticket nicht gefunden.', 'error')
+            return redirect(url_for('admin.tickets'))
+        
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []
+
+        # --- Auftragnehmer (Vorname Nachname) ---
+        auftragnehmer_user = None
+        if ticket.get('assigned_to'):
+            auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
+        if auftragnehmer_user:
+            auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+        else:
+            auftragnehmer_name = ''
+
+        # --- Checkboxen für Auftraggeber intern/extern ---
+        intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
+        extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
+
+        # --- Ausgeführte Arbeiten (bis zu 5) ---
+        arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
+        arbeiten_zeilen = []
+        if arbeiten_liste:
+            for zeile in arbeiten_liste.split('\n'):
+                if not zeile.strip():
+                    continue
+                teile = [t.strip() for t in zeile.split('|')]
+                eintrag = {
+                    'arbeiten': teile[0] if len(teile) > 0 else '',
+                    'arbeitsstunden': teile[1] if len(teile) > 1 else '',
+                    'leistungskategorie': teile[2] if len(teile) > 2 else ''
+                }
+                arbeiten_zeilen.append(eintrag)
+        # Fülle auf 5 Zeilen auf
+        while len(arbeiten_zeilen) < 5:
+            arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
+
+        # Materialdaten aufbereiten
+        material_rows = []
+        summe_material = 0
+        for m in material_list:
+            menge = float(m.get('menge') or 0)
+            einzelpreis = float(m.get('einzelpreis') or 0)
+            gesamtpreis = menge * einzelpreis
+            summe_material += gesamtpreis
+            material_rows.append({
+                'material': m.get('material', '') or '',
+                'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
+                'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
+                'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
+            })
+        while len(material_rows) < 5:
+            material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
+
+        arbeitspausch = 0
+        ubertrag = 0
+        zwischensumme = summe_material + arbeitspausch + ubertrag
+        mwst = zwischensumme * 0.07
+        gesamtsumme = zwischensumme + mwst
+
+        # --- Kontext für docxtpl bauen ---
+        context = {
+            'auftragnehmer': auftragnehmer_name,
+            'intern_checkbox': intern_checkbox,
+            'extern_checkbox': extern_checkbox,
+            'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
+            'kontakt': auftrag_details.get('kontakt', ''),
+            'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
+            'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
+            'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
+            'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
+            'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
+            'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
+            'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
+            'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
+            'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
+            'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
+            'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
+            'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
+            'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
+            'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
+            'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
+            'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
+            'material_1': material_rows[0]['material'],
+            'materialmenge_1': material_rows[0]['materialmenge'],
+            'materialpreis_1': material_rows[0]['materialpreis'],
+            'materialpreisges_1': material_rows[0]['materialpreisges'],
+            'material_2': material_rows[1]['material'],
+            'materialmenge_2': material_rows[1]['materialmenge'],
+            'materialpreis_2': material_rows[1]['materialpreis'],
+            'materialpreisges_2': material_rows[1]['materialpreisges'],
+            'material_3': material_rows[2]['material'],
+            'materialmenge_3': material_rows[2]['materialmenge'],
+            'materialpreis_3': material_rows[2]['materialpreis'],
+            'materialpreisges_3': material_rows[2]['materialpreisges'],
+            'material_4': material_rows[3]['material'],
+            'materialmenge_4': material_rows[3]['materialmenge'],
+            'materialpreis_4': material_rows[3]['materialpreis'],
+            'materialpreisges_4': material_rows[3]['materialpreisges'],
+            'material_5': material_rows[4]['material'],
+            'materialmenge_5': material_rows[4]['materialmenge'],
+            'materialpreis_5': material_rows[4]['materialpreis'],
+            'materialpreisges_5': material_rows[4]['materialpreisges'],
+            'summe_material': f"{summe_material:.2f}".replace('.', ','),
+            'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
+            'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
+            'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
+            'mwst': f"{mwst:.2f}".replace('.', ','),
+            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
+        }
+
+        # --- Word-Dokument generieren ---
         # Lade das Template
-        template_path = os.path.join(app.static_folder, 'word', 'btzauftrag.docx')
+        template_path = os.path.join(current_app.static_folder, 'word', 'btzauftrag.docx')
+        if not os.path.exists(template_path):
+            logging.error(f"Word-Template nicht gefunden: {template_path}")
+            flash('Word-Template nicht gefunden.', 'error')
+            return redirect(url_for('admin.ticket_detail', ticket_id=id))
+        
         doc = DocxTemplate(template_path)
         
         # Rendere das Dokument
         doc.render(context)
         
+        # Erstelle das uploads-Verzeichnis falls es nicht existiert
+        uploads_dir = os.path.join(current_app.static_folder, 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        
         # Speichere das generierte Dokument
-        output_path = os.path.join(app.static_folder, 'uploads', f'ticket_{id}_export.docx')
+        output_path = os.path.join(uploads_dir, f'ticket_{id}_export.docx')
         doc.save(output_path)
+        
+        logging.info(f"Word-Dokument erfolgreich generiert: {output_path}")
         
         # Sende das Dokument
         return send_file(output_path, as_attachment=True, download_name=f'ticket_{id}_export.docx')
         
     except Exception as e:
-        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}")
-        flash('Fehler beim Generieren des Dokuments.', 'error')
+        logging.error(f"Fehler beim Generieren des Word-Dokuments für Ticket {id}: {str(e)}")
+        flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
         return redirect(url_for('admin.ticket_detail', ticket_id=id))
 
 @bp.route('/tickets/<ticket_id>/update-details', methods=['POST'])
