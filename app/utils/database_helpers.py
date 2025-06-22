@@ -4,6 +4,7 @@ Datenbank-Hilfsfunktionen für Scandy
 
 from app.models.mongodb_database import mongodb
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -183,4 +184,34 @@ def migrate_old_data_to_settings():
                 )
                 
     except Exception as e:
-        logger.error(f"Fehler bei der Datenmigration: {e}") 
+        logger.error(f"Fehler bei der Datenmigration: {e}")
+
+def get_next_ticket_number():
+    """Generiert die nächste Auftragsnummer im Format YYMM-XXX"""
+    current_date = datetime.now()
+    year_suffix = str(current_date.year)[-2:]  # Letzte 2 Ziffern des Jahres
+    month = f"{current_date.month:02d}"  # Monat mit führender Null
+    
+    # Basis für die Nummer (z.B. "2506")
+    base_number = f"{year_suffix}{month}"
+    
+    # Finde die höchste Nummer für diesen Monat
+    existing_tickets = mongodb.find('tickets', {
+        'ticket_number': {'$regex': f'^{base_number}-[0-9]+$'}
+    })
+    
+    max_number = 0
+    for ticket in existing_tickets:
+        if ticket.get('ticket_number'):
+            try:
+                # Extrahiere die Nummer nach dem Bindestrich
+                number_part = ticket['ticket_number'].split('-')[1]
+                ticket_num = int(number_part)
+                max_number = max(max_number, ticket_num)
+            except (ValueError, IndexError):
+                continue
+    
+    # Nächste Nummer
+    next_number = max_number + 1
+    
+    return f"{base_number}-{next_number:03d}" 

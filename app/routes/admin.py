@@ -19,7 +19,7 @@ from app.config.config import Config
 from app.models.mongodb_database import MongoDB
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
 
 # Logger einrichten
@@ -50,18 +50,156 @@ def ensure_default_settings():
 
 def get_recent_activity():
     """Hole die letzten Aktivitäten"""
-    # TODO: Implementiere MongoDB-Version
-    return []
+    try:
+        # Hole die letzten 10 Ausleihen
+        recent_lendings = list(mongodb.find('lendings', {}, sort=[('lent_at', -1)], limit=10))
+        
+        # Hole die letzten 10 Verbrauchsmaterial-Ausgaben
+        recent_usages = list(mongodb.find('consumable_usages', {}, sort=[('used_at', -1)], limit=10))
+        
+        activities = []
+        
+        # Ausleihen verarbeiten
+        for lending in recent_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+            
+            if tool and worker:
+                activities.append({
+                    'type': 'lending',
+                    'timestamp': lending['lent_at'],
+                    'description': f'Werkzeug "{tool["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgeliehen',
+                    'icon': 'fas fa-tools'
+                })
+        
+        # Verbrauchsmaterial verarbeiten
+        for usage in recent_usages:
+            consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
+            
+            if consumable and worker:
+                activities.append({
+                    'type': 'usage',
+                    'timestamp': usage['used_at'],
+                    'description': f'{usage["quantity"]}x "{consumable["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgegeben',
+                    'icon': 'fas fa-box-open'
+                })
+        
+        # Nach Zeitstempel sortieren und die letzten 10 zurückgeben
+        activities.sort(key=lambda x: x['timestamp'], reverse=True)
+        return activities[:10]
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der letzten Aktivitäten: {str(e)}")
+        return []
 
 def get_material_usage():
     """Hole die Materialnutzung"""
-    # TODO: Implementiere MongoDB-Version
-    return []
+    try:
+        # Hole Verbrauchsmaterial-Ausgaben der letzten 30 Tage
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        
+        pipeline = [
+            {
+                '$match': {
+                    'used_at': {'$gte': thirty_days_ago}
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'consumables',
+                    'localField': 'consumable_barcode',
+                    'foreignField': 'barcode',
+                    'as': 'consumable'
+                }
+            },
+            {
+                '$unwind': '$consumable'
+            },
+            {
+                '$group': {
+                    '_id': '$consumable_barcode',
+                    'name': {'$first': '$consumable.name'},
+                    'total_quantity': {'$sum': '$quantity'},
+                    'usage_count': {'$sum': 1}
+                }
+            },
+            {
+                '$sort': {'total_quantity': -1}
+            },
+            {
+                '$limit': 5
+            }
+        ]
+        
+        usage_stats = list(mongodb.db.consumable_usages.aggregate(pipeline))
+        
+        return usage_stats
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Materialnutzung: {str(e)}")
+        return []
 
 def get_warnings():
     """Hole aktuelle Warnungen"""
-    # TODO: Implementiere MongoDB-Version
-    return []
+    try:
+        warnings = []
+        
+        # Warnung für niedrige Verbrauchsmaterial-Bestände
+        low_stock_consumables = list(mongodb.find('consumables', {
+            'deleted': {'$ne': True},
+            '$expr': {
+                '$lte': ['$quantity', '$min_quantity']
+            }
+        }))
+        
+        for consumable in low_stock_consumables:
+            warnings.append({
+                'type': 'low_stock',
+                'severity': 'warning',
+                'message': f'Verbrauchsmaterial "{consumable["name"]}" hat niedrigen Bestand: {consumable["quantity"]}',
+                'icon': 'fas fa-exclamation-triangle'
+            })
+        
+        # Warnung für überfällige Ausleihen (mehr als 30 Tage)
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        overdue_lendings = list(mongodb.find('lendings', {
+            'returned_at': None,
+            'lent_at': {'$lt': thirty_days_ago}
+        }))
+        
+        for lending in overdue_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+            
+            if tool and worker:
+                days_overdue = (datetime.now() - lending['lent_at']).days
+                warnings.append({
+                    'type': 'overdue',
+                    'severity': 'danger',
+                    'message': f'Werkzeug "{tool["name"]}" ist seit {days_overdue} Tagen an {worker["firstname"]} {worker["lastname"]} ausgeliehen',
+                    'icon': 'fas fa-clock'
+                })
+        
+        # Warnung für defekte Werkzeuge
+        defective_tools = list(mongodb.find('tools', {
+            'deleted': {'$ne': True},
+            'status': 'defekt'
+        }))
+        
+        for tool in defective_tools:
+            warnings.append({
+                'type': 'defective',
+                'severity': 'info',
+                'message': f'Werkzeug "{tool["name"]}" ist als defekt markiert',
+                'icon': 'fas fa-tools'
+            })
+        
+        return warnings
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Warnungen: {str(e)}")
+        return []
 
 def get_backup_info():
     """Hole Informationen über vorhandene Backups"""
@@ -640,7 +778,7 @@ def get_consumable_trend():
 def manual_lending():
     """Manuelle Ausleihe/Rückgabe"""
     if request.method == 'POST':
-        print("POST-Anfrage empfangen")
+        logger.info("POST-Anfrage für manuelle Ausleihe empfangen")
         
         try:
             # JSON-Daten verarbeiten
@@ -651,7 +789,7 @@ def manual_lending():
                     'message': 'Keine gültigen JSON-Daten empfangen'
                 }), 400
                 
-            print("JSON-Daten:", data)
+            logger.debug(f"JSON-Daten für manuelle Ausleihe: {data}")
             
             item_barcode = data.get('item_barcode')
             worker_barcode = data.get('worker_barcode')
@@ -805,14 +943,14 @@ def manual_lending():
                         'message': f'Werkzeug {tool["name"]} wurde zurückgegeben'
                     })
             except Exception as e:
-                print("Fehler bei der Ausleihe:", str(e))
+                logger.error(f"Fehler bei der Ausleihe: {str(e)}")
                 return jsonify({
                     'success': False,
                     'message': f'Fehler: {str(e)}'
                 }), 500
             
         except Exception as e:
-            print(f"Fehler beim Verarbeiten der Anfrage: {str(e)}")
+            logger.error(f"Fehler beim Verarbeiten der Anfrage: {str(e)}")
             return jsonify({
                 'success': False,
                 'message': 'Fehler beim Verarbeiten der Anfrage'
@@ -868,28 +1006,16 @@ def manual_lending():
 @bp.route('/trash')
 @mitarbeiter_required
 def trash():
-    """Papierkorb mit gelöschten Einträgen"""
+    """Zeigt den Papierkorb mit gelöschten Einträgen an"""
     try:
         # Gelöschte Werkzeuge
         tools = mongodb.find('tools', {'deleted': True}, sort=[('deleted_at', -1)])
         
-        logger.debug(f"Gelöschte Werkzeuge gefunden: {len(tools)}")
-        for tool in tools:
-            logger.debug(f"Tool: {tool}")
-        
         # Gelöschte Verbrauchsmaterialien
         consumables = mongodb.find('consumables', {'deleted': True}, sort=[('deleted_at', -1)])
         
-        logger.debug(f"Gelöschte Verbrauchsmaterialien gefunden: {len(consumables)}")
-        for consumable in consumables:
-            logger.debug(f"Consumable: {consumable}")
-        
         # Gelöschte Mitarbeiter
         workers = mongodb.find('workers', {'deleted': True}, sort=[('deleted_at', -1)])
-        
-        logger.debug(f"Gelöschte Mitarbeiter gefunden: {len(workers)}")
-        for worker in workers:
-            logger.debug(f"Worker: {worker}")
         
         return render_template('admin/trash.html',
                            tools=tools,
@@ -1502,6 +1628,16 @@ def ticket_detail(ticket_id):
 
     # Hole die Nachrichten für das Ticket
     messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
+    # Formatiere die Nachrichten für das Template
+    formatted_messages = []
+    for msg in messages:
+        formatted_msg = dict(msg)
+        # Konvertiere created_at zu String-Format
+        if isinstance(formatted_msg.get('created_at'), datetime):
+            formatted_msg['created_at'] = formatted_msg['created_at'].strftime('%d.%m.%Y %H:%M')
+        # Setze is_admin Flag basierend auf dem Sender
+        formatted_msg['is_admin'] = formatted_msg.get('sender') == current_user.username
+        formatted_messages.append(formatted_msg)
 
     # Hole die Auftragsdetails
     auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
@@ -1511,9 +1647,8 @@ def ticket_detail(ticket_id):
     material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
 
     # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
-    with mongodb.get_connection() as db:
-        users = db.find('users', {'is_active': True})
-        users = [dict(user) for user in users]
+    users = mongodb.find('users', {'is_active': True})
+    users = [dict(user) for user in users]
 
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
@@ -1524,8 +1659,9 @@ def ticket_detail(ticket_id):
     return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
                          notes=notes,
-                         messages=messages,
+                         messages=formatted_messages,
                          users=users,
+                         workers=users,  # Template erwartet 'workers'
                          assigned_users=assigned_users,
                          auftrag_details=auftrag_details,
                          material_list=material_list,
@@ -1575,7 +1711,11 @@ def add_ticket_message(ticket_id):
 
         return jsonify({
             'success': True,
-            'message': message  # Sende die Nachricht zurück
+            'message': {
+                'sender': current_user.username,
+                'text': message,
+                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
+            }
         })
 
     except Exception as e:
@@ -1591,12 +1731,12 @@ def add_ticket_message(ticket_id):
 def add_ticket_note(ticket_id):
     """Fügt eine neue Notiz zu einem Ticket hinzu."""
     try:
-        print(f"DEBUG: Notiz-Anfrage für Ticket {ticket_id} erhalten")
+        logger.debug(f"Notiz-Anfrage für Ticket {ticket_id} erhalten")
         # Hole das Ticket
         ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
         
         if not ticket:
-            print(f"DEBUG: Ticket {ticket_id} nicht gefunden")
+            logger.warning(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({
                 'success': False,
                 'message': 'Ticket nicht gefunden'
@@ -1604,7 +1744,7 @@ def add_ticket_note(ticket_id):
 
         # Hole die Notiz
         if not request.is_json:
-            print("DEBUG: Ungültiges Anfrageformat. JSON erwartet.")
+            logger.warning("Ungültiges Anfrageformat. JSON erwartet.")
             return jsonify({
                 'success': False,
                 'message': 'Ungültiges Anfrageformat. JSON erwartet.'
@@ -1614,13 +1754,13 @@ def add_ticket_note(ticket_id):
         note = data.get('note')
         
         if not note or not note.strip():
-            print("DEBUG: Notiz ist leer")
+            logger.warning("Notiz ist leer")
             return jsonify({
                 'success': False,
                 'message': 'Notiz ist erforderlich'
             }), 400
 
-        print(f"DEBUG: Notiz hinzufügen: {note}")
+        logger.debug(f"Notiz hinzufügen: {note}")
         # Füge die Notiz hinzu
         note_data = {
             'ticket_id': ObjectId(ticket_id),
@@ -1713,7 +1853,7 @@ def export_ticket(id):
     # --- Auftragnehmer (Vorname Nachname) ---
     auftragnehmer_user = None
     if ticket.get('assigned_to'):
-        auftragnehmer_user = User.get_by_username(ticket['assigned_to'])
+        auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
     if auftragnehmer_user:
         auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
     else:
@@ -2833,3 +2973,60 @@ def update_history():
             'status': 'error',
             'message': f'Fehler beim Abrufen der Update-Historie: {str(e)}'
         }), 500
+
+@bp.route('/tickets/<ticket_id>/update-assignment', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket_assignment(ticket_id):
+    """Aktualisiert die Zuweisung eines Tickets"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        assigned_to = data.get('assigned_to')
+        
+        # Wenn assigned_to leer ist, setze es auf None
+        if not assigned_to or assigned_to == "":
+            assigned_to = None
+
+        # Aktualisiere die Zuweisung direkt im Ticket
+        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
+
+        return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/tickets/<ticket_id>/update-status', methods=['POST'])
+@login_required
+@admin_required
+def update_ticket_status(ticket_id):
+    """Aktualisiert den Status eines Tickets"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        status = data.get('status')
+        
+        if not status:
+            return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
+
+        # Aktualisiere den Status im Ticket
+        update_data = {'status': status, 'updated_at': datetime.now()}
+        
+        # Wenn Status auf 'gelöst' gesetzt wird, setze resolved_at
+        if status == 'gelöst':
+            update_data['resolved_at'] = datetime.now()
+
+        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': update_data}):
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
+
+        return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500

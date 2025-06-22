@@ -19,7 +19,7 @@
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Auftrag #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <h2 class="card-title">Auftrag #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}</h2>
                         <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -231,7 +231,9 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
+        console.log('Server response:', data); // Debug-Ausgabe
+        
+        if (data.success && data.message && data.message.sender && data.message.text) {
             // Nachricht erfolgreich gesendet
             const messageInput = this.querySelector('textarea[name="message"]');
             messageInput.value = ''; // Formular leeren
@@ -241,13 +243,17 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
             const newMessage = document.createElement('div');
             newMessage.className = 'chat chat-end';
             
+            const sender = data.message.sender || 'Unbekannt';
+            const text = data.message.text || 'Keine Nachricht';
+            const timestamp = data.message.created_at || 'Gerade eben';
+            
             newMessage.innerHTML = `
                 <div class="chat-header">
-                    ${data.message.sender}
-                    <time class="text-xs opacity-50">${data.message.created_at}</time>
+                    ${sender}
+                    <time class="text-xs opacity-50">${timestamp}</time>
                 </div>
                 <div class="chat-bubble chat-bubble-primary">
-                    ${data.message.text}
+                    ${text}
                 </div>
             `;
             
@@ -260,7 +266,14 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
             messagesContainer.appendChild(newMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         } else {
-            alert(data.message || 'Fehler beim Senden der Nachricht');
+            // Fehlerbehandlung
+            console.error('Invalid response structure:', data); // Debug-Ausgabe
+            const errorMessage = data.message || 'Fehler beim Senden der Nachricht';
+            if (typeof errorMessage === 'string') {
+                alert(errorMessage);
+            } else {
+                alert('Fehler beim Senden der Nachricht');
+            }
         }
     })
     .catch(error => {

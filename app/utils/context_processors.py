@@ -19,7 +19,7 @@ def get_colors():
                 colors[key] = doc['value']
         return colors
     except Exception as e:
-        current_app.logger.error(f"Fehler beim Laden der Farben: {str(e)}")
+        logger.error(f"Fehler beim Laden der Farben: {str(e)}")
         return {
             'primary': '#2c3e50',
             'secondary': '#4c5789',
@@ -31,10 +31,7 @@ def get_colors():
 def inject_colors():
     """Injiziert die Farbeinstellungen aus MongoDB in alle Templates"""
     try:
-        print("\n=== Color Injection Debug ===")
         color_docs = mongodb.find('settings', {'key': {'$regex': '^color_'}})
-        print(f"MongoDB Query: settings, key ^color_")
-        print(f"Raw colors from DB:", color_docs)
         if color_docs:
             color_dict = {}
             for doc in color_docs:
@@ -43,15 +40,12 @@ def inject_colors():
                 if 'value' in doc:
                     value = doc['value']
                     color_dict[key] = value
-                    print(f"Loaded color: {key} = {value}")
-            print("Final color dict:", color_dict)
-            print("========================\n")
             return {'colors': color_dict}
     except Exception as e:
-        print(f"Fehler beim Laden der Farben: {e}")
-        print(traceback.format_exc())
-    print("Using fallback colors")
-    print("========================\n")
+        logger.error(f"Fehler beim Laden der Farben: {e}")
+        logger.debug(traceback.format_exc())
+    
+    # Fallback-Farben
     return {
         'colors': {
             'primary': '259 94% 51%',
@@ -104,7 +98,7 @@ def inject_app_labels():
         
         return {'app_labels': app_labels}
     except Exception as e:
-        print(f"Fehler beim Laden der App-Labels: {str(e)}")
+        logger.error(f"Fehler beim Laden der App-Labels: {str(e)}")
         return {
             'app_labels': {
                 'tools': {'name': 'Werkzeuge', 'icon': 'fas fa-tools'},

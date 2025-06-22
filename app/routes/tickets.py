@@ -2,13 +2,14 @@ from flask import Blueprint, render_template, request, jsonify, session, redirec
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import login_required, admin_required
-from app.utils.database_helpers import get_ticket_categories_from_settings
+from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number
 import logging
 from datetime import datetime
 from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
 from bson import ObjectId
+from flask import app
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 
@@ -98,7 +99,8 @@ def create():
                 'estimated_time': estimated_time,
                 'status': 'offen',
                 'created_at': datetime.now(),
-                'updated_at': datetime.now()
+                'updated_at': datetime.now(),
+                'ticket_number': get_next_ticket_number()  # Neue Auftragsnummer
             }
             
             result = mongodb.insert_one('tickets', ticket_data)
@@ -348,9 +350,8 @@ def detail(id):
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
     assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(id)})
 
-    # Hole alle Kategorien aus der ticket_categories Tabelle
-    categories = mongodb.find('ticket_categories', {})
-    categories = [c['name'] for c in categories]
+    # Hole alle Kategorien aus der settings Collection
+    categories = get_ticket_categories_from_settings()
 
     return render_template('tickets/detail.html', 
                          ticket=ticket, 
@@ -516,14 +517,13 @@ def update_assignment(id):
 
         data = request.get_json()
         assigned_to = data.get('assigned_to')
-        if isinstance(assigned_to, str):
-            # Falls nur ein Nutzer ausgewählt wurde, kommt ein String, sonst Liste
-            assigned_to = [assigned_to] if assigned_to else []
-        elif assigned_to is None:
-            assigned_to = []
+        
+        # Wenn assigned_to leer ist, setze es auf None
+        if not assigned_to or assigned_to == "":
+            assigned_to = None
 
-        # Aktualisiere die Zuweisungen in ticket_assignments
-        if not mongodb.update_many('ticket_assignments', {'ticket_id': ObjectId(id)}, {'$set': {'assigned_to': {'$in': [ObjectId(t) for t in assigned_to]}}} if isinstance(assigned_to, list) else {'$set': {'assigned_to': assigned_to}}):
+        # Aktualisiere die Zuweisung direkt im Ticket
+        if not mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
@@ -821,7 +821,8 @@ def public_create_order():
                 'estimated_time': estimated_time,
                 'status': 'offen',
                 'created_at': datetime.now(),
-                'updated_at': datetime.now()
+                'updated_at': datetime.now(),
+                'ticket_number': get_next_ticket_number()  # Neue Auftragsnummer
             }
             
             result = mongodb.insert_one('tickets', ticket_data)
@@ -836,8 +837,7 @@ def public_create_order():
             return redirect(url_for('tickets.public_create_order'))
     
     # Hole die Kategorien für das Formular
-    categories = mongodb.find('categories', {})
-    categories = [c['name'] for c in categories]  # Extrahiere nur die Namen aus den Tupeln
+    categories = get_categories_from_settings()
     
     return render_template('auftrag_public.html', 
                          categories=categories,

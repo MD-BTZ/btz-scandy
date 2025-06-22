@@ -13,31 +13,20 @@ logger = logging.getLogger(__name__)
 @bp.route('/')
 @login_required
 def index():
-    """Zeigt alle aktiven Verbrauchsmaterialien"""
-    logger.debug(f"[ROUTE] consumables.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
+    """Zeigt alle Verbrauchsmaterialien an"""
     try:
-        # Hole alle aktiven Verbrauchsmaterialien
         consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
         
-        # Setze Status basierend auf Menge
-        for consumable in consumables:
-            if consumable.get('quantity', 0) <= 0:
-                consumable['current_status'] = 'ausverkauft'
-            elif consumable.get('quantity', 0) <= consumable.get('min_quantity', 0):
-                consumable['current_status'] = 'niedrig'
-            else:
-                consumable['current_status'] = 'verfügbar'
-        
-        # Hole Kategorien und Standorte
+        # Hole Kategorien und Standorte aus den Settings
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
         
-        logger.debug(f"[ROUTE] consumables.index: Preparing template. User is Admin: {current_user.is_admin}")
         return render_template('consumables/index.html',
-                              consumables=consumables,
-                              categories=categories,
-                              locations=locations,
-                              is_admin=current_user.is_admin)
+                           consumables=consumables,
+                           categories=categories,
+                           locations=locations,
+                           is_admin=current_user.is_admin)
+                           
     except Exception as e:
         logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}", exc_info=True)
         return render_template('consumables/index.html',
@@ -50,90 +39,58 @@ def index():
 @login_required
 def add():
     """Fügt ein neues Verbrauchsmaterial hinzu"""
-    logger.debug(f"[ROUTE] consumables.add: Entered route (Method: {request.method}). User: {current_user.id}")
     if request.method == 'POST':
-        name = request.form.get('name')
-        barcode = request.form.get('barcode')
-        description = request.form.get('description')
-        category = request.form.get('category')
-        location = request.form.get('location')
-        quantity = request.form.get('quantity', type=int)
-        min_quantity = request.form.get('min_quantity', type=int)
-        
         try:
-            # Prüfe ob der Barcode bereits existiert
+            # Formulardaten abrufen
+            name = request.form.get('name')
+            barcode = request.form.get('barcode')
+            category = request.form.get('category')
+            location = request.form.get('location')
+            quantity = int(request.form.get('quantity', 0))
+            min_quantity = int(request.form.get('min_quantity', 0))
+            description = request.form.get('description', '')
+            
+            # Prüfe ob Barcode bereits existiert
             existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
             existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
             existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
             
             if existing_tool or existing_consumable or existing_worker:
-                flash('Dieser Barcode existiert bereits', 'error')
-                # Hole Kategorien und Standorte für das Template
+                flash('Barcode bereits vergeben', 'error')
                 categories = get_categories_from_settings()
                 locations = get_locations_from_settings()
-                
-                # Gebe die Formulardaten zurück an das Template
-                return render_template('consumables/add.html',
-                                   categories=categories,
-                                   locations=locations,
-                                   form_data={
-                                       'name': name,
-                                       'barcode': barcode,
-                                       'description': description,
-                                       'category': category,
-                                       'location': location,
-                                       'quantity': quantity,
-                                       'min_quantity': min_quantity
-                                   })
+                return render_template('consumables/add.html', 
+                                   categories=categories, 
+                                   locations=locations)
             
-            # Wenn Barcode eindeutig ist, füge das Verbrauchsmaterial hinzu
+            # Neues Verbrauchsmaterial erstellen
             consumable_data = {
                 'name': name,
                 'barcode': barcode,
-                'description': description,
                 'category': category,
                 'location': location,
-                'quantity': quantity or 0,
-                'min_quantity': min_quantity or 0,
+                'quantity': quantity,
+                'min_quantity': min_quantity,
+                'description': description,
                 'created_at': datetime.now(),
-                'modified_at': datetime.now(),
+                'updated_at': datetime.now(),
                 'deleted': False
             }
             
             mongodb.insert_one('consumables', consumable_data)
-            
-            flash('Verbrauchsmaterial erfolgreich hinzugefügt', 'success')
+            flash('Verbrauchsmaterial wurde erfolgreich hinzugefügt', 'success')
             return redirect(url_for('consumables.index'))
             
         except Exception as e:
             logger.error(f"Fehler beim Hinzufügen des Verbrauchsmaterials: {str(e)}", exc_info=True)
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
-            # Hole Kategorien und Standorte für das Template
-            categories = get_categories_from_settings()
-            locations = get_locations_from_settings()
-            
-            # Gebe die Formulardaten zurück an das Template
-            return render_template('consumables/add.html',
-                               categories=categories,
-                               locations=locations,
-                               form_data={
-                                   'name': name,
-                                   'barcode': barcode,
-                                   'description': description,
-                                   'category': category,
-                                   'location': location,
-                                   'quantity': quantity,
-                                   'min_quantity': min_quantity
-                               })
-            
-    else:
-        # GET: Zeige Formular
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
-        
-        return render_template('consumables/add.html',
-                           categories=categories,
-                           locations=locations)
+    
+    # GET-Anfrage: Formular anzeigen
+    categories = get_categories_from_settings()
+    locations = get_locations_from_settings()
+    return render_template('consumables/add.html', 
+                       categories=categories, 
+                       locations=locations)
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required

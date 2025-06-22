@@ -14,30 +14,28 @@ logger = logging.getLogger(__name__) # Logger für dieses Modul
 @bp.route('/')
 @login_required
 def index():
-    """Zeigt alle aktiven Werkzeuge"""
-    logger.debug(f"[ROUTE] tools.index: Entered route. User: {current_user.id}, Role: {current_user.role}")
+    """Zeigt alle Werkzeuge an"""
     try:
-        # Hole alle aktiven Werkzeuge mit MongoDB
-        tools = MongoDBTool.get_all_with_status()
+        # Hole alle aktiven Werkzeuge
+        tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
         
-        # Hole vordefinierte Kategorien
+        # Hole Kategorien und Standorte aus den Settings
         categories = get_categories_from_settings()
-        
-        # Hole vordefinierte Standorte
         locations = get_locations_from_settings()
-        
-        logger.debug(f"[ROUTE] tools.index: Tools: {tools}")
         
         return render_template('tools/index.html',
                            tools=tools,
                            categories=categories,
                            locations=locations,
                            is_admin=current_user.is_admin)
-                               
+                           
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True)
-        flash('Fehler beim Laden der Werkzeuge', 'error')
-        return redirect(url_for('main.index'))
+        return render_template('tools/index.html',
+                           tools=[],
+                           categories=[],
+                           locations=[],
+                           is_admin=current_user.is_admin)
 
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
