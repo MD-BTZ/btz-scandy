@@ -37,6 +37,12 @@ ENV/
 app/database/
 backups/
 
+# Scandy Datenverzeichnisse
+scandy_data/
+scandy_project/scandy_data/
+DATA_DIR/
+REPO_DIR/
+
 # Logs
 *.log
 logs/
