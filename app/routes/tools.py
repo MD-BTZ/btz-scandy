@@ -143,7 +143,14 @@ def detail(barcode):
         worker = mongodb.find_one('workers', {'barcode': current_lending['worker_barcode']})
         if worker:
             tool['current_borrower'] = f"{worker['firstname']} {worker['lastname']}"
-            tool['lending_date'] = current_lending['lent_at']
+            # Stelle sicher, dass das Datum korrekt formatiert wird
+            lending_date = current_lending['lent_at']
+            if isinstance(lending_date, str):
+                try:
+                    lending_date = datetime.strptime(lending_date, '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending_date = datetime.now()
+            tool['lending_date'] = lending_date
     
     # Hole Kategorien und Standorte
     categories = get_categories_from_settings()
@@ -153,8 +160,20 @@ def detail(barcode):
     lendings = mongodb.find('lendings', {'tool_barcode': barcode})
     lendings = list(lendings)
     
-    # Sortiere nach Datum (neueste zuerst)
-    lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
+    # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
+    def safe_date_key(lending):
+        lent_at = lending.get('lent_at')
+        if isinstance(lent_at, str):
+            try:
+                return datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                return datetime.min
+        elif isinstance(lent_at, datetime):
+            return lent_at
+        else:
+            return datetime.min
+    
+    lendings.sort(key=safe_date_key, reverse=True)
     
     # Erstelle Verlaufsliste
     history = []
@@ -162,19 +181,27 @@ def detail(barcode):
         worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
         worker_name = f"{worker['firstname']} {worker['lastname']}" if worker else "Unbekannt"
         
+        # Stelle sicher, dass das Datum korrekt formatiert wird
+        action_date = lending['lent_at']
+        if isinstance(action_date, str):
+            try:
+                action_date = datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                action_date = datetime.now()
+        
         history.append({
-            'action_type': 'Ausleihe/Rückgabe',
-            'action_date': lending['lent_at'],
-            'worker': worker_name,
-            'action': 'Zurückgegeben' if lending.get('returned_at') else 'Ausgeliehen',
-            'reason': None
+            'lent_at': action_date,
+            'worker_name': worker_name,
+            'worker_barcode': lending['worker_barcode'],
+            'returned_at': lending.get('returned_at'),
+            'status': 'Zurückgegeben' if lending.get('returned_at') else 'Ausgeliehen'
         })
     
     return render_template('tools/detail.html',
                          tool=tool,
                          categories=categories,
                          locations=locations,
-                         history=history)
+                         lending_history=history)
 
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
 @mitarbeiter_required

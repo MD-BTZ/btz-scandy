@@ -647,5 +647,13 @@ function returnTool(barcode) {
             }
         });
 }
+
+// Initialisierung der Manager beim Laden der Seite
+document.addEventListener('DOMContentLoaded', function() {
+    DepartmentManager.init();
+    LocationManager.init();
+    CategoryManager.init();
+    initChart();
+});
 </script>
 {% endblock %} 

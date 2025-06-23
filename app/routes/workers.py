@@ -198,25 +198,60 @@ def details(original_barcode):
             tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
             if tool:
                 lending['tool_name'] = tool['name']
+            
+            # Stelle sicher, dass das Datum korrekt formatiert ist
+            if isinstance(lending.get('lent_at'), str):
+                try:
+                    lending['lent_at'] = datetime.strptime(lending['lent_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending['lent_at'] = datetime.now()
 
         # Hole Verlauf aller Ausleihen
         all_lendings = mongodb.find('lendings', {'worker_barcode': original_barcode})
         all_lendings = list(all_lendings)
         
-        # Sortiere nach Datum (neueste zuerst)
-        all_lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
+        # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
+        def safe_date_key(lending):
+            lent_at = lending.get('lent_at')
+            if isinstance(lent_at, str):
+                try:
+                    return datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    return datetime.min
+            elif isinstance(lent_at, datetime):
+                return lent_at
+            else:
+                return datetime.min
         
+        all_lendings.sort(key=safe_date_key, reverse=True)
+        
+        # Sortiere auch aktive Ausleihen nach Datum
+        active_lendings.sort(key=safe_date_key, reverse=True)
+
         # Füge Tool-Informationen hinzu
         for lending in all_lendings:
             tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
             if tool:
                 lending['tool_name'] = tool['name']
+            
+            # Stelle sicher, dass die Datumsfelder korrekt formatiert sind
+            if isinstance(lending.get('lent_at'), str):
+                try:
+                    lending['lent_at'] = datetime.strptime(lending['lent_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending['lent_at'] = datetime.now()
+            
+            if isinstance(lending.get('returned_at'), str):
+                try:
+                    lending['returned_at'] = datetime.strptime(lending['returned_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending['returned_at'] = None
 
         return render_template('workers/details.html',
                              worker=worker,
                              departments=departments,
-                             active_lendings=active_lendings,
-                             all_lendings=all_lendings,
+                             current_lendings=active_lendings,
+                             lending_history=all_lendings,
                              is_admin=current_user.is_admin)
 
     except Exception as e:

@@ -67,19 +67,17 @@
                     <tbody>
                         {% for entry in history %}
                         <tr>
-                            <td>{{ entry.action_date }}</td>
+                            <td>{{ entry.action_date.strftime('%d.%m.%Y %H:%M') if entry.action_date else 'Unbekannt' }}</td>
                             <td>
-                                {% if entry.worker_name != 'Admin' %}
-                                <a href="{{ url_for('workers.details', original_barcode=entry.worker_barcode) }}" class="link link-primary">
-                                    {{ entry.worker_name }}
-                                </a>
+                                {% if entry.worker != 'Admin' %}
+                                {{ entry.worker }}
                                 {% else %}
-                                {{ entry.worker_name }}
+                                {{ entry.worker }}
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge {{ 'badge-success' if entry.quantity > 0 else 'badge-error' }}">
-                                    {{ entry.quantity }}
+                                <span class="badge {{ 'badge-success' if 'Hinzugefügt' in entry.action else 'badge-error' }}">
+                                    {{ entry.action }}
                                 </span>
                             </td>
                         </tr>

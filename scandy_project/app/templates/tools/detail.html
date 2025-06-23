@@ -95,7 +95,7 @@
                                 <tr>
                                     <td>{{ lending.lent_at|format_datetime }}</td>
                                     <td>
-                                        <a href="{{ url_for('workers.detail', barcode=lending.worker_barcode) }}" class="link link-primary">
+                                        <a href="{{ url_for('workers.details', original_barcode=lending.worker_barcode) }}" class="link link-primary">
                                             {{ lending.worker_name }}
                                         </a>
                                     </td>

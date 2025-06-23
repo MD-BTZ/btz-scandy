@@ -620,6 +620,16 @@ def dashboard():
     # Aktuelle Ausleihen
     current_lendings = []
     active_lendings = mongodb.find('lendings', {'returned_at': None})
+    # NEU: Konvertiere alle lent_at zu datetime
+    for lending in active_lendings:
+        lent_at = lending.get('lent_at')
+        if isinstance(lent_at, str):
+            try:
+                lending['lent_at'] = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                lending['lent_at'] = datetime.min
+        elif not isinstance(lent_at, datetime):
+            lending['lent_at'] = datetime.min
     # Sortiere die Ausleihen nach Datum (neueste zuerst)
     active_lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
     
@@ -630,7 +640,8 @@ def dashboard():
             current_lendings.append({
                 **lending,
                 'tool_name': tool['name'],
-                'worker_name': f"{worker['firstname']} {worker['lastname']}"
+                'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                'lent_at': lending['lent_at']
             })
     
     # Letzte Materialentnahmen
@@ -992,17 +1003,76 @@ def manual_lending():
         # Verbrauchsmaterialien laden
         consumables = mongodb.find('consumables', {'deleted': {'$ne': True}}, sort=[('name', 1)])
 
+        # Hole aktuelle Ausleihen
+        current_lendings = []
+        
+        # Aktuelle Werkzeug-Ausleihen
+        active_tool_lendings = mongodb.find('lendings', {'returned_at': None})
+        for lending in active_tool_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+            
+            if tool and worker:
+                current_lendings.append({
+                    'item_name': tool['name'],
+                    'item_barcode': tool['barcode'],
+                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                    'worker_barcode': worker['barcode'],
+                    'action_date': lending['lent_at'],
+                    'category': 'Werkzeuge',
+                    'amount': None
+                })
+
+        # Aktuelle Verbrauchsmaterial-Ausgaben (letzte 30 Tage)
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        recent_consumable_usages = mongodb.find('consumable_usages', {
+            'used_at': {'$gte': thirty_days_ago},
+            'quantity': {'$gt': 0}  # Nur Ausgaben, nicht Entnahmen
+        })
+        
+        for usage in recent_consumable_usages:
+            consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
+            
+            if consumable and worker:
+                current_lendings.append({
+                    'item_name': consumable['name'],
+                    'item_barcode': consumable['barcode'],
+                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                    'worker_barcode': worker['barcode'],
+                    'action_date': usage['used_at'],
+                    'category': 'Verbrauchsmaterial',
+                    'amount': usage['quantity']
+                })
+
+        # Sortiere nach Datum (neueste zuerst)
+        def safe_date_key(lending):
+            action_date = lending.get('action_date')
+            if isinstance(action_date, str):
+                try:
+                    return datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    return datetime.min
+            elif isinstance(action_date, datetime):
+                return action_date
+            else:
+                return datetime.min
+        
+        current_lendings.sort(key=safe_date_key, reverse=True)
+
         return render_template('admin/manual_lending.html', 
                               tools=tools,
                               workers=workers,
-                              consumables=consumables)
+                              consumables=consumables,
+                              current_lendings=current_lendings)
     except Exception as e:
         print(f"Fehler beim Laden der Daten: {e}")
         flash('Fehler beim Laden der Daten', 'error')
         return render_template('admin/manual_lending.html', 
                               tools=[], 
                               workers=[], 
-                              consumables=[])
+                              consumables=[],
+                              current_lendings=[])
 
 @bp.route('/trash')
 @mitarbeiter_required
@@ -1260,6 +1330,11 @@ def import_all_data():
         imported_counts = {"Werkzeuge": 0, "Mitarbeiter": 0, "Verbrauchsmaterial": 0, "Verlauf": 0}
         errors = []
 
+        # --- NEU: Sets zum Sammeln der Werte für settings ---
+        found_departments = set()
+        found_locations = set()
+        found_categories = set()
+
         # Spaltennamen-Mapping für flexible Erkennung
         column_mappings = {
             'tools': {
@@ -1300,33 +1375,24 @@ def import_all_data():
         if "Werkzeuge" in wb.sheetnames:
             ws_tools = wb["Werkzeuge"]
             headers_tools = [cell.value for cell in ws_tools[1]]
-            
-            # Spaltenindizes finden
             barcode_idx = find_column_index(headers_tools, column_mappings['tools']['barcode'])
             name_idx = find_column_index(headers_tools, column_mappings['tools']['name'])
-            
+            desc_idx = find_column_index(headers_tools, column_mappings['tools']['description'])
+            cat_idx = find_column_index(headers_tools, column_mappings['tools']['category'])
+            loc_idx = find_column_index(headers_tools, column_mappings['tools']['location'])
+            status_idx = find_column_index(headers_tools, column_mappings['tools']['status'])
             if barcode_idx is None or name_idx is None:
                 errors.append("Arbeitsblatt 'Werkzeuge' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
             else:
-                # Optionale Spaltenindizes finden
-                desc_idx = find_column_index(headers_tools, column_mappings['tools']['description'])
-                cat_idx = find_column_index(headers_tools, column_mappings['tools']['category'])
-                loc_idx = find_column_index(headers_tools, column_mappings['tools']['location'])
-                status_idx = find_column_index(headers_tools, column_mappings['tools']['status'])
-                
                 for row_idx, row in enumerate(ws_tools.iter_rows(min_row=2), start=2):
                     try:
-                        # Nur importieren, wenn Barcode und Name vorhanden sind
                         barcode = row[barcode_idx].value
                         name = row[name_idx].value
-                        
+                        desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
+                        cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
+                        loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
+                        status = row[status_idx].value if status_idx is not None and row[status_idx].value else 'verfügbar'
                         if barcode and name:
-                            # Optionale Felder extrahieren
-                            desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
-                            cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
-                            loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
-                            status = row[status_idx].value if status_idx is not None and row[status_idx].value else 'verfügbar'
-
                             tool_data = {
                                 'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
                                 'name': str(name).strip(),
@@ -1336,7 +1402,11 @@ def import_all_data():
                                 'status': str(status).strip() if status else 'verfügbar',
                                 'deleted': False
                             }
-                            
+                            # --- NEU: Sammle Kategorie und Standort ---
+                            if cat:
+                                found_categories.add(str(cat).strip())
+                            if loc:
+                                found_locations.add(str(loc).strip())
                             mongodb.update_one('tools', 
                                              {'barcode': tool_data['barcode']}, 
                                              {'$set': tool_data}, 
@@ -1351,30 +1421,22 @@ def import_all_data():
         if "Mitarbeiter" in wb.sheetnames:
             ws_workers = wb["Mitarbeiter"]
             headers_workers = [cell.value for cell in ws_workers[1]]
-            
-            # Spaltenindizes finden
             barcode_idx = find_column_index(headers_workers, column_mappings['workers']['barcode'])
             firstname_idx = find_column_index(headers_workers, column_mappings['workers']['firstname'])
             lastname_idx = find_column_index(headers_workers, column_mappings['workers']['lastname'])
-            
+            dept_idx = find_column_index(headers_workers, column_mappings['workers']['department'])
+            email_idx = find_column_index(headers_workers, column_mappings['workers']['email'])
             if barcode_idx is None or firstname_idx is None or lastname_idx is None:
                 errors.append("Arbeitsblatt 'Mitarbeiter' hat ungültige Spaltenüberschriften. Benötigt: Barcode, Vorname und Nachname")
             else:
-                # Optionale Spaltenindizes finden
-                dept_idx = find_column_index(headers_workers, column_mappings['workers']['department'])
-                email_idx = find_column_index(headers_workers, column_mappings['workers']['email'])
-                
                 for row_idx, row in enumerate(ws_workers.iter_rows(min_row=2), start=2):
                     try:
                         barcode = row[barcode_idx].value
                         firstname = row[firstname_idx].value
                         lastname = row[lastname_idx].value
-                        
+                        dept = row[dept_idx].value if dept_idx is not None and row[dept_idx].value else None
+                        email = row[email_idx].value if email_idx is not None and row[email_idx].value else None
                         if barcode and firstname and lastname:
-                            # Optionale Felder extrahieren
-                            dept = row[dept_idx].value if dept_idx is not None and row[dept_idx].value else None
-                            email = row[email_idx].value if email_idx is not None and row[email_idx].value else None
-
                             worker_data = {
                                 'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
                                 'firstname': str(firstname).strip(),
@@ -1383,7 +1445,9 @@ def import_all_data():
                                 'email': str(email).strip() if email else None,
                                 'deleted': False
                             }
-                            
+                            # --- NEU: Sammle Abteilung ---
+                            if dept:
+                                found_departments.add(str(dept).strip())
                             mongodb.update_one('workers', 
                                              {'barcode': worker_data['barcode']}, 
                                              {'$set': worker_data}, 
@@ -1398,47 +1462,36 @@ def import_all_data():
         if "Verbrauchsmaterial" in wb.sheetnames:
             ws_consumables = wb["Verbrauchsmaterial"]
             headers_consumables = [cell.value for cell in ws_consumables[1]]
-            
-            # Spaltenindizes finden
             barcode_idx = find_column_index(headers_consumables, column_mappings['consumables']['barcode'])
             name_idx = find_column_index(headers_consumables, column_mappings['consumables']['name'])
-            
+            desc_idx = find_column_index(headers_consumables, column_mappings['consumables']['description'])
+            cat_idx = find_column_index(headers_consumables, column_mappings['consumables']['category'])
+            loc_idx = find_column_index(headers_consumables, column_mappings['consumables']['location'])
+            quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['quantity'])
+            min_quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['min_quantity'])
+            unit_idx = find_column_index(headers_consumables, column_mappings['consumables']['unit'])
             if barcode_idx is None or name_idx is None:
                 errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
             else:
-                # Optionale Spaltenindizes finden
-                desc_idx = find_column_index(headers_consumables, column_mappings['consumables']['description'])
-                cat_idx = find_column_index(headers_consumables, column_mappings['consumables']['category'])
-                loc_idx = find_column_index(headers_consumables, column_mappings['consumables']['location'])
-                quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['quantity'])
-                min_quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['min_quantity'])
-                unit_idx = find_column_index(headers_consumables, column_mappings['consumables']['unit'])
-                
                 for row_idx, row in enumerate(ws_consumables.iter_rows(min_row=2), start=2):
                     try:
                         barcode = row[barcode_idx].value
                         name = row[name_idx].value
-                        
+                        desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
+                        cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
+                        loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
+                        quantity = row[quantity_idx].value if quantity_idx is not None and row[quantity_idx].value else 0
+                        min_quantity = row[min_quantity_idx].value if min_quantity_idx is not None and row[min_quantity_idx].value else 0
+                        unit = row[unit_idx].value if unit_idx is not None and row[unit_idx].value else 'Stück'
+                        try:
+                            quantity = int(quantity) if quantity else 0
+                        except (ValueError, TypeError):
+                            quantity = 0
+                        try:
+                            min_quantity = int(min_quantity) if min_quantity else 0
+                        except (ValueError, TypeError):
+                            min_quantity = 0
                         if barcode and name:
-                            # Optionale Felder extrahieren
-                            desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
-                            cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
-                            loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
-                            quantity = row[quantity_idx].value if quantity_idx is not None and row[quantity_idx].value else 0
-                            min_quantity = row[min_quantity_idx].value if min_quantity_idx is not None and row[min_quantity_idx].value else 0
-                            unit = row[unit_idx].value if unit_idx is not None and row[unit_idx].value else 'Stück'
-
-                            # Zahlen konvertieren
-                            try:
-                                quantity = int(quantity) if quantity else 0
-                            except (ValueError, TypeError):
-                                quantity = 0
-                            
-                            try:
-                                min_quantity = int(min_quantity) if min_quantity else 0
-                            except (ValueError, TypeError):
-                                min_quantity = 0
-
                             consumable_data = {
                                 'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
                                 'name': str(name).strip(),
@@ -1450,7 +1503,11 @@ def import_all_data():
                                 'unit': str(unit).strip() if unit else 'Stück',
                                 'deleted': False
                             }
-                            
+                            # --- NEU: Sammle Kategorie und Standort ---
+                            if cat:
+                                found_categories.add(str(cat).strip())
+                            if loc:
+                                found_locations.add(str(loc).strip())
                             mongodb.update_one('consumables', 
                                              {'barcode': consumable_data['barcode']}, 
                                              {'$set': consumable_data}, 
@@ -1529,6 +1586,22 @@ def import_all_data():
                                 imported_counts["Verlauf"] += 1
                     except Exception as e:
                         errors.append(f"Fehler in Verlauf Zeile {row_idx}: {e}")
+
+        # --- NEU: Übertrage die gesammelten Werte in die settings-Collection ---
+        def merge_settings_list(key, new_values):
+            if not new_values:
+                return
+            settings = mongodb.db.settings.find_one({'key': key})
+            current = set(settings.get('value', [])) if settings else set()
+            merged = sorted(current.union(new_values))
+            if settings:
+                mongodb.db.settings.update_one({'key': key}, {'$set': {'value': merged}})
+            else:
+                mongodb.db.settings.insert_one({'key': key, 'value': merged})
+
+        merge_settings_list('departments', found_departments)
+        merge_settings_list('locations', found_locations)
+        merge_settings_list('categories', found_categories)
 
         # Erfolgs- und Fehlermeldungen anzeigen
         if errors:
@@ -2483,18 +2556,14 @@ def add_ticket_category():
     try:
         name = request.form.get('category')
         if not name:
-            return jsonify({
-                'success': False,
-                'message': 'Bitte geben Sie einen Namen ein.'
-            })
+            flash('Bitte geben Sie einen Namen ein.', 'error')
+            return redirect(url_for('admin.tickets'))
 
         # Prüfen ob Ticket-Kategorie bereits existiert
         settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
         if settings and name in settings.get('value', []):
-            return jsonify({
-                'success': False,
-                'message': 'Diese Ticket-Kategorie existiert bereits.'
-            })
+            flash('Diese Ticket-Kategorie existiert bereits.', 'error')
+            return redirect(url_for('admin.tickets'))
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
@@ -2508,16 +2577,12 @@ def add_ticket_category():
                 'value': [name]
             })
 
-        return jsonify({
-            'success': True,
-            'message': 'Ticket-Kategorie erfolgreich hinzugefügt.'
-        })
+        flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
+        return redirect(url_for('admin.tickets'))
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Ein Fehler ist aufgetreten.'
-        })
+        flash('Ein Fehler ist aufgetreten.', 'error')
+        return redirect(url_for('admin.tickets'))
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
@@ -2527,10 +2592,8 @@ def delete_ticket_category(category):
         # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
         tickets_with_category = mongodb.db.tickets.find_one({'category': category})
         if tickets_with_category:
-            return jsonify({
-                'success': False,
-                'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
-            })
+            flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
+            return redirect(url_for('admin.tickets'))
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.db.settings.update_one(
@@ -2538,16 +2601,12 @@ def delete_ticket_category(category):
             {'$pull': {'value': category}}
         )
         
-        return jsonify({
-            'success': True,
-            'message': 'Ticket-Kategorie erfolgreich gelöscht.'
-        })
+        flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
+        return redirect(url_for('admin.tickets'))
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Ein Fehler ist aufgetreten.'
-        })
+        flash('Ein Fehler ist aufgetreten.', 'error')
+        return redirect(url_for('admin.tickets'))
 
 @bp.route('/system')
 @admin_required

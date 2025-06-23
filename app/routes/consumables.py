@@ -167,8 +167,20 @@ def detail(barcode):
     usages = mongodb.find('consumable_usages', {'consumable_barcode': barcode})
     usages = list(usages)
     
-    # Sortiere nach Datum (neueste zuerst)
-    usages.sort(key=lambda x: x.get('used_at', datetime.min), reverse=True)
+    # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
+    def safe_date_key(usage):
+        used_at = usage.get('used_at')
+        if isinstance(used_at, str):
+            try:
+                return datetime.strptime(used_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                return datetime.min
+        elif isinstance(used_at, datetime):
+            return used_at
+        else:
+            return datetime.min
+    
+    usages.sort(key=safe_date_key, reverse=True)
     
     # Erstelle Verlaufsliste
     history = []
@@ -179,9 +191,17 @@ def detail(barcode):
         action = "Entnommen" if usage['quantity'] < 0 else "Hinzugefügt"
         quantity = abs(usage['quantity'])
         
+        # Stelle sicher, dass das Datum korrekt formatiert wird
+        action_date = usage['used_at']
+        if isinstance(action_date, str):
+            try:
+                action_date = datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                action_date = datetime.now()
+        
         history.append({
             'action_type': 'Bestandsänderung',
-            'action_date': usage['used_at'],
+            'action_date': action_date,
             'worker': worker_name,
             'action': f"{action}: {quantity} Stück",
             'reason': None
@@ -198,12 +218,23 @@ def detail(barcode):
 def adjust_stock(barcode):
     """Passt den Bestand eines Verbrauchsmaterials an"""
     try:
-        data = request.get_json()
-        quantity_change = data.get('quantity_change', type=int)
-        reason = data.get('reason', '')
+        # Versuche zuerst JSON-Daten zu lesen, falls das fehlschlägt, verwende Form-Daten
+        try:
+            data = request.get_json()
+        except:
+            # Fallback auf Form-Daten
+            data = request.form.to_dict()
         
-        if quantity_change is None:
-            return jsonify({'success': False, 'message': 'Ungültige Menge'}), 400
+        quantity_change = data.get('quantity')
+        if quantity_change is not None:
+            try:
+                quantity_change = int(quantity_change)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'message': 'Ungültige Menge'}), 400
+        else:
+            return jsonify({'success': False, 'message': 'Menge ist erforderlich'}), 400
+            
+        reason = data.get('reason', '')
         
         # Hole aktuelles Verbrauchsmaterial
         consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
@@ -223,7 +254,7 @@ def adjust_stock(barcode):
         # Protokolliere Bestandsänderung
         usage_data = {
             'consumable_barcode': barcode,
-            'worker_barcode': current_user.username,
+            'worker_barcode': getattr(current_user, 'username', 'admin'),
             'quantity': quantity_change,
             'used_at': datetime.now(),
             'reason': reason
