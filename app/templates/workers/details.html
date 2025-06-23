@@ -182,38 +182,16 @@ function closeEditModal() {
     document.getElementById('editModal').close();
 }
 
-async function deleteWorker(barcode) {
-    if (!confirm('Möchten Sie diesen Mitarbeiter wirklich löschen?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/admin/workers/${barcode}/delete`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            window.location.href = '/workers';
-        } else {
-            alert(result.message || 'Ein Fehler ist aufgetreten');
-        }
-    } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Ein Fehler ist aufgetreten');
-    }
-}
-
 async function returnTool(barcode) {
+    console.log('returnTool called with barcode:', barcode);
+    
     if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {
+        console.log('User cancelled return');
         return;
     }
     
     try {
+        console.log('Sending return request...');
         const response = await fetch('/api/lending/return', {
             method: 'POST',
             headers: {
@@ -225,16 +203,19 @@ async function returnTool(barcode) {
             })
         });
         
+        console.log('Response status:', response.status);
         const result = await response.json();
+        console.log('Response result:', result);
         
         if (result.success) {
+            alert('Werkzeug erfolgreich zurückgegeben!');
             window.location.reload();
         } else {
             alert(result.message || 'Ein Fehler ist aufgetreten');
         }
     } catch (error) {
         console.error('Fehler bei der Rückgabe:', error);
-        alert('Ein Fehler ist aufgetreten');
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
     }
 }
 

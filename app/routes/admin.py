@@ -22,6 +22,7 @@ from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
 from docxtpl import DocxTemplate
+from urllib.parse import unquote
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -1102,9 +1103,12 @@ def trash():
 def restore_item(type, barcode):
     """Stellt einen gelöschten Eintrag wieder her"""
     try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
         if type == 'tool':
             # Prüfe ob das Werkzeug existiert
-            tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': True})
+            tool = mongodb.find_one('tools', {'barcode': decoded_barcode, 'deleted': True})
             
             if not tool:
                 return jsonify({
@@ -1114,12 +1118,12 @@ def restore_item(type, barcode):
                 
             # Stelle das Werkzeug wieder her
             mongodb.update_one('tools', 
-                             {'barcode': barcode}, 
+                             {'barcode': decoded_barcode}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
             
         elif type == 'consumable':
             # Prüfe ob das Verbrauchsmaterial existiert
-            consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': True})
+            consumable = mongodb.find_one('consumables', {'barcode': decoded_barcode, 'deleted': True})
             
             if not consumable:
                 return jsonify({
@@ -1129,12 +1133,12 @@ def restore_item(type, barcode):
                 
             # Stelle das Verbrauchsmaterial wieder her
             mongodb.update_one('consumables', 
-                             {'barcode': barcode}, 
+                             {'barcode': decoded_barcode}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
             
         elif type == 'worker':
             # Prüfe ob der Mitarbeiter existiert
-            worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': True})
+            worker = mongodb.find_one('workers', {'barcode': decoded_barcode, 'deleted': True})
             
             if not worker:
                 return jsonify({
@@ -1144,7 +1148,7 @@ def restore_item(type, barcode):
                 
             # Stelle den Mitarbeiter wieder her
             mongodb.update_one('workers', 
-                             {'barcode': barcode}, 
+                             {'barcode': decoded_barcode}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
         else:
             return jsonify({
@@ -1164,580 +1168,119 @@ def restore_item(type, barcode):
             'message': f'Fehler beim Wiederherstellen: {str(e)}'
         }), 500
 
-def get_label_setting(key, default):
-    """Hole eine Label-Einstellung aus MongoDB"""
-    try:
-        setting = mongodb.find_one('settings', {'key': key})
-        return setting['value'] if setting and setting.get('value') else default
-    except Exception as e:
-        logger.error(f"Fehler beim Lesen der Einstellung {key}: {str(e)}")
-        return default
-
-def get_app_labels():
-    """Hole alle Label-Einstellungen aus MongoDB"""
-    return {
-        'tools': {
-            'name': get_label_setting('label_tools_name', 'Werkzeuge'),
-            'icon': get_label_setting('label_tools_icon', 'fas fa-tools')
-        },
-        'consumables': {
-            'name': get_label_setting('label_consumables_name', 'Verbrauchsmaterial'),
-            'icon': get_label_setting('label_consumables_icon', 'fas fa-box-open')
-        },
-        'tickets': {
-            'name': get_label_setting('label_tickets_name', 'Tickets'),
-            'icon': get_label_setting('label_tickets_icon', 'fas fa-ticket-alt')
-        }
-    }
-
-def get_all_users():
-    """Gibt alle aktiven Benutzer zurück"""
-    return mongodb.find('users', {'is_active': True}, sort=[('username', 1)])
-
-def get_categories():
-    """Gibt alle Kategorien zurück"""
-    return get_categories_from_settings()
-
-@bp.route('/server-settings', methods=['GET', 'POST'])
-@admin_required
-def server_settings():
-    if request.method == 'POST':
-        # Begriffe & Icons
-        label_tools_name = request.form.get('label_tools_name', 'Werkzeuge')
-        label_tools_icon = request.form.get('label_tools_icon', 'fas fa-tools')
-        label_consumables_name = request.form.get('label_consumables_name', 'Verbrauchsmaterial')
-        label_consumables_icon = request.form.get('label_consumables_icon', 'fas fa-box')
-        label_tickets_name = request.form.get('label_tickets_name', 'Tickets')
-        label_tickets_icon = request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
-        
-        # Speichere die Einstellungen in MongoDB
-        settings_to_update = [
-            {'key': 'label_tools_name', 'value': label_tools_name},
-            {'key': 'label_tools_icon', 'value': label_tools_icon},
-            {'key': 'label_consumables_name', 'value': label_consumables_name},
-            {'key': 'label_consumables_icon', 'value': label_consumables_icon},
-            {'key': 'label_tickets_name', 'value': label_tickets_name},
-            {'key': 'label_tickets_icon', 'value': label_tickets_icon}
-        ]
-        
-        for setting in settings_to_update:
-            mongodb.update_one('settings', 
-                             {'key': setting['key']}, 
-                             {'$set': setting}, 
-                             upsert=True)
-        
-        flash('Einstellungen wurden gespeichert', 'success')
-        return redirect(url_for('admin.server_settings'))
-    
-    return render_template('admin/server-settings.html')
-
-@bp.route('/export/all')
+@bp.route('/tools/delete', methods=['DELETE'])
 @mitarbeiter_required
-def export_all_data():
-    """Exportiert alle relevanten Collections in eine Excel-Datei mit mehreren Sheets"""
+def delete_tool_soft_json():
+    """Werkzeug soft löschen (markieren als gelöscht) - Barcode aus JSON-Body"""
     try:
-        # Daten abrufen aus MongoDB
-        tools_data = mongodb.find('tools', {'deleted': {'$ne': True}}, sort=[('name', 1)])
-        workers_data = mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('lastname', 1), ('firstname', 1)])
-        consumables_data = mongodb.find('consumables', {'deleted': {'$ne': True}}, sort=[('name', 1)])
-        
-        # Lendings und Verbrauchsmaterial-Entnahmen
-        lendings = mongodb.find('lendings', sort=[('lent_at', -1)])
-        
-        # Verbrauchsmaterial-Entnahmen
-        consumable_usages = mongodb.find('consumable_usages', sort=[('used_at', -1)])
-        
-        # Verlauf-Daten zusammenstellen
-        history_data = []
-        
-        # Werkzeug-Ausleihen
-        for lending in lendings:
-            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-            if tool and worker:
-                history_data.append({
-                    'lent_at': lending['lent_at'],
-                    'returned_at': lending.get('returned_at'),
-                    'tool_name': tool['name'],
-                    'tool_barcode': tool['barcode'],
-                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
-                    'worker_barcode': worker['barcode'],
-                    'type': 'Werkzeug Ausleihe',
-                    'quantity': None
-                })
-        
-        # Material-Verbrauch
-        for usage in consumable_usages:
-            consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
-            if consumable and worker:
-                history_data.append({
-                    'lent_at': usage['used_at'],
-                    'returned_at': None,
-                    'consumable_name': consumable['name'],
-                    'consumable_barcode': consumable['barcode'],
-                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
-                    'worker_barcode': worker['barcode'],
-                    'type': 'Material Verbrauch',
-                    'quantity': usage['quantity']
-                })
-
-        # Daten für die Excel-Funktion vorbereiten
-        export_data = {
-            "Werkzeuge": tools_data,
-            "Mitarbeiter": workers_data,
-            "Verbrauchsmaterial": consumables_data,
-            "Verlauf": history_data
-        }
-
-        excel_file = create_multi_sheet_excel(export_data)
-        filename = f'scandy_gesamtexport_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-
-        return send_file(
-            excel_file,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=filename
-        )
-
-    except Exception as e:
-        logger.error(f"Fehler beim Exportieren der Daten: {str(e)}", exc_info=True)
-        flash(f'Fehler beim Exportieren: {str(e)}', 'error')
-        return redirect(url_for('admin.dashboard'))
-
-@bp.route('/import/all', methods=['POST'])
-@mitarbeiter_required
-def import_all_data():
-    """Importiert Daten aus einer Excel-Datei mit mehreren Sheets."""
-    if 'file' not in request.files:
-        flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.server_settings'))
-
-    file = request.files['file']
-    if file.filename == '':
-        flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.server_settings'))
-
-    if not file.filename.endswith('.xlsx'):
-        flash('Ungültiger Dateityp. Bitte eine .xlsx-Datei hochladen.', 'error')
-        return redirect(url_for('admin.server_settings'))
-
-    try:
-        # Excel-Datei in BytesIO laden, um sie mit openpyxl zu öffnen
-        file_content = BytesIO(file.read())
-        wb = openpyxl.load_workbook(file_content, data_only=True) # data_only=True vermeidet Formeln
-
-        imported_counts = {"Werkzeuge": 0, "Mitarbeiter": 0, "Verbrauchsmaterial": 0, "Verlauf": 0}
-        errors = []
-
-        # --- NEU: Sets zum Sammeln der Werte für settings ---
-        found_departments = set()
-        found_locations = set()
-        found_categories = set()
-
-        # Spaltennamen-Mapping für flexible Erkennung
-        column_mappings = {
-            'tools': {
-                'barcode': ['barcode', 'Barcode'],
-                'name': ['name', 'Name'],
-                'description': ['description', 'Beschreibung', 'desc'],
-                'category': ['category', 'Kategorie', 'cat'],
-                'location': ['location', 'Standort', 'loc'],
-                'status': ['status', 'Status']
-            },
-            'workers': {
-                'barcode': ['barcode', 'Barcode'],
-                'firstname': ['firstname', 'Vorname', 'vorname'],
-                'lastname': ['lastname', 'Nachname', 'nachname'],
-                'department': ['department', 'Abteilung', 'dept'],
-                'email': ['email', 'E-Mail', 'e-mail', 'email']
-            },
-            'consumables': {
-                'barcode': ['barcode', 'Barcode'],
-                'name': ['name', 'Name'],
-                'description': ['description', 'Beschreibung', 'desc'],
-                'category': ['category', 'Kategorie', 'cat'],
-                'location': ['location', 'Standort', 'loc'],
-                'quantity': ['quantity', 'Menge', 'qty'],
-                'min_quantity': ['min_quantity', 'Mindestmenge', 'min_qty', 'minimum_quantity'],
-                'unit': ['unit', 'Einheit', 'Einheiten']
-            }
-        }
-
-        def find_column_index(headers, possible_names):
-            """Findet den Index einer Spalte basierend auf möglichen Namen"""
-            for i, header in enumerate(headers):
-                if header and str(header).strip().lower() in [name.lower() for name in possible_names]:
-                    return i
-            return None
-
-        # --- Werkzeuge importieren ---
-        if "Werkzeuge" in wb.sheetnames:
-            ws_tools = wb["Werkzeuge"]
-            headers_tools = [cell.value for cell in ws_tools[1]]
-            barcode_idx = find_column_index(headers_tools, column_mappings['tools']['barcode'])
-            name_idx = find_column_index(headers_tools, column_mappings['tools']['name'])
-            desc_idx = find_column_index(headers_tools, column_mappings['tools']['description'])
-            cat_idx = find_column_index(headers_tools, column_mappings['tools']['category'])
-            loc_idx = find_column_index(headers_tools, column_mappings['tools']['location'])
-            status_idx = find_column_index(headers_tools, column_mappings['tools']['status'])
-            if barcode_idx is None or name_idx is None:
-                errors.append("Arbeitsblatt 'Werkzeuge' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
-            else:
-                for row_idx, row in enumerate(ws_tools.iter_rows(min_row=2), start=2):
-                    try:
-                        barcode = row[barcode_idx].value
-                        name = row[name_idx].value
-                        desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
-                        cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
-                        loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
-                        status = row[status_idx].value if status_idx is not None and row[status_idx].value else 'verfügbar'
-                        if barcode and name:
-                            tool_data = {
-                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
-                                'name': str(name).strip(),
-                                'description': str(desc).strip() if desc else '',
-                                'category': str(cat).strip() if cat else None,
-                                'location': str(loc).strip() if loc else None,
-                                'status': str(status).strip() if status else 'verfügbar',
-                                'deleted': False
-                            }
-                            # --- NEU: Sammle Kategorie und Standort ---
-                            if cat:
-                                found_categories.add(str(cat).strip())
-                            if loc:
-                                found_locations.add(str(loc).strip())
-                            mongodb.update_one('tools', 
-                                             {'barcode': tool_data['barcode']}, 
-                                             {'$set': tool_data}, 
-                                             upsert=True)
-                            imported_counts["Werkzeuge"] += 1
-                    except Exception as e:
-                        errors.append(f"Fehler in Werkzeuge Zeile {row_idx}: {e}")
-        else:
-            errors.append("Arbeitsblatt 'Werkzeuge' nicht gefunden.")
-
-        # --- Mitarbeiter importieren ---
-        if "Mitarbeiter" in wb.sheetnames:
-            ws_workers = wb["Mitarbeiter"]
-            headers_workers = [cell.value for cell in ws_workers[1]]
-            barcode_idx = find_column_index(headers_workers, column_mappings['workers']['barcode'])
-            firstname_idx = find_column_index(headers_workers, column_mappings['workers']['firstname'])
-            lastname_idx = find_column_index(headers_workers, column_mappings['workers']['lastname'])
-            dept_idx = find_column_index(headers_workers, column_mappings['workers']['department'])
-            email_idx = find_column_index(headers_workers, column_mappings['workers']['email'])
-            if barcode_idx is None or firstname_idx is None or lastname_idx is None:
-                errors.append("Arbeitsblatt 'Mitarbeiter' hat ungültige Spaltenüberschriften. Benötigt: Barcode, Vorname und Nachname")
-            else:
-                for row_idx, row in enumerate(ws_workers.iter_rows(min_row=2), start=2):
-                    try:
-                        barcode = row[barcode_idx].value
-                        firstname = row[firstname_idx].value
-                        lastname = row[lastname_idx].value
-                        dept = row[dept_idx].value if dept_idx is not None and row[dept_idx].value else None
-                        email = row[email_idx].value if email_idx is not None and row[email_idx].value else None
-                        if barcode and firstname and lastname:
-                            worker_data = {
-                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
-                                'firstname': str(firstname).strip(),
-                                'lastname': str(lastname).strip(),
-                                'department': str(dept).strip() if dept else None,
-                                'email': str(email).strip() if email else None,
-                                'deleted': False
-                            }
-                            # --- NEU: Sammle Abteilung ---
-                            if dept:
-                                found_departments.add(str(dept).strip())
-                            mongodb.update_one('workers', 
-                                             {'barcode': worker_data['barcode']}, 
-                                             {'$set': worker_data}, 
-                                             upsert=True)
-                            imported_counts["Mitarbeiter"] += 1
-                    except Exception as e:
-                        errors.append(f"Fehler in Mitarbeiter Zeile {row_idx}: {e}")
-        else:
-            errors.append("Arbeitsblatt 'Mitarbeiter' nicht gefunden.")
-
-        # --- Verbrauchsmaterial importieren ---
-        if "Verbrauchsmaterial" in wb.sheetnames:
-            ws_consumables = wb["Verbrauchsmaterial"]
-            headers_consumables = [cell.value for cell in ws_consumables[1]]
-            barcode_idx = find_column_index(headers_consumables, column_mappings['consumables']['barcode'])
-            name_idx = find_column_index(headers_consumables, column_mappings['consumables']['name'])
-            desc_idx = find_column_index(headers_consumables, column_mappings['consumables']['description'])
-            cat_idx = find_column_index(headers_consumables, column_mappings['consumables']['category'])
-            loc_idx = find_column_index(headers_consumables, column_mappings['consumables']['location'])
-            quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['quantity'])
-            min_quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['min_quantity'])
-            unit_idx = find_column_index(headers_consumables, column_mappings['consumables']['unit'])
-            if barcode_idx is None or name_idx is None:
-                errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
-            else:
-                for row_idx, row in enumerate(ws_consumables.iter_rows(min_row=2), start=2):
-                    try:
-                        barcode = row[barcode_idx].value
-                        name = row[name_idx].value
-                        desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
-                        cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
-                        loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
-                        quantity = row[quantity_idx].value if quantity_idx is not None and row[quantity_idx].value else 0
-                        min_quantity = row[min_quantity_idx].value if min_quantity_idx is not None and row[min_quantity_idx].value else 0
-                        unit = row[unit_idx].value if unit_idx is not None and row[unit_idx].value else 'Stück'
-                        try:
-                            quantity = int(quantity) if quantity else 0
-                        except (ValueError, TypeError):
-                            quantity = 0
-                        try:
-                            min_quantity = int(min_quantity) if min_quantity else 0
-                        except (ValueError, TypeError):
-                            min_quantity = 0
-                        if barcode and name:
-                            consumable_data = {
-                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
-                                'name': str(name).strip(),
-                                'description': str(desc).strip() if desc else '',
-                                'category': str(cat).strip() if cat else None,
-                                'location': str(loc).strip() if loc else None,
-                                'quantity': quantity,
-                                'min_quantity': min_quantity,
-                                'unit': str(unit).strip() if unit else 'Stück',
-                                'deleted': False
-                            }
-                            # --- NEU: Sammle Kategorie und Standort ---
-                            if cat:
-                                found_categories.add(str(cat).strip())
-                            if loc:
-                                found_locations.add(str(loc).strip())
-                            mongodb.update_one('consumables', 
-                                             {'barcode': consumable_data['barcode']}, 
-                                             {'$set': consumable_data}, 
-                                             upsert=True)
-                            imported_counts["Verbrauchsmaterial"] += 1
-                    except Exception as e:
-                        errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: {e}")
-        else:
-            errors.append("Arbeitsblatt 'Verbrauchsmaterial' nicht gefunden.")
-
-        # --- Verlauf importieren (optional) ---
-        if "Verlauf" in wb.sheetnames:
-            ws_history = wb["Verlauf"]
-            headers_history = [cell.value for cell in ws_history[1]]
+        data = request.get_json()
+        if not data or 'barcode' not in data:
+            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
             
-            # Spaltenindizes für Verlauf finden
-            lent_at_idx = None
-            returned_at_idx = None
-            tool_barcode_idx = None
-            worker_barcode_idx = None
-            
-            for i, header in enumerate(headers_history):
-                header_str = str(header).lower() if header else ''
-                if 'ausgeliehen' in header_str or 'lent' in header_str:
-                    lent_at_idx = i
-                elif 'zurückgegeben' in header_str or 'returned' in header_str:
-                    returned_at_idx = i
-                elif 'werkzeug' in header_str and 'barcode' in header_str:
-                    tool_barcode_idx = i
-                elif 'mitarbeiter' in header_str and 'barcode' in header_str:
-                    worker_barcode_idx = i
-            
-            if lent_at_idx is not None and tool_barcode_idx is not None and worker_barcode_idx is not None:
-                for row_idx, row in enumerate(ws_history.iter_rows(min_row=2), start=2):
-                    try:
-                        lent_at = row[lent_at_idx].value
-                        tool_barcode = row[tool_barcode_idx].value
-                        worker_barcode = row[worker_barcode_idx].value
-                        returned_at = row[returned_at_idx].value if returned_at_idx is not None else None
-                        
-                        if lent_at and tool_barcode and worker_barcode:
-                            # Datum konvertieren
-                            if isinstance(lent_at, str):
-                                try:
-                                    lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
-                                except ValueError:
-                                    lent_at = datetime.now()
-                            elif isinstance(lent_at, datetime):
-                                pass
-                            else:
-                                lent_at = datetime.now()
-                            
-                            if returned_at and isinstance(returned_at, str):
-                                try:
-                                    returned_at = datetime.strptime(returned_at, '%Y-%m-%d %H:%M:%S')
-                                except ValueError:
-                                    returned_at = None
-                            
-                            lending_data = {
-                                'lent_at': lent_at,
-                                'tool_barcode': int(tool_barcode) if isinstance(tool_barcode, (int, float)) else str(tool_barcode),
-                                'worker_barcode': int(worker_barcode) if isinstance(worker_barcode, (int, float)) else str(worker_barcode),
-                                'returned_at': returned_at,
-                                'created_at': datetime.now()
-                            }
-                            
-                            # Nur importieren, wenn nicht bereits vorhanden
-                            existing = mongodb.find_one('lendings', {
-                                'tool_barcode': lending_data['tool_barcode'],
-                                'worker_barcode': lending_data['worker_barcode'],
-                                'lent_at': lending_data['lent_at']
-                            })
-                            
-                            if not existing:
-                                mongodb.insert_one('lendings', lending_data)
-                                imported_counts["Verlauf"] += 1
-                    except Exception as e:
-                        errors.append(f"Fehler in Verlauf Zeile {row_idx}: {e}")
-
-        # --- NEU: Übertrage die gesammelten Werte in die settings-Collection ---
-        def merge_settings_list(key, new_values):
-            if not new_values:
-                return
-            settings = mongodb.db.settings.find_one({'key': key})
-            current = set(settings.get('value', [])) if settings else set()
-            merged = sorted(current.union(new_values))
-            if settings:
-                mongodb.db.settings.update_one({'key': key}, {'$set': {'value': merged}})
-            else:
-                mongodb.db.settings.insert_one({'key': key, 'value': merged})
-
-        merge_settings_list('departments', found_departments)
-        merge_settings_list('locations', found_locations)
-        merge_settings_list('categories', found_categories)
-
-        # Erfolgs- und Fehlermeldungen anzeigen
-        if errors:
-            for error in errors:
-                flash(error, 'error')
+        barcode = data['barcode'].strip()  # Barcode bereinigen
+        if len(barcode) > 50:
+            return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
         
-        if any(count > 0 for count in imported_counts.values()):
-            success_msg = f"Import abgeschlossen: "
-            success_parts = []
-            for item_type, count in imported_counts.items():
-                if count > 0:
-                    success_parts.append(f"{count} {item_type}")
-            success_msg += ", ".join(success_parts)
-            flash(success_msg, 'success')
-        return redirect(url_for('admin.server_settings'))
-    except Exception as e:
-        logger.error(f"Fehler beim Importieren der Daten: {str(e)}", exc_info=True)
-        flash(f'Fehler beim Importieren: {str(e)}', 'error')
-        return redirect(url_for('admin.server_settings'))
-
-@bp.route('/users/toggle_active/<user_id>', methods=['POST'])
-@admin_required
-def toggle_user_active(user_id):
-    """Benutzer aktivieren/deaktivieren"""
-    try:
-        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
-        if not user:
-            flash('Benutzer nicht gefunden', 'error')
-            return redirect(url_for('admin.manage_users'))
+        # Prüfe ob das Werkzeug existiert
+        tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
         
-        new_status = not user.get('is_active', True)
-        mongodb.update_one('users', 
-                          {'_id': ObjectId(user_id)}, 
-                          {'$set': {'is_active': new_status}})
-        
-        status_text = 'aktiviert' if new_status else 'deaktiviert'
-        flash(f'Benutzer {user["username"]} wurde {status_text}', 'success')
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Ändern des Benutzerstatus: {e}")
-        flash('Fehler beim Ändern des Benutzerstatus', 'error')
-    
-    return redirect(url_for('admin.manage_users'))
-
-@bp.route('/users/delete/<user_id>', methods=['POST'])
-@admin_required
-def delete_user(user_id):
-    """Benutzer löschen"""
-    try:
-        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
-        if not user:
-            flash('Benutzer nicht gefunden', 'error')
-            return redirect(url_for('admin.manage_users'))
-        
-        # Verhindere Löschung des eigenen Accounts
-        if str(user['_id']) == str(current_user.id):
-            flash('Sie können Ihren eigenen Account nicht löschen', 'error')
-            return redirect(url_for('admin.manage_users'))
-        
-        mongodb.delete_one('users', {'_id': ObjectId(user_id)})
-        flash(f'Benutzer {user["username"]} wurde gelöscht', 'success')
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Löschen des Benutzers: {e}")
-        flash('Fehler beim Löschen des Benutzers', 'error')
-    
-    return redirect(url_for('admin.manage_users'))
-
-@bp.app_context_processor
-def inject_app_labels():
-    """Injiziert die App-Labels in alle Templates"""
-    return {'app_labels': get_app_labels()}
-
-@bp.route('/upload-icon', methods=['POST'])
-@login_required
-@admin_required
-def upload_icon():
-    if 'icon' not in request.files:
-        return jsonify({'success': False, 'error': 'Keine Datei hochgeladen'}), 400
-    
-    file = request.files['icon']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'}), 400
-    
-    if file:
-        try:
-            # Lese das Bild
-            img = Image.open(file.stream)
-            
-            # Konvertiere zu RGB falls nötig (für PNG mit Transparenz)
-            if img.mode in ('RGBA', 'LA'):
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                background.paste(img, mask=img.split()[-1])
-                img = background
-            
-            # Berechne die neue Größe (maximal 64x64 Pixel)
-            max_size = (64, 64)
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
-            
-            # Erstelle einen eindeutigen Dateinamen
-            filename = secure_filename(file.filename)
-            base, ext = os.path.splitext(filename)
-            unique_filename = f"{base}_{int(time.time())}.png"  # Immer als PNG speichern
-            
-            # Stelle sicher, dass das Verzeichnis existiert
-            upload_dir = os.path.join(current_app.static_folder, 'uploads', 'icons')
-            os.makedirs(upload_dir, exist_ok=True)
-            
-            # Speichere die Datei
-            file_path = os.path.join(upload_dir, unique_filename)
-            img.save(file_path, 'PNG', quality=95, optimize=True)
-            
-            # Generiere den relativen Pfad für die Verwendung im Template
-            relative_path = f"/static/uploads/icons/{unique_filename}"
-            
-            return jsonify({
-                'success': True,
-                'icon_path': relative_path
-            })
-            
-        except Exception as e:
-            logger.error(f"Fehler bei der Bildverarbeitung: {str(e)}")
+        if not tool:
             return jsonify({
                 'success': False,
-                'error': f'Fehler bei der Bildverarbeitung: {str(e)}'
-            }), 500
-    
-    return jsonify({'success': False, 'error': 'Ungültige Datei'}), 400
+                'message': 'Werkzeug nicht gefunden'
+            }), 404
+            
+        # Prüfe ob das Werkzeug ausgeliehen ist
+        active_lending = mongodb.find_one('lendings', {
+            'tool_barcode': barcode, 
+            'returned_at': None
+        })
+        
+        if active_lending:
+            return jsonify({
+                'success': False,
+                'message': 'Werkzeug ist noch ausgeliehen und kann nicht gelöscht werden'
+            }), 400
+            
+        # Führe das Soft-Delete durch
+        mongodb.update_one('tools', {'barcode': barcode}, {
+            '$set': {
+                'deleted': True,
+                'deleted_at': datetime.now()
+            }
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Werkzeug wurde erfolgreich gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/tools/<barcode>/delete', methods=['DELETE'])
+@mitarbeiter_required
+def delete_tool_soft(barcode):
+    """Werkzeug soft löschen (markieren als gelöscht) - Barcode aus URL (Legacy)"""
+    try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
+        # Prüfe ob das Werkzeug existiert
+        tool = mongodb.find_one('tools', {'barcode': decoded_barcode, 'deleted': {'$ne': True}})
+        
+        if not tool:
+            return jsonify({
+                'success': False,
+                'message': 'Werkzeug nicht gefunden'
+            }), 404
+            
+        # Prüfe ob das Werkzeug ausgeliehen ist
+        active_lending = mongodb.find_one('lendings', {
+            'tool_barcode': decoded_barcode, 
+            'returned_at': None
+        })
+        
+        if active_lending:
+            return jsonify({
+                'success': False,
+                'message': 'Werkzeug ist noch ausgeliehen und kann nicht gelöscht werden'
+            }), 400
+            
+        # Führe das Soft-Delete durch
+        mongodb.update_one('tools', {'barcode': decoded_barcode}, {
+            '$set': {
+                'deleted': True,
+                'deleted_at': datetime.now()
+            }
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Werkzeug wurde erfolgreich gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
 
 @bp.route('/tools/<barcode>/delete-permanent', methods=['DELETE'])
 @mitarbeiter_required
 def delete_tool_permanent(barcode):
     """Werkzeug endgültig löschen"""
     try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
         # Prüfe ob das Werkzeug existiert und gelöscht ist
-        tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': True})
+        tool = mongodb.find_one('tools', {'barcode': decoded_barcode, 'deleted': True})
         
         if not tool:
             return jsonify({
@@ -1746,7 +1289,7 @@ def delete_tool_permanent(barcode):
             }), 404
             
         # Lösche das Werkzeug endgültig
-        mongodb.delete_one('tools', {'barcode': barcode})
+        mongodb.delete_one('tools', {'barcode': decoded_barcode})
         
         return jsonify({
             'success': True,
@@ -1768,7 +1311,7 @@ def delete_consumable_soft():
         if not data or 'barcode' not in data:
             return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
             
-        barcode = data['barcode']
+        barcode = data['barcode'].strip()  # Barcode bereinigen
         if len(barcode) > 50:
             return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
             
@@ -1794,38 +1337,147 @@ def delete_consumable_soft():
 @mitarbeiter_required
 def delete_consumable_permanent(barcode):
     try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
         # Prüfe ob das Verbrauchsmaterial existiert und gelöscht ist
-        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': True})
+        consumable = mongodb.find_one('consumables', {'barcode': decoded_barcode, 'deleted': True})
         if not consumable:
             return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden oder nicht gelöscht'}), 404
             
         # Führe das permanente Löschen durch
-        mongodb.delete_one('consumables', {'barcode': barcode})
+        mongodb.delete_one('consumables', {'barcode': decoded_barcode})
         return jsonify({'success': True, 'message': 'Verbrauchsmaterial permanent gelöscht'})
         
     except Exception as e:
         logger.error(f"Fehler beim permanenten Löschen des Verbrauchsmaterials: {e}")
         return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
 
-@bp.route('/workers/<barcode>/delete-permanent', methods=['DELETE'])
+@bp.route('/workers/delete', methods=['DELETE'])
 @mitarbeiter_required
-def delete_worker_permanent(barcode):
+def delete_worker_soft_json():
+    """Mitarbeiter soft löschen (markieren als gelöscht) - Barcode aus JSON-Body"""
     try:
+        data = request.get_json()
+        if not data or 'barcode' not in data:
+            return jsonify({'success': False, 'message': 'Kein Barcode angegeben'}), 400
+            
+        barcode = data['barcode'].strip()  # Barcode bereinigen
+        if len(barcode) > 50:
+            return jsonify({'success': False, 'message': 'Barcode zu lang (max. 50 Zeichen)'}), 400
+        
         # Prüfe ob der Mitarbeiter existiert
         worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
+        
         if not worker:
-            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
+            return jsonify({
+                'success': False,
+                'message': 'Mitarbeiter nicht gefunden'
+            }), 404
             
         # Prüfe ob der Mitarbeiter aktive Ausleihen hat
         active_lendings_count = mongodb.count_documents('lendings', {
             'worker_barcode': barcode, 
             'returned_at': None
         })
+        
+        if active_lendings_count > 0:
+            return jsonify({
+                'success': False,
+                'message': 'Mitarbeiter hat noch aktive Ausleihen'
+            }), 400
+            
+        # Führe das Soft-Delete durch
+        mongodb.update_one('workers', {'barcode': barcode}, {
+            '$set': {
+                'deleted': True,
+                'deleted_at': datetime.now()
+            }
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Mitarbeiter wurde erfolgreich gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/workers/<barcode>/delete', methods=['DELETE'])
+@mitarbeiter_required
+def delete_worker_soft(barcode):
+    """Mitarbeiter soft löschen (markieren als gelöscht) - Barcode aus URL (Legacy)"""
+    try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
+        # Prüfe ob der Mitarbeiter existiert
+        worker = mongodb.find_one('workers', {'barcode': decoded_barcode, 'deleted': {'$ne': True}})
+        
+        if not worker:
+            return jsonify({
+                'success': False,
+                'message': 'Mitarbeiter nicht gefunden'
+            }), 404
+            
+        # Prüfe ob der Mitarbeiter aktive Ausleihen hat
+        active_lendings_count = mongodb.count_documents('lendings', {
+            'worker_barcode': decoded_barcode, 
+            'returned_at': None
+        })
+        
+        if active_lendings_count > 0:
+            return jsonify({
+                'success': False,
+                'message': 'Mitarbeiter hat noch aktive Ausleihen'
+            }), 400
+            
+        # Führe das Soft-Delete durch
+        mongodb.update_one('workers', {'barcode': decoded_barcode}, {
+            '$set': {
+                'deleted': True,
+                'deleted_at': datetime.now()
+            }
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Mitarbeiter wurde erfolgreich gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Mitarbeiters: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/workers/<barcode>/delete-permanent', methods=['DELETE'])
+@mitarbeiter_required
+def delete_worker_permanent(barcode):
+    try:
+        # Barcode URL-dekodieren
+        decoded_barcode = unquote(barcode)
+        
+        # Prüfe ob der Mitarbeiter existiert
+        worker = mongodb.find_one('workers', {'barcode': decoded_barcode, 'deleted': {'$ne': True}})
+        if not worker:
+            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
+            
+        # Prüfe ob der Mitarbeiter aktive Ausleihen hat
+        active_lendings_count = mongodb.count_documents('lendings', {
+            'worker_barcode': decoded_barcode, 
+            'returned_at': None
+        })
         if active_lendings_count > 0:
             return jsonify({'success': False, 'message': 'Mitarbeiter hat noch aktive Ausleihen'}), 400
             
         # Führe das permanente Löschen durch
-        mongodb.delete_one('workers', {'barcode': barcode})
+        mongodb.delete_one('workers', {'barcode': decoded_barcode})
         return jsonify({'success': True, 'message': 'Mitarbeiter permanent gelöscht'})
         
     except Exception as e:
@@ -3243,29 +2895,159 @@ def update_ticket_assignment(ticket_id):
 @login_required
 @admin_required
 def update_ticket_status(ticket_id):
-    """Aktualisiert den Status eines Tickets"""
+    """Ticket-Status aktualisieren"""
     try:
-        if not request.is_json:
-            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
-
         data = request.get_json()
-        status = data.get('status')
+        if not data or 'status' not in data:
+            return jsonify({'success': False, 'message': 'Status nicht angegeben'}), 400
+            
+        new_status = data['status']
         
-        if not status:
-            return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
-
-        # Aktualisiere den Status im Ticket
-        update_data = {'status': status, 'updated_at': datetime.now()}
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+            
+        # Aktualisiere den Status
+        mongodb.update_one('tickets', 
+                          {'_id': ObjectId(ticket_id)}, 
+                          {
+                              '$set': {
+                                  'status': new_status,
+                                  'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                              }
+                          })
         
-        # Wenn Status auf 'gelöst' gesetzt wird, setze resolved_at
-        if status == 'gelöst':
-            update_data['resolved_at'] = datetime.now()
-
-        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': update_data}):
-            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
-
-        return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
-
+        return jsonify({
+            'success': True,
+            'message': f'Status wurde auf "{new_status}" geändert'
+        })
+        
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/tickets/<ticket_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_ticket(ticket_id):
+    """Ticket löschen"""
+    try:
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        
+        if not ticket:
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden'
+            }), 404
+            
+        # Lösche das Ticket
+        mongodb.delete_one('tickets', {'_id': ObjectId(ticket_id)})
+        
+        # Lösche auch zugehörige Daten
+        mongodb.delete_many('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket wurde erfolgreich gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Tickets: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/debug/barcodes')
+@mitarbeiter_required
+def debug_barcodes():
+    """Debug-Route zum Überprüfen der Barcodes in der Datenbank"""
+    try:
+        tools = list(mongodb.find('tools', {}, limit=5))
+        workers = list(mongodb.find('workers', {}, limit=5))
+        consumables = list(mongodb.find('consumables', {}, limit=5))
+        
+        return jsonify({
+            'tools': [{'barcode': t.get('barcode'), 'name': t.get('name')} for t in tools],
+            'workers': [{'barcode': w.get('barcode'), 'name': f"{w.get('firstname', '')} {w.get('lastname', '')}"} for w in workers],
+            'consumables': [{'barcode': c.get('barcode'), 'name': c.get('name')} for c in consumables]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/debug/clean-barcodes', methods=['POST'])
+@mitarbeiter_required
+def clean_barcodes():
+    """Bereinigt verunreinigte Barcodes in der Datenbank"""
+    try:
+        cleaned_count = 0
+        
+        # Werkzeuge bereinigen
+        tools = mongodb.find('tools', {})
+        for tool in tools:
+            old_barcode = tool.get('barcode', '')
+            if old_barcode and ' - IP:' in str(old_barcode):
+                # Entferne IP-Informationen
+                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
+                mongodb.update_one('tools', {'_id': tool['_id']}, {'$set': {'barcode': clean_barcode}})
+                cleaned_count += 1
+        
+        # Mitarbeiter bereinigen
+        workers = mongodb.find('workers', {})
+        for worker in workers:
+            old_barcode = worker.get('barcode', '')
+            if old_barcode and ' - IP:' in str(old_barcode):
+                # Entferne IP-Informationen
+                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
+                mongodb.update_one('workers', {'_id': worker['_id']}, {'$set': {'barcode': clean_barcode}})
+                cleaned_count += 1
+        
+        # Verbrauchsmaterialien bereinigen
+        consumables = mongodb.find('consumables', {})
+        for consumable in consumables:
+            old_barcode = consumable.get('barcode', '')
+            if old_barcode and ' - IP:' in str(old_barcode):
+                # Entferne IP-Informationen
+                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
+                mongodb.update_one('consumables', {'_id': consumable['_id']}, {'$set': {'barcode': clean_barcode}})
+                cleaned_count += 1
+        
+        return jsonify({
+            'success': True,
+            'message': f'{cleaned_count} Barcodes wurden bereinigt'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/debug')
+@mitarbeiter_required
+def debug_page():
+    """Debug-Seite für Barcode-Bereinigung"""
+    return render_template('admin/debug.html')
+
+@bp.route('/debug/test-barcodes')
+@mitarbeiter_required
+def test_barcodes():
+    """Test-Route zum Überprüfen der Barcodes"""
+    try:
+        # Hole ein paar Beispiele aus jeder Kategorie
+        tools = list(mongodb.find('tools', {}, limit=3))
+        workers = list(mongodb.find('workers', {}, limit=3))
+        consumables = list(mongodb.find('consumables', {}, limit=3))
+        
+        result = {
+            'tools': [{'barcode': str(t.get('barcode', '')), 'name': t.get('name', '')} for t in tools],
+            'workers': [{'barcode': str(w.get('barcode', '')), 'name': f"{w.get('firstname', '')} {w.get('lastname', '')}"} for w in workers],
+            'consumables': [{'barcode': str(c.get('barcode', '')), 'name': c.get('name', '')} for c in consumables]
+        }
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

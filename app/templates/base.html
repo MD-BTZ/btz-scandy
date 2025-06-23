@@ -186,18 +186,18 @@
                         </li>
                         {% if current_user.is_admin %}
                         <li>
-                            <a href="{{ url_for('admin.server_settings') }}" class="{% if request.endpoint and 'admin.server_settings' in request.endpoint %}active{% endif %}">
+                            <a href="{{ url_for('admin.tickets') }}" class="{% if request.endpoint and 'admin.tickets' in request.endpoint %}active{% endif %}">
+                                <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('admin.system') }}" class="{% if request.endpoint and 'admin.system' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-cogs mr-2"></i>Systemverwaltung
                             </a>
                         </li>
                         <li>
                             <a href="{{ url_for('admin.manage_users') }}" class="{% if request.endpoint and 'admin.manage_users' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-users-cog mr-2"></i>Benutzerverwaltung
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ url_for('admin.tickets') }}" class="{% if request.endpoint and 'admin.tickets' in request.endpoint %}active{% endif %}">
-                                <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}-Verwaltung
                             </a>
                         </li>
                         <li>

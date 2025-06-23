@@ -89,7 +89,7 @@
             <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="btn btn-sm btn-ghost">
                 <i class="fas fa-edit"></i>
             </a>
-            <button class="btn btn-sm btn-ghost btn-error" onclick="deleteTool('{{ tool.barcode }}')">
+            <button class="btn btn-sm btn-ghost btn-error" onclick="deleteItem('tool', '{{ tool.barcode }}')">
                 <i class="fas fa-trash"></i>
             </button>
         </div>
@@ -125,30 +125,5 @@ document.addEventListener('DOMContentLoaded', function() {
     locationFilter.addEventListener('change', applyFilters);
     statusFilter.addEventListener('change', applyFilters);
 });
-
-// Lösch-Funktion
-function deleteTool(barcode) {
-    if (confirm('Möchten Sie dieses Werkzeug wirklich löschen?')) {
-        fetch('/admin/tools/delete', {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ barcode: barcode })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.reload();
-            } else {
-                alert(data.message || 'Fehler beim Löschen des Werkzeugs');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Fehler beim Löschen des Werkzeugs');
-        });
-    }
-}
 </script>
 {% endblock %} 

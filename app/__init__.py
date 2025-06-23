@@ -136,6 +136,29 @@ def create_app(test_config=None):
     # Blueprints registrieren
     init_app(app)
     
+    # Health Check Route (direkt in der App, nicht im Blueprint)
+    @app.route('/health')
+    def health_check():
+        """Health Check für Docker Container"""
+        try:
+            from app.models.mongodb_database import MongoDBDatabase
+            mongodb = MongoDBDatabase()
+            # Prüfe Datenbankverbindung durch einfache Abfrage
+            mongodb._client.admin.command('ping')
+            return jsonify({
+                'status': 'healthy',
+                'database': 'connected',
+                'timestamp': datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Health check failed: {str(e)}")
+            return jsonify({
+                'status': 'unhealthy',
+                'database': 'disconnected',
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }), 503
+    
     # Fehlerbehandlung registrieren
     handle_errors(app)
     

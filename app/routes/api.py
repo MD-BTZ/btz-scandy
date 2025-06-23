@@ -144,7 +144,10 @@ def return_tool():
         tool_barcode = data.get('tool_barcode')
         worker_barcode = data.get('worker_barcode')
         
+        logger.info(f"Return request: tool_barcode={tool_barcode}, worker_barcode={worker_barcode}")
+        
         if not all([tool_barcode, worker_barcode]):
+            logger.warning("Missing parameters in return request")
             return jsonify({
                 'success': False,
                 'message': 'Fehlende Parameter'
@@ -157,21 +160,32 @@ def return_tool():
             'returned_at': None
         })
         
+        logger.info(f"Found lending: {lending}")
+        
         if not lending:
+            logger.warning(f"No active lending found for tool_barcode={tool_barcode}, worker_barcode={worker_barcode}")
             return jsonify({
                 'success': False,
                 'message': 'Keine aktive Ausleihe gefunden'
             }), 404
         
-        # Markiere als zurückgegeben
-        mongodb.update_one('lendings', 
-                          {'_id': lending['_id']}, 
+        # Markiere als zurückgegeben - verwende den ursprünglichen Filter
+        success = mongodb.update_one('lendings', 
+                          {
+                              'tool_barcode': tool_barcode,
+                              'worker_barcode': worker_barcode,
+                              'returned_at': None
+                          }, 
                           {'$set': {'returned_at': datetime.now()}})
         
+        logger.info(f"Update lending result: {success}")
+        
         # Aktualisiere Werkzeug-Status
-        mongodb.update_one('tools', 
+        tool_success = mongodb.update_one('tools', 
                           {'barcode': tool_barcode}, 
                           {'$set': {'status': 'verfügbar'}})
+        
+        logger.info(f"Update tool result: {tool_success}")
         
         return jsonify({
             'success': True,
@@ -179,6 +193,7 @@ def return_tool():
         })
         
     except Exception as e:
+        logger.error(f"Error in return_tool: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Fehler bei der Rückgabe: {str(e)}'

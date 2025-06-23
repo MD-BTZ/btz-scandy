@@ -18,20 +18,27 @@ function deleteItem(type, barcode) {
         return Promise.reject('Abgebrochen durch Benutzer');
     }
     
-    // URL basierend auf Typ
+    // Barcode bereinigen
+    const cleanBarcode = barcode.trim();
+    
+    // URL und Request-Konfiguration - alle verwenden jetzt Barcode im JSON-Body
     const urls = {
-        'tool': `/admin/tools/${barcode}/delete`,
-        'consumable': `/admin/consumables/${barcode}/delete`,
-        'worker': `/admin/workers/${barcode}/delete`
+        'tool': '/admin/tools/delete',
+        'consumable': '/admin/consumables/delete',
+        'worker': '/admin/workers/delete'
     };
     
-    return fetch(urls[type], {
+    const url = urls[type];
+    const requestConfig = {
         method: 'DELETE',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Content-Type': 'application/json'
-        }
-    })
+        },
+        body: JSON.stringify({ barcode: cleanBarcode })
+    };
+    
+    return fetch(url, requestConfig)
     .then(response => {
         if (!response.ok) {
             return response.json().then(data => {
@@ -46,8 +53,8 @@ function deleteItem(type, barcode) {
             showNotification(data.message || `${typeNames[type]} wurde in den Papierkorb verschoben`, 'success');
             
             // Optional: Seite neu laden oder Element aus DOM entfernen
-            if (document.querySelector(`[data-barcode="${barcode}"]`)) {
-                document.querySelector(`[data-barcode="${barcode}"]`).remove();
+            if (document.querySelector(`[data-barcode="${cleanBarcode}"]`)) {
+                document.querySelector(`[data-barcode="${cleanBarcode}"]`).remove();
             } else {
                 window.location.reload();
             }
@@ -57,6 +64,7 @@ function deleteItem(type, barcode) {
         return data;
     })
     .catch(error => {
+        console.error('Error in deleteItem:', error);
         showNotification(error.message || 'Fehler beim Löschen', 'error');
         throw error;
     });

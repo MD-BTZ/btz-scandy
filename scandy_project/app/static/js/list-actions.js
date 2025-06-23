@@ -23,8 +23,12 @@ function editConsumable(barcode) {
 
 function deleteConsumable(barcode) {
     if (confirm('Verbrauchsmaterial wirklich löschen?')) {
-        fetch(`/admin/consumables/${barcode}/delete`, {
-            method: 'DELETE'
+        fetch(`/admin/consumables/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ barcode: barcode })
         }).then(response => response.json())
         .then(data => {
             if (data.success) {
