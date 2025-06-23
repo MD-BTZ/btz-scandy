@@ -1241,16 +1241,16 @@ def import_all_data():
     """Importiert Daten aus einer Excel-Datei mit mehreren Sheets."""
     if 'file' not in request.files:
         flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.system'))
+        return redirect(url_for('admin.server_settings'))
 
     file = request.files['file']
     if file.filename == '':
         flash('Keine Datei ausgewählt', 'error')
-        return redirect(url_for('admin.system'))
+        return redirect(url_for('admin.server_settings'))
 
     if not file.filename.endswith('.xlsx'):
         flash('Ungültiger Dateityp. Bitte eine .xlsx-Datei hochladen.', 'error')
-        return redirect(url_for('admin.system'))
+        return redirect(url_for('admin.server_settings'))
 
     try:
         # Excel-Datei in BytesIO laden, um sie mit openpyxl zu öffnen
@@ -1543,11 +1543,11 @@ def import_all_data():
                     success_parts.append(f"{count} {item_type}")
             success_msg += ", ".join(success_parts)
             flash(success_msg, 'success')
-        return redirect(url_for('admin.system'))
+        return redirect(url_for('admin.server_settings'))
     except Exception as e:
         logger.error(f"Fehler beim Importieren der Daten: {str(e)}", exc_info=True)
         flash(f'Fehler beim Importieren: {str(e)}', 'error')
-        return redirect(url_for('admin.system'))
+        return redirect(url_for('admin.server_settings'))
 
 @bp.route('/users/toggle_active/<user_id>', methods=['POST'])
 @admin_required
@@ -2552,8 +2552,8 @@ def delete_ticket_category(category):
 @bp.route('/system')
 @admin_required
 def system():
-    """System-Einstellungen"""
-    return render_template('admin/system.html')
+    """System-Einstellungen - Weiterleitung zu server-settings"""
+    return redirect(url_for('admin.server_settings'))
 
 # Abteilungsverwaltung
 @bp.route('/departments')
