@@ -1257,36 +1257,83 @@ def import_all_data():
         file_content = BytesIO(file.read())
         wb = openpyxl.load_workbook(file_content, data_only=True) # data_only=True vermeidet Formeln
 
-        imported_counts = {"Werkzeuge": 0, "Mitarbeiter": 0, "Verbrauchsmaterial": 0}
+        imported_counts = {"Werkzeuge": 0, "Mitarbeiter": 0, "Verbrauchsmaterial": 0, "Verlauf": 0}
         errors = []
+
+        # Spaltennamen-Mapping für flexible Erkennung
+        column_mappings = {
+            'tools': {
+                'barcode': ['barcode', 'Barcode'],
+                'name': ['name', 'Name'],
+                'description': ['description', 'Beschreibung', 'desc'],
+                'category': ['category', 'Kategorie', 'cat'],
+                'location': ['location', 'Standort', 'loc'],
+                'status': ['status', 'Status']
+            },
+            'workers': {
+                'barcode': ['barcode', 'Barcode'],
+                'firstname': ['firstname', 'Vorname', 'vorname'],
+                'lastname': ['lastname', 'Nachname', 'nachname'],
+                'department': ['department', 'Abteilung', 'dept'],
+                'email': ['email', 'E-Mail', 'e-mail', 'email']
+            },
+            'consumables': {
+                'barcode': ['barcode', 'Barcode'],
+                'name': ['name', 'Name'],
+                'description': ['description', 'Beschreibung', 'desc'],
+                'category': ['category', 'Kategorie', 'cat'],
+                'location': ['location', 'Standort', 'loc'],
+                'quantity': ['quantity', 'Menge', 'qty'],
+                'min_quantity': ['min_quantity', 'Mindestmenge', 'min_qty', 'minimum_quantity'],
+                'unit': ['unit', 'Einheit', 'Einheiten']
+            }
+        }
+
+        def find_column_index(headers, possible_names):
+            """Findet den Index einer Spalte basierend auf möglichen Namen"""
+            for i, header in enumerate(headers):
+                if header and str(header).strip().lower() in [name.lower() for name in possible_names]:
+                    return i
+            return None
 
         # --- Werkzeuge importieren ---
         if "Werkzeuge" in wb.sheetnames:
             ws_tools = wb["Werkzeuge"]
             headers_tools = [cell.value for cell in ws_tools[1]]
-            # Erwartete Spalten prüfen (Mindestanforderung)
-            required_tools_cols = ['barcode', 'name']
-            if not all(col in headers_tools for col in required_tools_cols):
-                errors.append("Arbeitsblatt 'Werkzeuge' hat ungültige Spaltenüberschriften.")
+            
+            # Spaltenindizes finden
+            barcode_idx = find_column_index(headers_tools, column_mappings['tools']['barcode'])
+            name_idx = find_column_index(headers_tools, column_mappings['tools']['name'])
+            
+            if barcode_idx is None or name_idx is None:
+                errors.append("Arbeitsblatt 'Werkzeuge' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
             else:
+                # Optionale Spaltenindizes finden
+                desc_idx = find_column_index(headers_tools, column_mappings['tools']['description'])
+                cat_idx = find_column_index(headers_tools, column_mappings['tools']['category'])
+                loc_idx = find_column_index(headers_tools, column_mappings['tools']['location'])
+                status_idx = find_column_index(headers_tools, column_mappings['tools']['status'])
+                
                 for row_idx, row in enumerate(ws_tools.iter_rows(min_row=2), start=2):
-                    row_data = {headers_tools[i]: cell.value for i, cell in enumerate(row)}
                     try:
                         # Nur importieren, wenn Barcode und Name vorhanden sind
-                        if row_data.get('barcode') and row_data.get('name'):
-                             # Default-Werte für optionale Felder setzen, falls sie fehlen
-                            desc = row_data.get('description', '')
-                            cat = row_data.get('category')
-                            loc = row_data.get('location')
-                            status = row_data.get('status', 'verfügbar') # Default-Status
+                        barcode = row[barcode_idx].value
+                        name = row[name_idx].value
+                        
+                        if barcode and name:
+                            # Optionale Felder extrahieren
+                            desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
+                            cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
+                            loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
+                            status = row[status_idx].value if status_idx is not None and row[status_idx].value else 'verfügbar'
 
                             tool_data = {
-                                'barcode': row_data['barcode'],
-                                'name': row_data['name'],
-                                'description': desc,
-                                'category': cat,
-                                'location': loc,
-                                'status': status,
+                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
+                                'name': str(name).strip(),
+                                'description': str(desc).strip() if desc else '',
+                                'category': str(cat).strip() if cat else None,
+                                'location': str(loc).strip() if loc else None,
+                                'status': str(status).strip() if status else 'verfügbar',
                                 'deleted': False
                             }
                             
@@ -1304,23 +1351,36 @@ def import_all_data():
         if "Mitarbeiter" in wb.sheetnames:
             ws_workers = wb["Mitarbeiter"]
             headers_workers = [cell.value for cell in ws_workers[1]]
-            required_workers_cols = ['barcode', 'firstname', 'lastname']
-            if not all(col in headers_workers for col in required_workers_cols):
-                errors.append("Arbeitsblatt 'Mitarbeiter' hat ungültige Spaltenüberschriften.")
+            
+            # Spaltenindizes finden
+            barcode_idx = find_column_index(headers_workers, column_mappings['workers']['barcode'])
+            firstname_idx = find_column_index(headers_workers, column_mappings['workers']['firstname'])
+            lastname_idx = find_column_index(headers_workers, column_mappings['workers']['lastname'])
+            
+            if barcode_idx is None or firstname_idx is None or lastname_idx is None:
+                errors.append("Arbeitsblatt 'Mitarbeiter' hat ungültige Spaltenüberschriften. Benötigt: Barcode, Vorname und Nachname")
             else:
-                 for row_idx, row in enumerate(ws_workers.iter_rows(min_row=2), start=2):
-                    row_data = {headers_workers[i]: cell.value for i, cell in enumerate(row)}
+                # Optionale Spaltenindizes finden
+                dept_idx = find_column_index(headers_workers, column_mappings['workers']['department'])
+                email_idx = find_column_index(headers_workers, column_mappings['workers']['email'])
+                
+                for row_idx, row in enumerate(ws_workers.iter_rows(min_row=2), start=2):
                     try:
-                        if row_data.get('barcode') and row_data.get('firstname') and row_data.get('lastname'):
-                            dept = row_data.get('department')
-                            email = row_data.get('email')
+                        barcode = row[barcode_idx].value
+                        firstname = row[firstname_idx].value
+                        lastname = row[lastname_idx].value
+                        
+                        if barcode and firstname and lastname:
+                            # Optionale Felder extrahieren
+                            dept = row[dept_idx].value if dept_idx is not None and row[dept_idx].value else None
+                            email = row[email_idx].value if email_idx is not None and row[email_idx].value else None
 
                             worker_data = {
-                                'barcode': row_data['barcode'],
-                                'firstname': row_data['firstname'],
-                                'lastname': row_data['lastname'],
-                                'department': dept,
-                                'email': email,
+                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
+                                'firstname': str(firstname).strip(),
+                                'lastname': str(lastname).strip(),
+                                'department': str(dept).strip() if dept else None,
+                                'email': str(email).strip() if email else None,
                                 'deleted': False
                             }
                             
@@ -1338,28 +1398,56 @@ def import_all_data():
         if "Verbrauchsmaterial" in wb.sheetnames:
             ws_consumables = wb["Verbrauchsmaterial"]
             headers_consumables = [cell.value for cell in ws_consumables[1]]
-            required_consumables_cols = ['barcode', 'name']
-            if not all(col in headers_consumables for col in required_consumables_cols):
-                 errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften.")
+            
+            # Spaltenindizes finden
+            barcode_idx = find_column_index(headers_consumables, column_mappings['consumables']['barcode'])
+            name_idx = find_column_index(headers_consumables, column_mappings['consumables']['name'])
+            
+            if barcode_idx is None or name_idx is None:
+                errors.append("Arbeitsblatt 'Verbrauchsmaterial' hat ungültige Spaltenüberschriften. Benötigt: Barcode und Name")
             else:
+                # Optionale Spaltenindizes finden
+                desc_idx = find_column_index(headers_consumables, column_mappings['consumables']['description'])
+                cat_idx = find_column_index(headers_consumables, column_mappings['consumables']['category'])
+                loc_idx = find_column_index(headers_consumables, column_mappings['consumables']['location'])
+                quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['quantity'])
+                min_quantity_idx = find_column_index(headers_consumables, column_mappings['consumables']['min_quantity'])
+                unit_idx = find_column_index(headers_consumables, column_mappings['consumables']['unit'])
+                
                 for row_idx, row in enumerate(ws_consumables.iter_rows(min_row=2), start=2):
-                    row_data = {headers_consumables[i]: cell.value for i, cell in enumerate(row)}
                     try:
-                        if row_data.get('barcode') and row_data.get('name'):
-                            desc = row_data.get('description', '')
-                            cat = row_data.get('category')
-                            loc = row_data.get('location')
-                            quantity = row_data.get('quantity', 0)
-                            unit = row_data.get('unit', 'Stück')
+                        barcode = row[barcode_idx].value
+                        name = row[name_idx].value
+                        
+                        if barcode and name:
+                            # Optionale Felder extrahieren
+                            desc = row[desc_idx].value if desc_idx is not None and row[desc_idx].value else ''
+                            cat = row[cat_idx].value if cat_idx is not None and row[cat_idx].value else None
+                            loc = row[loc_idx].value if loc_idx is not None and row[loc_idx].value else None
+                            quantity = row[quantity_idx].value if quantity_idx is not None and row[quantity_idx].value else 0
+                            min_quantity = row[min_quantity_idx].value if min_quantity_idx is not None and row[min_quantity_idx].value else 0
+                            unit = row[unit_idx].value if unit_idx is not None and row[unit_idx].value else 'Stück'
+
+                            # Zahlen konvertieren
+                            try:
+                                quantity = int(quantity) if quantity else 0
+                            except (ValueError, TypeError):
+                                quantity = 0
+                            
+                            try:
+                                min_quantity = int(min_quantity) if min_quantity else 0
+                            except (ValueError, TypeError):
+                                min_quantity = 0
 
                             consumable_data = {
-                                'barcode': row_data['barcode'],
-                                'name': row_data['name'],
-                                'description': desc,
-                                'category': cat,
-                                'location': loc,
+                                'barcode': int(barcode) if isinstance(barcode, (int, float)) else str(barcode),
+                                'name': str(name).strip(),
+                                'description': str(desc).strip() if desc else '',
+                                'category': str(cat).strip() if cat else None,
+                                'location': str(loc).strip() if loc else None,
                                 'quantity': quantity,
-                                'unit': unit,
+                                'min_quantity': min_quantity,
+                                'unit': str(unit).strip() if unit else 'Stück',
                                 'deleted': False
                             }
                             
@@ -1372,6 +1460,75 @@ def import_all_data():
                         errors.append(f"Fehler in Verbrauchsmaterial Zeile {row_idx}: {e}")
         else:
             errors.append("Arbeitsblatt 'Verbrauchsmaterial' nicht gefunden.")
+
+        # --- Verlauf importieren (optional) ---
+        if "Verlauf" in wb.sheetnames:
+            ws_history = wb["Verlauf"]
+            headers_history = [cell.value for cell in ws_history[1]]
+            
+            # Spaltenindizes für Verlauf finden
+            lent_at_idx = None
+            returned_at_idx = None
+            tool_barcode_idx = None
+            worker_barcode_idx = None
+            
+            for i, header in enumerate(headers_history):
+                header_str = str(header).lower() if header else ''
+                if 'ausgeliehen' in header_str or 'lent' in header_str:
+                    lent_at_idx = i
+                elif 'zurückgegeben' in header_str or 'returned' in header_str:
+                    returned_at_idx = i
+                elif 'werkzeug' in header_str and 'barcode' in header_str:
+                    tool_barcode_idx = i
+                elif 'mitarbeiter' in header_str and 'barcode' in header_str:
+                    worker_barcode_idx = i
+            
+            if lent_at_idx is not None and tool_barcode_idx is not None and worker_barcode_idx is not None:
+                for row_idx, row in enumerate(ws_history.iter_rows(min_row=2), start=2):
+                    try:
+                        lent_at = row[lent_at_idx].value
+                        tool_barcode = row[tool_barcode_idx].value
+                        worker_barcode = row[worker_barcode_idx].value
+                        returned_at = row[returned_at_idx].value if returned_at_idx is not None else None
+                        
+                        if lent_at and tool_barcode and worker_barcode:
+                            # Datum konvertieren
+                            if isinstance(lent_at, str):
+                                try:
+                                    lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    lent_at = datetime.now()
+                            elif isinstance(lent_at, datetime):
+                                pass
+                            else:
+                                lent_at = datetime.now()
+                            
+                            if returned_at and isinstance(returned_at, str):
+                                try:
+                                    returned_at = datetime.strptime(returned_at, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    returned_at = None
+                            
+                            lending_data = {
+                                'lent_at': lent_at,
+                                'tool_barcode': int(tool_barcode) if isinstance(tool_barcode, (int, float)) else str(tool_barcode),
+                                'worker_barcode': int(worker_barcode) if isinstance(worker_barcode, (int, float)) else str(worker_barcode),
+                                'returned_at': returned_at,
+                                'created_at': datetime.now()
+                            }
+                            
+                            # Nur importieren, wenn nicht bereits vorhanden
+                            existing = mongodb.find_one('lendings', {
+                                'tool_barcode': lending_data['tool_barcode'],
+                                'worker_barcode': lending_data['worker_barcode'],
+                                'lent_at': lending_data['lent_at']
+                            })
+                            
+                            if not existing:
+                                mongodb.insert_one('lendings', lending_data)
+                                imported_counts["Verlauf"] += 1
+                    except Exception as e:
+                        errors.append(f"Fehler in Verlauf Zeile {row_idx}: {e}")
 
         # Erfolgs- und Fehlermeldungen anzeigen
         if errors:

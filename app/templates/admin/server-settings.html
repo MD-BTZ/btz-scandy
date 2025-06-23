@@ -69,6 +69,24 @@
                             Exportiert alle Daten als Excel-Datei mit mehreren Arbeitsblättern
                         </div>
                     </div>
+                    
+                    <!-- Excel-Import -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-semibold mb-2">Daten importieren</h3>
+                        <form action="{{ url_for('admin.import_all_data') }}" method="POST" enctype="multipart/form-data" class="space-y-2">
+                            <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered w-full" required>
+                            <button type="submit" class="btn btn-success btn-sm w-full">
+                                <i class="fas fa-upload mr-2"></i>Excel-Daten importieren
+                            </button>
+                        </form>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Importiert Daten aus einer Excel-Datei (.xlsx) mit Arbeitsblättern: Werkzeuge, Mitarbeiter, Verbrauchsmaterial, Verlauf
+                        </div>
+                        <div class="text-xs text-warning mt-1">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            Vor dem Import wird empfohlen, ein Backup zu erstellen
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
