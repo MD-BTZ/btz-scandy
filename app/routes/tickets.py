@@ -784,6 +784,21 @@ def inject_unread_tickets_count():
     count = get_unassigned_ticket_count()
     return dict(unread_tickets_count=count)
 
+@bp.route('/auftrag-neu-debug')
+def public_create_order_debug():
+    """Debug-Version der öffentlichen Auftragserstellung."""
+    # Hole die Kategorien für das Formular
+    categories = get_ticket_categories_from_settings()
+    
+    return render_template('auftrag_public_debug.html', 
+                         categories=categories,
+                         priority_colors={
+                             'niedrig': 'secondary',
+                             'normal': 'primary',
+                             'hoch': 'error',
+                             'dringend': 'error'
+                         })
+
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
     """Öffentliche Auftragserstellung ohne Login."""
@@ -837,7 +852,7 @@ def public_create_order():
             return redirect(url_for('tickets.public_create_order'))
     
     # Hole die Kategorien für das Formular
-    categories = get_categories_from_settings()
+    categories = get_ticket_categories_from_settings()
     
     return render_template('auftrag_public.html', 
                          categories=categories,

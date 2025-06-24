@@ -1133,7 +1133,7 @@ def delete_tool_soft_json():
             'success': True,
             'message': 'Werkzeug wurde erfolgreich gelöscht'
         })
-        
+
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
         return jsonify({
@@ -2859,7 +2859,7 @@ def update_ticket_status(ticket_id):
             'success': True,
             'message': f'Status wurde auf "{new_status}" geändert'
         })
-        
+
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
