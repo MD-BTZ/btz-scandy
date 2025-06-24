@@ -23,6 +23,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
 from docxtpl import DocxTemplate
 from urllib.parse import unquote
+import pandas as pd
+import tempfile
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
@@ -338,123 +340,40 @@ def create_excel(data, columns):
 
 # Angepasste Excel-Funktion für mehrere Sheets
 def create_multi_sheet_excel(data_dict):
-    """Erstellt eine Excel-Datei mit mehreren Sheets aus einem Dictionary von Daten.
-    Args:
-        data_dict (dict): Ein Dictionary, bei dem Keys die Sheet-Namen sind
-                          und Values Listen von Dictionaries (die Zeilen) sind.
-    """
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active) # Standard-Sheet entfernen
-
-    # Deutsche Spaltenüberschriften
-    headers_de = {
-        'Werkzeuge': {
-            'barcode': 'Barcode',
-            'name': 'Name',
-            'category': 'Kategorie',
-            'location': 'Standort',
-            'status': 'Status',
-            'description': 'Beschreibung'
-        },
-        'Mitarbeiter': {
-            'barcode': 'Barcode',
-            'firstname': 'Vorname',
-            'lastname': 'Nachname',
-            'department': 'Abteilung',
-            'email': 'E-Mail'
-        },
-        'Verbrauchsmaterial': {
-            'barcode': 'Barcode',
-            'name': 'Name',
-            'category': 'Kategorie',
-            'location': 'Standort',
-            'quantity': 'Menge',
-            'min_quantity': 'Mindestmenge',
-            'description': 'Beschreibung'
-        },
-        'Verlauf': {
-            'lent_at': 'Ausgeliehen am',
-            'returned_at': 'Zurückgegeben am',
-            'tool_name': 'Werkzeug',
-            'tool_barcode': 'Werkzeug-Barcode',
-            'consumable_name': 'Verbrauchsmaterial',
-            'consumable_barcode': 'Material-Barcode',
-            'worker_name': 'Mitarbeiter',
-            'worker_barcode': 'Mitarbeiter-Barcode',
-            'type': 'Typ',
-            'quantity': 'Menge'
-        }
-    }
-
-    for sheet_name, data in data_dict.items():
-        ws = wb.create_sheet(title=sheet_name)
-        
-        if not data:
-            ws.cell(row=1, column=1, value="Keine Daten verfügbar")
-            continue
-        
-        # Headers aus dem ersten Datensatz holen
-        headers = list(data[0].keys())
-        
-        # Deutsche Überschriften setzen
-        for col, header in enumerate(headers, 1):
-            de_header = headers_de.get(sheet_name, {}).get(header, header)
-            cell = ws.cell(row=1, column=col, value=de_header)
-            # Formatierung der Überschriften
-            cell.font = openpyxl.styles.Font(bold=True)
-            cell.fill = openpyxl.styles.PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
-            cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
-        
-        # Daten einfügen
-        for row_idx, item in enumerate(data, 2):
-            for col_idx, key in enumerate(headers, 1):
-                value = item.get(key, '')
-                cell = ws.cell(row=row_idx, column=col_idx, value=value)
-                
-                # Datumsformatierung
-                if isinstance(value, datetime):
-                    cell.number_format = 'DD.MM.YYYY HH:MM:SS'
-                # Zahlenformatierung
-                elif isinstance(value, (int, float)):
-                    cell.number_format = '#,##0'
-                    cell.alignment = openpyxl.styles.Alignment(horizontal='right')
-                # Textformatierung
+    """Erstellt eine Excel-Datei mit mehreren Arbeitsblättern"""
+    import pandas as pd
+    import tempfile
+    import os
+    
+    # Erstelle temporäre Datei
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+        tmp_file_path = tmp_file.name
+    
+    try:
+        # Erstelle Excel-Writer
+        with pd.ExcelWriter(tmp_file_path, engine='openpyxl') as writer:
+            for sheet_name, data_list in data_dict.items():
+                if data_list:
+                    # Konvertiere MongoDB-Dokumente zu DataFrame
+                    df = pd.DataFrame(data_list)
+                    
+                    # Entferne MongoDB-spezifische Felder
+                    if '_id' in df.columns:
+                        df = df.drop('_id', axis=1)
+                    
+                    # Schreibe Arbeitsblatt
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
                 else:
-                    cell.alignment = openpyxl.styles.Alignment(horizontal='left')
-
-        # Spaltenbreiten automatisch anpassen
-        for col_idx, column_cells in enumerate(ws.columns, 1):
-            max_length = 0
-            column_letter = openpyxl.utils.get_column_letter(col_idx)
-            
-            for cell in column_cells:
-                try:
-                    if cell.value:
-                        cell_length = len(str(cell.value))
-                        max_length = max(max_length, cell_length)
-                except:
-                    pass
-            
-            # Spaltenbreite mit Puffer
-            adjusted_width = (max_length + 2) * 1.2
-            ws.column_dimensions[column_letter].width = adjusted_width
-
-        # Rahmen für alle Zellen
-        thin_border = openpyxl.styles.Border(
-            left=openpyxl.styles.Side(style='thin'),
-            right=openpyxl.styles.Side(style='thin'),
-            top=openpyxl.styles.Side(style='thin'),
-            bottom=openpyxl.styles.Side(style='thin')
-        )
+                    # Leeres Arbeitsblatt erstellen
+                    pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
         
-        for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-            for cell in row:
-                cell.border = thin_border
-
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    return excel_file
+        return tmp_file_path
+        
+    except Exception as e:
+        # Bei Fehler temporäre Datei löschen
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+        raise e
 
 @bp.route('/')
 @mitarbeiter_required
@@ -2183,7 +2102,7 @@ def upload_logo():
     """Logo hochladen"""
     # TODO: Implementiere Logo-Upload
     flash('Logo erfolgreich hochgeladen', 'success')
-    return redirect(url_for('admin.server_settings'))
+    return redirect(url_for('admin.system'))
 
 @bp.route('/delete-logo/<filename>', methods=['POST'])
 @admin_required
@@ -2263,8 +2182,26 @@ def delete_ticket_category(category):
 @bp.route('/system')
 @admin_required
 def system():
-    """System-Einstellungen - Weiterleitung zu server-settings"""
-    return redirect(url_for('admin.server_settings'))
+    """System-Einstellungen"""
+    try:
+        # Hole alle verfügbaren Logos
+        logos = []
+        logos_dir = os.path.join(current_app.static_folder, 'uploads', 'logos')
+        if os.path.exists(logos_dir):
+            for filename in os.listdir(logos_dir):
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
+                    logos.append(filename)
+        
+        # Hole aktuelle Einstellungen
+        settings = mongodb.db.settings.find_one({'key': 'system'}) or {}
+        
+        return render_template('admin/server-settings.html', 
+                             logos=logos, 
+                             settings=settings.get('value', {}))
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Systemeinstellungen: {str(e)}")
+        flash('Fehler beim Laden der Systemeinstellungen', 'error')
+        return redirect(url_for('admin.index'))
 
 # Abteilungsverwaltung
 @bp.route('/departments')
@@ -3051,3 +2988,151 @@ def test_barcodes():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@bp.route('/delete_user/<user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    """Benutzer löschen"""
+    try:
+        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+        if not user:
+            flash('Benutzer nicht gefunden', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        # Verhindere das Löschen des eigenen Accounts
+        if user['username'] == current_user.username:
+            flash('Sie können Ihren eigenen Account nicht löschen', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        mongodb.delete_one('users', {'_id': ObjectId(user_id)})
+        flash(f'Benutzer "{user["username"]}" erfolgreich gelöscht', 'success')
+        return redirect(url_for('admin.manage_users'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Benutzers: {e}")
+        flash('Fehler beim Löschen des Benutzers', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+@bp.route('/user_form')
+@admin_required
+def user_form():
+    """Benutzer-Formular (für neue Benutzer)"""
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+
+@bp.route('/export_all_data')
+@admin_required
+def export_all_data():
+    """Exportiert alle Daten als Excel-Datei"""
+    try:
+        # Hole alle Daten aus der Datenbank
+        tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
+        consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+        lendings = list(mongodb.find('lendings', {}))
+        
+        # Erstelle Excel-Datei mit mehreren Arbeitsblättern
+        data_dict = {
+            'Werkzeuge': tools,
+            'Mitarbeiter': workers,
+            'Verbrauchsmaterial': consumables,
+            'Ausleihverlauf': lendings
+        }
+        
+        # Erstelle Excel-Datei
+        excel_file = create_multi_sheet_excel(data_dict)
+        
+        # Sende Datei als Download
+        return send_file(
+            excel_file,
+            as_attachment=True,
+            download_name=f'scandy_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Exportieren der Daten: {str(e)}")
+        flash('Fehler beim Exportieren der Daten', 'error')
+        return redirect(url_for('admin.system'))
+
+@bp.route('/import_all_data', methods=['POST'])
+@admin_required
+def import_all_data():
+    """Importiert Daten aus einer Excel-Datei"""
+    try:
+        if 'file' not in request.files:
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('admin.system'))
+            
+        file = request.files['file']
+        if file.filename == '':
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('admin.system'))
+            
+        if not file.filename.endswith('.xlsx'):
+            flash('Nur Excel-Dateien (.xlsx) werden unterstützt', 'error')
+            return redirect(url_for('admin.system'))
+        
+        # Speichere temporäre Datei
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            file.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Lese Excel-Datei
+            import pandas as pd
+            
+            # Lese alle Arbeitsblätter
+            excel_file = pd.ExcelFile(tmp_file_path)
+            
+            imported_count = 0
+            
+            # Importiere Werkzeuge
+            if 'Werkzeuge' in excel_file.sheet_names:
+                df_tools = pd.read_excel(excel_file, sheet_name='Werkzeuge')
+                for _, row in df_tools.iterrows():
+                    tool_data = row.to_dict()
+                    # Entferne NaN-Werte
+                    tool_data = {k: v for k, v in tool_data.items() if pd.notna(v)}
+                    # Prüfe ob Werkzeug bereits existiert
+                    existing = mongodb.find_one('tools', {'barcode': tool_data.get('barcode')})
+                    if not existing:
+                        mongodb.insert_one('tools', tool_data)
+                        imported_count += 1
+            
+            # Importiere Mitarbeiter
+            if 'Mitarbeiter' in excel_file.sheet_names:
+                df_workers = pd.read_excel(excel_file, sheet_name='Mitarbeiter')
+                for _, row in df_workers.iterrows():
+                    worker_data = row.to_dict()
+                    worker_data = {k: v for k, v in worker_data.items() if pd.notna(v)}
+                    existing = mongodb.find_one('workers', {'barcode': worker_data.get('barcode')})
+                    if not existing:
+                        mongodb.insert_one('workers', worker_data)
+                        imported_count += 1
+            
+            # Importiere Verbrauchsmaterial
+            if 'Verbrauchsmaterial' in excel_file.sheet_names:
+                df_consumables = pd.read_excel(excel_file, sheet_name='Verbrauchsmaterial')
+                for _, row in df_consumables.iterrows():
+                    consumable_data = row.to_dict()
+                    consumable_data = {k: v for k, v in consumable_data.items() if pd.notna(v)}
+                    existing = mongodb.find_one('consumables', {'barcode': consumable_data.get('barcode')})
+                    if not existing:
+                        mongodb.insert_one('consumables', consumable_data)
+                        imported_count += 1
+            
+            flash(f'{imported_count} Datensätze erfolgreich importiert', 'success')
+            
+        finally:
+            # Lösche temporäre Datei
+            os.unlink(tmp_file_path)
+        
+        return redirect(url_for('admin.system'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Importieren der Daten: {str(e)}")
+        flash(f'Fehler beim Importieren: {str(e)}', 'error')
+        return redirect(url_for('admin.system'))
