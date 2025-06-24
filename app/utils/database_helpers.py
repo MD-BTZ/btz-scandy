@@ -20,34 +20,67 @@ def get_ticket_categories_from_settings():
         return []
 
 def get_categories_from_settings():
-    """Lädt Kategorien aus der settings Collection"""
+    """Lädt Kategorien aus der settings Collection oder der categories Collection"""
     try:
+        # Versuche zuerst die settings Collection
         settings_doc = mongodb.find_one('settings', {'key': 'categories'})
         if settings_doc and 'value' in settings_doc:
-            return settings_doc['value']
-        return []
+            value = settings_doc['value']
+            # Wenn es ein String ist, splitte ihn an Kommas
+            if isinstance(value, str):
+                return [cat.strip() for cat in value.split(',') if cat.strip()]
+            # Wenn es bereits eine Liste ist, verwende sie direkt
+            elif isinstance(value, list):
+                return value
+            return []
+        
+        # Fallback: Verwende die ursprüngliche categories Collection
+        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
+        return [cat['name'] for cat in categories if 'name' in cat]
     except Exception as e:
         logger.error(f"Fehler beim Laden der Kategorien: {e}")
         return []
 
 def get_locations_from_settings():
-    """Lädt Standorte aus der settings Collection"""
+    """Lädt Standorte aus der settings Collection oder der locations Collection"""
     try:
+        # Versuche zuerst die settings Collection
         settings_doc = mongodb.find_one('settings', {'key': 'locations'})
         if settings_doc and 'value' in settings_doc:
-            return settings_doc['value']
-        return []
+            value = settings_doc['value']
+            # Wenn es ein String ist, splitte ihn an Kommas
+            if isinstance(value, str):
+                return [loc.strip() for loc in value.split(',') if loc.strip()]
+            # Wenn es bereits eine Liste ist, verwende sie direkt
+            elif isinstance(value, list):
+                return value
+            return []
+        
+        # Fallback: Verwende die ursprüngliche locations Collection
+        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
+        return [loc['name'] for loc in locations if 'name' in loc]
     except Exception as e:
         logger.error(f"Fehler beim Laden der Standorte: {e}")
         return []
 
 def get_departments_from_settings():
-    """Lädt Abteilungen aus der settings Collection"""
+    """Lädt Abteilungen aus der settings Collection oder der departments Collection"""
     try:
+        # Versuche zuerst die settings Collection
         settings_doc = mongodb.find_one('settings', {'key': 'departments'})
         if settings_doc and 'value' in settings_doc:
-            return settings_doc['value']
-        return []
+            value = settings_doc['value']
+            # Wenn es ein String ist, splitte ihn an Kommas
+            if isinstance(value, str):
+                return [dept.strip() for dept in value.split(',') if dept.strip()]
+            # Wenn es bereits eine Liste ist, verwende sie direkt
+            elif isinstance(value, list):
+                return value
+            return []
+        
+        # Fallback: Verwende die ursprüngliche departments Collection
+        departments = mongodb.find('departments', {'deleted': {'$ne': True}})
+        return [dept['name'] for dept in departments if 'name' in dept]
     except Exception as e:
         logger.error(f"Fehler beim Laden der Abteilungen: {e}")
         return []
@@ -182,9 +215,12 @@ def migrate_old_data_to_settings():
                     {'$set': {'value': ticket_categories_data}},
                     upsert=True
                 )
-                
+        
+        logger.info("Migration der alten Daten abgeschlossen")
+        
     except Exception as e:
-        logger.error(f"Fehler bei der Datenmigration: {e}")
+        logger.error(f"Fehler bei der Migration der alten Daten: {e}")
+        raise
 
 def get_next_ticket_number():
     """Generiert die nächste Auftragsnummer im Format YYMM-XXX"""

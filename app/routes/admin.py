@@ -2210,7 +2210,13 @@ def get_departments():
     """Gibt alle Abteilungen zurück"""
     try:
         settings = mongodb.db.settings.find_one({'key': 'departments'})
-        departments = settings.get('value', []) if settings else []
+        departments = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                departments = [dept.strip() for dept in value.split(',') if dept.strip()]
+            elif isinstance(value, list):
+                departments = value
         return jsonify({
             'success': True,
             'departments': [{'name': dept} for dept in departments]
@@ -2227,32 +2233,39 @@ def get_departments():
 def add_department():
     """Fügt eine neue Abteilung hinzu"""
     try:
-        name = request.form.get('department')  # Geändert von 'name' zu 'department'
+        name = request.form.get('department', '').strip()
         if not name:
             return jsonify({
                 'success': False,
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfen ob Abteilung bereits existiert
+        # Lade aktuelle Abteilungen
         settings = mongodb.db.settings.find_one({'key': 'departments'})
-        if settings and name in settings.get('value', []):
+        current_departments = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_departments = [dept.strip() for dept in value.split(',') if dept.strip()]
+            elif isinstance(value, list):
+                current_departments = value
+        
+        # Prüfe auf Duplikate (case-insensitive)
+        if any(dept.lower() == name.lower() for dept in current_departments):
             return jsonify({
                 'success': False,
                 'message': 'Diese Abteilung existiert bereits.'
             })
 
         # Abteilung zur Liste hinzufügen
-        if settings:
-            mongodb.db.settings.update_one(
-                {'key': 'departments'},
-                {'$push': {'value': name}}
-            )
-        else:
-            mongodb.db.settings.insert_one({
-                'key': 'departments',
-                'value': [name]
-            })
+        current_departments.append(name)
+        
+        # Speichere als Array
+        mongodb.db.settings.update_one(
+            {'key': 'departments'},
+            {'$set': {'value': current_departments}},
+            upsert=True
+        )
 
         return jsonify({
             'success': True,
@@ -2270,18 +2283,30 @@ def add_department():
 def delete_department(name):
     try:
         # Überprüfen, ob die Abteilung in Verwendung ist
-        workers_with_dept = mongodb.db.workers.find_one({'department': name})
-        if workers_with_dept:
+        workers_with_department = mongodb.db.workers.find_one({'department': name})
+        if workers_with_department:
             return jsonify({
                 'success': False,
                 'message': 'Die Abteilung kann nicht gelöscht werden, da sie noch von Mitarbeitern verwendet wird.'
             })
 
+        # Lade aktuelle Abteilungen
+        settings = mongodb.db.settings.find_one({'key': 'departments'})
+        current_departments = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_departments = [dept.strip() for dept in value.split(',') if dept.strip()]
+            elif isinstance(value, list):
+                current_departments = value
+        
         # Abteilung aus der Liste entfernen
-        mongodb.db.settings.update_one(
-            {'key': 'departments'},
-            {'$pull': {'value': name}}
-        )
+        if name in current_departments:
+            current_departments.remove(name)
+            mongodb.db.settings.update_one(
+                {'key': 'departments'},
+                {'$set': {'value': current_departments}}
+            )
         
         return jsonify({
             'success': True,
@@ -2301,7 +2326,13 @@ def get_categories_admin():
     """Gibt alle Kategorien zurück"""
     try:
         settings = mongodb.db.settings.find_one({'key': 'categories'})
-        categories = settings.get('value', []) if settings else []
+        categories = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+            elif isinstance(value, list):
+                categories = value
         return jsonify({
             'success': True,
             'categories': [{'name': cat} for cat in categories]
@@ -2318,32 +2349,39 @@ def get_categories_admin():
 def add_category():
     """Fügt eine neue Kategorie hinzu"""
     try:
-        name = request.form.get('category')  # Geändert von 'name' zu 'category'
+        name = request.form.get('category', '').strip()
         if not name:
             return jsonify({
                 'success': False,
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfen ob Kategorie bereits existiert
+        # Lade aktuelle Kategorien
         settings = mongodb.db.settings.find_one({'key': 'categories'})
-        if settings and name in settings.get('value', []):
+        current_categories = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+            elif isinstance(value, list):
+                current_categories = value
+        
+        # Prüfe auf Duplikate (case-insensitive)
+        if any(cat.lower() == name.lower() for cat in current_categories):
             return jsonify({
                 'success': False,
                 'message': 'Diese Kategorie existiert bereits.'
             })
 
         # Kategorie zur Liste hinzufügen
-        if settings:
-            mongodb.db.settings.update_one(
-                {'key': 'categories'},
-                {'$push': {'value': name}}
-            )
-        else:
-            mongodb.db.settings.insert_one({
-                'key': 'categories',
-                'value': [name]
-            })
+        current_categories.append(name)
+        
+        # Speichere als Array
+        mongodb.db.settings.update_one(
+            {'key': 'categories'},
+            {'$set': {'value': current_categories}},
+            upsert=True
+        )
 
         return jsonify({
             'success': True,
@@ -2368,11 +2406,23 @@ def delete_category(name):
                 'message': 'Die Kategorie kann nicht gelöscht werden, da sie noch von Werkzeugen verwendet wird.'
             })
 
+        # Lade aktuelle Kategorien
+        settings = mongodb.db.settings.find_one({'key': 'categories'})
+        current_categories = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+            elif isinstance(value, list):
+                current_categories = value
+        
         # Kategorie aus der Liste entfernen
-        mongodb.db.settings.update_one(
-            {'key': 'categories'},
-            {'$pull': {'value': name}}
-        )
+        if name in current_categories:
+            current_categories.remove(name)
+            mongodb.db.settings.update_one(
+                {'key': 'categories'},
+                {'$set': {'value': current_categories}}
+            )
         
         return jsonify({
             'success': True,
@@ -2392,7 +2442,13 @@ def get_locations():
     """Gibt alle Standorte zurück"""
     try:
         settings = mongodb.db.settings.find_one({'key': 'locations'})
-        locations = settings.get('value', []) if settings else []
+        locations = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                locations = [loc.strip() for loc in value.split(',') if loc.strip()]
+            elif isinstance(value, list):
+                locations = value
         return jsonify({
             'success': True,
             'locations': [{'name': loc} for loc in locations]
@@ -2409,32 +2465,39 @@ def get_locations():
 def add_location():
     """Fügt einen neuen Standort hinzu"""
     try:
-        name = request.form.get('location')  # Geändert von 'name' zu 'location'
+        name = request.form.get('location', '').strip()
         if not name:
             return jsonify({
                 'success': False,
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfen ob Standort bereits existiert
+        # Lade aktuelle Standorte
         settings = mongodb.db.settings.find_one({'key': 'locations'})
-        if settings and name in settings.get('value', []):
+        current_locations = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
+            elif isinstance(value, list):
+                current_locations = value
+        
+        # Prüfe auf Duplikate (case-insensitive)
+        if any(loc.lower() == name.lower() for loc in current_locations):
             return jsonify({
                 'success': False,
                 'message': 'Dieser Standort existiert bereits.'
             })
 
         # Standort zur Liste hinzufügen
-        if settings:
-            mongodb.db.settings.update_one(
-                {'key': 'locations'},
-                {'$push': {'value': name}}
-            )
-        else:
-            mongodb.db.settings.insert_one({
-                'key': 'locations',
-                'value': [name]
-            })
+        current_locations.append(name)
+        
+        # Speichere als Array
+        mongodb.db.settings.update_one(
+            {'key': 'locations'},
+            {'$set': {'value': current_locations}},
+            upsert=True
+        )
 
         return jsonify({
             'success': True,
@@ -2459,11 +2522,23 @@ def delete_location(name):
                 'message': 'Der Standort kann nicht gelöscht werden, da er noch von Werkzeugen verwendet wird.'
             })
 
+        # Lade aktuelle Standorte
+        settings = mongodb.db.settings.find_one({'key': 'locations'})
+        current_locations = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
+            elif isinstance(value, list):
+                current_locations = value
+        
         # Standort aus der Liste entfernen
-        mongodb.db.settings.update_one(
-            {'key': 'locations'},
-            {'$pull': {'value': name}}
-        )
+        if name in current_locations:
+            current_locations.remove(name)
+            mongodb.db.settings.update_one(
+                {'key': 'locations'},
+                {'$set': {'value': current_locations}}
+            )
         
         return jsonify({
             'success': True,

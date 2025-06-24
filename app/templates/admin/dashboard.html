@@ -390,6 +390,11 @@ const DepartmentManager = {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         try {
             const response = await fetch('/admin/departments/add', {
@@ -408,6 +413,10 @@ const DepartmentManager = {
         } catch (error) {
             console.error('Fehler beim Hinzufügen:', error);
             showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
         }
     },
 
@@ -417,12 +426,8 @@ const DepartmentManager = {
         }
 
         try {
-            const response = await fetch('/admin/departments/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name })
+            const response = await fetch(`/admin/departments/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             
@@ -488,6 +493,11 @@ const LocationManager = {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         try {
             const response = await fetch('/admin/locations/add', {
@@ -506,6 +516,10 @@ const LocationManager = {
         } catch (error) {
             console.error('Fehler beim Hinzufügen:', error);
             showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
         }
     },
 
@@ -515,12 +529,8 @@ const LocationManager = {
         }
 
         try {
-            const response = await fetch('/admin/locations/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name })
+            const response = await fetch(`/admin/locations/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             
@@ -586,6 +596,11 @@ const CategoryManager = {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         try {
             const response = await fetch('/admin/categories/add', {
@@ -604,6 +619,10 @@ const CategoryManager = {
         } catch (error) {
             console.error('Fehler beim Hinzufügen:', error);
             showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
         }
     },
 
@@ -613,12 +632,8 @@ const CategoryManager = {
         }
 
         try {
-            const response = await fetch('/admin/categories/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name })
+            const response = await fetch(`/admin/categories/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
             });
             const data = await response.json();
             
