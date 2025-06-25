@@ -41,19 +41,27 @@ echo -e "${GREEN}✓ Docker ist installiert und läuft${NC}"
 
 # Container-Name Abfrage
 read -p "Bitte geben Sie einen Namen für die Umgebung ein (Standard: scandy): " CONTAINER_NAME
-CONTAINER_NAME=${CONTAINER_NAME:-scandy}
+if [ -z "$CONTAINER_NAME" ]; then
+    CONTAINER_NAME="scandy"
+fi
 
 # App-Port Abfrage
 read -p "Bitte geben Sie den Port für die App ein (Standard: 5000): " APP_PORT
-APP_PORT=${APP_PORT:-5000}
+if [ -z "$APP_PORT" ]; then
+    APP_PORT="5000"
+fi
 
 # MongoDB-Port Abfrage
 read -p "Bitte geben Sie den Port für MongoDB ein (Standard: 27017): " MONGO_PORT
-MONGO_PORT=${MONGO_PORT:-27017}
+if [ -z "$MONGO_PORT" ]; then
+    MONGO_PORT="27017"
+fi
 
 # Mongo Express Port Abfrage
 read -p "Bitte geben Sie den Port für Mongo Express (Web-UI) ein (Standard: 8081): " MONGO_EXPRESS_PORT
-MONGO_EXPRESS_PORT=${MONGO_EXPRESS_PORT:-8081}
+if [ -z "$MONGO_EXPRESS_PORT" ]; then
+    MONGO_EXPRESS_PORT="8081"
+fi
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}   Konfiguration:${NC}"
@@ -77,9 +85,9 @@ cd "$PROJECT_DIR"
 
 echo -e "${GREEN}Erstelle Projektverzeichnis: $PROJECT_DIR${NC}"
 
-# Erstelle angepasste docker-compose.yml
+# Erstelle docker-compose.yml
 echo -e "${GREEN}Erstelle docker-compose.yml...${NC}"
-cat > docker-compose.yml << EOL
+cat > docker-compose.yml << EOF
 version: '3.8'
 
 services:
@@ -178,12 +186,12 @@ volumes:
 networks:
   ${CONTAINER_NAME}-network:
     driver: bridge
-EOL
+EOF
 
 # Erstelle MongoDB Init-Skript
 echo -e "${GREEN}Erstelle MongoDB Init-Skript...${NC}"
 mkdir -p mongo-init
-cat > mongo-init/init.js << EOL
+cat > mongo-init/init.js << EOF
 // MongoDB Initialisierung für Scandy
 db = db.getSiblingDB('scandy');
 
@@ -220,13 +228,13 @@ db.tickets.createIndex({ "status": 1 });
 db.tickets.createIndex({ "assigned_to": 1 });
 
 print('MongoDB für Scandy initialisiert!');
-EOL
+EOF
 
 # Erstelle Verwaltungsskripte
 echo -e "${GREEN}Erstelle Verwaltungsskripte...${NC}"
 
 # Start-Skript
-cat > start.sh << EOL
+cat > start.sh << EOF
 #!/bin/bash
 echo "Starte Scandy Docker-Container..."
 docker-compose up -d
@@ -244,19 +252,19 @@ echo "App: http://localhost:${APP_PORT}"
 echo "Mongo Express: http://localhost:${MONGO_EXPRESS_PORT}"
 echo "MongoDB: localhost:${MONGO_PORT}"
 echo "=========================================="
-EOL
+EOF
 
 # Stop-Skript
-cat > stop.sh << EOL
+cat > stop.sh << EOF
 #!/bin/bash
 echo "Stoppe Scandy Docker-Container..."
 docker-compose down
 
 echo "Container gestoppt."
-EOL
+EOF
 
 # Update-Skript
-cat > update.sh << EOL
+cat > update.sh << EOF
 #!/bin/bash
 echo "Update Scandy Docker-Container..."
 
@@ -270,10 +278,10 @@ docker-compose pull
 docker-compose up -d
 
 echo "Update abgeschlossen!"
-EOL
+EOF
 
 # Backup-Skript
-cat > backup.sh << EOL
+cat > backup.sh << EOF
 #!/bin/bash
 BACKUP_DIR="./backups"
 TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
@@ -293,7 +301,7 @@ echo "Backup App-Daten..."
 docker run --rm -v ${CONTAINER_NAME}_app_uploads:/data -v \$(pwd)/\$BACKUP_DIR:/backup alpine tar -czf /backup/app_data_\$TIMESTAMP.tar.gz -C /data .
 
 echo "Backup erstellt: \$BACKUP_DIR"
-EOL
+EOF
 
 # Setze Berechtigungen
 chmod +x start.sh stop.sh update.sh backup.sh
