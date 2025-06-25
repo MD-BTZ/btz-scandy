@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Scandy Docker-Installer (Vollständig) - Windows Version
+REM Scandy Docker-Installer (Vollständig)
 REM MongoDB + App Container Setup
 
 echo ========================================
@@ -12,8 +12,8 @@ echo ========================================
 REM Prüfe Docker-Installation
 docker --version >nul 2>&1
 if errorlevel 1 (
-    echo FEHLER: Docker ist nicht installiert. Bitte installieren Sie Docker Desktop zuerst.
-    echo Installationsanleitung: https://docs.docker.com/desktop/install/windows/
+    echo ERROR: Docker ist nicht installiert. Bitte installieren Sie Docker zuerst.
+    echo Installationsanleitung: https://docs.docker.com/get-docker/
     pause
     exit /b 1
 )
@@ -21,7 +21,7 @@ if errorlevel 1 (
 REM Prüfe Docker Compose
 docker-compose --version >nul 2>&1
 if errorlevel 1 (
-    echo FEHLER: Docker Compose ist nicht installiert. Bitte installieren Sie Docker Compose zuerst.
+    echo ERROR: Docker Compose ist nicht installiert. Bitte installieren Sie Docker Compose zuerst.
     echo Installationsanleitung: https://docs.docker.com/compose/install/
     pause
     exit /b 1
@@ -30,7 +30,7 @@ if errorlevel 1 (
 REM Prüfe ob Docker läuft
 docker info >nul 2>&1
 if errorlevel 1 (
-    echo FEHLER: Docker läuft nicht. Bitte starten Sie Docker Desktop zuerst.
+    echo ERROR: Docker läuft nicht. Bitte starten Sie Docker zuerst.
     pause
     exit /b 1
 )
@@ -41,19 +41,12 @@ REM Container-Name Abfrage
 :container_name_loop
 set /p CONTAINER_NAME="Bitte geben Sie einen Namen für die Umgebung ein (z.B. scandy_prod): "
 if "%CONTAINER_NAME%"=="" (
-    echo Der Name darf nicht leer sein.
+    echo ERROR: Der Name darf nicht leer sein.
     goto container_name_loop
 )
 
 REM Konvertiere zu Kleinbuchstaben und ersetze ungültige Zeichen
-set CONTAINER_NAME=%CONTAINER_NAME: =%
-set CONTAINER_NAME=%CONTAINER_NAME:ä=a%
-set CONTAINER_NAME=%CONTAINER_NAME:ö=o%
-set CONTAINER_NAME=%CONTAINER_NAME:ü=u%
-set CONTAINER_NAME=%CONTAINER_NAME:ß=s%
-set CONTAINER_NAME=%CONTAINER_NAME:Ä=A%
-set CONTAINER_NAME=%CONTAINER_NAME:Ö=O%
-set CONTAINER_NAME=%CONTAINER_NAME:Ü=U%
+for /f "tokens=*" %%i in ('echo %CONTAINER_NAME% ^| powershell -Command "$input = [Console]::In.ReadLine(); $input.ToLower() -replace '[^a-z0-9_-]', '-'"') do set CONTAINER_NAME=%%i
 
 REM App-Port Abfrage
 set /p APP_PORT="Bitte geben Sie den Port für die App ein (Standard: 5000): "
@@ -113,7 +106,7 @@ if not exist "%DATA_DIR%\static" mkdir "%DATA_DIR%\static"
 
 REM Kopiere statische Dateien
 echo Kopiere statische Dateien...
-xcopy /E /I /Y "..\app\static\*" "%DATA_DIR%\static\"
+if exist "..\app\static" xcopy "..\app\static\*" "%DATA_DIR%\static\" /E /I /Y
 
 REM Erstelle docker-compose.yml
 echo Erstelle docker-compose.yml...
@@ -138,7 +131,7 @@ echo     networks:
 echo       - %CONTAINER_NAME%-network
 echo     command: mongod --auth --bind_ip_all
 echo     healthcheck:
-echo       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+echo       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping'^)"]
 echo       interval: 30s
 echo       timeout: 10s
 echo       retries: 3
@@ -211,61 +204,126 @@ echo   %CONTAINER_NAME%-network:
 echo     driver: bridge
 ) > docker-compose.yml
 
-REM Erstelle Dockerfile
-echo Erstelle Dockerfile...
-(
-echo FROM python:3.11-slim
-echo.
-echo # Installiere System-Abhängigkeiten
-echo RUN apt-get update ^&^& apt-get install -y \
-echo     git \
-echo     nodejs \
-echo     npm \
-echo     curl \
-echo     build-essential \
-echo     zip \
-echo     unzip \
-echo     ^&^& rm -rf /var/lib/apt/lists/*
-echo.
-echo # Erstelle nicht-root Benutzer
-echo RUN useradd -m -u 1000 appuser
-echo.
-echo WORKDIR /app
-echo.
-echo # Kopiere Requirements zuerst für besseres Caching
-echo COPY requirements.txt .
-echo.
-echo # Installiere Python-Abhängigkeiten
-echo RUN pip install --no-cache-dir -r requirements.txt
-echo.
-echo # Kopiere den Rest der Anwendung
-echo COPY . .
-echo.
-echo # Installiere und baue CSS
-echo RUN npm install ^&^& npm run build:css
-echo.
-echo # Erstelle notwendige Verzeichnisse und setze Berechtigungen
-echo RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp ^&^& \
-echo     chown -R appuser:appuser /app ^&^& \
-echo     chmod -R 755 /app
-echo.
-echo # Wechsle zu nicht-root Benutzer
-echo USER appuser
-echo.
-echo # Exponiere Port
-echo EXPOSE 5000
-echo.
-echo # Health Check
-echo HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-echo     CMD curl -f http://localhost:5000/health ^|^| exit 1
-echo.
-echo # Starte die Anwendung
-echo CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
-) > Dockerfile
+REM Prüfe und kopiere Dockerfile
+echo Prüfe Dockerfile...
+if exist "..\Dockerfile" (
+    echo Kopiere vorhandenes optimiertes Dockerfile...
+    copy "..\Dockerfile" . >nul
+    echo ✓ Optimiertes Dockerfile übernommen
+) else (
+    echo WARNUNG: Kein Dockerfile im Hauptverzeichnis gefunden.
+    echo Erstelle einfaches Dockerfile...
+    (
+    echo FROM python:3.11-slim
+    echo.
+    echo # Installiere System-Abhängigkeiten
+    echo RUN apt-get update ^&^& apt-get install -y \
+    echo     git \
+    echo     nodejs \
+    echo     npm \
+    echo     curl \
+    echo     build-essential \
+    echo     zip \
+    echo     unzip \
+    echo     ^&^& rm -rf /var/lib/apt/lists/*
+    echo.
+    echo # Erstelle nicht-root Benutzer
+    echo RUN useradd -m -u 1000 appuser
+    echo.
+    echo WORKDIR /app
+    echo.
+    echo # Kopiere Requirements zuerst für besseres Caching
+    echo COPY requirements.txt .
+    echo.
+    echo # Installiere Python-Abhängigkeiten
+    echo RUN pip install --no-cache-dir -r requirements.txt
+    echo.
+    echo # Kopiere den Rest der Anwendung
+    echo COPY . .
+    echo.
+    echo # Installiere und baue CSS
+    echo RUN npm install ^&^& npm run build:css
+    echo.
+    echo # Erstelle notwendige Verzeichnisse und setze Berechtigungen
+    echo RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp ^&^& \
+    echo     chown -R appuser:appuser /app ^&^& \
+    echo     chmod -R 755 /app
+    echo.
+    echo # Wechsle zu nicht-root Benutzer
+    echo USER appuser
+    echo.
+    echo # Exponiere Port
+    echo EXPOSE 5000
+    echo.
+    echo # Health Check
+    echo HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    echo     CMD curl -f http://localhost:5000/health ^|^| exit 1
+    echo.
+    echo # Starte die Anwendung
+    echo CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
+    ) > Dockerfile
+)
+
+REM Prüfe und kopiere requirements.txt
+echo Prüfe requirements.txt...
+if exist "..\requirements.txt" (
+    echo Kopiere requirements.txt...
+    copy "..\requirements.txt" . >nul
+    echo ✓ Requirements.txt übernommen
+) else (
+    echo ERROR: requirements.txt nicht im Hauptverzeichnis gefunden!
+    pause
+    exit /b 1
+)
+
+REM Prüfe und kopiere package.json
+echo Prüfe package.json...
+if exist "..\package.json" (
+    echo Kopiere package.json...
+    copy "..\package.json" . >nul
+    echo ✓ Package.json übernommen
+) else (
+    echo ERROR: package.json nicht im Hauptverzeichnis gefunden!
+    pause
+    exit /b 1
+)
+
+REM Prüfe und kopiere package-lock.json
+echo Prüfe package-lock.json...
+if exist "..\package-lock.json" (
+    echo Kopiere package-lock.json...
+    copy "..\package-lock.json" . >nul
+    echo ✓ Package-lock.json übernommen
+) else (
+    echo WARNUNG: package-lock.json nicht gefunden. npm install wird verwendet.
+)
+
+REM Kopiere App-Verzeichnis
+echo Kopiere App-Verzeichnis...
+if exist "..\app" (
+    xcopy "..\app" "app\" /E /I /Y >nul
+    echo ✓ App-Verzeichnis übernommen
+) else (
+    echo ERROR: app-Verzeichnis nicht gefunden!
+    pause
+    exit /b 1
+)
+
+REM Kopiere Tailwind-Konfiguration
+echo Kopiere Tailwind-Konfiguration...
+if exist "..\tailwind.config.js" (
+    copy "..\tailwind.config.js" . >nul
+    echo ✓ Tailwind-Konfiguration übernommen
+)
+
+if exist "..\postcss.config.js" (
+    copy "..\postcss.config.js" . >nul
+    echo ✓ PostCSS-Konfiguration übernommen
+)
 
 REM Erstelle MongoDB Init-Skript
 echo Erstelle MongoDB Init-Skript...
-if not exist "mongo-init" mkdir mongo-init
+if not exist "mongo-init" mkdir "mongo-init"
 (
 echo // MongoDB Initialisierung für Scandy
 echo db = db.getSiblingDB^('scandy'^);
@@ -303,7 +361,7 @@ echo db.tickets.createIndex^({ "status": 1 }^);
 echo db.tickets.createIndex^({ "assigned_to": 1 }^);
 echo.
 echo print^('MongoDB für Scandy initialisiert!'^);
-) > mongo-init/init.js
+) > mongo-init\init.js
 
 REM Erstelle .dockerignore
 echo Erstelle .dockerignore...
@@ -398,9 +456,11 @@ REM Erstelle Backup-Skript
 echo Erstelle Backup-Skript...
 (
 echo @echo off
-echo set BACKUP_DIR=%DATA_DIR%/backups
-echo set TIMESTAMP=%%date:~-4,4%%%%date:~-10,2%%%%date:~-7,2%%_%%time:~0,2%%%%time:~3,2%%%%time:~6,2%%
-echo set TIMESTAMP=!TIMESTAMP: =0!
+echo set BACKUP_DIR=%DATA_DIR%\backups
+echo for /f "tokens=2 delims==" %%a in ^('wmic OS Get localdatetime /value'^) do set "dt=%%a"
+echo set "YY=!dt:~2,2!" ^& set "YYYY=!dt:~0,4!" ^& set "MM=!dt:~4,2!" ^& set "DD=!dt:~6,2!"
+echo set "HH=!dt:~8,2!" ^& set "Min=!dt:~10,2!" ^& set "Sec=!dt:~12,2!"
+echo set "TIMESTAMP=!YYYY!!MM!!DD!_!HH!!Min!!Sec!"
 echo.
 echo echo Erstelle Backup...
 echo.
@@ -410,11 +470,11 @@ echo.
 echo REM MongoDB Backup
 echo echo Backup MongoDB...
 echo docker exec %CONTAINER_NAME%-mongodb mongodump --out /tmp/backup
-echo docker cp %CONTAINER_NAME%-mongodb:/tmp/backup "!BACKUP_DIR!/mongodb_!TIMESTAMP!"
+echo docker cp %CONTAINER_NAME%-mongodb:/tmp/backup "!BACKUP_DIR!\mongodb_!TIMESTAMP!"
 echo.
 echo REM App-Daten Backup
 echo echo Backup App-Daten...
-echo powershell -Command "Compress-Archive -Path '%DATA_DIR%/uploads', '%DATA_DIR%/backups', '%DATA_DIR%/logs' -DestinationPath '!BACKUP_DIR!/app_data_!TIMESTAMP!.zip'"
+echo powershell -Command "Compress-Archive -Path '%DATA_DIR%\uploads', '%DATA_DIR%\backups', '%DATA_DIR%\logs' -DestinationPath '!BACKUP_DIR!\app_data_!TIMESTAMP!.zip'"
 echo.
 echo echo Backup erstellt: !BACKUP_DIR!
 echo pause

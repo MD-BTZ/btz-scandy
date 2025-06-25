@@ -52,6 +52,11 @@ app/uploads/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Temporäre Dateien
@@ -87,4 +92,16 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json 
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Docker volumes
+*_project/
+
+# Build artifacts
+*.css.map
+*.js.map 

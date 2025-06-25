@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.gitattributes
 
 # Python
 __pycache__
@@ -72,13 +73,14 @@ tmp/
 *.temp
 
 # Docker
-Dockerfile.old
-docker-compose*
+Dockerfile*
+docker-compose*.yml
 .dockerignore
 
 # Documentation
 README.md
 *.md
+docs/
 
 # Development files
 .env
@@ -91,10 +93,6 @@ README.md
 tests/
 test_*
 *_test.py
-
-# Documentation
-docs/
-*.rst
 
 # Python
 *.py[cod]
@@ -126,4 +124,8 @@ database_test/
 **/database_test/
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Environment variables
+.env.bak/
+venv.bak/ 

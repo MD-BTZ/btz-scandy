@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  mongodb:
+  scandy-mongodb:
     image: mongo:7.0
     container_name: scandy-mongodb
     restart: unless-stopped
@@ -12,45 +12,46 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./scandy_data/mongodb:/data/db
+      - mongodb_data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d
     networks:
       - scandy-network
     command: mongod --auth --bind_ip_all
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping'^)"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-  mongo-express:
+  scandy-mongo-express:
     image: mongo-express:1.0.0
     container_name: scandy-mongo-express
     restart: unless-stopped
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: admin
       ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@mongodb:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: scandy123
     ports:
       - "8081:8081"
     depends_on:
-      - mongodb
+      scandy-mongodb:
+        condition: service_healthy
     networks:
       - scandy-network
 
-  app:
-    build: .
+  scandy-app:
+    image: woschj/scandy:latest
     container_name: scandy-app
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:scandy123@mongodb:27017/
+      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-fixed
+      - SECRET_KEY=scandy-secret-key-change-in-production
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge
@@ -59,12 +60,13 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./scandy_data/uploads:/app/app/uploads
-      - ./scandy_data/backups:/app/app/backups
-      - ./scandy_data/logs:/app/app/logs
-      - ./scandy_data/static:/app/app/static
+      - app_uploads:/app/app/uploads
+      - app_backups:/app/app/backups
+      - app_logs:/app/app/logs
+      - app_static:/app/app/static
     depends_on:
-      - mongodb
+      scandy-mongodb:
+        condition: service_healthy
     networks:
       - scandy-network
     healthcheck:
@@ -80,7 +82,15 @@ services:
         max-file: "3"
 
 volumes:
-  scandy_css_test-mongodb-data:
+  mongodb_data:
+    driver: local
+  app_uploads:
+    driver: local
+  app_backups:
+    driver: local
+  app_logs:
+    driver: local
+  app_static:
     driver: local
 
 networks:
