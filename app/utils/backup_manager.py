@@ -98,11 +98,87 @@ class BackupManager:
                 except Exception as e:
                     print(f"Fehler beim Wiederherstellen von {collection}: {e}")
             
+            # Nach der Wiederherstellung: Kategorien-Inkonsistenz beheben
+            self._fix_category_inconsistency()
+            
             return True
             
         except Exception as e:
             print(f"Fehler beim Wiederherstellen aus Datei: {e}")
             return False
+    
+    def _fix_category_inconsistency(self):
+        """Behebt Inkonsistenzen zwischen Kategorien in den Settings und den tatsächlich verwendeten Kategorien"""
+        try:
+            print("Behebe Kategorien-Inkonsistenz...")
+            
+            # Sammle alle verwendeten Kategorien aus den Daten
+            used_categories = set()
+            
+            # Aus Werkzeugen
+            tools = list(mongodb.find('tools', {}))
+            for tool in tools:
+                if tool.get('category'):
+                    used_categories.add(tool['category'])
+            
+            # Aus Verbrauchsgütern
+            consumables = list(mongodb.find('consumables', {}))
+            for consumable in consumables:
+                if consumable.get('category'):
+                    used_categories.add(consumable['category'])
+            
+            # Aus Mitarbeitern (Abteilungen)
+            workers = list(mongodb.find('workers', {}))
+            for worker in workers:
+                if worker.get('department'):
+                    used_categories.add(worker['department'])
+            
+            # Aktualisiere die Settings mit allen verwendeten Kategorien
+            if used_categories:
+                categories_list = list(used_categories)
+                mongodb.update_one('settings', 
+                                 {'key': 'categories'}, 
+                                 {'$set': {'value': categories_list}}, 
+                                 upsert=True)
+                print(f"Kategorien aktualisiert: {categories_list}")
+            
+            # Sammle alle verwendeten Standorte
+            used_locations = set()
+            for tool in tools:
+                if tool.get('location'):
+                    used_locations.add(tool['location'])
+            for consumable in consumables:
+                if consumable.get('location'):
+                    used_locations.add(consumable['location'])
+            
+            # Aktualisiere die Standorte-Settings
+            if used_locations:
+                locations_list = list(used_locations)
+                mongodb.update_one('settings', 
+                                 {'key': 'locations'}, 
+                                 {'$set': {'value': locations_list}}, 
+                                 upsert=True)
+                print(f"Standorte aktualisiert: {locations_list}")
+            
+            # Sammle alle verwendeten Abteilungen
+            used_departments = set()
+            for worker in workers:
+                if worker.get('department'):
+                    used_departments.add(worker['department'])
+            
+            # Aktualisiere die Abteilungen-Settings
+            if used_departments:
+                departments_list = list(used_departments)
+                mongodb.update_one('settings', 
+                                 {'key': 'departments'}, 
+                                 {'$set': {'value': departments_list}}, 
+                                 upsert=True)
+                print(f"Abteilungen aktualisiert: {departments_list}")
+            
+            print("Kategorien-Inkonsistenz behoben!")
+            
+        except Exception as e:
+            print(f"Fehler beim Beheben der Kategorien-Inkonsistenz: {e}")
     
     def get_backup_path(self, filename):
         """Gibt den Pfad zu einer Backup-Datei zurück"""

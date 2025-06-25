@@ -1879,9 +1879,23 @@ def update_ticket_details(ticket_id):
         }), 500
 
 def create_mongodb_backup():
-    """Erstellt ein MongoDB-Backup (Platzhalter)"""
-    # TODO: Implementiere echtes MongoDB-Backup
-    return True
+    """Erstellt ein MongoDB-Backup"""
+    try:
+        from app.utils.backup_manager import BackupManager
+        
+        backup_manager = BackupManager()
+        backup_filename = backup_manager.create_backup()
+        
+        if backup_filename:
+            logger.info(f"MongoDB-Backup erfolgreich erstellt: {backup_filename}")
+            return True, backup_filename
+        else:
+            logger.error("Fehler beim Erstellen des MongoDB-Backups")
+            return False, "Fehler beim Erstellen des Backups"
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des MongoDB-Backups: {str(e)}")
+        return False, f"Fehler beim Erstellen des Backups: {str(e)}"
 
 @bp.route('/tickets')
 @login_required
@@ -2066,7 +2080,7 @@ def edit_user(user_id):
 @admin_required
 def notices():
     """Notizen-Übersicht"""
-    notices = mongodb.find('notices', {})
+    notices = mongodb.find('homepage_notices', {})
     return render_template('admin/notices.html', notices=notices)
 
 @bp.route('/create_notice', methods=['GET', 'POST'])
@@ -2087,14 +2101,31 @@ def edit_notice(id):
         # TODO: Implementiere Notiz-Bearbeitung
         flash('Notiz erfolgreich aktualisiert', 'success')
         return redirect(url_for('admin.notices'))
-    notice = mongodb.find_one('notices', {'_id': ObjectId(id)})
+    notice = mongodb.find_one('homepage_notices', {'_id': ObjectId(id)})
     return render_template('admin/notice_form.html', notice=notice)
 
 @bp.route('/delete_notice/<id>', methods=['POST'])
 @admin_required
 def delete_notice(id):
-    # TODO: Implementiere MongoDB-Version
-    return jsonify({'success': True})
+    """Löscht einen Hinweis"""
+    try:
+        # Konvertiere String-ID zu ObjectId
+        object_id = ObjectId(id)
+        
+        # Lösche den Hinweis
+        result = mongodb.delete_one('homepage_notices', {'_id': object_id})
+        
+        if result:
+            flash('Hinweis erfolgreich gelöscht', 'success')
+        else:
+            flash('Hinweis nicht gefunden', 'error')
+            
+        return redirect(url_for('admin.notices'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Hinweises: {str(e)}")
+        flash('Fehler beim Löschen des Hinweises', 'error')
+        return redirect(url_for('admin.notices'))
 
 @bp.route('/upload_logo', methods=['POST'])
 @admin_required

@@ -332,7 +332,7 @@ def get_consumable_forecast(barcode):
 def get_notices():
     """Gibt alle aktiven Hinweise zurück"""
     try:
-        notices = list(mongodb.find('homepage_notices', {'active': True}).sort([('created_at', -1)]))
+        notices = list(mongodb.find('homepage_notices', {'is_active': True}).sort([('priority', -1), ('created_at', -1)]))
         return jsonify({'success': True, 'notices': notices})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -358,7 +358,8 @@ def create_notice():
         notice_data = {
             'title': data.get('title'),
             'content': data.get('content'),
-            'active': data.get('active', True),
+            'is_active': data.get('is_active', True),
+            'priority': data.get('priority', 1),
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
@@ -376,7 +377,8 @@ def update_notice(id):
         update_data = {
             'title': data.get('title'),
             'content': data.get('content'),
-            'active': data.get('active', True),
+            'is_active': data.get('is_active', True),
+            'priority': data.get('priority', 1),
             'updated_at': datetime.now()
         }
         mongodb.update_one('homepage_notices', {'_id': id}, {'$set': update_data})

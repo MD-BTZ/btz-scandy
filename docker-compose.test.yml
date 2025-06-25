@@ -1,44 +1,51 @@
 version: '3.8'
 
 services:
-  scandy_test:
-    build: .
-    ports:
-      - "5001:5000"
-    environment:
-      - FLASK_ENV=testing
-      - DATABASE_URL=mongodb://mongodb_test:27017/scandy_test
-      - TICKETS_DATABASE_URL=mongodb://mongodb_test:27017/scandy_tickets_test
-      - SECRET_KEY=test-secret-key
-      - MONGODB_URI=mongodb://mongodb_test:27017/
-    volumes:
-      - ./app/static:/app/app/static
-      - ./app/uploads:/app/app/uploads
-      - ./app/logs:/app/app/logs
-      - ./app/backups:/app/app/backups
-    depends_on:
-      - mongodb_test
-    restart: unless-stopped
-    command: >
-      sh -c "
-      mkdir -p /app/database &&
-      python -m flask run --host=0.0.0.0 --port=5000
-      "
-
-  mongodb_test:
+  # MongoDB für Test
+  mongodb-test:
     image: mongo:6.0
+    container_name: scandy-mongodb-test
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: scandy_test
     ports:
-      - "27018:27017"
+      - "27019:27017"  # Anderer Port als Produktion
     volumes:
       - mongodb_test_data:/data/db
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - scandy-test-network
+
+  # Scandy App für Test
+  scandy-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scandy-app-test
     restart: unless-stopped
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
+      MONGODB_URI: mongodb://admin:password123@mongodb-test:27017/scandy_test?authSource=admin
+      MONGODB_DB: scandy_test
+      SECRET_KEY: test-secret-key-change-in-production
+    ports:
+      - "5002:5000"  # Anderer Port als Produktion
+    volumes:
+      - ./app:/app/app
+      - ./backups:/app/backups
+      - ./static:/app/static
+    depends_on:
+      - mongodb-test
+    networks:
+      - scandy-test-network
 
 volumes:
   mongodb_test_data:
+    driver: local
 
 networks:
-  scandy_test_network:
+  scandy-test-network:
     driver: bridge 

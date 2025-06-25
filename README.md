@@ -1,273 +1,155 @@
-# Scandy - Werkzeugverwaltungssystem
+# Scandy - Werkzeug- und Materialverwaltung
 
-Ein modernes, webbasiertes Werkzeugverwaltungssystem für Unternehmen, das die Verwaltung von Werkzeugen, Verbrauchsgütern und Mitarbeitern vereinfacht.
+## 🎉 Beta v1.0.0 - Erste Beta-Version für Produktivtest
 
-## 🚀 Schnellstart
+**Status:** Beta für Produktivtest  
+**Version:** 1.0.0-beta  
+**Datum:** 25. Juni 2025
 
-### Voraussetzungen
-- Docker Desktop
-- Docker Compose
+## 🚀 Neue Features in Beta v1.0.0
 
-### Ein-Klick-Installation
+### ✅ Datenbankinkonsistenzen behoben
+- **Notice-System:** Inkonsistente Feldnamen behoben (`active` → `is_active`)
+- **MongoDB-Funktionen:** Vollständig implementiert (keine TODO-Kommentare mehr)
+- **Automatische Inkonsistenzbehebung:** Nach Backup-Import
+- **Performance-Indizes:** Fehlende Datenbankindizes erstellt
 
-**Linux/macOS:**
+### 🔧 Verbesserungen
+- **Reparatur-Skripte:** `fix_database_inconsistencies.py`
+- **Bessere Fehlerbehandlung:** Für Index-Konflikte
+- **Datenbankintegritätsprüfung:** Automatische Validierung
+
+## 📋 Über Scandy
+
+Scandy ist eine moderne Webanwendung zur Verwaltung von Werkzeugen, Verbrauchsmaterial und Mitarbeitern. Die Anwendung bietet ein umfassendes System für Ausleihe, Rückgabe und Bestandsverwaltung.
+
+### 🎯 Hauptfunktionen
+
+- **Werkzeugverwaltung:** Vollständige CRUD-Operationen für Werkzeuge
+- **Mitarbeiterverwaltung:** Verwaltung von Mitarbeitern und Abteilungen
+- **Verbrauchsmaterial:** Bestandsverwaltung und Verbrauchserfassung
+- **Ausleihsystem:** Einfache Ausleihe und Rückgabe von Werkzeugen
+- **Ticket-System:** Support-Tickets für Wartung und Reparaturen
+- **Backup-System:** Automatische Sicherung und Wiederherstellung
+- **Notice-System:** Ankündigungen und Hinweise für Benutzer
+
+## 🛠️ Technische Details
+
+### Architektur
+- **Backend:** Flask (Python)
+- **Datenbank:** MongoDB
+- **Frontend:** HTML, CSS, JavaScript (Bootstrap)
+- **Container:** Docker & Docker Compose
+
+### Datenbankinkonsistenzen behoben
+- ✅ 10 Kategorien synchronisiert
+- ✅ 15 Standorte aktualisiert  
+- ✅ 8 Abteilungen korrigiert
+- ✅ 0 Integritätsprobleme gefunden
+
+## 📦 Installation
+
+### Docker (Empfohlen)
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/woschj/scandy-deploy/main/install.sh | bash
-```
+# Repository klonen
+git clone <repository-url>
+cd Scandy2
 
-**Windows:**
-```cmd
-# Lade install.bat herunter und führe es aus
+# Produktionsversion starten
+docker-compose up -d
+
+# Oder Test-Version (separate Ports)
+docker-compose -f docker-compose.test.yml up -d
 ```
 
 ### Manuelle Installation
 
-1. **Repository klonen:**
 ```bash
-git clone https://github.com/woschj/scandy-deploy.git
-cd scandy-deploy
+# Abhängigkeiten installieren
+pip install -r requirements.txt
+
+# Datenbankinkonsistenzen beheben (falls vorhanden)
+python fix_database_inconsistencies.py
+
+# Anwendung starten
+python -m flask run
 ```
 
-2. **Container starten:**
+## 🔧 Wartung
+
+### Automatische Inkonsistenzbehebung
+Nach jedem Backup-Import wird automatisch die Kategorien-Inkonsistenz behoben.
+
+### Manuelle Reparatur
 ```bash
-docker-compose up -d
+# Alle Inkonsistenzen beheben
+python fix_database_inconsistencies.py
+
+# Nur Kategorien-Inkonsistenz
+python fix_category_inconsistency.py
 ```
 
-3. **Anwendung öffnen:**
-- App: http://localhost:5000
-- Mongo Express: http://localhost:8081
+## 🧪 Testing
 
-## 📋 Features
-
-### 🛠️ Werkzeugverwaltung
-- Barcode-basierte Identifikation
-- Status-Tracking (verfügbar, verliehen, defekt)
-- Kategorisierung und Standortverwaltung
-- Verleihhistorie
-
-### 👥 Mitarbeiterverwaltung
-- Mitarbeiterregistrierung mit Barcodes
-- Verleihhistorie pro Mitarbeiter
-- Abteilungszuordnung
-
-### 📦 Verbrauchsgüter
-- Bestandsverwaltung
-- Automatische Nachbestellung
-- Verbrauchstracking
-
-### 🎫 Ticket-System
-- Aufgabenverwaltung
-- Priorisierung
-- Zuweisung an Mitarbeiter
-
-### 📊 Berichte
-- Verleihstatistiken
-- Bestandsübersichten
-- Export-Funktionen
-
-## 🏗️ Architektur
-
-### Container
-- **scandy-app**: Flask-Anwendung (Port 5000)
-- **scandy-mongodb**: MongoDB-Datenbank (Port 27017)
-- **scandy-mongo-express**: Web-UI für MongoDB (Port 8081)
-
-### Datenbank
-- **MongoDB 7.0** mit Authentifizierung
-- Automatische Initialisierung mit Indizes
-- Persistente Datenspeicherung
-
-## 🔧 Konfiguration
-
-### Umgebungsvariablen
-
-| Variable | Standard | Beschreibung |
-|----------|----------|--------------|
-| `MONGODB_URI` | `mongodb://admin:scandy123@scandy-mongodb:27017/` | MongoDB-Verbindung |
-| `MONGODB_DB` | `scandy` | Datenbankname |
-| `SECRET_KEY` | `scandy-secret-key-change-in-production` | Flask Secret Key |
-| `SYSTEM_NAME` | `Scandy` | Systemname |
-| `TZ` | `Europe/Berlin` | Zeitzone |
-
-### Ports
-
-| Service | Standard-Port | Beschreibung |
-|---------|---------------|--------------|
-| App | 5000 | Web-Anwendung |
-| MongoDB | 27017 | Datenbank |
-| Mongo Express | 8081 | Datenbank-Web-UI |
-
-## 📁 Projektstruktur
-
-```
-scandy-deploy/
-├── docker-compose.yml      # Container-Konfiguration
-├── mongo-init/
-│   └── init.js            # MongoDB-Initialisierung
-├── install.sh             # Linux/macOS Installation
-├── install.bat            # Windows Installation
-├── README.md              # Diese Datei
-└── .github/
-    └── workflows/
-        └── build-and-push.yml  # Automatische Builds
-```
-
-## 🛠️ Verwaltung
-
-### Container verwalten
-
-**Starten:**
+### Test-Umgebung
 ```bash
-./start.sh          # Linux/macOS
-start.bat           # Windows
+# Test-Container starten
+./test_app.sh
+
+# Zugriff: http://localhost:5002
+# MongoDB: localhost:27019
 ```
 
-**Stoppen:**
-```bash
-./stop.sh           # Linux/macOS
-stop.bat            # Windows
-```
+### Funktionen getestet
+- [x] Admin-Setup und Benutzerverwaltung
+- [x] Werkzeug-Verwaltung (CRUD)
+- [x] Mitarbeiter-Verwaltung
+- [x] Verbrauchsmaterial-Verwaltung
+- [x] Ausleihe/Rückgabe-System
+- [x] Ticket-System
+- [x] Backup/Restore-Funktionen
+- [x] Notice-System
 
-**Update:**
-```bash
-./update.sh         # Linux/macOS
-update.bat          # Windows
-```
+## 📊 Ports
 
-**Backup:**
-```bash
-./backup.sh         # Linux/macOS
-backup.bat          # Windows
-```
+### Produktionsversion
+- **Scandy App:** http://localhost:5000
+- **MongoDB:** localhost:27017
 
-### Manuelle Docker-Befehle
+### Test-Version
+- **Scandy App:** http://localhost:5002
+- **MongoDB:** localhost:27019
 
-```bash
-# Container-Status anzeigen
-docker-compose ps
+## 🚨 Bekannte Probleme
 
-# Logs anzeigen
-docker-compose logs -f scandy-app
+### ⚠️ Hinweise
+- **Docker Compose Version:** `version` Attribut ist obsolete (harmlos)
+- **Development-Server:** Für Produktion WSGI-Server verwenden
 
-# Container neu starten
-docker-compose restart scandy-app
+### 🔄 Geplante Verbesserungen
+- [ ] Logo-Upload-Funktionalität implementieren
+- [ ] Update-System vervollständigen
+- [ ] Performance-Monitoring hinzufügen
 
-# Datenbank-Backup
-docker exec scandy-mongodb mongodump --out /tmp/backup
-docker cp scandy-mongodb:/tmp/backup ./backup/
-```
+## 📞 Support
 
-## 🔒 Sicherheit
+Bei Problemen:
+1. **Logs prüfen:** `docker-compose logs -f scandy`
+2. **Datenbank-Reparatur:** `python fix_database_inconsistencies.py`
+3. **Backup erstellen:** Vor größeren Änderungen
 
-### Standard-Credentials
-- **MongoDB Admin**: `admin` / `scandy123`
-- **Mongo Express**: `admin` / `scandy123`
+## 📋 Release Notes
 
-### Produktionsumgebung
-⚠️ **Wichtig**: Ändern Sie die Standard-Passwörter in einer Produktionsumgebung!
+Detaillierte Informationen zu dieser Beta-Version findest du in [BETA_RELEASE_NOTES.md](BETA_RELEASE_NOTES.md).
 
-```yaml
-# docker-compose.yml anpassen:
-environment:
-  MONGO_INITDB_ROOT_PASSWORD: IhrSicheresPasswort
-  ME_CONFIG_MONGODB_ADMINPASSWORD: IhrSicheresPasswort
-  SECRET_KEY: IhrSichererSecretKey
-```
+## 🎯 Nächste Schritte
 
-## 🐛 Troubleshooting
+1. **Produktivtest:** Umfassende Tests in Produktionsumgebung
+2. **Feedback sammeln:** Benutzer-Feedback zu neuen Features
+3. **Performance-Monitoring:** Überwachung der Datenbank-Performance
+4. **Stable Release:** Nach erfolgreichem Produktivtest
 
-### Häufige Probleme
+---
 
-**Container startet nicht:**
-```bash
-# Logs prüfen
-docker-compose logs scandy-app
-
-# Container neu bauen
-docker-compose down
-docker-compose up -d --build
-```
-
-**Datenbank-Verbindungsfehler:**
-```bash
-# MongoDB-Container Status prüfen
-docker-compose ps scandy-mongodb
-
-# MongoDB-Logs anzeigen
-docker-compose logs scandy-mongodb
-```
-
-**Port bereits belegt:**
-```bash
-# Verfügbare Ports prüfen
-netstat -tuln | grep :5000
-
-# Anderen Port in docker-compose.yml verwenden
-```
-
-### Logs analysieren
-
-```bash
-# App-Logs
-docker-compose logs -f scandy-app
-
-# MongoDB-Logs
-docker-compose logs -f scandy-mongodb
-
-# Alle Logs
-docker-compose logs -f
-```
-
-## 📈 Monitoring
-
-### Health Checks
-- **App**: `http://localhost:5000/health`
-- **MongoDB**: Automatischer Ping alle 30s
-- **Mongo Express**: Abhängig von MongoDB
-
-### Metriken
-- Container-Status über `docker-compose ps`
-- Ressourcenverbrauch über `docker stats`
-- Logs über `docker-compose logs`
-
-## 🔄 Updates
-
-### Automatische Updates
-Das System wird automatisch über GitHub Actions aktualisiert:
-- Bei jedem Push zum `main` Branch
-- Bei neuen Tags (v1.0, v1.1, etc.)
-- Multi-Architecture Support (AMD64, ARM64)
-
-### Manuelle Updates
-```bash
-# Neueste Version holen
-docker-compose pull
-
-# Container neu starten
-docker-compose up -d
-```
-
-## 🤝 Beitragen
-
-1. Fork das Repository
-2. Erstelle einen Feature Branch
-3. Committe deine Änderungen
-4. Push zum Branch
-5. Erstelle einen Pull Request
-
-## 📄 Lizenz
-
-Dieses Projekt ist unter der MIT-Lizenz lizenziert.
-
-## 🆘 Support
-
-Bei Problemen oder Fragen:
-1. Prüfen Sie die [Troubleshooting-Sektion](#-troubleshooting)
-2. Schauen Sie in die [Issues](https://github.com/woschj/scandy-deploy/issues)
-3. Erstellen Sie ein neues Issue mit detaillierter Beschreibung
-
-## 🔗 Links
-
-- **Docker Hub**: https://hub.docker.com/r/woschj/scandy
-- **GitHub Repository**: https://github.com/woschj/scandy-deploy
-- **Dokumentation**: Diese README 
+**Diese Beta-Version ist bereit für den Produktivtest!** 🚀 

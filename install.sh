@@ -85,27 +85,61 @@ cd "$PROJECT_DIR"
 
 echo -e "${GREEN}Erstelle Projektverzeichnis: $PROJECT_DIR${NC}"
 
+# Prüfe Port-Verfügbarkeit
+echo -e "${GREEN}Prüfe Port-Verfügbarkeit...${NC}"
+
+check_port() {
+    local port=$1
+    local service=$2
+    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo -e "${RED}Port $port ist bereits belegt!${NC}"
+        echo -e "${YELLOW}Service: $service${NC}"
+        echo -e "${YELLOW}Bitte stoppen Sie den Service oder wählen Sie einen anderen Port.${NC}"
+        exit 1
+    fi
+}
+
+check_port 5000 "App (möglicherweise andere Anwendung)"
+check_port 27017 "MongoDB (möglicherweise andere MongoDB-Instanz)"
+check_port 8081 "Mongo Express (möglicherweise andere Anwendung)"
+
+echo -e "${GREEN}✓ Alle Ports sind verfügbar${NC}"
+
+# Prüfe ob bereits Scandy-Container laufen
+if docker ps --format "table {{.Names}}" | grep -q "scandy-"; then
+    echo -e "${YELLOW}Warnung: Es laufen bereits Scandy-Container!${NC}"
+    echo -e "${YELLOW}Möchten Sie diese stoppen und ersetzen? (j/n): ${NC}"
+    read -p "" replace_containers
+    if [[ "$replace_containers" =~ ^[Jj]$ ]]; then
+        echo -e "${YELLOW}Stoppe bestehende Scandy-Container...${NC}"
+        docker-compose down 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Installation abgebrochen.${NC}"
+        exit 0
+    fi
+fi
+
 # Erstelle docker-compose.yml
 echo -e "${GREEN}Erstelle docker-compose.yml...${NC}"
-cat > docker-compose.yml << EOF
+cat > docker-compose.yml << 'EOF'
 version: '3.8'
 
 services:
-  ${CONTAINER_NAME}-mongodb:
+  scandy-mongodb:
     image: mongo:7.0
-    container_name: ${CONTAINER_NAME}-mongodb
+    container_name: scandy-mongodb
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: scandy123
       MONGO_INITDB_DATABASE: scandy
     ports:
-      - "${MONGO_PORT}:27017"
+      - "27017:27017"
     volumes:
       - mongodb_data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d
     networks:
-      - ${CONTAINER_NAME}-network
+      - scandy-network
     command: mongod --auth --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
@@ -114,31 +148,31 @@ services:
       retries: 3
       start_period: 40s
 
-  ${CONTAINER_NAME}-mongo-express:
+  scandy-mongo-express:
     image: mongo-express:1.0.0
-    container_name: ${CONTAINER_NAME}-mongo-express
+    container_name: scandy-mongo-express
     restart: unless-stopped
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: admin
       ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@${CONTAINER_NAME}-mongodb:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: scandy123
     ports:
-      - "${MONGO_EXPRESS_PORT}:8081"
+      - "8081:8081"
     depends_on:
-      ${CONTAINER_NAME}-mongodb:
+      scandy-mongodb:
         condition: service_healthy
     networks:
-      - ${CONTAINER_NAME}-network
+      - scandy-network
 
-  ${CONTAINER_NAME}-app:
+  scandy-app:
     image: woschj/scandy:latest
-    container_name: ${CONTAINER_NAME}-app
+    container_name: scandy-app
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:scandy123@${CONTAINER_NAME}-mongodb:27017/
+      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
       - SECRET_KEY=scandy-secret-key-change-in-production
@@ -148,17 +182,17 @@ services:
       - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
       - TZ=Europe/Berlin
     ports:
-      - "${APP_PORT}:5000"
+      - "5000:5000"
     volumes:
       - app_uploads:/app/app/uploads
       - app_backups:/app/app/backups
       - app_logs:/app/app/logs
       - app_static:/app/app/static
     depends_on:
-      ${CONTAINER_NAME}-mongodb:
+      scandy-mongodb:
         condition: service_healthy
     networks:
-      - ${CONTAINER_NAME}-network
+      - scandy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -184,14 +218,14 @@ volumes:
     driver: local
 
 networks:
-  ${CONTAINER_NAME}-network:
+  scandy-network:
     driver: bridge
 EOF
 
 # Erstelle MongoDB Init-Skript
 echo -e "${GREEN}Erstelle MongoDB Init-Skript...${NC}"
 mkdir -p mongo-init
-cat > mongo-init/init.js << EOF
+cat > mongo-init/init.js << 'EOF'
 // MongoDB Initialisierung für Scandy
 db = db.getSiblingDB('scandy');
 
@@ -234,7 +268,7 @@ EOF
 echo -e "${GREEN}Erstelle Verwaltungsskripte...${NC}"
 
 # Start-Skript
-cat > start.sh << EOF
+cat > start.sh << 'EOF'
 #!/bin/bash
 echo "Starte Scandy Docker-Container..."
 docker-compose up -d
@@ -248,14 +282,14 @@ docker-compose ps
 echo ""
 echo "=========================================="
 echo "Scandy ist verfügbar unter:"
-echo "App: http://localhost:${APP_PORT}"
-echo "Mongo Express: http://localhost:${MONGO_EXPRESS_PORT}"
-echo "MongoDB: localhost:${MONGO_PORT}"
+echo "App: http://localhost:5000"
+echo "Mongo Express: http://localhost:8081"
+echo "MongoDB: localhost:27017"
 echo "=========================================="
 EOF
 
 # Stop-Skript
-cat > stop.sh << EOF
+cat > stop.sh << 'EOF'
 #!/bin/bash
 echo "Stoppe Scandy Docker-Container..."
 docker-compose down
@@ -264,7 +298,7 @@ echo "Container gestoppt."
 EOF
 
 # Update-Skript
-cat > update.sh << EOF
+cat > update.sh << 'EOF'
 #!/bin/bash
 echo "Update Scandy Docker-Container..."
 
@@ -281,42 +315,43 @@ echo "Update abgeschlossen!"
 EOF
 
 # Backup-Skript
-cat > backup.sh << EOF
+cat > backup.sh << 'EOF'
 #!/bin/bash
 BACKUP_DIR="./backups"
-TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 echo "Erstelle Backup..."
 
 # Erstelle Backup-Verzeichnis
-mkdir -p "\$BACKUP_DIR"
+mkdir -p "$BACKUP_DIR"
 
 # MongoDB Backup
 echo "Backup MongoDB..."
-docker exec ${CONTAINER_NAME}-mongodb mongodump --out /tmp/backup
-docker cp ${CONTAINER_NAME}-mongodb:/tmp/backup "\$BACKUP_DIR/mongodb_\$TIMESTAMP"
+docker exec scandy-mongodb mongodump --out /tmp/backup
+docker cp scandy-mongodb:/tmp/backup "$BACKUP_DIR/mongodb_$TIMESTAMP"
 
 # App-Daten Backup
 echo "Backup App-Daten..."
-docker run --rm -v ${CONTAINER_NAME}_app_uploads:/data -v \$(pwd)/\$BACKUP_DIR:/backup alpine tar -czf /backup/app_data_\$TIMESTAMP.tar.gz -C /data .
+docker run --rm -v scandy_project_app_uploads:/data -v $(pwd)/$BACKUP_DIR:/backup alpine tar -czf /backup/app_data_$TIMESTAMP.tar.gz -C /data .
 
-echo "Backup erstellt: \$BACKUP_DIR"
+echo "Backup erstellt: $BACKUP_DIR"
 EOF
 
 # Setze Berechtigungen
 chmod +x start.sh stop.sh update.sh backup.sh
 
-# Baue und starte Container
+# Baue und starte Container (SICHER)
 echo -e "${GREEN}Baue und starte Container...${NC}"
-docker-compose down --volumes --remove-orphans
+# Nur stoppen, keine Volumes löschen!
+docker-compose down 2>/dev/null || true
 docker-compose up -d
 
 echo "========================================"
 echo -e "${GREEN}Installation abgeschlossen!${NC}"
-echo "Die Anwendung ist unter http://localhost:${APP_PORT} erreichbar"
-echo "Container-Name: ${CONTAINER_NAME}"
-echo "MongoDB Port: ${MONGO_PORT}"
-echo "Mongo Express Port: ${MONGO_EXPRESS_PORT}"
+echo "Die Anwendung ist unter http://localhost:5000 erreichbar"
+echo "Container-Name: scandy"
+echo "MongoDB Port: 27017"
+echo "Mongo Express Port: 8081"
 echo "========================================"
 echo ""
 echo -e "${YELLOW}Verwaltung:${NC}"
