@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_labels.tools.name }} hinzufügen{% endblock %}
+
+{% block content %}
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title mb-4">Neues {{ app_labels.tools.name }} hinzufügen</h2>
+        
+        <form method="POST" action="{{ url_for('tools.add') }}" class="max-w-lg">
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Barcode</span>
+                </label>
+                <input type="text" name="barcode" class="input input-bordered" required>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Name</span>
+                </label>
+                <input type="text" name="name" class="input input-bordered" required>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Beschreibung</span>
+                </label>
+                <textarea name="description" class="textarea textarea-bordered" rows="3"></textarea>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Kategorie</span>
+                </label>
+                <input 
+                    type="text" 
+                    name="category" 
+                    list="category-list" 
+                    class="input input-bordered" 
+                    required
+                >
+                <datalist id="category-list">
+                    {% for category in categories %}
+                        <option value="{{ category }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Ort</span>
+                </label>
+                <input 
+                    type="text" 
+                    name="location" 
+                    list="location-list" 
+                    class="input input-bordered" 
+                    required
+                >
+                <datalist id="location-list">
+                    {% for location in locations %}
+                        <option value="{{ location }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Status</span>
+                </label>
+                <select name="status" class="select select-bordered" required>
+                    <option value="verfügbar">Verfügbar</option>
+                    <option value="defekt">Defekt</option>
+                    <option value="ausgeliehen">Verliehen</option>
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">Abbrechen</a>
+                <button type="submit" class="btn btn-primary">Speichern</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

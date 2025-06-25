@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Neuen Auftrag erstellen{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte: Auftrag erstellen -->
+        <div class="lg:col-span-1">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Neuen {{ app_labels.tickets.name }} erstellen</h2>
+                    <form method="POST" action="{{ url_for('tickets.create') }}" id="createForm">
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Titel</span>
+                            </label>
+                            <input type="text" name="title" class="input input-bordered" required>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Beschreibung</span>
+                            </label>
+                            <textarea name="description" class="textarea textarea-bordered h-32" required></textarea>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Kategorie</span>
+                            </label>
+                            <select name="category" id="categorySelect" class="select select-bordered w-full" required>
+                                <option value="" disabled selected hidden>Kategorie auswählen</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                                <option value="__new__">Neue Kategorie anlegen…</option>
+                            </select>
+                            <input type="text" name="new_category" id="newCategoryInput" class="input input-bordered mt-2 w-full" placeholder="Neue Kategorie eingeben" style="display:none;" autocomplete="off">
+                            <label class="label">
+                                <span class="label-text-alt">Wählen Sie eine bestehende Kategorie oder legen Sie eine neue an</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Priorität</span>
+                            </label>
+                            <select name="priority" class="select select-bordered">
+                                <option value="niedrig">Niedrig</option>
+                                <option value="normal" selected>Normal</option>
+                                <option value="hoch">Hoch</option>
+                                <option value="dringend">Dringend</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Fälligkeitsdatum</span>
+                            </label>
+                            <input type="datetime-local" name="due_date" class="input input-bordered" required>
+                        </div>
+                        
+                        <div class="form-control mb-4">
+                            <label class="label">
+                                <span class="label-text">Geschätzte Zeit</span>
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" name="estimated_time" class="input input-bordered w-full" 
+                                       min="0" step="1" placeholder="0">
+                                <span class="text-sm opacity-70">Minuten</span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-full" id="submitBtn">
+                            <i class="fas fa-plus mr-2"></i>
+                            {{ app_labels.tickets.name }} erstellen
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Spalte: Tabbed Table für alle {{ app_labels.tickets.name }} -->
+        <div class="lg:col-span-2">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <div class="tabs tabs-boxed mb-4">
+                        <a role="tab" class="tab tab-active" id="tab-open" onclick="showTab('open')">Offene {{ app_labels.tickets.name }}</a>
+                        <a role="tab" class="tab" id="tab-assigned" onclick="showTab('assigned')">Zugewiesene {{ app_labels.tickets.name }}</a>
+                        <a role="tab" class="tab" id="tab-mine" onclick="showTab('mine')">Meine {{ app_labels.tickets.name }}</a>
+                    </div>
+                    <div id="table-open">
+                        {% include 'tickets/_ticket_table_open.html' with context %}
+                    </div>
+                    <div id="table-assigned" style="display:none;">
+                        {% include 'tickets/_ticket_table_assigned.html' with context %}
+                    </div>
+                    <div id="table-mine" style="display:none;">
+                        {% include 'tickets/_ticket_table.html' with context %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('categorySelect').addEventListener('change', function() {
+    const newCategoryInput = document.getElementById('newCategoryInput');
+    if (this.value === '__new__') {
+        newCategoryInput.style.display = '';
+        newCategoryInput.required = true;
+    } else {
+        newCategoryInput.style.display = 'none';
+        newCategoryInput.required = false;
+        newCategoryInput.value = '';
+    }
+});
+
+document.getElementById('createForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Erstelle...';
+    const formData = new FormData(this);
+    let category = formData.get('category');
+    if (category === '__new__') {
+        category = formData.get('new_category');
+    }
+    const data = {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        category: category,
+        priority: formData.get('priority'),
+        due_date: formData.get('due_date'),
+        estimated_time: parseInt(formData.get('estimated_time'))
+    };
+    try {
+        const response = await fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        if (result.success) {
+            showToast('success', 'Ticket erfolgreich erstellt');
+            setTimeout(() => {
+                window.location.href = "{{ url_for('tickets.create') }}";
+            }, 1000);
+        } else {
+            throw new Error(result.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler:', error);
+        showToast('error', error.message || 'Ein Fehler ist aufgetreten');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>{{ app_labels.tickets.name }} erstellen';
+    }
+});
+
+function showTab(tab) {
+    document.getElementById('table-open').style.display = (tab === 'open') ? '' : 'none';
+    document.getElementById('table-assigned').style.display = (tab === 'assigned') ? '' : 'none';
+    document.getElementById('table-mine').style.display = (tab === 'mine') ? '' : 'none';
+    document.getElementById('tab-open').classList.toggle('tab-active', tab === 'open');
+    document.getElementById('tab-assigned').classList.toggle('tab-active', tab === 'assigned');
+    document.getElementById('tab-mine').classList.toggle('tab-active', tab === 'mine');
+}
+document.addEventListener('DOMContentLoaded', function() {
+    showTab('open');
+});
+</script>
+{% endblock %} 

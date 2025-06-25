@@ -1,0 +1,48 @@
+<div class="flex flex-col h-full">
+    <div class="text-lg font-medium mb-4">Werkzeug/Material scannen</div>
+    
+    <!-- Scanner Mode -->
+    <div id="scannerMode" class="flex-1">
+        <div class="bg-base-100 rounded-lg p-6">
+            <div class="scan-area relative">
+                <div class="scan-line"></div>
+                <input type="text" 
+                       id="itemScanInput"
+                       class="input input-bordered w-full bg-transparent" 
+                       placeholder="Barcode scannen..."
+                       autocomplete="off">
+            </div>
+            <!-- Kamera-Umschalt-Button für mobile Geräte -->
+            <button id="switchCameraBtn" class="btn btn-sm btn-ghost mt-2 hidden md:flex">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" />
+                </svg>
+                Kamera wechseln
+            </button>
+        </div>
+    </div>
+    
+    <!-- Webcam Mode -->
+    <div id="webcamMode" class="hidden flex-1">
+        <div class="bg-base-100 rounded-lg overflow-hidden">
+            <div class="relative aspect-video">
+                <video id="video" class="w-full h-full object-cover"></video>
+                <div class="scan-overlay"></div>
+                <!-- Kamera-Umschalt-Button für mobile Geräte -->
+                <button id="switchCameraBtnMobile" class="btn btn-circle btn-ghost absolute bottom-2 right-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scan Result -->
+    <div id="scannedItemInfo" class="mt-4 hidden">
+        <div class="alert alert-info shadow-lg">
+            <i class="fas fa-info-circle"></i>
+            <span id="itemDetails"></span>
+        </div>
+    </div>
+</div> 

@@ -1,0 +1,287 @@
+# Scandy - Technische Dokumentation
+
+## Inhaltsverzeichnis
+1. [Systemübersicht](#1-systemübersicht)
+2. [Technische Architektur](#2-technische-architektur)
+3. [Datenbankstruktur](#3-datenbankstruktur)
+4. [Kernfunktionen](#4-kernfunktionen)
+5. [Frontend](#5-frontend)
+6. [API & Integration](#6-api--integration)
+7. [Erweiterung & Anpassung](#7-erweiterung--anpassung)
+8. [Wartung & Troubleshooting](#8-wartung--troubleshooting)
+
+## 1. Systemübersicht
+
+### 1.1 Zweck
+Scandy ist ein Inventarverwaltungssystem für:
+- Werkzeugverwaltung
+- Verbrauchsmaterialverwaltung
+- Ausleihverwaltung
+- Mitarbeiterverwaltung
+
+### 1.2 Hauptfunktionen
+- Barcode-basierte Ausleihe/Rückgabe
+- Bestandsverwaltung
+- Nutzer- und Rechteverwaltung
+- Reporting und Historie
+
+## 2. Technische Architektur
+
+### 2.1 Technologie-Stack
+- **Backend:** Python 3, Flask
+- **Datenbank:** MongoDB
+- **Frontend:** HTML, Tailwind CSS, DaisyUI, JavaScript
+- **Server:** Gunicorn (Produktion)
+
+### 2.2 Projektstruktur
+/app
+├── config/ # Konfigurationsdateien
+├── models/ # Datenbankmodelle
+├── routes/ # Route Handler
+├── static/ # Statische Dateien
+├── templates/ # HTML Templates
+├── utils/ # Hilfsfunktionen
+└── main.py # App-Initialisierung
+
+### 2.3 Kernmodule
+
+#### models/mongodb_database.py
+```python
+class MongoDB:
+    """Zentrale MongoDB-Verbindung"""
+    def __init__(self):
+        self.client = MongoClient(MONGODB_URI)
+        self.db = self.client.scandy
+        self.tickets_db = self.client.scandy_tickets
+```
+
+#### routes/admin.py
+```python
+@bp.route('/dashboard')
+@admin_required
+def dashboard():
+    """Admin Dashboard mit Statistiken und Verwaltung"""
+    stats = get_dashboard_stats()
+    return render_template('admin/dashboard.html', stats=stats)
+```
+
+## 3. Datenbankstruktur
+
+### 3.1 Haupttabellen
+
+#### tools
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- name
+- status
+- location
+- category
+
+#### consumables
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- name
+- quantity
+- min_quantity
+- location
+
+#### workers
+- id (PRIMARY KEY)
+- barcode (UNIQUE)
+- firstname
+- lastname
+- department
+
+#### lendings
+- id (PRIMARY KEY)
+- tool_barcode (FOREIGN KEY)
+- worker_barcode (FOREIGN KEY)
+- lent_at
+- returned_at
+
+### 3.2 Datenbankoperationen
+
+#### Beispiel: Werkzeug ausleihen
+
+python
+def lend_tool(tool_barcode, worker_barcode):
+with Database.get_db() as conn:
+conn.execute('''
+INSERT INTO lendings (tool_barcode, worker_barcode, lent_at)
+VALUES (?, ?, CURRENT_TIMESTAMP)
+''', [tool_barcode, worker_barcode])
+conn.commit()
+
+
+## 4. Kernfunktionen
+
+### 4.1 Ausleihe-System
+
+#### Quick-Scan Prozess
+1. Barcode scannen (scanner.js)
+2. API-Anfrage an /api/scan
+3. Datenbankaktualisierung
+4. UI-Update
+
+
+javascript
+// scanner.js
+async function processBarcode(barcode) {
+const response = await fetch('/api/scan', {
+method: 'POST',
+body: JSON.stringify({ barcode })
+});
+updateUI(await response.json());
+}
+
+
+### 4.2 Inventarverwaltung
+
+#### Werkzeug hinzufügen
+
+python
+@bp.route('/add_tool', methods=['POST'])
+@admin_required
+def add_tool():
+data = request.form
+with Database.get_db() as conn:
+conn.execute('''
+INSERT INTO tools (barcode, name, category, location)
+VALUES (?, ?, ?, ?)
+''', [data['barcode'], data['name'],
+data['category'], data['location']])
+conn.commit()
+
+
+## 5. Frontend
+
+### 5.1 Template-Struktur
+
+#### base.html
+
+html
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+<title>{% block title %}{% endblock %} - Scandy</title>
+<link href="/static/css/tailwind.css" rel="stylesheet">
+</head>
+<body>
+<nav><!-- Navigation --></nav>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>
+
+
+
+### 5.2 Styling
+
+#### Farbanpassung
+
+html
+<style>
+:root {
+--primary-color: {{ g.settings.primary_color }};
+}
+.btn-primary {
+background-color: var(--primary-color);
+}
+</style>
+
+
+## 6. API & Integration
+
+### 6.1 API-Endpunkte
+
+#### Scan-Verarbeitung
+
+python
+@bp.route('/api/scan', methods=['POST'])
+def process_scan():
+data = request.get_json()
+barcode = data['barcode']
+# Barcode verarbeiten
+result = process_barcode(barcode)
+return jsonify(result)
+
+
+### 6.2 Authentifizierung
+
+#### Login-Prozess
+
+python
+@bp.route('/login', methods=['POST'])
+def login():
+if check_credentials(request.form):
+session['user_id'] = get_user_id()
+return redirect(url_for('index'))
+return render_template('login.html', error=True)
+
+
+## 7. Erweiterung & Anpassung
+
+### 7.1 Neue Funktionen hinzufügen
+
+1. Route erstellen:
+
+python
+@bp.route('/new_feature')
+def new_feature():
+return render_template('new_feature.html')
+
+
+2. Template erstellen:
+
+html
+{% extends "base.html" %}
+{% block content %}
+<!-- Neue Funktionalität -->
+{% endblock %}
+
+
+3. JavaScript hinzufügen:
+
+javascript
+// static/js/new_feature.js
+document.addEventListener('DOMContentLoaded', () => {
+// Neue Funktionalität
+});
+
+
+### 7.2 Datenbankänderungen
+
+1. Schema aktualisieren (db_schema.json)
+2. Migration erstellen:
+
+python
+def migrate():
+with Database.get_db() as conn:
+conn.execute('''
+ALTER TABLE table_name
+ADD COLUMN new_column TEXT
+''')
+
+
+## 8. Wartung & Troubleshooting
+
+### 8.1 Logging
+python
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(name)
+def critical_operation():
+try:
+# Operation
+logger.info("Operation erfolgreich")
+except Exception as e:
+logger.error(f"Fehler: {str(e)}")
+
+#### Datenbankverbindung
+```python
+from app.models.mongodb_database import MongoDB
+
+# MongoDB-Instanz erstellen
+mongodb = MongoDB()
+
+# Datenbankverbindung
+db = mongodb.db

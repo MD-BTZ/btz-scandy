@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Server-Einstellungen{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">
+        <i class="fas fa-server text-primary mr-2"></i>
+        Server-Einstellungen
+    </h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Backup-Verwaltung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-database text-primary mr-2"></i>
+                    Backup-Verwaltung
+                </h2>
+                <div class="space-y-4">
+                    <!-- Backup erstellen -->
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Neues Backup erstellen</span>
+                        <button id="createBackupBtn" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus mr-2"></i>Backup erstellen
+                        </button>
+                    </div>
+                    
+                    <!-- Backup hochladen -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-semibold mb-2">Backup hochladen</h3>
+                        <form id="uploadBackupForm" class="space-y-2">
+                            <input type="file" name="backup_file" accept=".json" class="file-input file-input-bordered w-full" required>
+                            <button type="submit" class="btn btn-secondary btn-sm w-full">
+                                <i class="fas fa-upload mr-2"></i>Backup hochladen
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Backup-Liste -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-semibold mb-2">Verfügbare Backups</h3>
+                        <div class="overflow-x-auto">
+                            <table class="table table-xs">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Größe</th>
+                                        <th>Erstellt</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backupsList">
+                                    <tr><td colspan="4" class="text-center">Lade Backups...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Excel-Export -->
+                    <div class="border-t pt-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">Datenbank-Export</span>
+                            <a href="{{ url_for('admin.export_all_data') }}" class="btn btn-accent btn-sm">
+                                <i class="fas fa-download mr-2"></i>Excel-Export
+                            </a>
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Exportiert alle Daten als Excel-Datei mit mehreren Arbeitsblättern
+                        </div>
+                    </div>
+                    
+                    <!-- Excel-Import -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-semibold mb-2">Daten importieren</h3>
+                        <form action="{{ url_for('admin.import_all_data') }}" method="POST" enctype="multipart/form-data" class="space-y-2">
+                            <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered w-full" required>
+                            <button type="submit" class="btn btn-success btn-sm w-full">
+                                <i class="fas fa-upload mr-2"></i>Excel-Daten importieren
+                            </button>
+                        </form>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Importiert Daten aus einer Excel-Datei (.xlsx) mit Arbeitsblättern: Werkzeuge, Mitarbeiter, Verbrauchsmaterial, Verlauf
+                        </div>
+                        <div class="text-xs text-warning mt-1">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            Vor dem Import wird empfohlen, ein Backup zu erstellen
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Begriffe & Icons -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-tags text-primary mr-2"></i>
+                    Begriffe & Icons
+                </h2>
+                <form method="POST" class="space-y-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Werkzeuge Name</span>
+                        </label>
+                        <input type="text" name="label_tools_name" value="{{ app_labels.tools.name }}" 
+                               class="input input-bordered">
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Werkzeuge Icon</span>
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" name="label_tools_icon" value="{{ app_labels.tools.icon }}" 
+                                   class="input input-bordered flex-1" placeholder="fas fa-tools" id="toolsIconInput">
+                            <button type="button" class="btn btn-outline" onclick="openIconSelector('toolsIconInput')">
+                                <i class="fas fa-icons"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Verbrauchsmaterial Name</span>
+                        </label>
+                        <input type="text" name="label_consumables_name" value="{{ app_labels.consumables.name }}" 
+                               class="input input-bordered">
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Verbrauchsmaterial Icon</span>
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" name="label_consumables_icon" value="{{ app_labels.consumables.icon }}" 
+                                   class="input input-bordered flex-1" placeholder="fas fa-box" id="consumablesIconInput">
+                            <button type="button" class="btn btn-outline" onclick="openIconSelector('consumablesIconInput')">
+                                <i class="fas fa-icons"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Tickets Name</span>
+                        </label>
+                        <input type="text" name="label_tickets_name" value="{{ app_labels.tickets.name }}" 
+                               class="input input-bordered">
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Tickets Icon</span>
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" name="label_tickets_icon" value="{{ app_labels.tickets.icon }}" 
+                                   class="input input-bordered flex-1" placeholder="fas fa-ticket-alt" id="ticketsIconInput">
+                            <button type="button" class="btn btn-outline" onclick="openIconSelector('ticketsIconInput')">
+                                <i class="fas fa-icons"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>Einstellungen speichern
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Icon Selector Modal -->
+<dialog id="iconSelectorModal" class="modal">
+    <div class="modal-box w-11/12 max-w-5xl">
+        <h3 class="font-bold text-lg mb-4">Icon auswählen</h3>
+        <div class="grid grid-cols-6 gap-2 max-h-96 overflow-y-auto" id="iconGrid">
+            <!-- Icons werden hier dynamisch geladen -->
+        </div>
+        <div class="modal-action">
+            <button class="btn" onclick="closeIconSelector()">Schließen</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Restore Confirmation Modal -->
+<dialog id="restoreBackupModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Backup wiederherstellen</h3>
+        <p class="py-4">Möchten Sie das Backup "<span id="restoreBackupName"></span>" wirklich wiederherstellen? Die aktuelle Datenbank wird automatisch gesichert.</p>
+        <div class="modal-action">
+            <button class="btn btn-warning" id="confirmRestoreBtn">Wiederherstellen</button>
+            <button class="btn" onclick="document.getElementById('restoreBackupModal').close()">Abbrechen</button>
+        </div>
+    </div>
+</dialog>
+
+<script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+<script src="{{ url_for('static', filename='js/backup.js') }}"></script>
+<script>
+// Icon Selector Funktionen
+const commonIcons = [
+    'fas fa-tools', 'fas fa-box', 'fas fa-ticket-alt', 'fas fa-wrench', 'fas fa-screwdriver',
+    'fas fa-hammer', 'fas fa-drill', 'fas fa-saw', 'fas fa-paint-brush', 'fas fa-pencil',
+    'fas fa-file', 'fas fa-folder', 'fas fa-database', 'fas fa-server', 'fas fa-cog',
+    'fas fa-users', 'fas fa-user', 'fas fa-user-tie', 'fas fa-hard-hat', 'fas fa-safety-vest',
+    'fas fa-car', 'fas fa-truck', 'fas fa-bicycle', 'fas fa-motorcycle', 'fas fa-train',
+    'fas fa-plane', 'fas fa-ship', 'fas fa-rocket', 'fas fa-satellite', 'fas fa-wifi',
+    'fas fa-bluetooth', 'fas fa-usb', 'fas fa-plug', 'fas fa-battery-full', 'fas fa-charging-station',
+    'fas fa-lightbulb', 'fas fa-lamp', 'fas fa-tv', 'fas fa-monitor', 'fas fa-laptop',
+    'fas fa-desktop', 'fas fa-tablet', 'fas fa-mobile', 'fas fa-phone', 'fas fa-fax',
+    'fas fa-print', 'fas fa-scanner', 'fas fa-camera', 'fas fa-video', 'fas fa-microphone',
+    'fas fa-headphones', 'fas fa-speaker', 'fas fa-volume-up', 'fas fa-music', 'fas fa-radio'
+];
+
+let currentIconInput = null;
+
+function openIconSelector(inputId) {
+    currentIconInput = document.getElementById(inputId);
+    const modal = document.getElementById('iconSelectorModal');
+    const grid = document.getElementById('iconGrid');
+    
+    // Grid mit Icons füllen
+    grid.innerHTML = '';
+    commonIcons.forEach(icon => {
+        const div = document.createElement('div');
+        div.className = 'p-2 border rounded cursor-pointer hover:bg-gray-100 text-center';
+        div.innerHTML = `<i class="${icon} text-xl"></i><div class="text-xs mt-1">${icon}</div>`;
+        div.onclick = () => selectIcon(icon);
+        grid.appendChild(div);
+    });
+    
+    modal.showModal();
+}
+
+function selectIcon(icon) {
+    if (currentIconInput) {
+        currentIconInput.value = icon;
+    }
+    closeIconSelector();
+}
+
+function closeIconSelector() {
+    document.getElementById('iconSelectorModal').close();
+    currentIconInput = null;
+}
+
+// Backup-Funktionen initialisieren
+document.addEventListener('DOMContentLoaded', function() {
+    setupBackupHandlers();
+    loadBackups();
+});
+</script>
+{% endblock %} 

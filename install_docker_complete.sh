@@ -294,9 +294,16 @@ networks:
     driver: bridge
 EOL
 
-# Erstelle Dockerfile
-echo -e "${GREEN}Erstelle Dockerfile...${NC}"
-cat > Dockerfile << 'EOL'
+# Prüfe und kopiere Dockerfile
+echo -e "${GREEN}Prüfe Dockerfile...${NC}"
+if [ -f "../Dockerfile" ]; then
+    echo -e "${GREEN}Kopiere vorhandenes optimiertes Dockerfile...${NC}"
+    cp ../Dockerfile .
+    echo -e "${GREEN}✓ Optimiertes Dockerfile übernommen${NC}"
+else
+    echo -e "${YELLOW}WARNUNG: Kein Dockerfile im Hauptverzeichnis gefunden.${NC}"
+    echo -e "${YELLOW}Erstelle einfaches Dockerfile...${NC}"
+    cat > Dockerfile << 'EOL'
 FROM python:3.11-slim
 
 # Installiere System-Abhängigkeiten
@@ -345,6 +352,61 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Starte die Anwendung
 CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
 EOL
+fi
+
+# Prüfe und kopiere requirements.txt
+echo -e "${GREEN}Prüfe requirements.txt...${NC}"
+if [ -f "../requirements.txt" ]; then
+    echo -e "${GREEN}Kopiere requirements.txt...${NC}"
+    cp ../requirements.txt .
+    echo -e "${GREEN}✓ Requirements.txt übernommen${NC}"
+else
+    echo -e "${RED}FEHLER: requirements.txt nicht im Hauptverzeichnis gefunden!${NC}"
+    exit 1
+fi
+
+# Prüfe und kopiere package.json
+echo -e "${GREEN}Prüfe package.json...${NC}"
+if [ -f "../package.json" ]; then
+    echo -e "${GREEN}Kopiere package.json...${NC}"
+    cp ../package.json .
+    echo -e "${GREEN}✓ Package.json übernommen${NC}"
+else
+    echo -e "${RED}FEHLER: package.json nicht im Hauptverzeichnis gefunden!${NC}"
+    exit 1
+fi
+
+# Prüfe und kopiere package-lock.json
+echo -e "${GREEN}Prüfe package-lock.json...${NC}"
+if [ -f "../package-lock.json" ]; then
+    echo -e "${GREEN}Kopiere package-lock.json...${NC}"
+    cp ../package-lock.json .
+    echo -e "${GREEN}✓ Package-lock.json übernommen${NC}"
+else
+    echo -e "${YELLOW}WARNUNG: package-lock.json nicht gefunden. npm install wird verwendet.${NC}"
+fi
+
+# Kopiere App-Verzeichnis
+echo -e "${GREEN}Kopiere App-Verzeichnis...${NC}"
+if [ -d "../app" ]; then
+    cp -r ../app .
+    echo -e "${GREEN}✓ App-Verzeichnis übernommen${NC}"
+else
+    echo -e "${RED}FEHLER: app-Verzeichnis nicht gefunden!${NC}"
+    exit 1
+fi
+
+# Kopiere Tailwind-Konfiguration
+echo -e "${GREEN}Kopiere Tailwind-Konfiguration...${NC}"
+if [ -f "../tailwind.config.js" ]; then
+    cp ../tailwind.config.js .
+    echo -e "${GREEN}✓ Tailwind-Konfiguration übernommen${NC}"
+fi
+
+if [ -f "../postcss.config.js" ]; then
+    cp ../postcss.config.js .
+    echo -e "${GREEN}✓ PostCSS-Konfiguration übernommen${NC}"
+fi
 
 # Erstelle MongoDB Init-Skript
 echo -e "${GREEN}Erstelle MongoDB Init-Skript...${NC}"

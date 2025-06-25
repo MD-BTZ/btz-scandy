@@ -1,0 +1,674 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Scandy{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Toast Script -->
+<script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
+<!-- Lending Service -->
+<script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+<!-- Admin Dashboard Script -->
+<script src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Statistik-Karten: immer eigene Zeile -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
+        <!-- {{ app_labels.tools.name }}-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="{{ app_labels.tools.icon }} text-primary"></i>
+                    {{ app_labels.tools.name }}
+                </h2>
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ tool_stats.total }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Verfügbar</div>
+                        <div class="stat-value text-success text-lg">{{ tool_stats.available }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Ausgeliehen</div>
+                        <div class="stat-value text-warning text-lg">{{ tool_stats.lent }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Defekt</div>
+                        <div class="stat-value text-error text-lg">{{ tool_stats.defect }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- {{ app_labels.consumables.name }}-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="{{ app_labels.consumables.icon }} text-primary"></i>
+                    {{ app_labels.consumables.name }}
+                </h2>
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ consumable_stats.total }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Ausreichend</div>
+                        <div class="stat-value text-success text-lg">{{ consumable_stats.sufficient }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Warnung</div>
+                        <div class="stat-value text-warning text-lg">{{ consumable_stats.warning }}</div>
+                    </div>
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Kritisch</div>
+                        <div class="stat-value text-error text-lg">{{ consumable_stats.critical }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Mitarbeiter-Statistiken -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-users text-primary"></i>
+                    Mitarbeiter
+                </h2>
+                <div class="stats stats-vertical flex-1">
+                    <div class="stat py-1">
+                        <div class="stat-title text-xs">Gesamt</div>
+                        <div class="stat-value text-lg">{{ worker_stats.total }}</div>
+                    </div>
+                    <div class="overflow-y-auto max-h-28 text-xs">
+                        {% for dept in worker_stats.by_department %}
+                        <div class="stat py-1">
+                            <div class="stat-title text-xs">{{ dept.name or 'Ohne Abteilung' }}</div>
+                            <div class="stat-value text-lg">{{ dept.count }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Aktuelle Ausleihen -->
+        <div class="card bg-base-100 shadow-md h-80">
+            <div class="card-body p-3 h-full flex flex-col justify-between">
+                <h2 class="card-title text-base mb-2">
+                    <i class="fas fa-clock text-primary"></i>
+                    Aktuelle Ausleihen
+                </h2>
+                <div class="overflow-x-auto flex-1">
+                    <table class="table table-zebra w-full text-xs">
+                        <thead>
+                            <tr>
+                                <th>{{ app_labels.tools.name }}</th>
+                                <th>Mitarbeiter</th>
+                                <th>Datum</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lending in current_lendings %}
+                            <tr>
+                                <td>{{ lending.tool_name }}</td>
+                                <td>{{ lending.worker_name }}</td>
+                                <td>{{ lending.lent_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center">Keine aktiven Ausleihen</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warnungen und Hinweise: eigene Zeile -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <!-- {{ app_labels.tools.name }}-Warnungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    {{ app_labels.tools.name }}-Warnungen
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tool in tool_warnings %}
+                            <tr>
+                                <td>{{ tool.name }}</td>
+                                <td>
+                                    <span class="badge badge-{{ tool.severity }}">
+                                        {{ tool.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">Keine Warnungen</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- {{ app_labels.consumables.name }}-Warnungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    {{ app_labels.consumables.name }}-Warnungen
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for consumable in consumable_warnings %}
+                            <tr>
+                                <td>{{ consumable.message }}</td>
+                                <td>
+                                    <span class="badge badge-{{ consumable.type }}">
+                                        <i class="fas fa-{{ consumable.icon }}"></i>
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">Keine Warnungen</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Verwaltungslisten: eigene Zeile -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <!-- Abteilungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-building text-primary"></i>
+                    Abteilungen
+                </h2>
+                <form id="addDepartmentForm" class="mb-2 flex gap-2">
+                    <input name="department" class="input input-bordered input-sm flex-1" placeholder="Neue Abteilung" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="departmentsList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- Standorte -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-map-marker-alt text-primary"></i>
+                    Standorte
+                </h2>
+                <form id="addLocationForm" class="mb-2 flex gap-2">
+                    <input name="location" class="input input-bordered input-sm flex-1" placeholder="Neuer Standort" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationsList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- Kategorien -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-tags text-primary"></i>
+                    Kategorien
+                </h2>
+                <form id="addCategoryForm" class="mb-2 flex gap-2">
+                    <input name="category" class="input input-bordered input-sm flex-1" placeholder="Neue Kategorie" required />
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoriesList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart initialisieren wenn das Element existiert und Daten vorhanden sind
+function initChart() {
+    const chartCanvas = document.getElementById('consumableTrendChart');
+    const trendData = '{{ stats.consumable_trend|tojson if stats is defined and stats.consumable_trend is defined else '' }}';
+    let trend = null;
+    try {
+        if (trendData) {
+            trend = JSON.parse(trendData);
+        }
+    } catch (e) {
+        trend = null;
+    }
+    if (chartCanvas && trend && trend.labels && trend.datasets) {
+        const ctx = chartCanvas.getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: trend.labels,
+                datasets: trend.datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Abteilungsverwaltung
+const DepartmentManager = {
+    init() {
+        const form = document.getElementById('addDepartmentForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddDepartment(e));
+            this.loadDepartments();
+        }
+    },
+
+    async loadDepartments() {
+        const tbody = document.getElementById('departmentsList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/departments');
+            const data = await response.json();
+            if (data.success) {
+                this.renderDepartments(data.departments);
+            } else {
+                showToast('error', 'Fehler beim Laden der Abteilungen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Abteilungen:', error);
+            showToast('error', 'Fehler beim Laden der Abteilungen');
+        }
+    },
+
+    renderDepartments(departments) {
+        const tbody = document.getElementById('departmentsList');
+        if (!tbody) return;
+
+        tbody.innerHTML = departments.map(dept => `
+            <tr>
+                <td>${dept.name}</td>
+                <td class="text-right">
+                    <button onclick="DepartmentManager.deleteDepartment('${dept.name}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddDepartment(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        try {
+            const response = await fetch('/admin/departments/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadDepartments();
+                showToast('success', 'Abteilung hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
+        }
+    },
+
+    async deleteDepartment(name) {
+        if (!confirm(`Möchten Sie die Abteilung "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/departments/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadDepartments();
+                showToast('success', 'Abteilung gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
+
+// Standortverwaltung
+const LocationManager = {
+    init() {
+        const form = document.getElementById('addLocationForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddLocation(e));
+            this.loadLocations();
+        }
+    },
+
+    async loadLocations() {
+        const tbody = document.getElementById('locationsList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/locations');
+            const data = await response.json();
+            if (data.success) {
+                this.renderLocations(data.locations);
+            } else {
+                showToast('error', 'Fehler beim Laden der Standorte');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Standorte:', error);
+            showToast('error', 'Fehler beim Laden der Standorte');
+        }
+    },
+
+    renderLocations(locations) {
+        const tbody = document.getElementById('locationsList');
+        if (!tbody) return;
+
+        tbody.innerHTML = locations.map(loc => `
+            <tr>
+                <td>${loc.name}</td>
+                <td class="text-right">
+                    <button onclick="LocationManager.deleteLocation('${loc.name}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddLocation(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        try {
+            const response = await fetch('/admin/locations/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadLocations();
+                showToast('success', 'Standort hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
+        }
+    },
+
+    async deleteLocation(name) {
+        if (!confirm(`Möchten Sie den Standort "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/locations/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadLocations();
+                showToast('success', 'Standort gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
+
+// Kategorieverwaltung
+const CategoryManager = {
+    init() {
+        const form = document.getElementById('addCategoryForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleAddCategory(e));
+            this.loadCategories();
+        }
+    },
+
+    async loadCategories() {
+        const tbody = document.getElementById('categoriesList');
+        if (!tbody) return;
+
+        try {
+            const response = await fetch('/admin/categories');
+            const data = await response.json();
+            if (data.success) {
+                this.renderCategories(data.categories);
+            } else {
+                showToast('error', 'Fehler beim Laden der Kategorien');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden der Kategorien:', error);
+            showToast('error', 'Fehler beim Laden der Kategorien');
+        }
+    },
+
+    renderCategories(categories) {
+        const tbody = document.getElementById('categoriesList');
+        if (!tbody) return;
+
+        tbody.innerHTML = categories.map(cat => `
+            <tr>
+                <td>${cat.name}</td>
+                <td class="text-right">
+                    <button onclick="CategoryManager.deleteCategory('${cat.name}')" 
+                            class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    async handleAddCategory(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Button deaktivieren um Duplikate zu verhindern
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        try {
+            const response = await fetch('/admin/categories/add', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                form.reset();
+                this.loadCategories();
+                showToast('success', 'Kategorie hinzugefügt');
+            } else {
+                showToast('error', data.message || 'Fehler beim Hinzufügen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen:', error);
+            showToast('error', 'Fehler beim Hinzufügen');
+        } finally {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Hinzufügen';
+        }
+    },
+
+    async deleteCategory(name) {
+        if (!confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/categories/delete/${encodeURIComponent(name)}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.loadCategories();
+                showToast('success', 'Kategorie gelöscht');
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen');
+            }
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            showToast('error', 'Fehler beim Löschen');
+        }
+    }
+};
+
+function returnTool(barcode) {
+    if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {
+        return;
+    }
+    
+    window.LendingService.returnItem(barcode)
+        .then(success => {
+            if (success) {
+                window.location.reload();
+            }
+        });
+}
+
+// Initialisierung der Manager beim Laden der Seite
+document.addEventListener('DOMContentLoaded', function() {
+    DepartmentManager.init();
+    LocationManager.init();
+    CategoryManager.init();
+    initChart();
+});
+</script>
+{% endblock %} 

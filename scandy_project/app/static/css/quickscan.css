@@ -1,0 +1,311 @@
+/* QuickScan Styles */
+.scan-area {
+    position: relative;
+    min-height: 60px;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: rgba(var(--b1) / 0.1);
+    backdrop-filter: blur(8px);
+}
+
+.scan-animation {
+    position: relative;
+    min-height: 3rem;
+}
+
+.scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        hsl(var(--p) / 0.3) 20%, 
+        hsl(var(--p)) 50%,
+        hsl(var(--p) / 0.3) 80%,
+        transparent 100%
+    );
+    box-shadow: 0 0 8px hsl(var(--p) / 0.5);
+    animation: scanning 1.5s ease-in-out infinite;
+    z-index: 10;
+}
+
+.scan-overlay {
+    position: absolute;
+    inset: 0;
+    border: 2px solid hsl(var(--p));
+    border-radius: 0.5rem;
+}
+
+@keyframes scanning {
+    0% {
+        top: 0;
+        opacity: 0.8;
+    }
+    50% {
+        top: calc(100% - 2px);
+        opacity: 1;
+    }
+    100% {
+        top: 0;
+        opacity: 0.8;
+    }
+}
+
+/* Step Styles */
+.step.step-primary .collapse-title {
+    background-color: hsl(var(--p));
+    color: hsl(var(--pc));
+}
+
+.step:not(.step-primary) .collapse-content {
+    opacity: 0.5;
+}
+
+/* Webcam Container */
+#webcamMode {
+    aspect-ratio: 16/9;
+    max-height: 200px;
+    overflow: hidden;
+    border-radius: 0.5rem;
+}
+
+#video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Anpassungen für horizontale Steps */
+.modal-box {
+    max-height: min(600px, 80vh);
+    width: min(450px, 95vw);
+}
+
+.steps-horizontal {
+    margin-bottom: 1rem;
+}
+
+.step {
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.step.active {
+    opacity: 1;
+}
+
+/* Steps */
+.steps {
+    --connector-size: 2px;
+    --step-padding: 1rem;
+}
+
+.steps .step {
+    --size: 2rem;
+}
+
+.steps .step:before {
+    height: var(--connector-size);
+    background-color: hsl(var(--b3));
+}
+
+.steps .step.step-primary:before {
+    background-color: hsl(var(--p));
+}
+
+.steps .step:after {
+    width: var(--size);
+    height: var(--size);
+    background-color: hsl(var(--b3));
+    border: var(--connector-size) solid hsl(var(--b2));
+    font-size: 0.8rem;
+}
+
+.steps .step.step-primary:after {
+    background-color: hsl(var(--p));
+    border-color: hsl(var(--p));
+    color: hsl(var(--pc));
+}
+
+/* Content Area */
+#stepContent {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Transitions */
+.transition-all {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+/* Alert Customization */
+.alert {
+    --padding-y: 0.5rem;
+    --padding-x: 0.75rem;
+}
+
+/* Input Customization */
+.input-sm {
+    height: 2rem;
+    font-size: 0.875rem;
+}
+
+/* Button Customization */
+.btn-sm {
+    height: 2rem;
+    min-height: 2rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+
+/* Content Area */
+.bg-base-200 {
+    --tw-bg-opacity: 0.5;
+}
+
+/* Progress Steps Container */
+.w-full.px-4.py-2.bg-base-200 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* Content Area Padding anpassen */
+.p-4 {
+    padding: 0.75rem;
+}
+
+/* Alert Größe optimieren */
+.alert.shadow-sm {
+    padding: 0.5rem;
+    min-height: unset;
+}
+
+/* Toast Container */
+#toast-container {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 9999; /* Höher als Modal (normalerweise 999) */
+    pointer-events: none; /* Erlaubt Klicks durch den Container */
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Individual Toast */
+#toast-container .alert {
+    pointer-events: auto; /* Macht den Toast selbst klickbar */
+    min-width: 250px;
+    max-width: 90vw;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Toast Animation */
+#toast-container .alert {
+    transition: all 0.3s ease;
+}
+
+/* Toast Varianten */
+#toast-container .alert-error {
+    background-color: hsl(var(--er));
+    color: hsl(var(--erc));
+}
+
+#toast-container .alert-success {
+    background-color: hsl(var(--su));
+    color: hsl(var(--suc));
+}
+
+#toast-container .alert-info {
+    background-color: hsl(var(--in));
+    color: hsl(var(--inc));
+}
+
+#toast-container .alert-warning {
+    background-color: hsl(var(--wa));
+    color: hsl(var(--wac));
+}
+
+/* Scanning Animation */
+.scan-step {
+    transition: all 0.3s ease-in-out;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.scan-step.hidden {
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+}
+
+/* Confirmation Barcodes */
+canvas {
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+/* Success Animation */
+@keyframes success-pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.success-icon {
+    animation: success-pulse 0.5s ease-out forwards;
+}
+
+/* Mobile Optimierungen */
+@media (max-width: 768px) {
+    .modal-box {
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .scan-area {
+        min-height: 80px;
+    }
+
+    #webcamMode {
+        max-height: 300px;
+    }
+
+    .steps-horizontal {
+        flex-wrap: wrap;
+    }
+
+    .step {
+        min-width: 50%;
+    }
+}
+
+/* Touch-Optimierungen */
+@media (hover: none) {
+    .btn {
+        min-height: 44px; /* Bessere Touch-Targets */
+    }
+
+    .scan-area {
+        min-height: 100px;
+    }
+} 

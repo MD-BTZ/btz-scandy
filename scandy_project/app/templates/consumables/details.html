@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}{{ consumable.name }} - Details{% endblock %}
+
+{% block page_content %}
+<div class="mb-4">
+    <a href="{{ url_for('consumables.index') }}" class="btn btn-ghost">
+        <i class="fas fa-arrow-left mr-2"></i>
+        Zurück zur Übersicht
+    </a>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Verbrauchsmaterial-Details -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="flex justify-between items-start">
+                <h2 class="card-title">{{ consumable.name }}</h2>
+                <div class="badge badge-lg {{ 'badge-success' if consumable.quantity > consumable.min_quantity else 'badge-warning' if consumable.quantity > 0 else 'badge-error' }}">
+                    {{ consumable.quantity }} Stück
+                </div>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Grundinformationen -->
+            <div class="space-y-2">
+                <p><strong>Barcode:</strong> {{ consumable.barcode }}</p>
+                <p><strong>Kategorie:</strong> {{ consumable.category or 'Keine Kategorie' }}</p>
+                <p><strong>Standort:</strong> {{ consumable.location or 'Kein Standort' }}</p>
+                <p><strong>Mindestbestand:</strong> {{ consumable.min_quantity }}</p>
+                {% if consumable.description %}
+                <p><strong>Beschreibung:</strong> {{ consumable.description }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Aktionen -->
+            <div class="card-actions justify-end mt-4">
+                <button class="btn btn-primary" onclick="showStockModal()">
+                    <i class="fas fa-boxes mr-2"></i>Bestand anpassen
+                </button>
+                <button class="btn btn-primary" onclick="showEditModal()">
+                    <i class="fas fa-edit mr-2"></i>Bearbeiten
+                </button>
+                <button class="btn btn-danger" 
+                        onclick="deleteItem('consumable', '{{ consumable.barcode }}')"
+                        data-barcode="{{ consumable.barcode }}">
+                    <i class="fas fa-trash"></i> In den Papierkorb
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bestandsänderungen -->
+    <div class="card bg-base-100 shadow-xl col-span-2">
+        <div class="card-body">
+            <h2 class="card-title">Bestandsänderungen</h2>
+            {% if history %}
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Mitarbeiter</th>
+                            <th>Menge</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in history %}
+                        <tr>
+                            <td>{{ entry.action_date.strftime('%d.%m.%Y %H:%M') if entry.action_date else 'Unbekannt' }}</td>
+                            <td>
+                                {% if entry.worker != 'Admin' %}
+                                {{ entry.worker }}
+                                {% else %}
+                                {{ entry.worker }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {{ 'badge-success' if 'Hinzugefügt' in entry.action else 'badge-error' }}">
+                                    {{ entry.action }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-base-content/60">Keine Bestandsänderungen vorhanden</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Bestandsanpassung Modal -->
+<dialog id="stockModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Bestand anpassen</h3>
+        <form id="stockForm" method="POST" action="{{ url_for('consumables.adjust_stock', barcode=consumable.barcode) }}">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Aktueller Bestand: {{ consumable.quantity }}</span>
+                </label>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Menge hinzufügen/abziehen</span>
+                </label>
+                <input type="number" name="quantity" class="input input-bordered" required>
+                <label class="label">
+                    <span class="label-text-alt">Positive Zahl zum Hinzufügen, negative zum Abziehen</span>
+                </label>
+                <div class="text-sm text-gray-500 mt-2">
+                    <p>Beispiele:</p>
+                    <ul class="list-disc list-inside">
+                        <li>+5: Fügt 5 Stück zum Bestand hinzu</li>
+                        <li>-3: Zieht 3 Stück vom Bestand ab</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Grund</span>
+                </label>
+                <input type="text" name="reason" class="input input-bordered" placeholder="z.B. Neue Lieferung" required>
+            </div>
+            
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">Speichern</button>
+                <button type="button" class="btn" onclick="closeStockModal()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Edit Modal -->
+<dialog id="editModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">{{ app_labels.consumables.name }} bearbeiten</h3>
+        <form id="editForm" method="POST" action="{{ url_for('consumables.detail', barcode=consumable.barcode) }}">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Name</span>
+                </label>
+                <input type="text" name="name" class="input input-bordered" value="{{ consumable.name }}" required>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Barcode</span>
+                </label>
+                <input type="text" name="barcode" class="input input-bordered" value="{{ consumable.barcode }}" required>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Kategorie</span>
+                </label>
+                <select name="category" class="select select-bordered">
+                    <option value="">Keine Kategorie</option>
+                    {% for category in categories %}
+                    <option value="{{ category }}" {{ 'selected' if category == consumable.category }}>
+                        {{ category }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Standort</span>
+                </label>
+                <select name="location" class="select select-bordered">
+                    <option value="">Kein Standort</option>
+                    {% for location in locations %}
+                    <option value="{{ location }}" {{ 'selected' if location == consumable.location }}>
+                        {{ location }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Mindestbestand</span>
+                </label>
+                <input type="number" name="min_quantity" class="input input-bordered" value="{{ consumable.min_quantity }}" required min="0">
+            </div>
+            
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Beschreibung</span>
+                </label>
+                <textarea name="description" class="textarea textarea-bordered" rows="3">{{ consumable.description or '' }}</textarea>
+            </div>
+            
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">Speichern</button>
+                <button type="button" class="btn" onclick="closeEditModal()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+function showEditModal() {
+    document.getElementById('editModal').showModal();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+function showStockModal() {
+    document.getElementById('stockModal').showModal();
+}
+
+function closeStockModal() {
+    document.getElementById('stockModal').close();
+}
+
+async function deleteConsumable(barcode) {
+    if (!confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/consumables/${barcode}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.href = '/consumables';
+        } else {
+            alert(result.message || 'Ein Fehler ist aufgetreten');
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen:', error);
+        alert('Ein Fehler ist aufgetreten');
+    }
+}
+
+// Formular-Handling
+const editForm = document.getElementById('editForm');
+if (editForm) {
+    editForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        try {
+            const response = await fetch(this.action, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert(result.message || 'Ein Fehler ist aufgetreten');
+            }
+        } catch (error) {
+            console.error('Fehler beim Speichern:', error);
+            alert('Ein Fehler ist aufgetreten');
+        }
+    });
+}
+
+// Bestandsanpassung Formular-Handling
+const stockForm = document.getElementById('stockForm');
+if (stockForm) {
+    stockForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        try {
+            const response = await fetch(this.action, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert(result.message || 'Ein Fehler ist aufgetreten');
+            }
+        } catch (error) {
+            console.error('Fehler beim Anpassen des Bestands:', error);
+            alert('Ein Fehler ist aufgetreten');
+        }
+    });
+}
+</script>
+{% endblock %} 

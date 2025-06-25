@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug - Neuer Auftrag</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.0.7/dist/full.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+<body class="p-8">
+    <div class="container mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Debug: Öffentliches Auftragsformular</h1>
+        
+        <div class="card bg-base-100 shadow-lg mb-6">
+            <div class="card-body">
+                <h2 class="card-title">Debug-Informationen</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="font-bold">Kategorien-Variable:</h3>
+                        <pre class="bg-base-200 p-4 rounded">{{ categories }}</pre>
+                    </div>
+                    
+                    <div>
+                        <h3 class="font-bold">Kategorien-Typ:</h3>
+                        <pre class="bg-base-200 p-4 rounded">{{ categories.__class__.__name__ }}</pre>
+                    </div>
+                    
+                    <div>
+                        <h3 class="font-bold">Kategorien-Länge:</h3>
+                        <pre class="bg-base-200 p-4 rounded">{{ categories|length }}</pre>
+                    </div>
+                    
+                    <div>
+                        <h3 class="font-bold">Alle verfügbaren Variablen:</h3>
+                        <pre class="bg-base-200 p-4 rounded">{{ vars() }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-lg">
+            <div class="card-body">
+                <h2 class="card-title">Kategorien-Dropdown Test</h2>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Kategorie</span>
+                    </label>
+                    <select name="category" class="select select-bordered w-full">
+                        <option value="">Keine Kategorie</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mt-4">
+                    <h3 class="font-bold">For-Loop Debug:</h3>
+                    <ul class="list-disc list-inside">
+                        {% for cat in categories %}
+                        <li>Kategorie: "{{ cat }}" (Typ: {{ cat.__class__.__name__ }})</li>
+                        {% else %}
+                        <li class="text-error">Keine Kategorien gefunden!</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

@@ -1,0 +1,143 @@
+<!-- QuickScan Modal -->
+<dialog id="quickScanModal" class="modal">
+    <div class="modal-box w-full max-w-4xl max-h-[95vh] flex flex-col p-4 relative">
+        <button class="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost text-xl" onclick="document.getElementById('quickScanModal').close()" aria-label="Schließen">&times;</button>
+        <h3 class="font-bold text-base mb-4 text-center">QuickScan</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 justify-center">
+            <!-- Karte: Werkzeug/Verbrauchsgut -->
+            <div id="itemCard" class="card w-[320px] h-[320px] min-w-[320px] min-h-[320px] bg-base-200 cursor-pointer transition hover:shadow-2xl hover:scale-[1.03] active:scale-[0.98] border-2 border-transparent" onclick="QuickScan.activateInput('item')">
+                <div class="card-body flex flex-col items-center justify-center h-full">
+                    <i class="fas fa-tools text-2xl text-primary mb-1"></i>
+                    <h2 class="card-title text-base mb-1">Werkzeug / Verbrauchsgut</h2>
+                    <div id="itemCardContent">
+                        <p class="text-sm opacity-50">Klicken &amp; Barcode scannen oder eingeben</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Karte: Mitarbeiter -->
+            <div id="workerCard" class="card w-[320px] h-[320px] min-w-[320px] min-h-[320px] bg-base-200 cursor-pointer transition hover:shadow-2xl hover:scale-[1.03] active:scale-[0.98] border-2 border-transparent" onclick="QuickScan.activateInput('worker')">
+                <div class="card-body flex flex-col items-center justify-center h-full">
+                    <i class="fas fa-id-badge text-2xl text-secondary mb-1"></i>
+                    <h2 class="card-title text-base mb-1">Mitarbeiter</h2>
+                    <div id="workerCardContent">
+                        <p class="text-sm opacity-50">Klicken &amp; Barcode scannen oder eingeben</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Sichtbares Eingabefeld, das nur bei aktiver Karte angezeigt wird -->
+        <div class="flex flex-col items-center gap-2 mt-4">
+            <div id="quickScanActiveInputContainer" class="hidden w-full max-w-sm">
+                <input type="text" id="quickScanActiveInput" class="input input-bordered w-full" autocomplete="off" />
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button class="btn btn-ghost hover:btn-warning active:scale-95 transition" type="button" onclick="QuickScan.reset()">Reset</button>
+                <button class="btn btn-primary hover:btn-success active:scale-95 transition" id="quickScanConfirmBtn" type="button" onclick="QuickScan.confirm()" disabled>Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- Quantity Modal -->
+<dialog id="quantityModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Menge eingeben</h3>
+        <div class="space-y-4">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Menge</span>
+                </label>
+                <input type="number" id="quantityInput" class="input input-bordered w-full" min="1" value="1">
+            </div>
+            <div class="flex justify-end space-x-4">
+                <button type="button" onclick="QuickScan.closeQuantityModal()" class="btn btn-ghost">Abbrechen</button>
+                <button type="button" onclick="QuickScan.confirmQuantity()" class="btn btn-primary">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- JsBarcode Library -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<!-- VIBE Easter Egg Overlay -->
+<div id="vibeOverlay" class="fixed inset-0 bg-black/80 z-[9999999] hidden">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-4xl font-bold">
+        VIBE MODE ACTIVATED! 🎵
+    </div>
+    <video id="vibeVideoLeft" class="fixed top-1/2 left-[5%] -translate-y-1/2 w-[400px] h-auto" loop>
+        <source src="{{ url_for('static', filename='videos/vibe.mp4') }}" type="video/mp4">
+    </video>
+    <video id="vibeVideoRight" class="fixed top-1/2 right-[5%] -translate-y-1/2 w-[400px] h-auto" loop>
+        <source src="{{ url_for('static', filename='videos/vibe.mp4') }}" type="video/mp4">
+    </video>
+</div>
+
+<script>
+    // Bestehender Code für das Zebra-Easter Egg
+    let lastInput = '';
+    const danceCode = 'DANCE';
+    const vibeCode = 'VIBE';
+    
+    document.getElementById('quickScanActiveInput').addEventListener('input', function(e) {
+        lastInput = e.target.value.toUpperCase();
+        
+        // Zebra Easter Egg
+        if (lastInput === danceCode) {
+            const overlay = document.createElement('div');
+            overlay.className = 'zebra-overlay';
+            document.body.appendChild(overlay);
+            
+            const zebraLeft = document.createElement('img');
+            zebraLeft.src = "{{ url_for('static', filename='images/zebra.gif') }}";
+            zebraLeft.className = 'dancing-zebra left';
+            zebraLeft.style.animation = 'dance 1s infinite';
+            
+            const zebraRight = document.createElement('img');
+            zebraRight.src = "{{ url_for('static', filename='images/zebra.gif') }}";
+            zebraRight.className = 'dancing-zebra right';
+            zebraRight.style.animation = 'dance 1s infinite';
+            
+            document.body.appendChild(zebraLeft);
+            document.body.appendChild(zebraRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                zebraLeft.remove();
+                zebraRight.remove();
+            }, 5000);
+            
+            e.target.value = '';
+        }
+        
+        // VIBE Easter Egg
+        if (lastInput === vibeCode) {
+            const overlay = document.createElement('div');
+            overlay.className = 'zebra-overlay';
+            document.body.appendChild(overlay);
+            
+            const videoLeft = document.createElement('video');
+            videoLeft.src = "{{ url_for('static', filename='videos/vibe.mp4') }}";
+            videoLeft.className = 'dancing-zebra left';
+            videoLeft.loop = true;
+            videoLeft.autoplay = true;
+            
+            const videoRight = document.createElement('video');
+            videoRight.src = "{{ url_for('static', filename='videos/vibe.mp4') }}";
+            videoRight.className = 'dancing-zebra right';
+            videoRight.loop = true;
+            videoRight.autoplay = true;
+            
+            document.body.appendChild(videoLeft);
+            document.body.appendChild(videoRight);
+            
+            setTimeout(() => {
+                overlay.remove();
+                videoLeft.remove();
+                videoRight.remove();
+            }, 10000);
+            
+            e.target.value = '';
+        }
+    });
+</script> 

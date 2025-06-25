@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Debug - Löschfunktion Test{% endblock %}
+
+{% block page_content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h1 class="card-title text-2xl mb-4">
+                <i class="fas fa-bug mr-2"></i>
+                Debug - Löschfunktion Test
+            </h1>
+            
+            <div class="space-y-4">
+                <div>
+                    <h2 class="text-lg font-bold mb-2">1. Test-Löschfunktion</h2>
+                    <div class="space-y-2">
+                        <button class="btn btn-danger" onclick="testDelete('worker', 'TEST001')">
+                            <i class="fas fa-trash mr-2"></i>Mitarbeiter TEST001 löschen
+                        </button>
+                        <button class="btn btn-danger" onclick="testDelete('tool', 'TOOL001')">
+                            <i class="fas fa-trash mr-2"></i>Werkzeug TOOL001 löschen
+                        </button>
+                        <button class="btn btn-danger" onclick="testDelete('consumable', 'CONS001')">
+                            <i class="fas fa-trash mr-2"></i>Verbrauchsmaterial CONS001 löschen
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h2 class="text-lg font-bold mb-2">2. Console-Ausgaben</h2>
+                    <p class="text-sm text-gray-600">Öffnen Sie die Browser-Konsole (F12) um die Debug-Ausgaben zu sehen.</p>
+                </div>
+                
+                <div>
+                    <h2 class="text-lg font-bold mb-2">3. Verfügbare Routen</h2>
+                    <ul class="list-disc list-inside text-sm">
+                        <li><code>DELETE /admin/workers/{barcode}/delete</code> - Mitarbeiter soft löschen</li>
+                        <li><code>DELETE /admin/tools/{barcode}/delete</code> - Werkzeug soft löschen</li>
+                        <li><code>DELETE /admin/consumables/delete</code> - Verbrauchsmaterial soft löschen (Barcode im JSON-Body)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function testDelete(type, barcode) {
+    console.log('=== TEST DELETE FUNCTION ===');
+    console.log('Type:', type);
+    console.log('Barcode:', barcode);
+    
+    // Teste die deleteItem-Funktion
+    if (typeof deleteItem === 'function') {
+        console.log('deleteItem function exists');
+        deleteItem(type, barcode).then(result => {
+            console.log('Delete successful:', result);
+        }).catch(error => {
+            console.error('Delete failed:', error);
+        });
+    } else {
+        console.error('deleteItem function not found!');
+    }
+}
+</script>
+{% endblock %} 
