@@ -53,13 +53,15 @@ services:
       - DATABASE_MODE=mongodb
       - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/admin
       - MONGODB_DB=scandy
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - SECRET_KEY=scandy-secret-key-change-in-production
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge
       - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
       - TZ=Europe/Berlin
+      - SESSION_COOKIE_SECURE=False
+      - REMEMBER_COOKIE_SECURE=False
     ports:
       - "5000:5000"
     volumes:
@@ -67,6 +69,7 @@ services:
       - app_uploads:/app/app/uploads
       - app_backups:/app/app/backups
       - app_logs:/app/app/logs
+      - app_sessions:/app/app/flask_session
     depends_on:
       scandy-mongodb:
         condition: service_healthy
@@ -92,6 +95,8 @@ volumes:
   app_backups:
     driver: local
   app_logs:
+    driver: local
+  app_sessions:
     driver: local
   app_static:
     driver: local
