@@ -96,228 +96,310 @@ function createTicket() {
     });
 }
 
-// Event Listener für DOMContentLoaded
+// Event Listener für DOMContentLoaded, der das Modal und seine Formulare behandelt
 document.addEventListener('DOMContentLoaded', function() {
-    // Nur initialisieren wenn wir auf einer Ticket-Seite sind
-    if (!isTicketPage()) {
-        console.log('Keine Ticket-Seite - tickets.js wird nicht initialisiert');
-        return;
-    }
-    
-    console.log('DOMContentLoaded Event auf Ticket-Seite');
-    
-    // Filter-Formular
-    const filterForm = document.getElementById('filterForm');
-    if (filterForm) {
-        const inputs = filterForm.querySelectorAll('select, input');
-        
-        inputs.forEach(input => {
-            input.addEventListener('change', function() {
-                const params = new URLSearchParams(window.location.search);
-                
-                inputs.forEach(inp => {
-                    if (inp.value) {
-                        params.set(inp.name, inp.value);
-                    } else {
-                        params.delete(inp.name);
-                    }
-                });
-                
-                window.location.href = `${window.location.pathname}?${params.toString()}`;
-            });
-            
-            // Setze gespeicherte Werte
-            const params = new URLSearchParams(window.location.search);
-            const savedValue = params.get(input.name);
-            if (savedValue) {
-                input.value = savedValue;
-            }
-        });
-    }
+    const form = document.getElementById('ticket_details_form');
 
-    // Ticket-Formular
-    const ticketForm = document.getElementById('ticketForm');
-    if (ticketForm) {
-        ticketForm.addEventListener('submit', function(e) {
+    if (form) {
+        console.log("Auftragsdetails-Formular gefunden. Initialisiere Event-Listener.");
+            
+        // Event-Listener für das Absenden des Formulars (nur für AJAX-Requests)
+        if (form.getAttribute('data-ajax') === 'true') {
+            form.addEventListener('submit', function(e) {
             e.preventDefault();
+                console.log('Formular wird abgeschickt...');
             
-            const submitBtn = this.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichern...';
+                const data = collectAuftragDetails();
+                const ticketId = form.closest('.modal')?.dataset.ticketId || 
+                                window.location.pathname.split('/')[2];
             
-            const formData = new FormData(this);
-            const data = {};
-            formData.forEach((value, key) => {
-                data[key] = value;
-            });
-            
-            fetch(this.action, {
+                fetch(`/tickets/${ticketId}/update-details`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
                 },
                 body: JSON.stringify(data)
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showToast('success', 'Ticket erfolgreich erstellt');
-                    // Formular zurücksetzen
-                    this.reset();
-                    // Weiterleitung zur Create-Seite
-                    window.location.href = '/tickets/create';
+                        showToast('success', 'Auftragsdetails erfolgreich gespeichert');
+                        const modal = document.querySelector('.modal');
+                        if (modal) {
+                            modal.close();
+                            setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                            window.location.reload();
+                        }
                 } else {
-                    throw new Error(data.message || 'Fehler beim Erstellen des Tickets');
+                        showToast('error', data.message || 'Fehler beim Speichern');
                 }
             })
             .catch(error => {
                 console.error('Fehler:', error);
-                showToast('error', error.message || 'Ein Fehler ist aufgetreten');
-            })
-            .finally(() => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Speichern';
+                    showToast('error', 'Ein Fehler ist aufgetreten');
+                });
             });
-        });
+        }
+
+        // Event-Listener für "Material hinzufügen"
+        const addMaterialBtn = document.getElementById('addMaterialBtn');
+        if (addMaterialBtn) {
+            addMaterialBtn.addEventListener('click', addMaterialRow);
     }
 
-    // Initialisiere das Modal nur wenn es existiert
-    const auftragDetailsModal = document.getElementById('auftragDetailsModal');
-    if (auftragDetailsModal) {
-        console.log('Auftragsdetails-Modal gefunden');
-        // Warte einen kurzen Moment, um sicherzustellen, dass alle DOM-Elemente geladen sind
-        setTimeout(() => {
-            initializeAuftragDetailsModal();
-        }, 100);
-    } else {
-        console.log('Auftragsdetails-Modal nicht gefunden');
+        // Event-Listener für "Arbeit hinzufügen"
+        const addArbeitBtn = document.getElementById('addArbeitBtn');
+        if (addArbeitBtn) {
+            addArbeitBtn.addEventListener('click', addArbeitRow);
+        }
+
+        // Event-Listener für bestehende Zeilen initialisieren
+        initializeExistingRows();
+        
+        // Initiale Berechnungen durchführen
+        updateSummeMaterial();
+        updateSummeArbeit();
+        updateGesamtsumme();
     }
 });
+
+// Funktion zum Initialisieren bestehender Zeilen
+function initializeExistingRows() {
+    console.log('Initialisiere bestehende Zeilen...');
+    
+    // Materialzeilen
+    document.querySelectorAll('#materialRows .material-row').forEach(row => {
+        console.log('Initialisiere Materialzeile:', row);
+        initializeMaterialRowEvents(row);
+    });
+    
+    // Arbeitszeilen
+    document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+        console.log('Initialisiere Arbeitszeile:', row);
+        initializeArbeitRowEvents(row);
+});
+}
 
 // Funktion zum Hinzufügen einer neuen Materialzeile
 function addMaterialRow() {
     console.log('Materialzeile hinzufügen');
-    const tbody = document.querySelector('#materialTable tbody');
+    const tbody = document.getElementById('materialRows');
     const newRow = document.createElement('tr');
     newRow.className = 'material-row';
     newRow.innerHTML = `
-        <td><input type="text" class="input input-bordered w-full material-input" placeholder="Material"></td>
-        <td><input type="number" class="input input-bordered w-full menge-input" placeholder="Menge" min="0" step="0.01" onchange="updateMaterialSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full einzelpreis-input" placeholder="Einzelpreis" min="0" step="0.01" onchange="updateMaterialSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full summe-input" placeholder="Summe" readonly></td>
-        <td>
-            <button type="button" class="btn btn-error btn-sm" onclick="deleteRow(this)">
-                <i class="fas fa-trash"></i>
-            </button>
-        </td>
+        <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(newRow);
+    initializeMaterialRowEvents(newRow);
+}
+
+function initializeMaterialRowEvents(row) {
+    console.log('Initialisiere Materialzeile Events:', row);
+    
+    // Event-Listener für Menge und Einzelpreis
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    
+    if (mengeInput) {
+        mengeInput.addEventListener('input', () => {
+            console.log('Menge geändert');
+            updateRowSum(row);
+        });
+    }
+    
+    if (einzelpreisInput) {
+        einzelpreisInput.addEventListener('input', () => {
+            console.log('Einzelpreis geändert');
+            updateRowSum(row);
+        });
+    }
+    
+    // Event-Listener für Löschen-Button
+    const deleteBtn = row.querySelector('.delete-material-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            console.log('Materialzeile löschen');
+            row.remove();
+            updateSummeMaterial();
+            updateGesamtsumme();
+        });
+    }
+    
+    // Initiale Berechnung
+    updateRowSum(row);
 }
 
 // Funktion zum Hinzufügen einer neuen Arbeitszeile
 function addArbeitRow() {
     console.log('Arbeitszeile hinzufügen');
-    const tbody = document.querySelector('#arbeitTable tbody');
+    const tbody = document.getElementById('arbeitenRows');
     const newRow = document.createElement('tr');
     newRow.className = 'arbeit-row';
     newRow.innerHTML = `
-        <td><input type="text" class="input input-bordered w-full arbeit-input" placeholder="Arbeit"></td>
-        <td><input type="number" class="input input-bordered w-full stunden-input" placeholder="Stunden" min="0" step="0.5" onchange="updateArbeitSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full stundensatz-input" placeholder="Stundensatz" min="0" step="0.01" onchange="updateArbeitSum(this)"></td>
-        <td><input type="number" class="input input-bordered w-full summe-input" placeholder="Summe" readonly></td>
-        <td>
-            <button type="button" class="btn btn-error btn-sm" onclick="deleteRow(this)">
-                <i class="fas fa-trash"></i>
-            </button>
-        </td>
+        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
+        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(newRow);
+    initializeArbeitRowEvents(newRow);
 }
 
-// Funktion zum Löschen einer Zeile
-function deleteRow(button) {
-    const row = button.closest('tr');
+function initializeArbeitRowEvents(row) {
+    console.log('Initialisiere Arbeitszeile Events:', row);
+    
+    // Event-Listener für Arbeitsstunden
+    const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+    if (arbeitsstundenInput) {
+        arbeitsstundenInput.addEventListener('input', () => {
+            console.log('Arbeitsstunden geändert');
+            updateSummeArbeit();
+            updateGesamtsumme();
+        });
+    }
+    
+    // Event-Listener für Löschen-Button
+    const deleteBtn = row.querySelector('.delete-arbeit-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            console.log('Arbeitszeile löschen');
         row.remove();
+            updateSummeArbeit();
+            updateGesamtsumme();
+        });
+    }
+}
+
+function updateRowSum(row) {
+    console.log('Berechne Zeilensumme für:', row);
+    
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+    
+    if (!mengeInput || !einzelpreisInput || !gesamtpreisInput) {
+        console.log('Fehlende Input-Felder in Zeile');
+        return;
+    }
+    
+    const menge = parseFloat(mengeInput.value) || 0;
+    const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    
+    console.log(`Menge: ${menge}, Einzelpreis: ${einzelpreis}, Gesamtpreis: ${gesamtpreis}`);
+    
+    gesamtpreisInput.value = gesamtpreis.toFixed(2);
+    
+    updateSummeMaterial();
     updateGesamtsumme();
 }
 
-// Funktion zum Aktualisieren der Materialsumme
-function updateMaterialSum(input) {
-    const row = input.closest('tr');
-    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-    const summe = menge * einzelpreis;
-    row.querySelector('.summe-input').value = summe.toFixed(2);
+function updateSummeMaterial() {
+    console.log('Berechne Materialsumme...');
+    let summe = 0;
+    
+    document.querySelectorAll('#materialRows .material-row').forEach(row => {
+        const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+        if (gesamtpreisInput) {
+            const gesamtpreis = parseFloat(gesamtpreisInput.value) || 0;
+            summe += gesamtpreis;
+            console.log('Zeile Gesamtpreis:', gesamtpreis);
+        }
+    });
+    
+    const summeElement = document.getElementById('summeMaterial');
+    if (summeElement) {
+        summeElement.textContent = summe.toFixed(2) + ' €';
+        console.log('Materialsumme gesetzt auf:', summe.toFixed(2));
+    }
+    
     updateGesamtsumme();
 }
 
-// Funktion zum Aktualisieren der Arbeitssumme
-function updateArbeitSum(input) {
-    const row = input.closest('tr');
-    const stunden = parseFloat(row.querySelector('.stunden-input').value) || 0;
-    const stundensatz = parseFloat(row.querySelector('.stundensatz-input').value) || 0;
-    const summe = stunden * stundensatz;
-    row.querySelector('.summe-input').value = summe.toFixed(2);
+function updateSummeArbeit() {
+    console.log('Berechne Arbeitssumme...');
+    let summe = 0;
+    
+    document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+        const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+        if (arbeitsstundenInput) {
+            const stunden = parseFloat(arbeitsstundenInput.value) || 0;
+            summe += stunden;
+            console.log('Zeile Arbeitsstunden:', stunden);
+        }
+    });
+    
+    const summeElement = document.getElementById('summeArbeit');
+    if (summeElement) {
+        summeElement.textContent = summe.toFixed(2) + ' h';
+        console.log('Arbeitssumme gesetzt auf:', summe.toFixed(2));
+    }
+    
     updateGesamtsumme();
 }
 
-// Funktion zum Aktualisieren der Gesamtsumme
 function updateGesamtsumme() {
-    let materialSum = 0;
-    let arbeitSum = 0;
-
-    // Materialsumme berechnen
-    document.querySelectorAll('#materialTable .summe-input').forEach(input => {
-        materialSum += parseFloat(input.value) || 0;
-    });
-
-    // Arbeitssumme berechnen
-    document.querySelectorAll('#arbeitTable .summe-input').forEach(input => {
-        arbeitSum += parseFloat(input.value) || 0;
-    });
-
-    const gesamtSum = materialSum + arbeitSum;
-    document.getElementById('gesamtsumme').value = gesamtSum.toFixed(2);
+    console.log('Berechne Gesamtsumme...');
+    
+    const summeMaterialElement = document.getElementById('summeMaterial');
+    const gesamtsummeElement = document.getElementById('gesamtsumme');
+    
+    if (!summeMaterialElement || !gesamtsummeElement) {
+        console.log('Summen-Elemente nicht gefunden');
+        return;
+    }
+    
+    const summeMaterialText = summeMaterialElement.textContent;
+    const summeMaterial = parseFloat(summeMaterialText.replace(' €', '')) || 0;
+    
+    console.log('Materialsumme für Gesamtsumme:', summeMaterial);
+    
+    gesamtsummeElement.textContent = summeMaterial.toFixed(2) + ' €';
+    console.log('Gesamtsumme gesetzt auf:', summeMaterial.toFixed(2));
 }
 
-// Funktion zum Sammeln der Auftragsdetails
+// Daten-Sammelfunktionen
 function collectAuftragDetails() {
-    const form = document.getElementById('auftragDetailsForm');
+    const form = document.getElementById('ticket_details_form');
     const formData = new FormData(form);
     const data = {};
 
-    // Basis-Formulardaten
     for (let [key, value] of formData.entries()) {
-        if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
-            data[key] = value === '1';
+        if (key.endsWith('[]')) {
+            let realKey = key.slice(0, -2);
+            if (!data[realKey]) {
+                data[realKey] = [];
+            }
+            data[realKey].push(value);
         } else {
             data[key] = value;
         }
     }
 
-    // Materialliste sammeln
-    data.material_list = collectMaterialList();
+    // Verarbeite den Auftraggeber-Typ (Radio-Button)
+    const auftraggeberTyp = data.auftraggeber_typ || '';
+    data.auftraggeber_intern = auftraggeberTyp === 'intern';
+    data.auftraggeber_extern = auftraggeberTyp === 'extern';
     
-    // Arbeitenliste sammeln
+    data.material_list = collectMaterialList();
     data.arbeit_list = collectArbeitList();
 
-    // Gesamtsumme hinzufügen
-    data.gesamtsumme = parseFloat(document.getElementById('gesamtsumme').value) || 0;
-
-    console.log('Gesammelte Daten:', data);
     return data;
 }
 
-// Funktion zum Sammeln der Materialliste
 function collectMaterialList() {
     const materialList = [];
-    document.querySelectorAll('.material-row').forEach(row => {
-        const material = row.querySelector('.material-input').value;
-        const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
+    document.querySelectorAll('#materialRows .material-row').forEach(row => {
+        const material = row.querySelector('.material-input')?.value.trim();
+        const menge = parseFloat(row.querySelector('.menge-input')?.value) || 0;
+        const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input')?.value) || 0;
         
-        if (material || menge || einzelpreis) {
+        if (material || menge > 0 || einzelpreis > 0) {
             materialList.push({
                 material: material,
                 menge: menge,
@@ -328,62 +410,20 @@ function collectMaterialList() {
     return materialList;
 }
 
-// Funktion zum Sammeln der Arbeitenliste
 function collectArbeitList() {
     const arbeitList = [];
-    document.querySelectorAll('.arbeit-row').forEach(row => {
-        const arbeit = row.querySelector('.arbeit-input').value;
-        const stunden = parseFloat(row.querySelector('.stunden-input').value) || 0;
-        const stundensatz = parseFloat(row.querySelector('.stundensatz-input').value) || 0;
+    document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+        const arbeit = row.querySelector('.arbeit-input')?.value.trim();
+        const arbeitsstunden = parseFloat(row.querySelector('.arbeitsstunden-input')?.value) || 0;
+        const leistungskategorie = row.querySelector('.leistungskategorie-input')?.value.trim();
         
-        if (arbeit || stunden || stundensatz) {
+        if (arbeit || arbeitsstunden > 0 || leistungskategorie) {
             arbeitList.push({
                 arbeit: arbeit,
-                stunden: stunden,
-                stundensatz: stundensatz
+                arbeitsstunden: arbeitsstunden,
+                leistungskategorie: leistungskategorie
             });
         }
     });
     return arbeitList;
-}
-
-// Zentrale Initialisierungsfunktion für das Modal
-function initializeAuftragDetailsModal() {
-    console.log('Initialisiere Auftragsdetails-Modal...');
-    
-    // Event-Listener für Material-Buttons
-    const addMaterialBtn = document.getElementById('addMaterialBtn');
-    if (addMaterialBtn) {
-        addMaterialBtn.addEventListener('click', addMaterialRow);
-    }
-    
-    // Event-Listener für Arbeit-Buttons
-    const addArbeitBtn = document.getElementById('addArbeitBtn');
-    if (addArbeitBtn) {
-        addArbeitBtn.addEventListener('click', addArbeitRow);
-    }
-    
-    // Event-Listener für Lösch-Buttons
-    document.querySelectorAll('.delete-material-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            removeMaterialRow(this);
-        });
-    });
-    
-    document.querySelectorAll('.delete-arbeit-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            removeArbeitRow(this);
-        });
-    });
-    
-    // Event-Listener für Summen-Updates
-    document.querySelectorAll('.menge-input, .einzelpreis-input').forEach(input => {
-        input.addEventListener('input', function() {
-            updateSumme(this);
-        });
-    });
-    
-    // Initialisiere die Summen
-    updateSummeMaterial();
-    updateSummeArbeit();
 } 

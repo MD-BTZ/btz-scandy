@@ -1,42 +1,44 @@
 <!-- Modal für Auftragsdetails und Materialliste -->
-<dialog id="auftragDetailsModal" class="modal" data-ticket-id="{{ ticket.id }}">
+<dialog id="auftragDetailsModal" class="modal" data-ticket-id="{{ ticket._id }}">
     <div class="modal-box" style="width:70vw; height:90vh; max-width:none; max-height:none; overflow:auto;">
         <h3 class="font-bold text-lg mb-4">
             <i class="fas fa-clipboard-list text-primary mr-2"></i>
             Auftragsdetails bearbeiten
         </h3>
-        <form method="POST" action="{{ url_for('tickets.update', id=ticket.id) }}" id="auftragDetailsForm">
+        <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="label"><span class="label-text">Bereich</span></label>
-                    <input type="text" name="bereich" class="input input-bordered w-full" value="{{ auftrag_details.bereich if auftrag_details else '' }}">
+                    <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
                 </div>
                 <div>
                     <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
-                    <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ auftrag_details.fertigstellungstermin if auftrag_details else '' }}">
+                    <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ ticket.auftrag_details.fertigstellungstermin | default('', true) }}">
                 </div>
                 <div>
                     <label class="label"><span class="label-text">Auftraggeber</span></label>
+                    <div class="flex items-center">
                     <label class="cursor-pointer mr-4">
-                        <input type="checkbox" name="auftraggeber_intern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_intern %}checked{% endif %}>
+                            <input type="radio" name="auftraggeber_typ" value="intern" class="radio radio-primary" {% if ticket.auftrag_details.get('auftraggeber_intern') %}checked{% endif %}>
                         <span class="ml-2">Intern</span>
                     </label>
                     <label class="cursor-pointer">
-                        <input type="checkbox" name="auftraggeber_extern" value="1" class="checkbox" {% if auftrag_details and auftrag_details.auftraggeber_extern %}checked{% endif %}>
+                            <input type="radio" name="auftraggeber_typ" value="extern" class="radio radio-primary" {% if ticket.auftrag_details.get('auftraggeber_extern') %}checked{% endif %}>
                         <span class="ml-2">Extern</span>
                     </label>
+                    </div>
                 </div>
                 <div>
                     <label class="label"><span class="label-text">Name Auftraggeber</span></label>
-                    <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ auftrag_details.auftraggeber_name if auftrag_details else '' }}">
+                    <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}">
                 </div>
                 <div class="md:col-span-2">
                     <label class="label"><span class="label-text">Kontakt</span></label>
-                    <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ auftrag_details.kontakt if auftrag_details else '' }}">
+                    <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ ticket.auftrag_details.kontakt | default('', true) }}">
                 </div>
                 <div class="md:col-span-2">
                     <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
-                    <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ auftrag_details.auftragsbeschreibung if auftrag_details else '' }}</textarea>
+                    <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ ticket.auftrag_details.auftragsbeschreibung | default('', true) }}</textarea>
                 </div>
             </div>
             <div class="divider my-6">Materialliste</div>
@@ -52,6 +54,7 @@
                         </tr>
                     </thead>
                     <tbody id="materialRows">
+                        {% set material_list = ticket.auftrag_details.get('material_list', []) %}
                         {% if material_list %}
                             {% for mat in material_list %}
                             <tr class="material-row">
@@ -91,17 +94,15 @@
                         </tr>
                     </thead>
                     <tbody id="arbeitenRows">
-                        {% if auftrag_details and auftrag_details.ausgefuehrte_arbeiten %}
-                            {% for arbeit in auftrag_details.ausgefuehrte_arbeiten.split('\n') %}
-                                {% if arbeit %}
-                                    {% set parts = arbeit.split('|') %}
+                        {% set arbeit_list = ticket.auftrag_details.get('arbeit_list', []) %}
+                        {% if arbeit_list %}
+                            {% for arbeit in arbeit_list %}
                                     <tr class="arbeit-row">
-                                        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" value="{{ parts[0] if parts|length > 0 else '' }}"></td>
-                                        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5" value="{{ parts[1] if parts|length > 1 else '' }}"></td>
-                                        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" value="{{ parts[2] if parts|length > 2 else '' }}"></td>
+                                    <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" value="{{ arbeit.arbeit }}"></td>
+                                    <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5" value="{{ arbeit.arbeitsstunden }}"></td>
+                                    <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" value="{{ arbeit.leistungskategorie }}"></td>
                                         <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
                                     </tr>
-                                {% endif %}
                             {% endfor %}
                         {% endif %}
                         <tr class="arbeit-row">
@@ -115,6 +116,14 @@
                 <button type="button" class="btn btn-secondary mt-2" id="addArbeitBtn"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
             </div>
             <div class="flex justify-end mt-4">
+                <div class="font-bold mr-4">Summe Arbeit:</div>
+                <div id="summeArbeit" class="font-bold">0,00 h</div>
+            </div>
+            <div class="flex justify-end mt-4">
+                <div class="font-bold mr-4">Gesamtsumme:</div>
+                <div id="gesamtsumme" class="font-bold">0,00 €</div>
+            </div>
+            <div class="flex justify-end mt-4">
                 <button type="submit" class="btn btn-primary">Speichern</button>
                 <button type="button" class="btn ml-2" onclick="document.getElementById('auftragDetailsModal').close()">Abbrechen</button>
             </div>
@@ -124,17 +133,13 @@
 
 <script>
 // Setze die Ticket-ID für die JavaScript-Funktionen
-const ticketId = {{ ticket.id }};
+const ticketId = '{{ ticket._id }}';
 
 // Initialisiere das Modal nach dem Laden
 document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('auftragDetailsModal');
     if (modal) {
-        console.log('Modal gefunden, initialisiere...');
-        // Lade das Script dynamisch nur wenn das Modal existiert
-        const script = document.createElement('script');
-        script.src = "{{ url_for('static', filename='js/tickets.js') }}";
-        document.body.appendChild(script);
+        console.log('Modal gefunden. tickets.js sollte die Listener initialisieren.');
     } else {
         console.log('Modal nicht gefunden');
     }

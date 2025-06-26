@@ -1614,8 +1614,8 @@ def update_ticket(ticket_id):
         # Bereite die Auftragsdetails vor
         auftrag_details = {
             'bereich': data.get('bereich', ''),
-            'auftraggeber_intern': bool(data.get('auftraggeber_intern', False)),
-            'auftraggeber_extern': bool(data.get('auftraggeber_extern', False)),
+            'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
+            'auftraggeber_extern': data.get('auftraggeber_typ') == 'extern',
             'auftraggeber_name': data.get('auftraggeber_name', ''),
             'kontakt': data.get('kontakt', ''),
             'auftragsbeschreibung': data.get('auftragsbeschreibung', ''),
@@ -1721,82 +1721,69 @@ def export_ticket(id):
         # --- Kontext für docxtpl bauen ---
         context = {
             'auftragnehmer': auftragnehmer_name,
-            'intern_checkbox': intern_checkbox,
-            'extern_checkbox': extern_checkbox,
-            'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
-            'kontakt': auftrag_details.get('kontakt', ''),
+            'auftragnummer': ticket.get('ticket_number', id),
+            'datum': datetime.now().strftime('%d.%m.%Y'),
+            'internchk': '☒' if auftrag_details.get('auftraggeber_intern') else '☐',
+            'externchk': '☒' if auftrag_details.get('auftraggeber_extern') else '☐',
+            'auftraggebername': auftrag_details.get('auftraggeber_name', ''),
+            'auftraggebermail': auftrag_details.get('kontakt', ''),
+            'bereich': auftrag_details.get('bereich', ''),
             'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
-            'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
-            'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
-            'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
-            'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
-            'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
-            'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
-            'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
-            'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
-            'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
-            'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
-            'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
-            'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
-            'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
-            'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
-            'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
-            'material_1': material_rows[0]['material'],
-            'materialmenge_1': material_rows[0]['materialmenge'],
-            'materialpreis_1': material_rows[0]['materialpreis'],
-            'materialpreisges_1': material_rows[0]['materialpreisges'],
-            'material_2': material_rows[1]['material'],
-            'materialmenge_2': material_rows[1]['materialmenge'],
-            'materialpreis_2': material_rows[1]['materialpreis'],
-            'materialpreisges_2': material_rows[1]['materialpreisges'],
-            'material_3': material_rows[2]['material'],
-            'materialmenge_3': material_rows[2]['materialmenge'],
-            'materialpreis_3': material_rows[2]['materialpreis'],
-            'materialpreisges_3': material_rows[2]['materialpreisges'],
-            'material_4': material_rows[3]['material'],
-            'materialmenge_4': material_rows[3]['materialmenge'],
-            'materialpreis_4': material_rows[3]['materialpreis'],
-            'materialpreisges_4': material_rows[3]['materialpreisges'],
-            'material_5': material_rows[4]['material'],
-            'materialmenge_5': material_rows[4]['materialmenge'],
-            'materialpreis_5': material_rows[4]['materialpreis'],
-            'materialpreisges_5': material_rows[4]['materialpreisges'],
-            'summe_material': f"{summe_material:.2f}".replace('.', ','),
-            'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
+            'duedate': auftrag_details.get('fertigstellungstermin', ''),
+            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ','),
+            'matsum': f"{summe_material:.2f}".replace('.', ','),
             'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
-            'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
+            'arpausch': f"{arbeitspausch:.2f}".replace('.', ','),
+            'zwsum': f"{zwischensumme:.2f}".replace('.', ','),
             'mwst': f"{mwst:.2f}".replace('.', ','),
-            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
+            'arbeitenblock': '\n'.join([arbeit['arbeiten'] for arbeit in arbeiten_zeilen]),
+            'stundenblock': '\n'.join([arbeit['arbeitsstunden'] for arbeit in arbeiten_zeilen]),
+            'kategorieblock': '\n'.join([arbeit['leistungskategorie'] for arbeit in arbeiten_zeilen]),
+            'materialblock': '\n'.join([material['material'] for material in material_rows]),
+            'mengenblock': '\n'.join([material['materialmenge'] for material in material_rows]),
+            'preisblock': '\n'.join([material['materialpreis'] for material in material_rows]),
+            'gesamtblock': '\n'.join([material['materialpreisges'] for material in material_rows])
         }
 
         # --- Word-Dokument generieren ---
+        logging.info(f"Starte Admin-Export für Ticket {id}")
+        
         # Lade das Template
-        template_path = os.path.join(current_app.static_folder, 'word', 'btzauftrag.docx')
+        template_path = os.path.join(current_app.root_path, 'static', 'word', 'btzauftrag.docx')
+        logging.info(f"Template-Pfad: {template_path}")
+        
         if not os.path.exists(template_path):
-            logging.error(f"Word-Template nicht gefunden: {template_path}")
+            logging.error(f"Template-Datei nicht gefunden: {template_path}")
             flash('Word-Template nicht gefunden.', 'error')
             return redirect(url_for('admin.ticket_detail', ticket_id=id))
         
         doc = DocxTemplate(template_path)
+        logging.info("Template erfolgreich geladen")
         
         # Rendere das Dokument
+        logging.info(f"Rendere Dokument mit Kontext: {context}")
         doc.render(context)
+        logging.info("Dokument erfolgreich gerendert")
         
         # Erstelle das uploads-Verzeichnis falls es nicht existiert
-        uploads_dir = os.path.join(current_app.static_folder, 'uploads')
+        uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
         # Speichere das generierte Dokument
-        output_path = os.path.join(uploads_dir, f'ticket_{id}_export.docx')
+        ticket_number = ticket.get('ticket_number', id)
+        output_path = os.path.join(uploads_dir, f'ticket_{ticket_number}_export.docx')
+        
+        logging.info(f"Speichere Dokument unter: {output_path}")
         doc.save(output_path)
+        logging.info("Dokument erfolgreich gespeichert")
         
         logging.info(f"Word-Dokument erfolgreich generiert: {output_path}")
         
         # Sende das Dokument
-        return send_file(output_path, as_attachment=True, download_name=f'ticket_{id}_export.docx')
+        return send_file(output_path, as_attachment=True, download_name=f'ticket_{ticket_number}_export.docx')
         
     except Exception as e:
-        logging.error(f"Fehler beim Generieren des Word-Dokuments für Ticket {id}: {str(e)}")
+        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}", exc_info=True)
         flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
         return redirect(url_for('admin.ticket_detail', ticket_id=id))
 
@@ -1829,8 +1816,8 @@ def update_ticket_details(ticket_id):
             'ticket_id': ObjectId(ticket_id),
             'auftrag_an': data.get('auftrag_an', ''),
             'bereich': data.get('bereich', ''),
-            'auftraggeber_intern': data.get('auftraggeber_intern', ''),
-            'auftraggeber_extern': data.get('auftraggeber_extern', ''),
+            'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
+            'auftraggeber_extern': data.get('auftraggeber_typ') == 'extern',
             'beschreibung': data.get('beschreibung', ''),
             'prioritaet': data.get('prioritaet', 'normal'),
             'deadline': data.get('deadline'),

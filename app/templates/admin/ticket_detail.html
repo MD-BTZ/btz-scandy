@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Auftrag #{{ ticket.id }}{% endblock %}
+{% block title %}Auftrag #{{ ticket.ticket_number or ticket.id }}{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -203,9 +203,6 @@
                     </button>
                 </div>
             </div>
-
-            <!-- Modal Container -->
-            <div id="auftragDetailsModalContainer"></div>
         </div>
     </div>
 </div>
@@ -283,78 +280,8 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
 });
 
 function loadAuftragDetailsModal() {
-    fetch(`/admin/tickets/{{ ticket.id }}/auftrag-details-modal`)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
-            const modal = document.getElementById('auftragDetailsModal');
-            modal.showModal();
-            
-            // Event-Listener für das Formular
-            const form = document.getElementById('auftragDetailsForm');
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                // Formulardaten sammeln
-                const formData = new FormData(form);
-                const jsonData = {};
-                
-                // Basis-Formulardaten
-                for (let [key, value] of formData.entries()) {
-                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
-                        jsonData[key] = value === '1';
-                    } else {
-                        jsonData[key] = value;
-                    }
-                }
-                
-                // Materialliste sammeln
-                const materialList = [];
-                document.querySelectorAll('.material-row').forEach(row => {
-                    const material = row.querySelector('.material-input').value;
-                    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-                    
-                    if (material || menge || einzelpreis) {
-                        materialList.push({
-                            material: material,
-                            menge: menge,
-                            einzelpreis: einzelpreis
-                        });
-                    }
-                });
-                
-                jsonData.material_list = materialList;
-                
-                // AJAX-Request senden
-                fetch(`/admin/tickets/{{ ticket.id }}/update`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify(jsonData)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        modal.close();
-                        // Optional: Seite neu laden oder UI aktualisieren
-                        window.location.reload();
-                    } else {
-                        alert('Fehler beim Speichern: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Fehler:', error);
-                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Fehler beim Laden des Modals:', error);
-            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
-        });
+    // Weiterleitung zur eigenen Auftragsdetails-Seite
+    window.location.href = `/tickets/{{ ticket.id }}/auftrag-details`;
 }
 
 function updateTicketStatus(newStatus) {

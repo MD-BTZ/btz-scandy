@@ -124,7 +124,7 @@ database_test/
 **/database_test/
 *.db
 *.sqlite
-*.sqlite3
+*.sqlite3 
 
 # Environment variables
 .env.bak/

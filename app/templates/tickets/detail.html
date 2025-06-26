@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Auftrag #{{ ticket.id }}{% endblock %}
+{% block title %}Auftrag #{{ ticket.ticket_number or ticket.id }}{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <!-- Zurück Button -->
     <div class="mb-6">
-        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
+        <a href="{{ url_for('tickets.index') }}" class="btn btn-outline">
             <i class="fas fa-arrow-left mr-2"></i>
             Zurück zur Übersicht
         </a>
@@ -19,7 +19,7 @@
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Auftrag #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <h2 class="card-title">Auftrag #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}</h2>
                         <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

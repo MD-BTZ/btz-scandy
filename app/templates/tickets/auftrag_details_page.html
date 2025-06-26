@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Auftragsdetails - Ticket #{{ ticket.ticket_number or ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Zurück Button -->
+    <div class="mb-6">
+        <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zum Ticket
+        </a>
+    </div>
+
+    <!-- Hauptinhalt -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-6">
+                <i class="fas fa-clipboard-list text-primary mr-2"></i>
+                Auftragsdetails bearbeiten - Ticket #{{ ticket.ticket_number or ticket.id }}
+            </h2>
+            
+            <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="label"><span class="label-text">Bereich</span></label>
+                        <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                    </div>
+                    <div>
+                        <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
+                        <input type="date" name="fertigstellungstermin" class="input input-bordered w-full" value="{{ ticket.auftrag_details.fertigstellungstermin | default('', true) }}">
+                    </div>
+                    <div>
+                        <label class="label"><span class="label-text">Auftraggeber</span></label>
+                        <div class="flex items-center">
+                            <label class="cursor-pointer mr-4">
+                                <input type="radio" name="auftraggeber_typ" value="intern" class="radio radio-primary" {% if ticket.auftrag_details.get('auftraggeber_intern') %}checked{% endif %}>
+                                <span class="ml-2">Intern</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="auftraggeber_typ" value="extern" class="radio radio-primary" {% if ticket.auftrag_details.get('auftraggeber_extern') %}checked{% endif %}>
+                                <span class="ml-2">Extern</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label"><span class="label-text">Name Auftraggeber</span></label>
+                        <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="label"><span class="label-text">Kontakt</span></label>
+                        <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ ticket.auftrag_details.kontakt | default('', true) }}">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
+                        <textarea name="auftragsbeschreibung" class="textarea textarea-bordered w-full h-24">{{ ticket.auftrag_details.auftragsbeschreibung | default(ticket.description, true) }}</textarea>
+                    </div>
+                </div>
+                
+                <div class="divider my-6">Materialliste</div>
+                <div id="materialList">
+                    <table class="table w-full">
+                        <thead>
+                            <tr>
+                                <th>Material</th>
+                                <th>Menge</th>
+                                <th>Einzelpreis (€)</th>
+                                <th>Gesamtpreis (€)</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="materialRows">
+                            {% if material_list %}
+                                {% for mat in material_list %}
+                                <tr class="material-row">
+                                    <td><input type="text" name="material" class="material-input input input-bordered w-full" value="{{ mat.material }}"></td>
+                                    <td><input type="number" name="menge" class="menge-input input input-bordered w-24" value="{{ mat.menge }}" min="0" step="any"></td>
+                                    <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" value="{{ mat.einzelpreis }}" min="0" step="any"></td>
+                                    <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" value="{{ (mat.menge * mat.einzelpreis)|round(2) }}" readonly></td>
+                                    <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr class="material-row">
+                                    <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+                                    <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+                                    <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+                                    <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                                    <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <div class="font-bold mr-4">Summe Material:</div>
+                    <div id="summeMaterial" class="font-bold">0,00 €</div>
+                </div>
+                
+                <div class="divider my-6">Ausgeführte Arbeiten</div>
+                <div id="arbeitenList">
+                    <table class="table w-full">
+                        <thead>
+                            <tr>
+                                <th>Arbeit</th>
+                                <th>Arbeitsstunden</th>
+                                <th>Leistungskategorie</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="arbeitenRows">
+                            {% if arbeit_list %}
+                                {% for arbeit in arbeit_list %}
+                                    <tr class="arbeit-row">
+                                        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full" value="{{ arbeit.arbeit }}"></td>
+                                        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5" value="{{ arbeit.arbeitsstunden }}"></td>
+                                        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full" value="{{ arbeit.leistungskategorie }}"></td>
+                                        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
+                            <tr class="arbeit-row">
+                                <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+                                <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
+                                <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+                                <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-secondary mt-2" id="addArbeitBtn"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <div class="font-bold mr-4">Summe Arbeit:</div>
+                    <div id="summeArbeit" class="font-bold">0,00 h</div>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <div class="font-bold mr-4">Gesamtsumme:</div>
+                    <div id="gesamtsumme" class="font-bold">0,00 €</div>
+                </div>
+                
+                <div class="flex justify-end mt-6">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>Speichern
+                    </button>
+                    <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="btn ml-2">
+                        <i class="fas fa-times mr-2"></i>Abbrechen
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+{% endblock %} 
