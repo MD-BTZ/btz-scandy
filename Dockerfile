@@ -3,7 +3,7 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY app/static/css/input.css ./app/static/css/
 RUN npm run build:css
