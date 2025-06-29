@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Auftrag #{{ ticket.id }}{% endblock %}
+{% block title %}Auftrag #{{ ticket.ticket_number or ticket.id }}{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -19,7 +19,7 @@
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Auftrag #{{ ticket.id }}: {{ ticket.title }}</h2>
+                        <h2 class="card-title">Auftrag #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}</h2>
                         <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -163,14 +163,13 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <select id="assignedToSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                <option value="">Nicht zugewiesen</option>
-                                {% for worker in workers %}
-                                <option value="{{ worker.username }}" {% if ticket.assigned_to == worker.username %}selected{% endif %}>
-                                    {{ worker.username }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <p class="font-medium">
+                                {% if ticket.assigned_to %}
+                                    {{ ticket.assigned_to }}
+                                {% else %}
+                                    Nicht zugewiesen
+                                {% endif %}
+                            </p>
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -195,17 +194,14 @@
                 </div>
             </div>
 
-            <!-- Button zum Öffnen des Modals für Auftragsdetails -->
+            <!-- Button zum Öffnen der Auftragsdetails-Seite -->
             <div class="card bg-base-100 shadow-xl mb-6">
                 <div class="card-body">
-                    <button class="btn btn-primary w-full" onclick="loadAuftragDetailsModal()">
+                    <a href="{{ url_for('tickets.auftrag_details_page', id=ticket.id) }}" class="btn btn-primary w-full">
                         <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
-                    </button>
+                    </a>
                 </div>
             </div>
-
-            <!-- Modal Container -->
-            <div id="auftragDetailsModalContainer"></div>
         </div>
     </div>
 </div>
@@ -269,81 +265,6 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
     });
 });
 
-function loadAuftragDetailsModal() {
-    fetch(`/tickets/{{ ticket.id }}/auftrag-details-modal`)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('auftragDetailsModalContainer').innerHTML = html;
-            const modal = document.getElementById('auftragDetailsModal');
-            modal.showModal();
-            
-            // Event-Listener für das Formular
-            const form = document.getElementById('auftragDetailsForm');
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                // Formulardaten sammeln
-                const formData = new FormData(form);
-                const jsonData = {};
-                
-                // Basis-Formulardaten
-                for (let [key, value] of formData.entries()) {
-                    if (key === 'auftraggeber_intern' || key === 'auftraggeber_extern') {
-                        jsonData[key] = value === '1';
-                    } else {
-                        jsonData[key] = value;
-                    }
-                }
-                
-                // Materialliste sammeln
-                const materialList = [];
-                document.querySelectorAll('.material-row').forEach(row => {
-                    const material = row.querySelector('.material-input').value;
-                    const menge = parseFloat(row.querySelector('.menge-input').value) || 0;
-                    const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input').value) || 0;
-                    
-                    if (material || menge || einzelpreis) {
-                        materialList.push({
-                            material: material,
-                            menge: menge,
-                            einzelpreis: einzelpreis
-                        });
-                    }
-                });
-                
-                jsonData.material_list = materialList;
-                
-                // AJAX-Request senden
-                fetch(`/tickets/{{ ticket.id }}/update`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify(jsonData)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        modal.close();
-                        // Optional: Seite neu laden oder UI aktualisieren
-                        window.location.reload();
-                    } else {
-                        alert('Fehler beim Speichern: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Fehler:', error);
-                    alert('Ein Fehler ist aufgetreten beim Speichern der Daten.');
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Fehler beim Laden des Modals:', error);
-            alert('Ein Fehler ist aufgetreten beim Laden des Modals.');
-        });
-}
-
 function updateTicketStatus(newStatus) {
     fetch(`/tickets/{{ ticket.id }}/update-status`, {
         method: 'POST',
@@ -366,31 +287,6 @@ function updateTicketStatus(newStatus) {
     .catch(error => {
         console.error('Fehler:', error);
         alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
-    });
-}
-
-function updateTicketAssignment(newAssignee) {
-    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            assigned_to: newAssignee
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
-            alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
     });
 }
 

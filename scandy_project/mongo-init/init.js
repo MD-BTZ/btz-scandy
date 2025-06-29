@@ -33,4 +33,4 @@ db.tickets.createIndex({ "created_at": 1 });
 db.tickets.createIndex({ "status": 1 });
 db.tickets.createIndex({ "assigned_to": 1 });
 
-print('MongoDB für Scandy initialisiert!');
+print('MongoDB für Scandy initialisiert');

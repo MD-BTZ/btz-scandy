@@ -37,20 +37,30 @@
                 <span class="label-text">E-Mail (optional)</span>
             </label>
             <input type="email" id="email" name="email" value="{{ request.form.email or (current_user_data.email if current_user_data) or '' }}" class="input input-bordered w-full" />
+            {% if not current_user_data %}
+            <label class="label">
+                <span class="label-text-alt text-info">Wenn eine E-Mail-Adresse angegeben wird, wird das Passwort automatisch per E-Mail gesendet.</span>
+            </label>
+            {% endif %}
         </div>
 
         <div class="form-control">
             <label class="label" for="password">
-                <span class="label-text">Passwort {% if not current_user_data %}<span class="text-error">*</span>{% else %}(leer lassen für keine Änderung){% endif %}</span>
+                <span class="label-text">Passwort {% if not current_user_data %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
             </label>
-            <input type="password" id="password" name="password" class="input input-bordered w-full" {% if not current_user_data %}required{% endif %} />
+            <input type="password" id="password" name="password" class="input input-bordered w-full" />
+            {% if not current_user_data %}
+            <label class="label">
+                <span class="label-text-alt text-info">Lassen Sie das Feld leer, um automatisch ein sicheres 12-stelliges Passwort zu generieren.</span>
+            </label>
+            {% endif %}
         </div>
 
         <div class="form-control">
             <label class="label" for="password_confirm">
-                <span class="label-text">Passwort bestätigen {% if not current_user_data %}<span class="text-error">*</span>{% else %}(leer lassen für keine Änderung){% endif %}</span>
+                <span class="label-text">Passwort bestätigen {% if not current_user_data %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
             </label>
-            <input type="password" id="password_confirm" name="password_confirm" class="input input-bordered w-full" {% if not current_user_data %}required{% endif %} />
+            <input type="password" id="password_confirm" name="password_confirm" class="input input-bordered w-full" />
         </div>
 
         <div class="form-control">

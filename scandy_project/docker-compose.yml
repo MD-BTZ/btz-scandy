@@ -18,11 +18,16 @@ services:
       - scandy-network
     command: mongod --auth --bind_ip_all
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping'^)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   scandy-mongo-express:
     image: mongo-express:1.0.0
@@ -41,9 +46,16 @@ services:
         condition: service_healthy
     networks:
       - scandy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   scandy-app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: scandy-app
     restart: unless-stopped
     environment:
@@ -51,7 +63,7 @@ services:
       - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-1750833883
+      - SECRET_KEY=scandy-secret-key-production
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge

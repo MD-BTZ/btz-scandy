@@ -172,6 +172,14 @@ def create_app(test_config=None):
     # Komprimierung aktivieren
     Compress(app)
     
+    # E-Mail-System initialisieren
+    try:
+        from app.utils.email_utils import init_mail
+        init_mail(app)
+        app.logger.info("E-Mail-System initialisiert")
+    except Exception as e:
+        app.logger.warning(f"E-Mail-System konnte nicht initialisiert werden: {e}")
+    
     # Context Processor für Template-Variablen
     @app.context_processor
     def utility_processor():

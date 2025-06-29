@@ -42,7 +42,7 @@
                                 <tr class="hover data-row ticket-row"
                                     data-status="{{ ticket.status }}"
                                     data-priority="{{ ticket.priority }}">
-                                    <td><div class="badge badge-outline">{{ ticket.id }}</div></td>
+                                    <td><div class="badge badge-outline">{{ ticket.ticket_number or ticket.id }}</div></td>
                                     <td>
                                         <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover font-medium">
                                             {{ ticket.title }}

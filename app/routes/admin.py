@@ -16,7 +16,7 @@ import time
 from PIL import Image
 import io
 from app.config.config import Config
-from app.models.mongodb_database import MongoDB
+from app.models.mongodb_database import mongodb
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,7 +30,6 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
-mongodb = MongoDB()
 
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
 # ensure_default_settings()
@@ -1405,7 +1404,7 @@ def delete_worker_permanent(barcode):
 
 @bp.route('/tickets/<ticket_id>')
 @login_required
-@admin_required
+@mitarbeiter_required
 def ticket_detail(ticket_id):
     """Zeigt die Details eines Tickets für Administratoren."""
     ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
@@ -1886,7 +1885,7 @@ def create_mongodb_backup():
 
 @bp.route('/tickets')
 @login_required
-@admin_required
+@mitarbeiter_required
 def tickets():
     """Zeigt die Ticket-Verwaltungsseite an."""
     # Hole alle Tickets aus der Datenbank
@@ -1908,7 +1907,7 @@ def tickets():
                          title="Ticket-Verwaltung")
 
 @bp.route('/manage_users')
-@admin_required
+@mitarbeiter_required
 def manage_users():
     """Benutzerverwaltung"""
     try:
@@ -1920,148 +1919,176 @@ def manage_users():
         return render_template('admin/users.html', users=[])
 
 @bp.route('/add_user', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def add_user():
-    """Neuen Benutzer hinzufügen"""
     if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            email = request.form.get('email', '').strip()
-            password = request.form.get('password', '').strip()
-            password_confirm = request.form.get('password_confirm', '').strip()
-            firstname = request.form.get('firstname', '').strip()
-            lastname = request.form.get('lastname', '').strip()
-            role = request.form.get('role', '').strip()
-            
-            # Validierung
-            if not username or not password or not firstname or not lastname or not role:
-                flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
-                                     form_data=request.form)
-            
+        role = request.form.get('role', '').strip()
+        if current_user.role != 'admin' and role == 'admin':
+            flash('Sie dürfen keine Admin-Benutzer anlegen.', 'error')
+            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'], form_data=request.form)
+    try:
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        password_confirm = request.form.get('password_confirm', '').strip()
+        firstname = request.form.get('firstname', '').strip()
+        lastname = request.form.get('lastname', '').strip()
+        role = request.form.get('role', '').strip()
+        
+        # Validierung der Pflichtfelder (Passwort ist jetzt optional)
+        if not username or not firstname or not lastname or not role:
+            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+            return render_template('admin/user_form.html', 
+                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 form_data=request.form)
+        
+        # Automatische Passwort-Generierung wenn keines eingegeben wurde
+        if not password:
+            import secrets
+            import string
+            # Mindestens 1 von jeder Kategorie sicherstellen
+            password = (
+                secrets.choice(string.ascii_uppercase) +  # 1 Großbuchstabe
+                secrets.choice(string.ascii_lowercase) +  # 1 Kleinbuchstabe
+                secrets.choice(string.digits) +           # 1 Ziffer
+                secrets.choice("!@#$%^&*") +              # 1 Sonderzeichen
+                ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(8))  # 8 weitere zufällige Zeichen
+            )
+            # Passwort mischen
+            password_list = list(password)
+            secrets.SystemRandom().shuffle(password_list)
+            password = ''.join(password_list)
+            password_confirm = password  # Für die Validierung
+        else:
+            # Wenn Passwort eingegeben wurde, prüfe ob es bestätigt wurde
             if password != password_confirm:
                 flash('Passwörter stimmen nicht überein', 'error')
                 return render_template('admin/user_form.html', 
                                      roles=['admin', 'mitarbeiter', 'anwender'],
                                      form_data=request.form)
-            
-            # Prüfe ob Benutzername bereits existiert
-            existing_user = mongodb.find_one('users', {'username': username})
-            if existing_user:
-                flash('Benutzername existiert bereits', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
-                                     form_data=request.form)
-            
-            # Benutzer erstellen
-            user_data = {
-                'username': username,
-                'email': email if email else None,
-                'password_hash': generate_password_hash(password),
-                'firstname': firstname,
-                'lastname': lastname,
-                'role': role,
-                'is_active': True,
-                'created_at': datetime.now(),
-                'updated_at': datetime.now()
-            }
-            
-            mongodb.insert_one('users', user_data)
-            flash(f'Benutzer "{username}" erfolgreich erstellt', 'success')
-            return redirect(url_for('admin.manage_users'))
-            
-        except Exception as e:
-            logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
-            flash('Fehler beim Erstellen des Benutzers', 'error')
+        
+        # Prüfe ob Benutzername bereits existiert
+        existing_user = mongodb.find_one('users', {'username': username})
+        if existing_user:
+            flash('Benutzername existiert bereits', 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender'],
                                  form_data=request.form)
+        
+        # Benutzer erstellen
+        user_data = {
+            'username': username,
+            'email': email if email else None,
+            'password_hash': generate_password_hash(password),
+            'firstname': firstname,
+            'lastname': lastname,
+            'role': role,
+            'is_active': True,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        }
+        
+        mongodb.insert_one('users', user_data)
+        
+        # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
+        if email:
+            try:
+                from app.utils.email_utils import send_password_mail
+                send_password_mail(email, password)
+                flash(f'Benutzer "{username}" erfolgreich erstellt. Passwort wurde per E-Mail an {email} gesendet.', 'success')
+            except Exception as e:
+                logger.error(f"Fehler beim Versenden der E-Mail: {e}")
+                flash(f'Benutzer "{username}" erfolgreich erstellt. E-Mail konnte nicht versendet werden.', 'warning')
+        else:
+            flash(f'Benutzer "{username}" erfolgreich erstellt. Passwort: {password}', 'success')
+        
+        return redirect(url_for('admin.manage_users'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
+        flash('Fehler beim Erstellen des Benutzers', 'error')
+        return render_template('admin/user_form.html', 
+                             roles=['admin', 'mitarbeiter', 'anwender'],
+                             form_data=request.form)
     
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
 
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def edit_user(user_id):
-    """Benutzer bearbeiten"""
+    user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+    if not user:
+        flash('Benutzer nicht gefunden', 'error')
+        return redirect(url_for('admin.manage_users'))
+    if current_user.role != 'admin' and user.get('role') == 'admin':
+        flash('Sie dürfen keine Admin-Benutzer bearbeiten.', 'error')
+        return redirect(url_for('admin.manage_users'))
     try:
-        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
-        if not user:
-            flash('Benutzer nicht gefunden', 'error')
-            return redirect(url_for('admin.manage_users'))
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        password_confirm = request.form.get('password_confirm', '').strip()
+        firstname = request.form.get('firstname', '').strip()
+        lastname = request.form.get('lastname', '').strip()
+        role = request.form.get('role', '').strip()
         
-        if request.method == 'POST':
-            try:
-                username = request.form.get('username', '').strip()
-                email = request.form.get('email', '').strip()
-                password = request.form.get('password', '').strip()
-                password_confirm = request.form.get('password_confirm', '').strip()
-                firstname = request.form.get('firstname', '').strip()
-                lastname = request.form.get('lastname', '').strip()
-                role = request.form.get('role', '').strip()
-                
-                # Validierung
-                if not username or not firstname or not lastname or not role:
-                    flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
-                    return render_template('admin/user_form.html', 
-                                         user=user,
-                                         roles=['admin', 'mitarbeiter', 'anwender'])
-                
-                # Prüfe ob Passwort geändert werden soll
-                if password:
-                    if password != password_confirm:
-                        flash('Passwörter stimmen nicht überein', 'error')
-                        return render_template('admin/user_form.html', 
-                                             user=user,
-                                             roles=['admin', 'mitarbeiter', 'anwender'])
-                    password_hash = generate_password_hash(password)
-                else:
-                    password_hash = user.get('password_hash')
-                
-                # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
-                existing_user = mongodb.find_one('users', {
-                    'username': username,
-                    '_id': {'$ne': ObjectId(user_id)}
-                })
-                if existing_user:
-                    flash('Benutzername existiert bereits', 'error')
-                    return render_template('admin/user_form.html', 
-                                         user=user,
-                                         roles=['admin', 'mitarbeiter', 'anwender'])
-                
-                # Benutzer aktualisieren
-                update_data = {
-                    'username': username,
-                    'email': email if email else None,
-                    'password_hash': password_hash,
-                    'firstname': firstname,
-                    'lastname': lastname,
-                    'role': role,
-                    'updated_at': datetime.now()
-                }
-                
-                mongodb.update_one('users', 
-                                 {'_id': ObjectId(user_id)}, 
-                                 {'$set': update_data})
-                
-                flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
-                return redirect(url_for('admin.manage_users'))
-                
-            except Exception as e:
-                logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
-                flash('Fehler beim Aktualisieren des Benutzers', 'error')
+        # Validierung
+        if not username or not firstname or not lastname or not role:
+            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+            return render_template('admin/user_form.html', 
+                                 user=user,
+                                 roles=['admin', 'mitarbeiter', 'anwender'])
+        
+        # Prüfe ob Passwort geändert werden soll
+        if password:
+            if password != password_confirm:
+                flash('Passwörter stimmen nicht überein', 'error')
                 return render_template('admin/user_form.html', 
                                      user=user,
                                      roles=['admin', 'mitarbeiter', 'anwender'])
+            password_hash = generate_password_hash(password)
+        else:
+            password_hash = user.get('password_hash')
         
+        # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
+        existing_user = mongodb.find_one('users', {
+            'username': username,
+            '_id': {'$ne': ObjectId(user_id)}
+        })
+        if existing_user:
+            flash('Benutzername existiert bereits', 'error')
+            return render_template('admin/user_form.html', 
+                                 user=user,
+                                 roles=['admin', 'mitarbeiter', 'anwender'])
+        
+        # Benutzer aktualisieren
+        update_data = {
+            'username': username,
+            'email': email if email else None,
+            'password_hash': password_hash,
+            'firstname': firstname,
+            'lastname': lastname,
+            'role': role,
+            'updated_at': datetime.now()
+        }
+        
+        mongodb.update_one('users', 
+                         {'_id': ObjectId(user_id)}, 
+                         {'$set': update_data})
+        
+        flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
+        return redirect(url_for('admin.manage_users'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
+        flash('Fehler beim Aktualisieren des Benutzers', 'error')
         return render_template('admin/user_form.html', 
                              user=user,
                              roles=['admin', 'mitarbeiter', 'anwender'])
-                             
-    except Exception as e:
-        logger.error(f"Fehler beim Laden des Benutzers: {e}")
-        flash('Fehler beim Laden des Benutzers', 'error')
-        return redirect(url_for('admin.manage_users'))
+    
+    return render_template('admin/user_form.html', 
+                         user=user,
+                         roles=['admin', 'mitarbeiter', 'anwender'])
 
 @bp.route('/notices')
 @admin_required
@@ -2156,12 +2183,12 @@ def add_ticket_category():
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
-            mongodb.db.settings.update_one(
+            mongodb.update_one_array(
                 {'key': 'ticket_categories'},
                 {'$push': {'value': name}}
             )
         else:
-            mongodb.db.settings.insert_one({
+            mongodb.insert_one('settings', {
                 'key': 'ticket_categories',
                 'value': [name]
             })
@@ -2185,7 +2212,7 @@ def delete_ticket_category(category):
             return redirect(url_for('admin.tickets'))
 
         # Ticket-Kategorie aus der Liste entfernen
-        mongodb.db.settings.update_one(
+        mongodb.update_one_array(
             {'key': 'ticket_categories'},
             {'$pull': {'value': category}}
         )
@@ -2596,11 +2623,31 @@ def create_backup():
         backup_file = backup_manager.create_backup()
         
         if backup_file:
-            return jsonify({
-                'status': 'success',
-                'message': 'Backup erfolgreich erstellt',
-                'filename': backup_file
-            })
+            # E-Mail-Versand (optional)
+            email_recipient = request.form.get('email_recipient', '').strip()
+            if email_recipient:
+                try:
+                    from app.utils.email_utils import send_backup_mail
+                    backup_path = backup_manager.get_backup_path(backup_file)
+                    send_backup_mail(email_recipient, str(backup_path))
+                    return jsonify({
+                        'status': 'success',
+                        'message': f'Backup erfolgreich erstellt und an {email_recipient} gesendet',
+                        'filename': backup_file
+                    })
+                except Exception as e:
+                    logger.error(f"Fehler beim E-Mail-Versand: {str(e)}")
+                    return jsonify({
+                        'status': 'success',
+                        'message': 'Backup erfolgreich erstellt, aber E-Mail-Versand fehlgeschlagen',
+                        'filename': backup_file
+                    })
+            else:
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Backup erfolgreich erstellt',
+                    'filename': backup_file
+                })
         else:
             return jsonify({
                 'status': 'error',
@@ -3083,7 +3130,7 @@ def test_barcodes():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/delete_user/<user_id>', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete_user(user_id):
     """Benutzer löschen"""
     try:
@@ -3107,7 +3154,7 @@ def delete_user(user_id):
         return redirect(url_for('admin.manage_users'))
 
 @bp.route('/user_form')
-@admin_required
+@mitarbeiter_required
 def user_form():
     """Benutzer-Formular (für neue Benutzer)"""
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
@@ -3229,3 +3276,96 @@ def import_all_data():
         logger.error(f"Fehler beim Importieren der Daten: {str(e)}")
         flash(f'Fehler beim Importieren: {str(e)}', 'error')
         return redirect(url_for('admin.system'))
+
+@bp.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    """Passwort-Reset per E-Mail"""
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        
+        if not email:
+            flash('Bitte geben Sie eine E-Mail-Adresse ein.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Prüfe ob Benutzer mit dieser E-Mail existiert
+        user = mongodb.find_one('users', {'email': email})
+        if not user:
+            flash('Kein Benutzer mit dieser E-Mail-Adresse gefunden.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Generiere sicheres neues Passwort (wie bei add_user)
+        import secrets
+        import string
+        # Mindestens 1 von jeder Kategorie sicherstellen
+        password = (
+            secrets.choice(string.ascii_uppercase) +  # 1 Großbuchstabe
+            secrets.choice(string.ascii_lowercase) +  # 1 Kleinbuchstabe
+            secrets.choice(string.digits) +           # 1 Ziffer
+            secrets.choice("!@#$%^&*") +              # 1 Sonderzeichen
+            ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(8))  # 8 weitere zufällige Zeichen
+        )
+        # Passwort mischen
+        password_list = list(password)
+        secrets.SystemRandom().shuffle(password_list)
+        password = ''.join(password_list)
+        
+        # Hash das neue Passwort
+        from werkzeug.security import generate_password_hash
+        password_hash = generate_password_hash(password)
+        
+        # Aktualisiere das Passwort in der Datenbank
+        try:
+            result = mongodb.update_one('users', 
+                                     {'_id': user['_id']}, 
+                                     {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
+            
+            if not result:
+                logger.error(f"Fehler beim Aktualisieren des Passworts für Benutzer {user['username']}")
+                flash('Fehler beim Zurücksetzen des Passworts.', 'error')
+                return render_template('auth/reset_password.html')
+            
+            logger.info(f"Passwort erfolgreich zurückgesetzt für Benutzer {user['username']} ({email})")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren des Passworts in der Datenbank: {e}")
+            flash('Fehler beim Zurücksetzen des Passworts.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Sende E-Mail mit neuem Passwort
+        try:
+            from app.utils.email_utils import send_password_reset_mail
+            send_result = send_password_reset_mail(email, password=password)
+            if send_result:
+                flash('Ein neues Passwort wurde an Ihre E-Mail-Adresse gesendet.', 'success')
+                logger.info(f"Passwort-Reset-E-Mail erfolgreich an {email} gesendet")
+            else:
+                flash('Passwort wurde zurückgesetzt, aber E-Mail konnte nicht versendet werden.', 'warning')
+                logger.warning(f"Passwort-Reset-E-Mail konnte nicht an {email} gesendet werden")
+        except Exception as e:
+            logger.error(f"Fehler beim Versenden der E-Mail: {e}")
+            flash('Passwort wurde zurückgesetzt, aber E-Mail konnte nicht versendet werden.', 'warning')
+        
+        return redirect(url_for('auth.login'))
+    
+    return render_template('auth/reset_password.html')
+
+@bp.route('/debug/password/<username>')
+@admin_required
+def debug_password(username):
+    """Debug-Route zum Überprüfen des Passwort-Hashes eines Benutzers"""
+    try:
+        user = mongodb.find_one('users', {'username': username})
+        if not user:
+            return jsonify({'error': 'Benutzer nicht gefunden'}), 404
+        
+        return jsonify({
+            'username': user['username'],
+            'email': user.get('email'),
+            'has_password_hash': 'password_hash' in user,
+            'password_hash_length': len(user.get('password_hash', '')),
+            'password_hash_preview': user.get('password_hash', '')[:20] + '...' if user.get('password_hash') else None,
+            'updated_at': user.get('updated_at'),
+            'created_at': user.get('created_at')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

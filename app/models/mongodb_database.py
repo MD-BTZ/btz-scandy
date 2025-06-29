@@ -135,13 +135,28 @@ class MongoDBDatabase:
         """Aktualisiert ein Dokument in einer Collection"""
         collection = self.get_collection(collection_name)
         
-        # updated_at Timestamp hinzufügen
-        if '$set' in update_dict:
-            update_dict['$set']['updated_at'] = datetime.now()
+        # Prüfe ob update_dict bereits MongoDB-Operatoren enthält
+        has_operators = any(key.startswith('$') for key in update_dict.keys())
+        
+        if has_operators:
+            # Wenn bereits Operatoren vorhanden sind, füge nur updated_at hinzu, falls $set vorhanden ist
+            if '$set' in update_dict:
+                update_dict['$set']['updated_at'] = datetime.now()
+            # Wenn kein $set vorhanden ist, füge es hinzu nur für updated_at
+            else:
+                update_dict['$set'] = {'updated_at': datetime.now()}
         else:
             # Erstelle $set Modifier falls nicht vorhanden
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
+        result = collection.update_one(filter_dict, update_dict, upsert=upsert)
+        return result.modified_count > 0 or result.upserted_id is not None
+    
+    def update_one_array(self, collection_name: str, filter_dict: Dict[str, Any], 
+                        update_dict: Dict[str, Any], upsert: bool = False) -> bool:
+        """Aktualisiert ein Dokument in einer Collection mit Array-Operationen ($push, $pull, etc.)
+        Diese Methode fügt keine automatischen Timestamps hinzu, um Konflikte zu vermeiden."""
+        collection = self.get_collection(collection_name)
         result = collection.update_one(filter_dict, update_dict, upsert=upsert)
         return result.modified_count > 0 or result.upserted_id is not None
     
@@ -150,9 +165,16 @@ class MongoDBDatabase:
         """Aktualisiert mehrere Dokumente in einer Collection"""
         collection = self.get_collection(collection_name)
         
-        # updated_at Timestamp hinzufügen
-        if '$set' in update_dict:
-            update_dict['$set']['updated_at'] = datetime.now()
+        # Prüfe ob update_dict bereits MongoDB-Operatoren enthält
+        has_operators = any(key.startswith('$') for key in update_dict.keys())
+        
+        if has_operators:
+            # Wenn bereits Operatoren vorhanden sind, füge nur updated_at hinzu, falls $set vorhanden ist
+            if '$set' in update_dict:
+                update_dict['$set']['updated_at'] = datetime.now()
+            # Wenn kein $set vorhanden ist, füge es hinzu nur für updated_at
+            else:
+                update_dict['$set'] = {'updated_at': datetime.now()}
         else:
             # Erstelle $set Modifier falls nicht vorhanden
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}

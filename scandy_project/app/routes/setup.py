@@ -62,7 +62,7 @@ def settings():
             # Lösche alte Einstellungen
             mongodb.delete_many('settings', {'key': {'$in': ['label_tools_name', 'label_tools_icon', 'label_consumables_name', 'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']}})
             
-            # Füge neue Einstellungen hinzu
+            # Füge neue Einstellungen hinzu (mit upsert=True um Duplikate zu vermeiden)
             settings_data = [
                 {'key': 'label_tools_name', 'value': label_tools_name or 'Werkzeuge', 'description': 'Anzeigename für Werkzeuge'},
                 {'key': 'label_tools_icon', 'value': label_tools_icon or 'fas fa-tools', 'description': 'Icon für Werkzeuge'},
@@ -73,7 +73,10 @@ def settings():
             ]
             
             for setting in settings_data:
-                mongodb.insert_one('settings', setting)
+                mongodb.update_one('settings', 
+                                 {'key': setting['key']}, 
+                                 {'$set': setting}, 
+                                 upsert=True)
             
             flash('Einstellungen erfolgreich gespeichert', 'success')
             return redirect(url_for('setup.setup_optional'))
@@ -111,17 +114,77 @@ def setup_optional():
         departments = request.form.getlist('departments[]')
         
         try:
-            # TODO: Implementiere die Anpassung auf MongoDB
+            # Speichere Kategorien
+            if categories:
+                # Entferne leere Einträge
+                categories = [cat.strip() for cat in categories if cat.strip()]
+                mongodb.update_one('settings', 
+                                 {'key': 'categories'}, 
+                                 {'$set': {'value': categories}}, 
+                                 upsert=True)
+                logger.info(f"[SETUP] Kategorien gespeichert: {categories}")
+            
+            # Speichere Standorte
+            if locations:
+                # Entferne leere Einträge
+                locations = [loc.strip() for loc in locations if loc.strip()]
+                mongodb.update_one('settings', 
+                                 {'key': 'locations'}, 
+                                 {'$set': {'value': locations}}, 
+                                 upsert=True)
+                logger.info(f"[SETUP] Standorte gespeichert: {locations}")
+            
+            # Speichere Abteilungen
+            if departments:
+                # Entferne leere Einträge
+                departments = [dept.strip() for dept in departments if dept.strip()]
+                mongodb.update_one('settings', 
+                                 {'key': 'departments'}, 
+                                 {'$set': {'value': departments}}, 
+                                 upsert=True)
+                logger.info(f"[SETUP] Abteilungen gespeichert: {departments}")
+            
             flash('Optionale Einstellungen wurden gespeichert', 'success')
             return redirect(url_for('auth.login'))
+            
         except Exception as e:
             logger.error(f"Fehler beim Speichern der optionalen Einstellungen: {e}")
             return render_template('setup_optional.html', error='Fehler beim Speichern der Einstellungen')
     
-    # Lade vorhandene Einstellungen für die Anzeige
+    # GET: Lade vorhandene Einstellungen für die Anzeige
     try:
-        # TODO: Implementiere die Anpassung auf MongoDB
-        return render_template('setup_optional.html')
+        # Lade vorhandene Einstellungen
+        settings = {}
+        rows = mongodb.find('settings', {})
+        for row in rows:
+            settings[row['key']] = row['value']
+        
+        # Hole aktuelle Werte
+        current_categories = settings.get('categories', [])
+        current_locations = settings.get('locations', [])
+        current_departments = settings.get('departments', [])
+        
+        # Stelle sicher, dass es Listen sind
+        if isinstance(current_categories, str):
+            current_categories = [cat.strip() for cat in current_categories.split(',') if cat.strip()]
+        if isinstance(current_locations, str):
+            current_locations = [loc.strip() for loc in current_locations.split(',') if loc.strip()]
+        if isinstance(current_departments, str):
+            current_departments = [dept.strip() for dept in current_departments.split(',') if dept.strip()]
+        
+        # Füge Standardwerte hinzu, falls keine vorhanden sind
+        if not current_categories:
+            current_categories = ['Elektrowerkzeuge', 'Handwerkzeug', 'Messwerkzeuge']
+        if not current_locations:
+            current_locations = ['Lager A', 'Lager B', 'Werkstatt']
+        if not current_departments:
+            current_departments = ['IT', 'Produktion', 'Verwaltung']
+        
+        return render_template('setup_optional.html',
+                             categories=current_categories,
+                             locations=current_locations,
+                             departments=current_departments)
+                             
     except Exception as e:
         logger.error(f"Fehler beim Laden der optionalen Einstellungen: {e}")
         return render_template('setup_optional.html', error='Fehler beim Laden der Einstellungen')

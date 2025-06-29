@@ -139,15 +139,25 @@ function setupBackupButtonHandlers() {
 // Backup erstellen
 async function createBackup() {
     console.log("createBackup function called!");
+    
+    // Frage nach E-Mail-Adresse für Backup-Versand
+    const emailRecipient = prompt('E-Mail-Adresse für Backup-Versand (optional, leer lassen für keinen Versand):');
+    
     try {
+        const formData = new FormData();
+        if (emailRecipient && emailRecipient.trim()) {
+            formData.append('email_recipient', emailRecipient.trim());
+        }
+        
         const response = await fetch('/admin/backup/create', {
-            method: 'POST'
+            method: 'POST',
+            body: formData
         });
         
         const data = await response.json();
         
         if (data.status === 'success') {
-            showSuccess('Backup wurde erfolgreich erstellt');
+            showSuccess(data.message || 'Backup wurde erfolgreich erstellt');
             loadBackups();
         } else {
             showError(data.message || 'Fehler beim Erstellen des Backups');

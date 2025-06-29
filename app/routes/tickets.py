@@ -65,7 +65,7 @@ def create():
                 ticket_categories = get_ticket_categories_from_settings()
                 if category not in ticket_categories:
                     # Füge die neue Kategorie zu den Settings hinzu
-                    mongodb.update_one(
+                    mongodb.update_one_array(
                         'settings',
                         {'key': 'ticket_categories'},
                         {'$push': {'value': category}},

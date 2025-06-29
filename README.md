@@ -1,155 +1,224 @@
-# Scandy - Werkzeug- und Materialverwaltung
+# Scandy - Werkzeugverwaltungssystem
 
-## 🎉 Beta v1.0.0 - Erste Beta-Version für Produktivtest
+Ein modernes, webbasiertes Werkzeugverwaltungssystem mit Barcode-Scanner-Unterstützung.
 
-**Status:** Beta für Produktivtest  
-**Version:** 1.0.0-beta  
-**Datum:** 25. Juni 2025
+## 🚀 Schnellstart
 
-## 🚀 Neue Features in Beta v1.0.0
-
-### ✅ Datenbankinkonsistenzen behoben
-- **Notice-System:** Inkonsistente Feldnamen behoben (`active` → `is_active`)
-- **MongoDB-Funktionen:** Vollständig implementiert (keine TODO-Kommentare mehr)
-- **Automatische Inkonsistenzbehebung:** Nach Backup-Import
-- **Performance-Indizes:** Fehlende Datenbankindizes erstellt
-
-### 🔧 Verbesserungen
-- **Reparatur-Skripte:** `fix_database_inconsistencies.py`
-- **Bessere Fehlerbehandlung:** Für Index-Konflikte
-- **Datenbankintegritätsprüfung:** Automatische Validierung
-
-## 📋 Über Scandy
-
-Scandy ist eine moderne Webanwendung zur Verwaltung von Werkzeugen, Verbrauchsmaterial und Mitarbeitern. Die Anwendung bietet ein umfassendes System für Ausleihe, Rückgabe und Bestandsverwaltung.
-
-### 🎯 Hauptfunktionen
-
-- **Werkzeugverwaltung:** Vollständige CRUD-Operationen für Werkzeuge
-- **Mitarbeiterverwaltung:** Verwaltung von Mitarbeitern und Abteilungen
-- **Verbrauchsmaterial:** Bestandsverwaltung und Verbrauchserfassung
-- **Ausleihsystem:** Einfache Ausleihe und Rückgabe von Werkzeugen
-- **Ticket-System:** Support-Tickets für Wartung und Reparaturen
-- **Backup-System:** Automatische Sicherung und Wiederherstellung
-- **Notice-System:** Ankündigungen und Hinweise für Benutzer
-
-## 🛠️ Technische Details
-
-### Architektur
-- **Backend:** Flask (Python)
-- **Datenbank:** MongoDB
-- **Frontend:** HTML, CSS, JavaScript (Bootstrap)
-- **Container:** Docker & Docker Compose
-
-### Datenbankinkonsistenzen behoben
-- ✅ 10 Kategorien synchronisiert
-- ✅ 15 Standorte aktualisiert  
-- ✅ 8 Abteilungen korrigiert
-- ✅ 0 Integritätsprobleme gefunden
-
-## 📦 Installation
-
-### Docker (Empfohlen)
-
+### Windows
 ```bash
-# Repository klonen
-git clone <repository-url>
-cd Scandy2
-
-# Produktionsversion starten
-docker-compose up -d
-
-# Oder Test-Version (separate Ports)
-docker-compose -f docker-compose.test.yml up -d
+install.bat
 ```
 
-### Manuelle Installation
-
+### Linux/macOS
 ```bash
-# Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# Datenbankinkonsistenzen beheben (falls vorhanden)
-python fix_database_inconsistencies.py
-
-# Anwendung starten
-python -m flask run
+chmod +x install.sh
+./install.sh
 ```
 
-## 🔧 Wartung
+## 📋 Features
 
-### Automatische Inkonsistenzbehebung
-Nach jedem Backup-Import wird automatisch die Kategorien-Inkonsistenz behoben.
+- **Werkzeugverwaltung**: Vollständige Verwaltung von Werkzeugen mit Barcode-Scanner
+- **Mitarbeiterverwaltung**: Verwaltung von Mitarbeitern und deren Berechtigungen
+- **Ausleihsystem**: Einfaches Ausleihen und Zurückgeben von Werkzeugen
+- **Verbrauchsgüter**: Verwaltung von Verbrauchsmaterialien
+- **Aufgabensystem**: Ticket-basiertes Aufgabensystem für Wartung und Reparaturen
+- **Automatische Backups**: Backups werden automatisch bei jedem Start erstellt
+- **Docker-basiert**: Einfache Installation und Wartung
 
-### Manuelle Reparatur
-```bash
-# Alle Inkonsistenzen beheben
-python fix_database_inconsistencies.py
+## 🛠️ Installation
 
-# Nur Kategorien-Inkonsistenz
-python fix_category_inconsistency.py
+### Voraussetzungen
+- Docker Desktop
+- Mindestens 4GB RAM
+- 10GB freier Speicherplatz
+
+### Automatische Installation
+
+1. **Repository klonen:**
+   ```bash
+   git clone <repository-url>
+   cd scandy
+   ```
+
+2. **Installation starten:**
+   
+   **Windows:**
+   ```bash
+   install.bat
+   ```
+   
+   **Linux/macOS:**
+   ```bash
+   chmod +x install.sh
+   ./install.sh
+   ```
+
+3. **Installation folgt automatisch:**
+   - Docker-Container werden erstellt
+   - Datenbank wird initialisiert
+   - Automatische Backups werden eingerichtet
+   - Anwendung wird gestartet
+
+### Nach der Installation
+
+- **Scandy**: http://localhost:5000
+- **Mongo Express**: http://localhost:8081
+- **MongoDB**: localhost:27017
+
+## 📁 Projektstruktur
+
+```
+scandy_project/
+├── docker-compose.yml    # Container-Konfiguration
+├── start.bat            # Windows: Container starten
+├── stop.bat             # Windows: Container stoppen
+├── update.bat           # Windows: System aktualisieren
+├── backup.bat           # Windows: Backup erstellen
+├── start.sh             # Linux/macOS: Container starten
+├── stop.sh              # Linux/macOS: Container stoppen
+├── update.sh            # Linux/macOS: System aktualisieren
+├── backup.sh            # Linux/macOS: Backup erstellen
+└── scandy_data/         # Persistente Daten
+    ├── mongodb/         # MongoDB-Daten
+    ├── uploads/         # Hochgeladene Dateien
+    ├── backups/         # Automatische Backups
+    ├── logs/            # Anwendungs-Logs
+    └── static/          # Statische Dateien
 ```
 
-## 🧪 Testing
+## 🔄 Automatische Backups
 
-### Test-Umgebung
-```bash
-# Test-Container starten
-./test_app.sh
+Backups werden automatisch erstellt:
+- **Bei jedem Start** der Anwendung
+- **MongoDB-Dump** mit allen Daten
+- **Anwendungsdaten** (Uploads, Logs, etc.)
+- **Komprimiert** in ZIP/TAR-Format
+- **Zeitstempel** für einfache Verwaltung
 
-# Zugriff: http://localhost:5002
-# MongoDB: localhost:27019
+### Backup-Verzeichnis
+```
+scandy_data/backups/
+├── mongodb_20250101_120000/     # MongoDB-Dump
+├── app_data_20250101_120000.zip # Anwendungsdaten
+└── ...
 ```
 
-### Funktionen getestet
-- [x] Admin-Setup und Benutzerverwaltung
-- [x] Werkzeug-Verwaltung (CRUD)
-- [x] Mitarbeiter-Verwaltung
-- [x] Verbrauchsmaterial-Verwaltung
-- [x] Ausleihe/Rückgabe-System
-- [x] Ticket-System
-- [x] Backup/Restore-Funktionen
-- [x] Notice-System
+## 🛠️ Verwaltung
 
-## 📊 Ports
+### Container starten
+```bash
+# Windows
+start.bat
 
-### Produktionsversion
-- **Scandy App:** http://localhost:5000
-- **MongoDB:** localhost:27017
+# Linux/macOS
+./start.sh
+```
 
-### Test-Version
-- **Scandy App:** http://localhost:5002
-- **MongoDB:** localhost:27019
+### Container stoppen
+```bash
+# Windows
+stop.bat
 
-## 🚨 Bekannte Probleme
+# Linux/macOS
+./stop.sh
+```
 
-### ⚠️ Hinweise
-- **Docker Compose Version:** `version` Attribut ist obsolete (harmlos)
-- **Development-Server:** Für Produktion WSGI-Server verwenden
+### System aktualisieren
+```bash
+# Windows
+update.bat
 
-### 🔄 Geplante Verbesserungen
-- [ ] Logo-Upload-Funktionalität implementieren
-- [ ] Update-System vervollständigen
-- [ ] Performance-Monitoring hinzufügen
+# Linux/macOS
+./update.sh
+```
+
+### Backup erstellen
+```bash
+# Windows
+backup.bat
+
+# Linux/macOS
+./backup.sh
+```
+
+### Mit automatischem Backup starten
+```bash
+# Windows
+start-with-backup.bat
+
+# Linux/macOS
+./start-with-backup.sh
+```
+
+## 🔧 Konfiguration
+
+### Umgebungsvariablen
+- `CONTAINER_NAME`: Name der Container (Standard: scandy)
+- `APP_PORT`: Port für die Web-Anwendung (Standard: 5000)
+- `MONGO_PORT`: Port für MongoDB (Standard: 27017)
+- `MONGO_EXPRESS_PORT`: Port für Mongo Express (Standard: 8081)
+- `DATA_DIR`: Verzeichnis für persistente Daten (Standard: ./scandy_data)
+
+### Anpassung
+Die Konfiguration kann in den Install-Scripts angepasst werden:
+- `install.bat` (Windows)
+- `install.sh` (Linux/macOS)
+
+## 🐛 Fehlerbehebung
+
+### Container startet nicht
+1. Prüfen Sie Docker-Logs: `docker-compose logs`
+2. Prüfen Sie Container-Status: `docker-compose ps`
+3. Starten Sie Container neu: `docker-compose restart`
+
+### Flask-Modul nicht gefunden
+Das System verwendet automatisch eine einfache Dockerfile-Version als Fallback.
+
+### Backup-Probleme
+1. Prüfen Sie Schreibrechte im Backup-Verzeichnis
+2. Prüfen Sie verfügbaren Speicherplatz
+3. Manuelles Backup: `backup.bat` oder `./backup.sh`
 
 ## 📞 Support
 
 Bei Problemen:
-1. **Logs prüfen:** `docker-compose logs -f scandy`
-2. **Datenbank-Reparatur:** `python fix_database_inconsistencies.py`
-3. **Backup erstellen:** Vor größeren Änderungen
+1. Prüfen Sie die Logs: `docker-compose logs`
+2. Prüfen Sie den Container-Status: `docker-compose ps`
+3. Erstellen Sie ein Backup vor Änderungen
+4. Kontaktieren Sie den Support
 
-## 📋 Release Notes
+## 📄 Lizenz
 
-Detaillierte Informationen zu dieser Beta-Version findest du in [BETA_RELEASE_NOTES.md](BETA_RELEASE_NOTES.md).
+Dieses Projekt steht unter der MIT-Lizenz.
 
-## 🎯 Nächste Schritte
+## 📚 Dokumentation
 
-1. **Produktivtest:** Umfassende Tests in Produktionsumgebung
-2. **Feedback sammeln:** Benutzer-Feedback zu neuen Features
-3. **Performance-Monitoring:** Überwachung der Datenbank-Performance
-4. **Stable Release:** Nach erfolgreichem Produktivtest
+- [Benutzerhandbuch](docs/05_BENUTZERHANDBUCH.md)
+- [Admin-Handbuch](docs/06_ADMINHANDBUCH.md)
+- [Entwickler-Dokumentation](docs/10_ENTWICKLUNG.md)
+- [Multi-Platform Docker](DOCKER_MULTI_PLATFORM.md)
+
+## 🤝 Support
+
+Bei Problemen:
+
+1. **Troubleshooting-Script verwenden**
+2. **Logs prüfen**: `docker-compose logs`
+3. **Dokumentation lesen**: [docs/](docs/)
+4. **Issue erstellen**: GitHub Issues
+
+## 📄 Lizenz
+
+MIT License - siehe [LICENSE](LICENSE) Datei.
+
+## 🔄 Updates
+
+```bash
+# System aktualisieren
+./update.sh  # Linux/macOS
+update.bat   # Windows
+```
 
 ---
 
-**Diese Beta-Version ist bereit für den Produktivtest!** 🚀 
+**Scandy** - Moderne Inventarverwaltung für die digitale Arbeitswelt 

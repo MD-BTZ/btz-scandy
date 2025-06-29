@@ -23,6 +23,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   scandy-mongo-express:
     image: mongo-express:1.0.0
@@ -41,29 +46,46 @@ services:
         condition: service_healthy
     networks:
       - scandy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   scandy-app:
-    image: woschj/scandy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: scandy-local:dev
     container_name: scandy-app
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
+      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/admin
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-change-in-production
+      - SECRET_KEY=scandy-secret-key-production
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge
       - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - CONTAINER_NAME=scandy
       - TZ=Europe/Berlin
+      # Gmail SMTP Konfiguration - ERsetzen Sie diese Werte mit Ihren echten Daten
+      - MAIL_SERVER=smtp.gmail.com
+      - MAIL_PORT=587
+      - MAIL_USE_TLS=true
+      - MAIL_USERNAME=scandy.post@gmail.com
+      - MAIL_PASSWORD=dpic ojfs prpa uurs
+      - MAIL_DEFAULT_SENDER=scandy.post@gmail.com
     ports:
       - "5000:5000"
     volumes:
+      - ./app:/app/app
       - app_uploads:/app/app/uploads
       - app_backups:/app/app/backups
       - app_logs:/app/app/logs
-      - app_static:/app/app/static
+      - app_sessions:/app/app/flask_session
     depends_on:
       scandy-mongodb:
         condition: service_healthy
@@ -80,6 +102,21 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # Plattform-spezifische Einstellungen für bessere Performance
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 volumes:
   mongodb_data:
@@ -90,9 +127,9 @@ volumes:
     driver: local
   app_logs:
     driver: local
-  app_static:
+  app_sessions:
     driver: local
 
 networks:
   scandy-network:
-    driver: bridge
+    driver: bridge 

@@ -16,7 +16,7 @@ import time
 from PIL import Image
 import io
 from app.config.config import Config
-from app.models.mongodb_database import MongoDB
+from app.models.mongodb_database import mongodb
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,7 +30,6 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
-mongodb = MongoDB()
 
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
 # ensure_default_settings()
@@ -1405,7 +1404,7 @@ def delete_worker_permanent(barcode):
 
 @bp.route('/tickets/<ticket_id>')
 @login_required
-@admin_required
+@mitarbeiter_required
 def ticket_detail(ticket_id):
     """Zeigt die Details eines Tickets für Administratoren."""
     ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
@@ -1614,8 +1613,8 @@ def update_ticket(ticket_id):
         # Bereite die Auftragsdetails vor
         auftrag_details = {
             'bereich': data.get('bereich', ''),
-            'auftraggeber_intern': bool(data.get('auftraggeber_intern', False)),
-            'auftraggeber_extern': bool(data.get('auftraggeber_extern', False)),
+            'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
+            'auftraggeber_extern': data.get('auftraggeber_typ') == 'extern',
             'auftraggeber_name': data.get('auftraggeber_name', ''),
             'kontakt': data.get('kontakt', ''),
             'auftragsbeschreibung': data.get('auftragsbeschreibung', ''),
@@ -1721,82 +1720,69 @@ def export_ticket(id):
         # --- Kontext für docxtpl bauen ---
         context = {
             'auftragnehmer': auftragnehmer_name,
-            'intern_checkbox': intern_checkbox,
-            'extern_checkbox': extern_checkbox,
-            'auftraggeber_name': auftrag_details.get('auftraggeber_name', ''),
-            'kontakt': auftrag_details.get('kontakt', ''),
+            'auftragnummer': ticket.get('ticket_number', id),
+            'datum': datetime.now().strftime('%d.%m.%Y'),
+            'internchk': '☒' if auftrag_details.get('auftraggeber_intern') else '☐',
+            'externchk': '☒' if auftrag_details.get('auftraggeber_extern') else '☐',
+            'auftraggebername': auftrag_details.get('auftraggeber_name', ''),
+            'auftraggebermail': auftrag_details.get('kontakt', ''),
+            'bereich': auftrag_details.get('bereich', ''),
             'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
-            'arbeiten_1': arbeiten_zeilen[0]['arbeiten'],
-            'arbeitsstunden_1': arbeiten_zeilen[0]['arbeitsstunden'],
-            'leistungskategorie_1': arbeiten_zeilen[0]['leistungskategorie'],
-            'arbeiten_2': arbeiten_zeilen[1]['arbeiten'],
-            'arbeitsstunden_2': arbeiten_zeilen[1]['arbeitsstunden'],
-            'leistungskategorie_2': arbeiten_zeilen[1]['leistungskategorie'],
-            'arbeiten_3': arbeiten_zeilen[2]['arbeiten'],
-            'arbeitsstunden_3': arbeiten_zeilen[2]['arbeitsstunden'],
-            'leistungskategorie_3': arbeiten_zeilen[2]['leistungskategorie'],
-            'arbeiten_4': arbeiten_zeilen[3]['arbeiten'],
-            'arbeitsstunden_4': arbeiten_zeilen[3]['arbeitsstunden'],
-            'leistungskategorie_4': arbeiten_zeilen[3]['leistungskategorie'],
-            'arbeiten_5': arbeiten_zeilen[4]['arbeiten'],
-            'arbeitsstunden_5': arbeiten_zeilen[4]['arbeitsstunden'],
-            'leistungskategorie_5': arbeiten_zeilen[4]['leistungskategorie'],
-            'material_1': material_rows[0]['material'],
-            'materialmenge_1': material_rows[0]['materialmenge'],
-            'materialpreis_1': material_rows[0]['materialpreis'],
-            'materialpreisges_1': material_rows[0]['materialpreisges'],
-            'material_2': material_rows[1]['material'],
-            'materialmenge_2': material_rows[1]['materialmenge'],
-            'materialpreis_2': material_rows[1]['materialpreis'],
-            'materialpreisges_2': material_rows[1]['materialpreisges'],
-            'material_3': material_rows[2]['material'],
-            'materialmenge_3': material_rows[2]['materialmenge'],
-            'materialpreis_3': material_rows[2]['materialpreis'],
-            'materialpreisges_3': material_rows[2]['materialpreisges'],
-            'material_4': material_rows[3]['material'],
-            'materialmenge_4': material_rows[3]['materialmenge'],
-            'materialpreis_4': material_rows[3]['materialpreis'],
-            'materialpreisges_4': material_rows[3]['materialpreisges'],
-            'material_5': material_rows[4]['material'],
-            'materialmenge_5': material_rows[4]['materialmenge'],
-            'materialpreis_5': material_rows[4]['materialpreis'],
-            'materialpreisges_5': material_rows[4]['materialpreisges'],
-            'summe_material': f"{summe_material:.2f}".replace('.', ','),
-            'arbeitspausch': f"{arbeitspausch:.2f}".replace('.', ','),
+            'duedate': auftrag_details.get('fertigstellungstermin', ''),
+            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ','),
+            'matsum': f"{summe_material:.2f}".replace('.', ','),
             'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
-            'zwischensumme': f"{zwischensumme:.2f}".replace('.', ','),
+            'arpausch': f"{arbeitspausch:.2f}".replace('.', ','),
+            'zwsum': f"{zwischensumme:.2f}".replace('.', ','),
             'mwst': f"{mwst:.2f}".replace('.', ','),
-            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ',')
+            'arbeitenblock': '\n'.join([arbeit['arbeiten'] for arbeit in arbeiten_zeilen]),
+            'stundenblock': '\n'.join([arbeit['arbeitsstunden'] for arbeit in arbeiten_zeilen]),
+            'kategorieblock': '\n'.join([arbeit['leistungskategorie'] for arbeit in arbeiten_zeilen]),
+            'materialblock': '\n'.join([material['material'] for material in material_rows]),
+            'mengenblock': '\n'.join([material['materialmenge'] for material in material_rows]),
+            'preisblock': '\n'.join([material['materialpreis'] for material in material_rows]),
+            'gesamtblock': '\n'.join([material['materialpreisges'] for material in material_rows])
         }
 
         # --- Word-Dokument generieren ---
+        logging.info(f"Starte Admin-Export für Ticket {id}")
+        
         # Lade das Template
-        template_path = os.path.join(current_app.static_folder, 'word', 'btzauftrag.docx')
+        template_path = os.path.join(current_app.root_path, 'static', 'word', 'btzauftrag.docx')
+        logging.info(f"Template-Pfad: {template_path}")
+        
         if not os.path.exists(template_path):
-            logging.error(f"Word-Template nicht gefunden: {template_path}")
+            logging.error(f"Template-Datei nicht gefunden: {template_path}")
             flash('Word-Template nicht gefunden.', 'error')
             return redirect(url_for('admin.ticket_detail', ticket_id=id))
         
         doc = DocxTemplate(template_path)
+        logging.info("Template erfolgreich geladen")
         
         # Rendere das Dokument
+        logging.info(f"Rendere Dokument mit Kontext: {context}")
         doc.render(context)
+        logging.info("Dokument erfolgreich gerendert")
         
         # Erstelle das uploads-Verzeichnis falls es nicht existiert
-        uploads_dir = os.path.join(current_app.static_folder, 'uploads')
+        uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
         # Speichere das generierte Dokument
-        output_path = os.path.join(uploads_dir, f'ticket_{id}_export.docx')
+        ticket_number = ticket.get('ticket_number', id)
+        output_path = os.path.join(uploads_dir, f'ticket_{ticket_number}_export.docx')
+        
+        logging.info(f"Speichere Dokument unter: {output_path}")
         doc.save(output_path)
+        logging.info("Dokument erfolgreich gespeichert")
         
         logging.info(f"Word-Dokument erfolgreich generiert: {output_path}")
         
         # Sende das Dokument
-        return send_file(output_path, as_attachment=True, download_name=f'ticket_{id}_export.docx')
+        return send_file(output_path, as_attachment=True, download_name=f'ticket_{ticket_number}_export.docx')
         
     except Exception as e:
-        logging.error(f"Fehler beim Generieren des Word-Dokuments für Ticket {id}: {str(e)}")
+        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}", exc_info=True)
         flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
         return redirect(url_for('admin.ticket_detail', ticket_id=id))
 
@@ -1829,8 +1815,8 @@ def update_ticket_details(ticket_id):
             'ticket_id': ObjectId(ticket_id),
             'auftrag_an': data.get('auftrag_an', ''),
             'bereich': data.get('bereich', ''),
-            'auftraggeber_intern': data.get('auftraggeber_intern', ''),
-            'auftraggeber_extern': data.get('auftraggeber_extern', ''),
+            'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
+            'auftraggeber_extern': data.get('auftraggeber_typ') == 'extern',
             'beschreibung': data.get('beschreibung', ''),
             'prioritaet': data.get('prioritaet', 'normal'),
             'deadline': data.get('deadline'),
@@ -1879,13 +1865,27 @@ def update_ticket_details(ticket_id):
         }), 500
 
 def create_mongodb_backup():
-    """Erstellt ein MongoDB-Backup (Platzhalter)"""
-    # TODO: Implementiere echtes MongoDB-Backup
-    return True
+    """Erstellt ein MongoDB-Backup"""
+    try:
+        from app.utils.backup_manager import BackupManager
+        
+        backup_manager = BackupManager()
+        backup_filename = backup_manager.create_backup()
+        
+        if backup_filename:
+            logger.info(f"MongoDB-Backup erfolgreich erstellt: {backup_filename}")
+            return True, backup_filename
+        else:
+            logger.error("Fehler beim Erstellen des MongoDB-Backups")
+            return False, "Fehler beim Erstellen des Backups"
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des MongoDB-Backups: {str(e)}")
+        return False, f"Fehler beim Erstellen des Backups: {str(e)}"
 
 @bp.route('/tickets')
 @login_required
-@admin_required
+@mitarbeiter_required
 def tickets():
     """Zeigt die Ticket-Verwaltungsseite an."""
     # Hole alle Tickets aus der Datenbank
@@ -1907,7 +1907,7 @@ def tickets():
                          title="Ticket-Verwaltung")
 
 @bp.route('/manage_users')
-@admin_required
+@mitarbeiter_required
 def manage_users():
     """Benutzerverwaltung"""
     try:
@@ -1919,154 +1919,151 @@ def manage_users():
         return render_template('admin/users.html', users=[])
 
 @bp.route('/add_user', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def add_user():
-    """Neuen Benutzer hinzufügen"""
     if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            email = request.form.get('email', '').strip()
-            password = request.form.get('password', '').strip()
-            password_confirm = request.form.get('password_confirm', '').strip()
-            firstname = request.form.get('firstname', '').strip()
-            lastname = request.form.get('lastname', '').strip()
-            role = request.form.get('role', '').strip()
-            
-            # Validierung
-            if not username or not password or not firstname or not lastname or not role:
-                flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
-                                     form_data=request.form)
-            
-            if password != password_confirm:
-                flash('Passwörter stimmen nicht überein', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
-                                     form_data=request.form)
-            
-            # Prüfe ob Benutzername bereits existiert
-            existing_user = mongodb.find_one('users', {'username': username})
-            if existing_user:
-                flash('Benutzername existiert bereits', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
-                                     form_data=request.form)
-            
-            # Benutzer erstellen
-            user_data = {
-                'username': username,
-                'email': email if email else None,
-                'password_hash': generate_password_hash(password),
-                'firstname': firstname,
-                'lastname': lastname,
-                'role': role,
-                'is_active': True,
-                'created_at': datetime.now(),
-                'updated_at': datetime.now()
-            }
-            
-            mongodb.insert_one('users', user_data)
-            flash(f'Benutzer "{username}" erfolgreich erstellt', 'success')
-            return redirect(url_for('admin.manage_users'))
-            
-        except Exception as e:
-            logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
-            flash('Fehler beim Erstellen des Benutzers', 'error')
+        role = request.form.get('role', '').strip()
+        if current_user.role != 'admin' and role == 'admin':
+            flash('Sie dürfen keine Admin-Benutzer anlegen.', 'error')
+            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'], form_data=request.form)
+    try:
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        password_confirm = request.form.get('password_confirm', '').strip()
+        firstname = request.form.get('firstname', '').strip()
+        lastname = request.form.get('lastname', '').strip()
+        role = request.form.get('role', '').strip()
+        
+        # Validierung
+        if not username or not password or not firstname or not lastname or not role:
+            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender'],
                                  form_data=request.form)
+        
+        if password != password_confirm:
+            flash('Passwörter stimmen nicht überein', 'error')
+            return render_template('admin/user_form.html', 
+                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 form_data=request.form)
+        
+        # Prüfe ob Benutzername bereits existiert
+        existing_user = mongodb.find_one('users', {'username': username})
+        if existing_user:
+            flash('Benutzername existiert bereits', 'error')
+            return render_template('admin/user_form.html', 
+                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 form_data=request.form)
+        
+        # Benutzer erstellen
+        user_data = {
+            'username': username,
+            'email': email if email else None,
+            'password_hash': generate_password_hash(password),
+            'firstname': firstname,
+            'lastname': lastname,
+            'role': role,
+            'is_active': True,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        }
+        
+        mongodb.insert_one('users', user_data)
+        flash(f'Benutzer "{username}" erfolgreich erstellt', 'success')
+        return redirect(url_for('admin.manage_users'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
+        flash('Fehler beim Erstellen des Benutzers', 'error')
+        return render_template('admin/user_form.html', 
+                             roles=['admin', 'mitarbeiter', 'anwender'],
+                             form_data=request.form)
     
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
 
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
-@admin_required
+@mitarbeiter_required
 def edit_user(user_id):
-    """Benutzer bearbeiten"""
+    user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+    if not user:
+        flash('Benutzer nicht gefunden', 'error')
+        return redirect(url_for('admin.manage_users'))
+    if current_user.role != 'admin' and user.get('role') == 'admin':
+        flash('Sie dürfen keine Admin-Benutzer bearbeiten.', 'error')
+        return redirect(url_for('admin.manage_users'))
     try:
-        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
-        if not user:
-            flash('Benutzer nicht gefunden', 'error')
-            return redirect(url_for('admin.manage_users'))
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        password_confirm = request.form.get('password_confirm', '').strip()
+        firstname = request.form.get('firstname', '').strip()
+        lastname = request.form.get('lastname', '').strip()
+        role = request.form.get('role', '').strip()
         
-        if request.method == 'POST':
-            try:
-                username = request.form.get('username', '').strip()
-                email = request.form.get('email', '').strip()
-                password = request.form.get('password', '').strip()
-                password_confirm = request.form.get('password_confirm', '').strip()
-                firstname = request.form.get('firstname', '').strip()
-                lastname = request.form.get('lastname', '').strip()
-                role = request.form.get('role', '').strip()
-                
-                # Validierung
-                if not username or not firstname or not lastname or not role:
-                    flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
-                    return render_template('admin/user_form.html', 
-                                         user=user,
-                                         roles=['admin', 'mitarbeiter', 'anwender'])
-                
-                # Prüfe ob Passwort geändert werden soll
-                if password:
-                    if password != password_confirm:
-                        flash('Passwörter stimmen nicht überein', 'error')
-                        return render_template('admin/user_form.html', 
-                                             user=user,
-                                             roles=['admin', 'mitarbeiter', 'anwender'])
-                    password_hash = generate_password_hash(password)
-                else:
-                    password_hash = user.get('password_hash')
-                
-                # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
-                existing_user = mongodb.find_one('users', {
-                    'username': username,
-                    '_id': {'$ne': ObjectId(user_id)}
-                })
-                if existing_user:
-                    flash('Benutzername existiert bereits', 'error')
-                    return render_template('admin/user_form.html', 
-                                         user=user,
-                                         roles=['admin', 'mitarbeiter', 'anwender'])
-                
-                # Benutzer aktualisieren
-                update_data = {
-                    'username': username,
-                    'email': email if email else None,
-                    'password_hash': password_hash,
-                    'firstname': firstname,
-                    'lastname': lastname,
-                    'role': role,
-                    'updated_at': datetime.now()
-                }
-                
-                mongodb.update_one('users', 
-                                 {'_id': ObjectId(user_id)}, 
-                                 {'$set': update_data})
-                
-                flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
-                return redirect(url_for('admin.manage_users'))
-                
-            except Exception as e:
-                logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
-                flash('Fehler beim Aktualisieren des Benutzers', 'error')
+        # Validierung
+        if not username or not firstname or not lastname or not role:
+            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+            return render_template('admin/user_form.html', 
+                                 user=user,
+                                 roles=['admin', 'mitarbeiter', 'anwender'])
+        
+        # Prüfe ob Passwort geändert werden soll
+        if password:
+            if password != password_confirm:
+                flash('Passwörter stimmen nicht überein', 'error')
                 return render_template('admin/user_form.html', 
                                      user=user,
                                      roles=['admin', 'mitarbeiter', 'anwender'])
+            password_hash = generate_password_hash(password)
+        else:
+            password_hash = user.get('password_hash')
         
+        # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
+        existing_user = mongodb.find_one('users', {
+            'username': username,
+            '_id': {'$ne': ObjectId(user_id)}
+        })
+        if existing_user:
+            flash('Benutzername existiert bereits', 'error')
+            return render_template('admin/user_form.html', 
+                                 user=user,
+                                 roles=['admin', 'mitarbeiter', 'anwender'])
+        
+        # Benutzer aktualisieren
+        update_data = {
+            'username': username,
+            'email': email if email else None,
+            'password_hash': password_hash,
+            'firstname': firstname,
+            'lastname': lastname,
+            'role': role,
+            'updated_at': datetime.now()
+        }
+        
+        mongodb.update_one('users', 
+                         {'_id': ObjectId(user_id)}, 
+                         {'$set': update_data})
+        
+        flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
+        return redirect(url_for('admin.manage_users'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
+        flash('Fehler beim Aktualisieren des Benutzers', 'error')
         return render_template('admin/user_form.html', 
                              user=user,
                              roles=['admin', 'mitarbeiter', 'anwender'])
-                             
-    except Exception as e:
-        logger.error(f"Fehler beim Laden des Benutzers: {e}")
-        flash('Fehler beim Laden des Benutzers', 'error')
-        return redirect(url_for('admin.manage_users'))
+    
+    return render_template('admin/user_form.html', 
+                         user=user,
+                         roles=['admin', 'mitarbeiter', 'anwender'])
 
 @bp.route('/notices')
 @admin_required
 def notices():
     """Notizen-Übersicht"""
-    notices = mongodb.find('notices', {})
+    notices = mongodb.find('homepage_notices', {})
     return render_template('admin/notices.html', notices=notices)
 
 @bp.route('/create_notice', methods=['GET', 'POST'])
@@ -2087,14 +2084,31 @@ def edit_notice(id):
         # TODO: Implementiere Notiz-Bearbeitung
         flash('Notiz erfolgreich aktualisiert', 'success')
         return redirect(url_for('admin.notices'))
-    notice = mongodb.find_one('notices', {'_id': ObjectId(id)})
+    notice = mongodb.find_one('homepage_notices', {'_id': ObjectId(id)})
     return render_template('admin/notice_form.html', notice=notice)
 
 @bp.route('/delete_notice/<id>', methods=['POST'])
 @admin_required
 def delete_notice(id):
-    # TODO: Implementiere MongoDB-Version
-    return jsonify({'success': True})
+    """Löscht einen Hinweis"""
+    try:
+        # Konvertiere String-ID zu ObjectId
+        object_id = ObjectId(id)
+        
+        # Lösche den Hinweis
+        result = mongodb.delete_one('homepage_notices', {'_id': object_id})
+        
+        if result:
+            flash('Hinweis erfolgreich gelöscht', 'success')
+        else:
+            flash('Hinweis nicht gefunden', 'error')
+            
+        return redirect(url_for('admin.notices'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Hinweises: {str(e)}")
+        flash('Fehler beim Löschen des Hinweises', 'error')
+        return redirect(url_for('admin.notices'))
 
 @bp.route('/upload_logo', methods=['POST'])
 @admin_required
@@ -2138,12 +2152,12 @@ def add_ticket_category():
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
-            mongodb.db.settings.update_one(
+            mongodb.update_one_array(
                 {'key': 'ticket_categories'},
                 {'$push': {'value': name}}
             )
         else:
-            mongodb.db.settings.insert_one({
+            mongodb.insert_one('settings', {
                 'key': 'ticket_categories',
                 'value': [name]
             })
@@ -2167,7 +2181,7 @@ def delete_ticket_category(category):
             return redirect(url_for('admin.tickets'))
 
         # Ticket-Kategorie aus der Liste entfernen
-        mongodb.db.settings.update_one(
+        mongodb.update_one_array(
             {'key': 'ticket_categories'},
             {'$pull': {'value': category}}
         )
@@ -3065,7 +3079,7 @@ def test_barcodes():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/delete_user/<user_id>', methods=['POST'])
-@admin_required
+@mitarbeiter_required
 def delete_user(user_id):
     """Benutzer löschen"""
     try:
@@ -3089,7 +3103,7 @@ def delete_user(user_id):
         return redirect(url_for('admin.manage_users'))
 
 @bp.route('/user_form')
-@admin_required
+@mitarbeiter_required
 def user_form():
     """Benutzer-Formular (für neue Benutzer)"""
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])

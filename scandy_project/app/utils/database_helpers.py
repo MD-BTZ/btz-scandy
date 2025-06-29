@@ -32,7 +32,7 @@ def get_categories_from_settings():
             # Wenn es bereits eine Liste ist, verwende sie direkt
             elif isinstance(value, list):
                 return value
-            return []
+        return []
         
         # Fallback: Verwende die ursprüngliche categories Collection
         categories = mongodb.find('categories', {'deleted': {'$ne': True}})
@@ -54,7 +54,7 @@ def get_locations_from_settings():
             # Wenn es bereits eine Liste ist, verwende sie direkt
             elif isinstance(value, list):
                 return value
-            return []
+        return []
         
         # Fallback: Verwende die ursprüngliche locations Collection
         locations = mongodb.find('locations', {'deleted': {'$ne': True}})
@@ -76,7 +76,7 @@ def get_departments_from_settings():
             # Wenn es bereits eine Liste ist, verwende sie direkt
             elif isinstance(value, list):
                 return value
-            return []
+        return []
         
         # Fallback: Verwende die ursprüngliche departments Collection
         departments = mongodb.find('departments', {'deleted': {'$ne': True}})
@@ -215,7 +215,7 @@ def migrate_old_data_to_settings():
                     {'$set': {'value': ticket_categories_data}},
                     upsert=True
                 )
-        
+                
         logger.info("Migration der alten Daten abgeschlossen")
         
     except Exception as e:

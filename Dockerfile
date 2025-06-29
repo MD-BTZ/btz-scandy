@@ -1,60 +1,40 @@
-# Multi-Stage Build für optimierte Größe
-FROM node:18-alpine AS frontend-builder
+# Einfaches Dockerfile für Scandy
+FROM python:3.11-slim
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-
-COPY app/static/css/input.css ./app/static/css/
-RUN npm run build:css
-
-# Python Builder Stage
-FROM python:3.11-slim AS python-builder
-
-WORKDIR /app
-
-# Installiere nur Build-Abhängigkeiten
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Kopiere und installiere Python-Abhängigkeiten
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Final Stage
-FROM python:3.11-slim AS final
-
-# Installiere nur Runtime-Abhängigkeiten
+# Installiere System-Abhängigkeiten
 RUN apt-get update && apt-get install -y \
     curl \
+    ca-certificates \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Erstelle nicht-root Benutzer
-RUN useradd -m -u 1000 appuser
+WORKDIR /app
+
+# Kopiere nur die notwendigen Dateien
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY package*.json ./
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
+
+# Kopiere das app-Verzeichnis
+COPY app ./app
 
 WORKDIR /app
 
-# Kopiere Python-Pakete vom Builder
-COPY --from=python-builder /root/.local /home/appuser/.local
-
-# Kopiere CSS vom Frontend-Builder
-COPY --from=frontend-builder /app/app/static/css/main.css ./app/static/css/
-
-# Kopiere Anwendungscode
-COPY . .
+RUN npm install --silent
+RUN npm run build:css
 
 # Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp && \
-    chown -R appuser:appuser /app && \
-    chmod -R 755 /app
+RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp
 
-# Wechsle zu nicht-root Benutzer
-USER appuser
-
-# Füge Python-Pakete zum PATH hinzu
-ENV PATH=/home/appuser/.local/bin:$PATH
+# Setze Umgebungsvariablen
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV FLASK_APP=app/wsgi.py
 
 # Exponiere Port
 EXPOSE 5000

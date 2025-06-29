@@ -48,4 +48,7 @@ pymongo==4.6.1
 mongoengine==0.27.0
 dnspython==2.4.2
 
-# Entfernt: docker==7.0.0 (nicht im Container benötigt) 
+# Entfernt: docker==7.0.0 (nicht im Container benötigt)
+
+# Email
+Flask-Mail 

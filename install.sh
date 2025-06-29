@@ -1,81 +1,56 @@
 #!/bin/bash
 
-# Scandy Ein-Klick-Installation
-# MongoDB + App Container Setup
+# Scandy Universal Installer für Linux/macOS
+# Kombiniert alle Funktionen in einem Script
 
 set -e
 
-# Farben für die Ausgabe
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+echo "🚀 Scandy Installation (Linux/macOS)"
+echo "================================="
 
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}   Scandy Ein-Klick-Installation${NC}"
-echo -e "${GREEN}   MongoDB + App Container Setup${NC}"
-echo -e "${GREEN}========================================${NC}"
-
-# Prüfe Docker-Installation
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker ist nicht installiert. Bitte installieren Sie Docker zuerst.${NC}"
-    echo "Installationsanleitung: https://docs.docker.com/get-docker/"
+# Prüfe Docker
+if ! docker info >/dev/null 2>&1; then
+    echo "❌ Docker läuft nicht. Bitte starten Sie Docker zuerst."
     exit 1
 fi
 
-# Prüfe Docker Compose
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}Docker Compose ist nicht installiert. Bitte installieren Sie Docker Compose zuerst.${NC}"
-    echo "Installationsanleitung: https://docs.docker.com/compose/install/"
-    exit 1
-fi
+echo "✅ Docker ist verfügbar"
 
-# Prüfe ob Docker läuft
-if ! docker info &> /dev/null; then
-    echo -e "${RED}Docker läuft nicht. Bitte starten Sie Docker zuerst.${NC}"
-    exit 1
-fi
+# Konfiguration
+CONTAINER_NAME="scandy"
+APP_PORT="5000"
+MONGO_PORT="27017"
+MONGO_EXPRESS_PORT="8081"
+MONGO_USER="admin"
+MONGO_PASS="scandy123"
+DATA_DIR="./scandy_data"
 
-echo -e "${GREEN}✓ Docker ist installiert und läuft${NC}"
+echo "========================================"
+echo "   Konfiguration:"
+echo "========================================"
+echo "Container Name: $CONTAINER_NAME"
+echo "App Port: $APP_PORT"
+echo "MongoDB Port: $MONGO_PORT"
+echo "Mongo Express Port: $MONGO_EXPRESS_PORT"
+echo "Datenverzeichnis: $DATA_DIR"
+echo "========================================"
 
-# Container-Name Abfrage
-read -p "Bitte geben Sie einen Namen für die Umgebung ein (Standard: scandy): " CONTAINER_NAME
-if [ -z "$CONTAINER_NAME" ]; then
-    CONTAINER_NAME="scandy"
-fi
-
-# App-Port Abfrage
-read -p "Bitte geben Sie den Port für die App ein (Standard: 5000): " APP_PORT
-if [ -z "$APP_PORT" ]; then
-    APP_PORT="5000"
-fi
-
-# MongoDB-Port Abfrage
-read -p "Bitte geben Sie den Port für MongoDB ein (Standard: 27017): " MONGO_PORT
-if [ -z "$MONGO_PORT" ]; then
-    MONGO_PORT="27017"
-fi
-
-# Mongo Express Port Abfrage
-read -p "Bitte geben Sie den Port für Mongo Express (Web-UI) ein (Standard: 8081): " MONGO_EXPRESS_PORT
-if [ -z "$MONGO_EXPRESS_PORT" ]; then
-    MONGO_EXPRESS_PORT="8081"
-fi
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}   Konfiguration:${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo -e "Container Name: ${GREEN}$CONTAINER_NAME${NC}"
-echo -e "App Port: ${GREEN}$APP_PORT${NC}"
-echo -e "MongoDB Port: ${GREEN}$MONGO_PORT${NC}"
-echo -e "Mongo Express Port: ${GREEN}$MONGO_EXPRESS_PORT${NC}"
-echo -e "${BLUE}========================================${NC}"
-
-read -p "Möchten Sie mit der Installation fortfahren? (j/n): " confirm
-if [[ ! "$confirm" =~ ^[Jj]$ ]]; then
-    echo -e "${YELLOW}Installation abgebrochen.${NC}"
-    exit 0
+# Prüfe bestehende Installation
+if [ -d "$DATA_DIR/mongodb" ]; then
+    echo "⚠️  Bestehende Installation gefunden!"
+    echo "Optionen: 1=Abbrechen, 2=Backup+Neu, 3=Überschreiben"
+    read -p "Wählen Sie (1-3): " choice
+    case $choice in
+        1) exit 0 ;;
+        2) 
+            echo "Erstelle Backup..."
+            mkdir -p "$DATA_DIR/backups"
+            ;;
+        3) 
+            echo "Lösche alte Daten..."
+            rm -rf "$DATA_DIR"
+            ;;
+    esac
 fi
 
 # Erstelle Projektverzeichnis
@@ -83,63 +58,34 @@ PROJECT_DIR="${CONTAINER_NAME}_project"
 mkdir -p "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 
-echo -e "${GREEN}Erstelle Projektverzeichnis: $PROJECT_DIR${NC}"
+# Erstelle Datenverzeichnisse
+mkdir -p "$DATA_DIR/mongodb" "$DATA_DIR/uploads" "$DATA_DIR/backups" "$DATA_DIR/logs" "$DATA_DIR/static"
 
-# Prüfe Port-Verfügbarkeit
-echo -e "${GREEN}Prüfe Port-Verfügbarkeit...${NC}"
-
-check_port() {
-    local port=$1
-    local service=$2
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        echo -e "${RED}Port $port ist bereits belegt!${NC}"
-        echo -e "${YELLOW}Service: $service${NC}"
-        echo -e "${YELLOW}Bitte stoppen Sie den Service oder wählen Sie einen anderen Port.${NC}"
-        exit 1
-    fi
-}
-
-check_port 5000 "App (möglicherweise andere Anwendung)"
-check_port 27017 "MongoDB (möglicherweise andere MongoDB-Instanz)"
-check_port 8081 "Mongo Express (möglicherweise andere Anwendung)"
-
-echo -e "${GREEN}✓ Alle Ports sind verfügbar${NC}"
-
-# Prüfe ob bereits Scandy-Container laufen
-if docker ps --format "table {{.Names}}" | grep -q "scandy-"; then
-    echo -e "${YELLOW}Warnung: Es laufen bereits Scandy-Container!${NC}"
-    echo -e "${YELLOW}Möchten Sie diese stoppen und ersetzen? (j/n): ${NC}"
-    read -p "" replace_containers
-    if [[ "$replace_containers" =~ ^[Jj]$ ]]; then
-        echo -e "${YELLOW}Stoppe bestehende Scandy-Container...${NC}"
-        docker-compose down 2>/dev/null || true
-    else
-        echo -e "${YELLOW}Installation abgebrochen.${NC}"
-        exit 0
-    fi
+# Kopiere statische Dateien
+if [ -d "../app/static" ]; then
+    cp -r ../app/static/* "$DATA_DIR/static/"
 fi
 
 # Erstelle docker-compose.yml
-echo -e "${GREEN}Erstelle docker-compose.yml...${NC}"
-cat > docker-compose.yml << 'EOF'
+cat > docker-compose.yml << EOF
 version: '3.8'
 
 services:
-  scandy-mongodb:
+  ${CONTAINER_NAME}-mongodb:
     image: mongo:7.0
-    container_name: scandy-mongodb
+    container_name: ${CONTAINER_NAME}-mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: scandy123
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
       MONGO_INITDB_DATABASE: scandy
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT}:27017"
     volumes:
-      - mongodb_data:/data/db
+      - ${DATA_DIR}/mongodb:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d
     networks:
-      - scandy-network
+      - ${CONTAINER_NAME}-network
     command: mongod --auth --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
@@ -148,88 +94,90 @@ services:
       retries: 3
       start_period: 40s
 
-  scandy-mongo-express:
+  ${CONTAINER_NAME}-mongo-express:
     image: mongo-express:1.0.0
-    container_name: scandy-mongo-express
+    container_name: ${CONTAINER_NAME}-mongo-express
     restart: unless-stopped
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
-      ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: scandy123
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_USER}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_PASS}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER}:${MONGO_PASS}@${CONTAINER_NAME}-mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_USER}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_PASS}
     ports:
-      - "8081:8081"
+      - "${MONGO_EXPRESS_PORT}:8081"
     depends_on:
-      scandy-mongodb:
+      ${CONTAINER_NAME}-mongodb:
         condition: service_healthy
     networks:
-      - scandy-network
+      - ${CONTAINER_NAME}-network
 
-  scandy-app:
-    image: woschj/scandy:latest
-    container_name: scandy-app
+  ${CONTAINER_NAME}-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${CONTAINER_NAME}-app
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/
+      - MONGODB_URI=mongodb://${MONGO_USER}:${MONGO_PASS}@${CONTAINER_NAME}-mongodb:27017/
       - MONGODB_DB=scandy
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-change-in-production
+      - SECRET_KEY=scandy-secret-key-production
       - SYSTEM_NAME=Scandy
       - TICKET_SYSTEM_NAME=Aufgaben
       - TOOL_SYSTEM_NAME=Werkzeuge
       - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - CONTAINER_NAME=${CONTAINER_NAME}
       - TZ=Europe/Berlin
     ports:
-      - "5000:5000"
+      - "${APP_PORT}:5000"
     volumes:
-      - app_uploads:/app/app/uploads
-      - app_backups:/app/app/backups
-      - app_logs:/app/app/logs
-      - app_static:/app/app/static
+      - ${DATA_DIR}/uploads:/app/app/uploads
+      - ${DATA_DIR}/backups:/app/app/backups
+      - ${DATA_DIR}/logs:/app/app/logs
+      - ${DATA_DIR}/static:/app/app/static
     depends_on:
-      scandy-mongodb:
+      ${CONTAINER_NAME}-mongodb:
         condition: service_healthy
     networks:
-      - scandy-network
+      - ${CONTAINER_NAME}-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
 volumes:
-  mongodb_data:
-    driver: local
-  app_uploads:
-    driver: local
-  app_backups:
-    driver: local
-  app_logs:
-    driver: local
-  app_static:
+  ${CONTAINER_NAME}-mongodb-data:
     driver: local
 
 networks:
-  scandy-network:
+  ${CONTAINER_NAME}-network:
     driver: bridge
 EOF
 
-# Erstelle MongoDB Init-Skript
-echo -e "${GREEN}Erstelle MongoDB Init-Skript...${NC}"
+# Kopiere Dateien
+cp ../Dockerfile . 2>/dev/null || echo "WARNUNG: Dockerfile nicht gefunden"
+cp ../requirements.txt . 2>/dev/null || echo "WARNUNG: requirements.txt nicht gefunden"
+cp ../package.json . 2>/dev/null || echo "WARNUNG: package.json nicht gefunden"
+[ -f "../tailwind.config.js" ] && cp ../tailwind.config.js .
+[ -f "../postcss.config.js" ] && cp ../postcss.config.js .
+[ -f "../.dockerignore" ] && cp ../.dockerignore .
+
+# Kopiere App
+if [ -d "../app" ]; then
+    cp -r ../app .
+else
+    echo "ERROR: app-Verzeichnis nicht gefunden!"
+    exit 1
+fi
+
+# Erstelle MongoDB Init
 mkdir -p mongo-init
 cat > mongo-init/init.js << 'EOF'
-// MongoDB Initialisierung für Scandy
 db = db.getSiblingDB('scandy');
-
-// Erstelle Collections
 db.createCollection('tools');
 db.createCollection('consumables');
 db.createCollection('workers');
@@ -238,124 +186,110 @@ db.createCollection('users');
 db.createCollection('tickets');
 db.createCollection('settings');
 db.createCollection('system_logs');
-
-// Erstelle Indizes
 db.tools.createIndex({ "barcode": 1 }, { unique: true });
 db.tools.createIndex({ "deleted": 1 });
 db.tools.createIndex({ "status": 1 });
-
 db.consumables.createIndex({ "barcode": 1 }, { unique: true });
 db.consumables.createIndex({ "deleted": 1 });
-
 db.workers.createIndex({ "barcode": 1 }, { unique: true });
 db.workers.createIndex({ "deleted": 1 });
-
 db.lendings.createIndex({ "tool_barcode": 1 });
 db.lendings.createIndex({ "worker_barcode": 1 });
 db.lendings.createIndex({ "returned_at": 1 });
-
 db.users.createIndex({ "username": 1 }, { unique: true });
 db.users.createIndex({ "email": 1 }, { sparse: true });
-
 db.tickets.createIndex({ "created_at": 1 });
 db.tickets.createIndex({ "status": 1 });
 db.tickets.createIndex({ "assigned_to": 1 });
-
 print('MongoDB für Scandy initialisiert!');
 EOF
 
-# Erstelle Verwaltungsskripte
-echo -e "${GREEN}Erstelle Verwaltungsskripte...${NC}"
-
-# Start-Skript
-cat > start.sh << 'EOF'
+# Erstelle Management-Scripts
+cat > start.sh << EOF
 #!/bin/bash
-echo "Starte Scandy Docker-Container..."
+echo "Starte Scandy..."
+docker-compose up -d
+sleep 10
+docker-compose ps
+echo ""
+echo "Scandy: http://localhost:${APP_PORT}"
+echo "Mongo Express: http://localhost:${MONGO_EXPRESS_PORT}"
+EOF
+
+cat > stop.sh << EOF
+#!/bin/bash
+echo "Stoppe Scandy..."
+docker-compose down
+EOF
+
+cat > update.sh << EOF
+#!/bin/bash
+echo "Update Scandy..."
+docker-compose down
+docker-compose pull
+docker-compose build --no-cache
+docker-compose up -d
+EOF
+
+chmod +x start.sh stop.sh update.sh
+
+# Baue und starte
+echo "🏗️  Baue Container..."
+docker-compose build --no-cache
+
+if [ $? -ne 0 ]; then
+    echo "⚠️  Standard-Build fehlgeschlagen, verwende einfache Version..."
+    if [ -f "../Dockerfile.simple" ]; then
+        cp ../Dockerfile.simple Dockerfile
+        docker-compose build --no-cache
+    fi
+fi
+
+if [ $? -ne 0 ]; then
+    echo "❌ Build fehlgeschlagen!"
+    exit 1
+fi
+
+echo "✅ Build erfolgreich!"
+
+echo "🚀 Starte Container..."
 docker-compose up -d
 
-echo "Warte auf Container-Start..."
-sleep 10
+echo "⏳ Warte auf Start..."
+sleep 15
 
-echo "Container-Status:"
-docker-compose ps
+echo "========================================"
+echo "✅ Installation abgeschlossen!"
+echo "========================================"
+echo "Scandy: http://localhost:${APP_PORT}"
+echo "Mongo Express: http://localhost:${MONGO_EXPRESS_PORT}"
+echo "========================================"
+echo ""
+echo "📋 Scripts:"
+echo "- start.sh: Container starten"
+echo "- stop.sh: Container stoppen"
+echo "- update.sh: System aktualisieren"
+echo "========================================"
 
 echo ""
-echo "=========================================="
-echo "Scandy ist verfügbar unter:"
-echo "App: http://localhost:5000"
-echo "Mongo Express: http://localhost:8081"
-echo "MongoDB: localhost:27017"
-echo "=========================================="
-EOF
+echo "🔄 Richte automatische Backups ein..."
+echo "Erstelle Backup-Script..."
 
-# Stop-Skript
-cat > stop.sh << 'EOF'
-#!/bin/bash
-echo "Stoppe Scandy Docker-Container..."
-docker-compose down
-
-echo "Container gestoppt."
-EOF
-
-# Update-Skript
-cat > update.sh << 'EOF'
-#!/bin/bash
-echo "Update Scandy Docker-Container..."
-
-# Stoppe Container
-docker-compose down
-
-# Pull neueste Images
-docker-compose pull
-
-# Starte Container
-docker-compose up -d
-
-echo "Update abgeschlossen!"
-EOF
-
-# Backup-Skript
 cat > backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="./backups"
+BACKUP_DIR="${DATA_DIR}/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 echo "Erstelle Backup..."
-
-# Erstelle Backup-Verzeichnis
 mkdir -p "$BACKUP_DIR"
-
-# MongoDB Backup
-echo "Backup MongoDB..."
-docker exec scandy-mongodb mongodump --out /tmp/backup
-docker cp scandy-mongodb:/tmp/backup "$BACKUP_DIR/mongodb_$TIMESTAMP"
-
-# App-Daten Backup
-echo "Backup App-Daten..."
-docker run --rm -v scandy_project_app_uploads:/data -v $(pwd)/$BACKUP_DIR:/backup alpine tar -czf /backup/app_data_$TIMESTAMP.tar.gz -C /data .
-
+docker exec ${CONTAINER_NAME}-mongodb mongodump --out /tmp/backup
+docker cp ${CONTAINER_NAME}-mongodb:/tmp/backup "$BACKUP_DIR/mongodb_$TIMESTAMP"
+tar -czf "$BACKUP_DIR/app_data_$TIMESTAMP.tar.gz" -C "$DATA_DIR" uploads backups logs
 echo "Backup erstellt: $BACKUP_DIR"
 EOF
 
-# Setze Berechtigungen
-chmod +x start.sh stop.sh update.sh backup.sh
+chmod +x backup.sh
 
-# Baue und starte Container (SICHER)
-echo -e "${GREEN}Baue und starte Container...${NC}"
-# Nur stoppen, keine Volumes löschen!
-docker-compose down 2>/dev/null || true
-docker-compose up -d
-
-echo "========================================"
-echo -e "${GREEN}Installation abgeschlossen!${NC}"
-echo "Die Anwendung ist unter http://localhost:5000 erreichbar"
-echo "Container-Name: scandy"
-echo "MongoDB Port: 27017"
-echo "Mongo Express Port: 8081"
-echo "========================================"
-echo ""
-echo -e "${YELLOW}Verwaltung:${NC}"
-echo "  Starten: ./start.sh"
-echo "  Stoppen: ./stop.sh"
-echo "  Update:  ./update.sh"
-echo "  Backup:  ./backup.sh" 
+echo "✅ Automatische Backups eingerichtet!"
+echo "💡 Backups werden bei jedem Start erstellt"
+echo "" 

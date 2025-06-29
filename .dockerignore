@@ -3,33 +3,50 @@
 .gitignore
 .gitattributes
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
-.tox
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git
-.mypy_cache
-.pytest_cache
-.hypothesis
+# Dokumentation
+README*.md
+docs/
+*.md
+DOCKER_INSTALLATION.md
+BETA_RELEASE_NOTES.md
+PROBLEM_ANALYSIS.md
+IMPORT_ANLEITUNG.md
+README_AUTO_INSTALL.md
+CLEANUP_COMPLETED.md
+KATEGORIEN_PROBLEM_BEHOBEN.md
+DATABASE_INCONSISTENCIES_FIXED.md
+app_structure.md
+PROJECT_STRUCTURE.md
 
-# Virtual environments
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
 venv/
-ENV/
 env/
-.venv/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
 .vscode/
@@ -47,85 +64,75 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Node.js
+# Logs
+*.log
+logs/
+backup.log
+
+# Daten
+scandy_data/
+DATA_DIR/
+REPO_DIR/
+backups/
+instance/
+tmp/
+
+# Docker
+Dockerfile.old
+docker-compose.*.yml
+docker-compose.production.yml
+docker-start.sh
+docker-update.sh
+update_scandy_container.sh
+update_scandy_test_container.sh
+
+# Scripts
+*.bat
+*.sh
+install*.bat
+install*.sh
+start*.bat
+start*.sh
+update*.sh
+rebuild*.bat
+rebuild*.sh
+cleanup*.bat
+cleanup*.sh
+get-docker.sh
+test_*.py
+test_*.sh
+debug_*.py
+check_*.py
+fix_*.py
+convert_*.py
+process_*.py
+read_*.py
+init_*.py
+
+# Test-Dateien
+test_import.xlsx
+test_import.py
+scandy_gesamtexport_*.xlsx
+
+# Node.js (wird separat gehandhabt)
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build artifacts
-*.css.map
-*.js.map
-
-# Logs
-logs/
-*.log
-
-# Backups
-backups/
-
-# Uploads
-uploads/
-
-# Temporary files
-tmp/
+# Temporäre Dateien
 *.tmp
 *.temp
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Docker
-Dockerfile*
-docker-compose*.yml
-.dockerignore
-
-# Documentation
-README.md
-*.md
-docs/
-
-# Development files
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-
-# Test files
-tests/
-test_*
-*_test.py
-
-# Python
-*.py[cod]
-*$py.class
-*.so
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Backup files
+# Backup-Dateien
 *.bak
 *.backup
+*.old
 
-# Database
-database/
-database_test/
-**/database/
-**/database_test/
-*.db
-*.sqlite
-*.sqlite3 
-
-# Environment variables
-.env.bak/
-venv.bak/ 
+# Konfigurationsdateien (außer den benötigten)
+mongodb.env
+scandy.service 

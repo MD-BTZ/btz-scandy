@@ -17,7 +17,7 @@
         <tbody>
             {% for ticket in open_tickets %}
             <tr>
-                <td>{{ ticket.id }}</td>
+                <td>{{ ticket.ticket_number or ticket.id }}</td>
                 <td>
                     <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
                         {{ ticket.title }}

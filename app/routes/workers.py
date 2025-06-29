@@ -364,7 +364,7 @@ def search():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/timesheets')
-@mitarbeiter_required
+@login_required
 def timesheet_list():
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
@@ -478,7 +478,7 @@ def timesheet_list():
     )
 
 @bp.route('/timesheet/new', methods=['GET', 'POST'])
-@mitarbeiter_required
+@login_required
 def timesheet_create():
     if request.method == 'POST':
         user_id = current_user.username
@@ -508,7 +508,7 @@ def timesheet_create():
     return render_template('workers/timesheet.html', now=datetime.now())
 
 @bp.route('/timesheet/<string:ts_id>/edit', methods=['GET', 'POST'])
-@mitarbeiter_required
+@login_required
 def timesheet_edit(ts_id):
     user_id = current_user.username
     
@@ -554,7 +554,7 @@ def timesheet_edit(ts_id):
     return render_template('workers/timesheet.html', ts=ts, now=datetime.now())
 
 @bp.route('/timesheet/<string:ts_id>/download')
-@mitarbeiter_required
+@login_required
 def timesheet_download(ts_id):
     user_id = current_user.username
     

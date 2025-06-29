@@ -1,33 +1,15 @@
-# Multi-Stage Build für optimierte Größe
-FROM node:18-alpine AS frontend-builder
+# Einfaches Multi-Platform Dockerfile für Scandy
+# Fallback-Version für bessere Kompatibilität
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+FROM python:3.11-slim
 
-COPY app/static/css/input.css ./app/static/css/
-RUN npm run build:css
-
-# Python Builder Stage
-FROM python:3.11-slim AS python-builder
-
-WORKDIR /app
-
-# Installiere nur Build-Abhängigkeiten
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Kopiere und installiere Python-Abhängigkeiten
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Final Stage
-FROM python:3.11-slim AS final
-
-# Installiere nur Runtime-Abhängigkeiten
+# Installiere System-Abhängigkeiten
 RUN apt-get update && apt-get install -y \
     curl \
+    ca-certificates \
+    nodejs \
+    npm \
+    build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -36,14 +18,14 @@ RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
-# Kopiere Python-Pakete vom Builder
-COPY --from=python-builder /root/.local /home/appuser/.local
-
-# Kopiere CSS vom Frontend-Builder
-COPY --from=frontend-builder /app/app/static/css/main.css ./app/static/css/
-
 # Kopiere Anwendungscode
 COPY . .
+
+# Installiere Python-Abhängigkeiten
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Installiere Node.js Dependencies und baue CSS
+RUN npm install && npm run build:css
 
 # Erstelle notwendige Verzeichnisse
 RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /app/tmp && \
@@ -55,6 +37,11 @@ USER appuser
 
 # Füge Python-Pakete zum PATH hinzu
 ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Setze Umgebungsvariablen
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV FLASK_APP=app/wsgi.py
 
 # Exponiere Port
 EXPOSE 5000
