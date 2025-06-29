@@ -2102,8 +2102,7 @@ def notices():
 def create_notice():
     """Neue Notiz erstellen"""
     if request.method == 'POST':
-        # TODO: Implementiere Notiz-Erstellung
-        flash('Notiz erfolgreich erstellt', 'success')
+        flash('Notiz-Funktion noch nicht implementiert', 'warning')
         return redirect(url_for('admin.notices'))
     return render_template('admin/notice_form.html')
 
@@ -2112,8 +2111,7 @@ def create_notice():
 def edit_notice(id):
     """Notiz bearbeiten"""
     if request.method == 'POST':
-        # TODO: Implementiere Notiz-Bearbeitung
-        flash('Notiz erfolgreich aktualisiert', 'success')
+        flash('Notiz-Funktion noch nicht implementiert', 'warning')
         return redirect(url_for('admin.notices'))
     notice = mongodb.find_one('homepage_notices', {'_id': ObjectId(id)})
     return render_template('admin/notice_form.html', notice=notice)
@@ -2145,8 +2143,7 @@ def delete_notice(id):
 @admin_required
 def upload_logo():
     """Logo hochladen"""
-    # TODO: Implementiere Logo-Upload
-    flash('Logo erfolgreich hochgeladen', 'success')
+    flash('Logo-Upload-Funktion noch nicht implementiert', 'warning')
     return redirect(url_for('admin.system'))
 
 @bp.route('/delete-logo/<filename>', methods=['POST'])

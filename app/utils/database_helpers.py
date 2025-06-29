@@ -1,5 +1,14 @@
 """
 Datenbank-Hilfsfunktionen für Scandy
+
+Dieses Modul enthält zentrale Hilfsfunktionen für Datenbankoperationen,
+insbesondere für das Laden und Verwalten von Einstellungen und Referenzdaten.
+
+Hauptfunktionen:
+- Laden von Einstellungen aus der settings Collection
+- Verwaltung von Kategorien, Standorten und Abteilungen
+- Ticket-Nummern-Generierung
+- Migration alter Datenstrukturen
 """
 
 from app.models.mongodb_database import mongodb
@@ -8,87 +17,98 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def get_ticket_categories_from_settings():
-    """Lädt Ticket-Kategorien aus der settings Collection"""
+def get_setting_value(setting_key, fallback_collection=None, fallback_field='name'):
+    """
+    Generische Funktion zum Laden von Settings-Werten.
+    
+    Versucht zuerst die settings Collection, falls nicht vorhanden
+    wird auf die ursprüngliche Collection zurückgegriffen.
+    
+    Args:
+        setting_key: Schlüssel in der settings Collection
+        fallback_collection: Fallback-Collection falls settings nicht existiert
+        fallback_field: Feldname in der Fallback-Collection
+        
+    Returns:
+        list: Liste der Werte oder leere Liste bei Fehler
+        
+    Example:
+        >>> get_setting_value('categories', 'categories', 'name')
+        ['Werkzeuge', 'Elektronik', 'Büro']
+    """
     try:
-        settings_doc = mongodb.find_one('settings', {'key': 'ticket_categories'})
+        # Versuche zuerst die settings Collection
+        settings_doc = mongodb.find_one('settings', {'key': setting_key})
         if settings_doc and 'value' in settings_doc:
-            return settings_doc['value']
+            value = settings_doc['value']
+            # Wenn es ein String ist, splitte ihn an Kommas
+            if isinstance(value, str):
+                return [item.strip() for item in value.split(',') if item.strip()]
+            # Wenn es bereits eine Liste ist, verwende sie direkt
+            elif isinstance(value, list):
+                return value
+        
+        # Fallback: Verwende die ursprüngliche Collection
+        if fallback_collection:
+            items = mongodb.find(fallback_collection, {'deleted': {'$ne': True}})
+            return [item[fallback_field] for item in items if fallback_field in item]
+        
         return []
+        
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Ticket-Kategorien: {e}")
+        logger.error(f"Fehler beim Laden der Settings für '{setting_key}': {e}")
         return []
+
+def get_ticket_categories_from_settings():
+    """
+    Lädt Ticket-Kategorien aus der settings Collection.
+    
+    Returns:
+        list: Liste der Ticket-Kategorien
+    """
+    return get_setting_value('ticket_categories')
 
 def get_categories_from_settings():
-    """Lädt Kategorien aus der settings Collection oder der categories Collection"""
-    try:
-        # Versuche zuerst die settings Collection
-        settings_doc = mongodb.find_one('settings', {'key': 'categories'})
-        if settings_doc and 'value' in settings_doc:
-            value = settings_doc['value']
-            # Wenn es ein String ist, splitte ihn an Kommas
-            if isinstance(value, str):
-                return [cat.strip() for cat in value.split(',') if cat.strip()]
-            # Wenn es bereits eine Liste ist, verwende sie direkt
-            elif isinstance(value, list):
-                return value
-        return []
-        
-        # Fallback: Verwende die ursprüngliche categories Collection
-        categories = mongodb.find('categories', {'deleted': {'$ne': True}})
-        return [cat['name'] for cat in categories if 'name' in cat]
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Kategorien: {e}")
-        return []
+    """
+    Lädt Kategorien aus der settings Collection oder der categories Collection.
+    
+    Returns:
+        list: Liste der Kategorien
+    """
+    return get_setting_value('categories', 'categories', 'name')
 
 def get_locations_from_settings():
-    """Lädt Standorte aus der settings Collection oder der locations Collection"""
-    try:
-        # Versuche zuerst die settings Collection
-        settings_doc = mongodb.find_one('settings', {'key': 'locations'})
-        if settings_doc and 'value' in settings_doc:
-            value = settings_doc['value']
-            # Wenn es ein String ist, splitte ihn an Kommas
-            if isinstance(value, str):
-                return [loc.strip() for loc in value.split(',') if loc.strip()]
-            # Wenn es bereits eine Liste ist, verwende sie direkt
-            elif isinstance(value, list):
-                return value
-        return []
-        
-        # Fallback: Verwende die ursprüngliche locations Collection
-        locations = mongodb.find('locations', {'deleted': {'$ne': True}})
-        return [loc['name'] for loc in locations if 'name' in loc]
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Standorte: {e}")
-        return []
+    """
+    Lädt Standorte aus der settings Collection oder der locations Collection.
+    
+    Returns:
+        list: Liste der Standorte
+    """
+    return get_setting_value('locations', 'locations', 'name')
 
 def get_departments_from_settings():
-    """Lädt Abteilungen aus der settings Collection oder der departments Collection"""
-    try:
-        # Versuche zuerst die settings Collection
-        settings_doc = mongodb.find_one('settings', {'key': 'departments'})
-        if settings_doc and 'value' in settings_doc:
-            value = settings_doc['value']
-            # Wenn es ein String ist, splitte ihn an Kommas
-            if isinstance(value, str):
-                return [dept.strip() for dept in value.split(',') if dept.strip()]
-            # Wenn es bereits eine Liste ist, verwende sie direkt
-            elif isinstance(value, list):
-                return value
-        return []
-        
-        # Fallback: Verwende die ursprüngliche departments Collection
-        departments = mongodb.find('departments', {'deleted': {'$ne': True}})
-        return [dept['name'] for dept in departments if 'name' in dept]
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Abteilungen: {e}")
-        return []
+    """
+    Lädt Abteilungen aus der settings Collection oder der departments Collection.
+    
+    Returns:
+        list: Liste der Abteilungen
+    """
+    return get_setting_value('departments', 'departments', 'name')
 
 def ensure_default_settings():
     """
-    Stellt sicher, dass die settings Collection existiert, aber ohne Standardwerte.
+    Stellt sicher, dass die settings Collection existiert.
+    
+    Erstellt leere Einträge für:
+    - Kategorien
+    - Standorte  
+    - Abteilungen
+    - Ticket-Kategorien
+    
     Die Werte werden ausschließlich über das Dashboard verwaltet.
+    
+    Raises:
+        Exception: Bei Fehlern während der Initialisierung
     """
     try:
         # Prüfe und erstelle leere Kategorien-Collection
@@ -128,7 +148,16 @@ def ensure_default_settings():
         raise
 
 def validate_reference_data():
-    """Validiert und gibt Referenzdaten zurück"""
+    """
+    Validiert und gibt Referenzdaten zurück.
+    
+    Lädt alle wichtigen Referenzdaten und gibt sie in einem
+    strukturierten Dictionary zurück.
+    
+    Returns:
+        dict: Dictionary mit Kategorien, Standorten und Abteilungen
+              Falls Fehler: Leere Listen für alle Felder
+    """
     try:
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
@@ -148,7 +177,15 @@ def validate_reference_data():
         }
 
 def migrate_old_data_to_settings():
-    """Migriert alte Daten zu settings Collection (falls vorhanden)"""
+    """
+    Migriert alte Daten zu settings Collection.
+    
+    Prüft ob alte Collections (categories, locations, departments, ticket_categories)
+    existieren und migriert deren Daten in die neue settings Collection.
+    
+    Raises:
+        Exception: Bei Fehlern während der Migration
+    """
     try:
         # Prüfe ob alte Collections existieren und migriere sie
         old_categories = mongodb.find('categories', {})
@@ -223,7 +260,21 @@ def migrate_old_data_to_settings():
         raise
 
 def get_next_ticket_number():
-    """Generiert die nächste Auftragsnummer im Format YYMM-XXX"""
+    """
+    Generiert die nächste Auftragsnummer im Format YYMM-XXX.
+    
+    Die Nummer setzt sich zusammen aus:
+    - YY: Letzte 2 Ziffern des Jahres
+    - MM: Monat mit führender Null
+    - XXX: Fortlaufende Nummer für diesen Monat
+    
+    Returns:
+        str: Nächste verfügbare Auftragsnummer
+        
+    Example:
+        >>> get_next_ticket_number()
+        '2506-001'
+    """
     current_date = datetime.now()
     year_suffix = str(current_date.year)[-2:]  # Letzte 2 Ziffern des Jahres
     month = f"{current_date.month:02d}"  # Monat mit führender Null

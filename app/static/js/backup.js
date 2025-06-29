@@ -1,32 +1,20 @@
 // Backup-Verwaltung
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("DOM fully loaded and parsed"); // Log 1: DOM ready
-    
     // Nur noch die eindeutigen Backup-Buttons initialisieren
     const createBackupBtn = document.getElementById('createBackupBtn');
     const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
-    
-    console.log("Attempting to find buttons:", createBackupBtn, downloadCurrentBtn); // Log 2: Buttons found?
 
     if (createBackupBtn) {
-        console.log("createBackupBtn found, attaching onclick handler."); // Log 3: Handler attachment attempt
         createBackupBtn.onclick = createBackup;
-    } else {
-        console.error("createBackupBtn NOT found!"); // Log 4: Button not found error
     }
     
     if (downloadCurrentBtn) {
-        console.log("downloadCurrentBtn found, attaching onclick handler.");
         downloadCurrentBtn.onclick = downloadCurrentDatabase;
-    } else {
-        console.error("downloadCurrentBtn NOT found!");
     }
     
     // Initialisiere Backup-System
-    console.log("Initializing backup system (loadBackups, setupBackupHandlers)"); // Log 5: Before init functions
     loadBackups();
     setupBackupHandlers();
-    console.log("Backup system initialization finished."); // Log 6: After init functions
 });
 
 // Hilfsfunktionen
@@ -38,33 +26,22 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function showSuccess(message) {
-    // Toast-Nachricht anzeigen
+function showToast(type, message) {
+    // Verwende die zentrale window.showToast Funktion
     if (typeof window.showToast === 'function') {
-        window.showToast('success', message);
+        window.showToast(type, message);
     } else {
-        alert('Erfolg: ' + message);
-    }
-}
-
-function showError(message) {
-    // Toast-Nachricht anzeigen
-    if (typeof window.showToast === 'function') {
-        window.showToast('error', message);
-    } else {
-        alert('Fehler: ' + message);
+        // Fallback für den Fall, dass window.showToast nicht verfügbar ist
+        alert(`${type.toUpperCase()}: ${message}`);
     }
 }
 
 // Backups laden
 async function loadBackups() {
-    console.log("loadBackups() wird ausgeführt");
     try {
         const response = await fetch('/admin/backup/list');
         const data = await response.json();
-        console.log("Antwort von /admin/backup/list:", data);
         const backupsList = document.getElementById('backupsList');
-        console.log("backupsList Element:", backupsList);
         
         if (data.status === 'success') {
             backupsList.innerHTML = '';
@@ -90,7 +67,6 @@ async function loadBackups() {
                     `;
                     backupsList.appendChild(row);
                 });
-                console.log("Backups wurden in die Tabelle geschrieben");
                 // Event-Handler für die Backup-Aktionen registrieren
                 setupBackupButtonHandlers();
             } else {
@@ -101,11 +77,10 @@ async function loadBackups() {
                 `;
             }
         } else {
-            showError('Fehler beim Laden der Backups: ' + (data.message || 'Unbekannter Fehler'));
+            showToast('error', 'Fehler beim Laden der Backups: ' + (data.message || 'Unbekannter Fehler'));
         }
     } catch (error) {
-        showError('Fehler beim Laden der Backups: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Laden der Backups: ' + error.message);
     }
 }
 
@@ -138,8 +113,6 @@ function setupBackupButtonHandlers() {
 
 // Backup erstellen
 async function createBackup() {
-    console.log("createBackup function called!");
-    
     // Frage nach E-Mail-Adresse für Backup-Versand
     const emailRecipient = prompt('E-Mail-Adresse für Backup-Versand (optional, leer lassen für keinen Versand):');
     
@@ -157,14 +130,13 @@ async function createBackup() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showSuccess(data.message || 'Backup wurde erfolgreich erstellt');
+            showToast('success', data.message || 'Backup wurde erfolgreich erstellt');
             loadBackups();
         } else {
-            showError(data.message || 'Fehler beim Erstellen des Backups');
+            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
-        showError('Fehler beim Erstellen des Backups: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
     }
 }
 
@@ -182,11 +154,10 @@ async function downloadCurrentDatabase() {
             // Lade das gerade erstellte Backup herunter
             window.location.href = `/admin/backup/download/${data.filename}`;
         } else {
-            showError(data.message || 'Fehler beim Erstellen des Backups');
+            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
-        showError('Fehler beim Herunterladen der Datenbank: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Herunterladen der Datenbank: ' + error.message);
     }
 }
 
@@ -195,8 +166,7 @@ async function downloadBackup(filename) {
     try {
         window.location.href = `/admin/backup/download/${filename}`;
     } catch (error) {
-        showError('Fehler beim Herunterladen des Backups: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Herunterladen des Backups: ' + error.message);
     }
 }
 
@@ -206,7 +176,6 @@ function showRestoreModal(filename) {
     document.getElementById('restoreBackupModal').showModal();
     document.getElementById('confirmRestoreBtn').onclick = function() {
         restoreBackup(filename);
-        document.getElementById('restoreBackupModal').close();
     };
 }
 
@@ -223,14 +192,13 @@ async function restoreBackup(filename) {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showSuccess('Backup wurde erfolgreich wiederhergestellt. Die Seite wird neu geladen.');
+            showToast('success', 'Backup wurde erfolgreich wiederhergestellt. Die Seite wird neu geladen.');
             setTimeout(() => window.location.reload(), 2000);
         } else {
-            showError(data.message || 'Fehler beim Wiederherstellen des Backups');
+            showToast('error', data.message || 'Fehler beim Wiederherstellen des Backups');
         }
     } catch (error) {
-        showError('Fehler beim Wiederherstellen des Backups: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Wiederherstellen des Backups: ' + error.message);
     }
 }
 
@@ -252,14 +220,13 @@ async function deleteBackup(filename) {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showSuccess('Backup wurde erfolgreich gelöscht');
+            showToast('success', 'Backup wurde erfolgreich gelöscht');
             loadBackups();
         } else {
-            showError(data.message || 'Fehler beim Löschen des Backups');
+            showToast('error', data.message || 'Fehler beim Löschen des Backups');
         }
     } catch (error) {
-        showError('Fehler beim Löschen des Backups: ' + error.message);
-        console.error(error);
+        showToast('error', 'Fehler beim Löschen des Backups: ' + error.message);
     }
 }
 
@@ -275,12 +242,12 @@ function setupBackupHandlers() {
             const fileInput = uploadForm.querySelector('input[type="file"]');
             
             if (!fileInput.files.length) {
-                showError('Bitte wählen Sie eine Datei aus');
+                showToast('error', 'Bitte wählen Sie eine Datei aus');
                 return;
             }
             
             if (!fileInput.files[0].name.endsWith('.json')) {
-                showError('Nur .json-Dateien erlaubt!');
+                showToast('error', 'Nur .json-Dateien erlaubt!');
                 return;
             }
             
@@ -293,15 +260,15 @@ function setupBackupHandlers() {
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    showSuccess('Backup erfolgreich hochgeladen und aktiviert');
+                    showToast('success', 'Backup erfolgreich hochgeladen und aktiviert');
                     loadBackups();
                     uploadForm.reset();
                 } else {
-                    showError(data.message || 'Fehler beim Hochladen des Backups');
+                    showToast('error', data.message || 'Fehler beim Hochladen des Backups');
                 }
             } catch (error) {
                 console.error('Fehler beim Hochladen des Backups:', error);
-                showError('Fehler beim Hochladen des Backups: ' + error.message);
+                showToast('error', 'Fehler beim Hochladen des Backups: ' + error.message);
             }
         });
     }

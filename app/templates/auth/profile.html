@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+
+{% block title %}Mein Profil - {{ system_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-user-edit text-primary"></i>
+                    Mein Profil
+                </h2>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} shadow-lg">
+                                <div>
+                                    {% if category == 'success' %}<i class="fas fa-check-circle"></i>
+                                    {% elif category == 'error' %}<i class="fas fa-times-circle"></i>
+                                    {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                                    <span>{{ message }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <form method="POST" class="space-y-6">
+                    <!-- Benutzerinformationen -->
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">
+                            <i class="fas fa-info-circle text-info"></i>
+                            Benutzerinformationen
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text font-medium">Benutzername</span>
+                                </label>
+                                <input type="text" value="{{ user.username }}" class="input input-bordered" readonly>
+                                <label class="label">
+                                    <span class="label-text-alt text-info">Benutzername kann nicht geändert werden</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text font-medium">Rolle</span>
+                                </label>
+                                <input type="text" value="{{ user.role|title }}" class="input input-bordered" readonly>
+                            </div>
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text font-medium">Vorname</span>
+                                </label>
+                                <input type="text" value="{{ user.firstname }}" class="input input-bordered" readonly>
+                            </div>
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text font-medium">Nachname</span>
+                                </label>
+                                <input type="text" value="{{ user.lastname }}" class="input input-bordered" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- E-Mail ändern -->
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">
+                            <i class="fas fa-envelope text-warning"></i>
+                            E-Mail-Adresse ändern
+                        </h3>
+                        <div class="form-control">
+                            <label class="label" for="email">
+                                <span class="label-text font-medium">E-Mail-Adresse</span>
+                            </label>
+                            <input type="email" id="email" name="email" 
+                                   value="{{ user.email or '' }}" 
+                                   class="input input-bordered w-full" 
+                                   placeholder="ihre.email@beispiel.de">
+                            <label class="label">
+                                <span class="label-text-alt text-info">Lassen Sie das Feld leer, um keine Änderung vorzunehmen</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Passwort ändern -->
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">
+                            <i class="fas fa-lock text-error"></i>
+                            Passwort ändern
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="form-control">
+                                <label class="label" for="current_password">
+                                    <span class="label-text font-medium">Aktuelles Passwort</span>
+                                </label>
+                                <input type="password" id="current_password" name="current_password" 
+                                       class="input input-bordered w-full" 
+                                       placeholder="Ihr aktuelles Passwort">
+                                <label class="label">
+                                    <span class="label-text-alt text-info">Erforderlich für Passwortänderung</span>
+                                </label>
+                            </div>
+                            
+                            <div class="form-control">
+                                <label class="label" for="new_password">
+                                    <span class="label-text font-medium">Neues Passwort</span>
+                                </label>
+                                <input type="password" id="new_password" name="new_password" 
+                                       class="input input-bordered w-full" 
+                                       placeholder="Neues Passwort (mindestens 8 Zeichen)">
+                                <label class="label">
+                                    <span class="label-text-alt text-info">Lassen Sie das Feld leer, um das Passwort nicht zu ändern</span>
+                                </label>
+                            </div>
+                            
+                            <div class="form-control">
+                                <label class="label" for="new_password_confirm">
+                                    <span class="label-text font-medium">Neues Passwort bestätigen</span>
+                                </label>
+                                <input type="password" id="new_password_confirm" name="new_password_confirm" 
+                                       class="input input-bordered w-full" 
+                                       placeholder="Neues Passwort wiederholen">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Buttons -->
+                    <div class="flex justify-between items-center">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-ghost">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Zurück
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>
+                            Änderungen speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Passwort-Bestätigung in Echtzeit prüfen
+document.getElementById('new_password_confirm').addEventListener('input', function() {
+    const newPassword = document.getElementById('new_password').value;
+    const confirmPassword = this.value;
+    
+    if (confirmPassword && newPassword !== confirmPassword) {
+        this.classList.add('input-error');
+        this.classList.remove('input-success');
+    } else if (confirmPassword && newPassword === confirmPassword) {
+        this.classList.add('input-success');
+        this.classList.remove('input-error');
+    } else {
+        this.classList.remove('input-error', 'input-success');
+    }
+});
+
+// Passwort-Stärke prüfen
+document.getElementById('new_password').addEventListener('input', function() {
+    const password = this.value;
+    const confirmField = document.getElementById('new_password_confirm');
+    
+    if (password.length > 0 && password.length < 8) {
+        this.classList.add('input-error');
+        this.classList.remove('input-success');
+    } else if (password.length >= 8) {
+        this.classList.add('input-success');
+        this.classList.remove('input-error');
+    } else {
+        this.classList.remove('input-error', 'input-success');
+    }
+    
+    // Bestätigungsfeld zurücksetzen wenn Passwort geändert wird
+    if (confirmField.value) {
+        confirmField.dispatchEvent(new Event('input'));
+    }
+});
+</script>
+{% endblock %} 

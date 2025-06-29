@@ -1,20 +1,63 @@
 #!/bin/bash
 
-# Scandy Universal Installer für Linux/macOS
-# Kombiniert alle Funktionen in einem Script
+echo "========================================"
+echo "Scandy Installation - Linux/macOS"
+echo "========================================"
+echo
 
-set -e
-
-echo "🚀 Scandy Installation (Linux/macOS)"
-echo "================================="
-
-# Prüfe Docker
-if ! docker info >/dev/null 2>&1; then
-    echo "❌ Docker läuft nicht. Bitte starten Sie Docker zuerst."
+# Prüfe ob Docker installiert ist
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: Docker ist nicht installiert oder nicht verfügbar!"
+    echo "Bitte installiere Docker und starte es neu."
     exit 1
 fi
 
-echo "✅ Docker ist verfügbar"
+# Prüfe ob Docker läuft
+if ! docker info &> /dev/null; then
+    echo "ERROR: Docker läuft nicht!"
+    echo "Bitte starte Docker und versuche es erneut."
+    exit 1
+fi
+
+echo "Docker gefunden. Starte Installation..."
+echo
+
+# Stoppe laufende Container
+echo "Stoppe laufende Container..."
+docker-compose down
+
+# Lösche alte Images (optional)
+echo "Lösche alte Images..."
+docker-compose down --rmi all
+
+# Baue und starte Container
+echo "Baue und starte Container..."
+docker-compose up -d --build
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Fehler beim Bauen der Container!"
+    exit 1
+fi
+
+echo
+echo "========================================"
+echo "Installation abgeschlossen!"
+echo "========================================"
+echo
+echo "Die Scandy-App ist jetzt verfügbar unter:"
+echo "- Web-App: http://localhost:5000"
+echo "- Mongo Express: http://localhost:8081"
+echo
+echo "Standard-Zugangsdaten:"
+echo "- Benutzer: admin"
+echo "- Passwort: admin123"
+echo
+echo "Container-Status prüfen:"
+echo "docker-compose ps"
+echo
+echo "Logs anzeigen:"
+echo "docker-compose logs -f"
+echo
 
 # Konfiguration
 CONTAINER_NAME="scandy"

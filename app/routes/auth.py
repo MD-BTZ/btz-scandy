@@ -1,3 +1,15 @@
+"""
+Authentifizierung und Benutzerverwaltung
+
+Dieses Modul enthält alle Routen für die Benutzerauthentifizierung:
+- Login/Logout
+- Setup für die Ersteinrichtung
+- Profilverwaltung (E-Mail und Passwort ändern)
+
+Alle Routen verwenden Flask-Login für die Session-Verwaltung
+und MongoDB für die Benutzerdaten.
+"""
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
@@ -6,22 +18,38 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.mongodb_database import MongoDB
 from app.utils.auth_utils import needs_setup
 from datetime import datetime
+import logging
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 mongodb = MongoDB()
+logger = logging.getLogger(__name__)
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login-Seite"""
+    """
+    Benutzeranmeldung.
+    
+    GET: Zeigt das Login-Formular
+    POST: Verarbeitet die Anmeldedaten
+    
+    Validierung:
+    - Benutzername und Passwort müssen korrekt sein
+    - Benutzerkonto muss aktiv sein
+    
+    Redirects:
+    - Bei erfolgreicher Anmeldung: Zur ursprünglich gewünschten Seite oder Dashboard
+    - Bei bereits angemeldeten Benutzern: Direkt zum Dashboard
+    """
     if current_user.is_authenticated:
         return redirect(url_for('main.index')) 
     
     if request.method == 'POST':
+        # ===== FORMULARDATEN HOLEN =====
         username = request.form.get('username')
         password = request.form.get('password')
         remember = request.form.get('remember') == 'on'
         
-        # MongoDB User-Logik
+        # ===== BENUTZER VALIDIEREN =====
         user_data = MongoDBUser.get_by_username(username)
             
         if user_data and check_password_hash(user_data['password_hash'], password):
@@ -33,6 +61,8 @@ def login():
                 login_user(user, remember=remember) 
                 
                 flash('Anmeldung erfolgreich!', 'success')
+                
+                # ===== REDIRECT LOGIK =====
                 next_page = request.args.get('next')
                 if not next_page or urlparse(next_page).netloc != '' and urlparse(next_page).netloc != request.host:
                     next_page = url_for('main.index') 
@@ -46,12 +76,24 @@ def login():
 
 @bp.route('/setup', methods=['GET', 'POST'])
 def setup():
-    """Setup-Seite für die Ersteinrichtung"""
+    """
+    Ersteinrichtung des Systems.
+    
+    GET: Zeigt das Setup-Formular
+    POST: Erstellt den ersten Admin-Benutzer und Systemeinstellungen
+    
+    Erstellt:
+    - Admin-Benutzer mit gewähltem Passwort
+    - Standard-Systemeinstellungen (Labels für Tickets, Tools, etc.)
+    
+    Zugriff nur möglich wenn noch kein Admin-Benutzer existiert.
+    """
     if not needs_setup():
         flash('Das System wurde bereits eingerichtet.', 'info')
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
+        # ===== PASSWORT VALIDIERUNG =====
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
         
@@ -59,7 +101,7 @@ def setup():
             flash('Die Passwörter stimmen nicht überein.', 'error')
             return render_template('auth/setup.html')
         
-        # Admin-Benutzer erstellen
+        # ===== ADMIN-BENUTZER ERSTELLEN =====
         admin_data = {
             'username': 'Admin',
             'password_hash': generate_password_hash(password),
@@ -72,7 +114,7 @@ def setup():
         try:
             mongodb.insert_one('users', admin_data)
             
-            # Label-Einstellungen speichern
+            # ===== SYSTEMEINSTELLUNGEN SPEICHERN =====
             settings = [
                 {'key': 'label_tickets_name', 'value': request.form.get('label_tickets_name', 'Tickets')},
                 {'key': 'label_tickets_icon', 'value': request.form.get('label_tickets_icon', 'fas fa-ticket-alt')},
@@ -100,6 +142,109 @@ def setup():
 @bp.route('/logout')
 @login_required
 def logout():
+    """
+    Benutzer abmelden.
+    
+    Beendet die aktuelle Session und leitet zur Login-Seite weiter.
+    """
     logout_user()
     flash('Sie wurden erfolgreich abgemeldet.', 'info')
     return redirect(url_for('auth.login'))
+
+@bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    """
+    Benutzerprofil bearbeiten.
+    
+    GET: Zeigt das Profilformular mit aktuellen Benutzerdaten
+    POST: Aktualisiert E-Mail und/oder Passwort
+    
+    Validierung:
+    - E-Mail darf nicht bereits von anderem Benutzer verwendet werden
+    - Aktuelles Passwort muss korrekt sein (bei Passwortänderung)
+    - Neues Passwort muss mindestens 8 Zeichen lang sein
+    - Neue Passwörter müssen übereinstimmen
+    """
+    if request.method == 'POST':
+        try:
+            # ===== AKTUELLE BENUTZERDATEN HOLEN =====
+            user = mongodb.find_one('users', {'username': current_user.username})
+            if not user:
+                flash('Benutzer nicht gefunden', 'error')
+                return redirect(url_for('auth.profile'))
+            
+            # ===== FORMULARDATEN HOLEN =====
+            email = request.form.get('email', '').strip()
+            current_password = request.form.get('current_password', '').strip()
+            new_password = request.form.get('new_password', '').strip()
+            new_password_confirm = request.form.get('new_password_confirm', '').strip()
+            
+            # ===== E-MAIL ÄNDERN =====
+            if email and email != user.get('email', ''):
+                # Prüfe ob E-Mail bereits von anderem Benutzer verwendet wird
+                existing_user = mongodb.find_one('users', {
+                    'email': email,
+                    'username': {'$ne': current_user.username}
+                })
+                if existing_user:
+                    flash('Diese E-Mail-Adresse wird bereits von einem anderen Benutzer verwendet.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # E-Mail aktualisieren
+                from bson import ObjectId
+                mongodb.update_one('users', 
+                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'$set': {'email': email, 'updated_at': datetime.now()}})
+                flash('E-Mail-Adresse erfolgreich aktualisiert.', 'success')
+            
+            # ===== PASSWORT ÄNDERN =====
+            if new_password:
+                if not current_password:
+                    flash('Bitte geben Sie Ihr aktuelles Passwort ein, um das Passwort zu ändern.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # Prüfe aktuelles Passwort
+                from werkzeug.security import check_password_hash
+                if not check_password_hash(user.get('password_hash', ''), current_password):
+                    flash('Aktuelles Passwort ist falsch.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # Prüfe ob neue Passwörter übereinstimmen
+                if new_password != new_password_confirm:
+                    flash('Neue Passwörter stimmen nicht überein.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # Prüfe Passwort-Stärke (mindestens 8 Zeichen)
+                if len(new_password) < 8:
+                    flash('Das neue Passwort muss mindestens 8 Zeichen lang sein.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # Passwort aktualisieren
+                from werkzeug.security import generate_password_hash
+                password_hash = generate_password_hash(new_password)
+                
+                from bson import ObjectId
+                mongodb.update_one('users', 
+                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
+                flash('Passwort erfolgreich geändert.', 'success')
+            
+            # Aktualisiere user für Template
+            user = mongodb.find_one('users', {'username': current_user.username})
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren des Benutzerprofils: {e}")
+            flash('Fehler beim Aktualisieren des Profils.', 'error')
+    
+    # ===== BENUTZERDATEN FÜR TEMPLATE VORBEREITEN =====
+    user = mongodb.find_one('users', {'username': current_user.username})
+    
+    # Stelle sicher, dass alle erforderlichen Felder vorhanden sind
+    if user:
+        user.setdefault('firstname', '')
+        user.setdefault('lastname', '')
+        user.setdefault('email', '')
+        user.setdefault('role', 'anwender')
+    
+    return render_template('auth/profile.html', user=user)

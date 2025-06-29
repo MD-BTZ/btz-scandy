@@ -16,56 +16,13 @@ function debug(area, message, data = null) {
     
     debug('INIT', 'Starting LendingService initialization');
 
-    // Debug-Namespace
-    window.ScanDebug = {
-        async testLending() {
-            debug('TEST', 'Starting lending test');
-            try {
-                const testData = {
-                    itemData: {
-                        type: 'tool',
-                        barcode: '12345',
-                        amount: 1
-                    },
-                    workerData: {
-                        barcode: '67890'
-                    }
-                };
-                debug('TEST', 'Using test data:', testData);
-                
-                debug('TEST', 'Calling processLending...');
-                const result = await window.LendingService.processLending(
-                    testData.itemData, 
-                    testData.workerData
-                );
-                debug('TEST', 'Lending test completed successfully:', result);
-                return result;
-            } catch (error) {
-                debug('TEST', 'Test failed with error:', {
-                    name: error.name,
-                    message: error.message,
-                    stack: error.stack
-                });
-                throw error;
-            }
-        },
-
-        // Debug-Hilfsfunktionen
-        checkEnvironment() {
-            debug('ENV', 'Checking environment...');
-            const checks = {
-                fetch: typeof fetch !== 'undefined',
-                json: typeof JSON !== 'undefined',
-                lendingService: typeof window.LendingService !== 'undefined',
-                scanDebug: typeof window.ScanDebug !== 'undefined'
-            };
-            debug('ENV', 'Environment check results:', checks);
-            return checks;
+    // LendingService-Klasse definieren
+    class LendingService {
+        constructor() {
+            this.isInitialized = false;
+            this.scanDebug = false; // Debug-Modus deaktiviert
         }
-    };
 
-    // LendingService Definition
-    window.LendingService = {
         // Neue Funktion für Broadcast-Events
         broadcastChange() {
             // Sende eine Nachricht an alle Tabs
@@ -75,7 +32,7 @@ function debug(area, message, data = null) {
             }
             // Aktualisiere die aktuelle Seite
             window.location.reload();
-        },
+        }
 
         async processLending(itemData, workerData) {
             debug('LENDING', 'ProcessLending called with:', { itemData, workerData });
@@ -130,7 +87,7 @@ function debug(area, message, data = null) {
                 showToast('error', `Fehler: ${error.message}`);
                 return false;
             }
-        },
+        }
 
         async returnItem(barcode) {
             try {
@@ -172,7 +129,7 @@ function debug(area, message, data = null) {
                 showToast('error', `Fehler bei der Rückgabe: ${error.message}`);
                 return false;
             }
-        },
+        }
 
         async returnTool(barcode) {
             debug('RETURN', 'ReturnTool called with barcode:', barcode);
@@ -211,7 +168,7 @@ function debug(area, message, data = null) {
                 debug('RETURN', 'Error in returnTool:', error);
                 throw error;
             }
-        },
+        }
 
         async lendItem(toolBarcode, workerBarcode) {
             try {
@@ -245,7 +202,7 @@ function debug(area, message, data = null) {
                 return false;
             }
         }
-    };
+    }
 
     // Initialisierung abschließen
     debug('INIT', 'LendingService initialization completed');
@@ -258,7 +215,7 @@ function debug(area, message, data = null) {
     window.ScanDebug.checkEnvironment();
 
     console.log('=== LENDING SERVICE INITIALIZATION COMPLETE ===');
-})(); 
+})();
 
 // Manual Lending Namespace
 window.ManualLending = {

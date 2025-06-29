@@ -248,7 +248,12 @@ def view(ticket_id):
         
         # Hole die Auftragsdetails
         auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': object_id})
-        logging.info(f"DEBUG: auftrag_details für Ticket {ticket_id}: {auftrag_details}")
+        
+        # Hole Materialliste
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': object_id}))
+        
+        # Hole Arbeitsliste
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': object_id}))
         
         # Hole alle Kategorien aus der settings Collection
         categories = get_ticket_categories_from_settings()
@@ -363,10 +368,12 @@ def detail(id):
 
     # Hole die Auftragsdetails
     auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
-    logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
     
-    # Hole die Materialliste
-    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)})
+    # Hole Materialliste
+    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}))
+    
+    # Hole Arbeitsliste
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(id)}))
 
     # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
     users = mongodb.find('users', {'is_active': True})
@@ -460,17 +467,20 @@ def auftrag_details_modal(id):
 
     # Hole die Auftragsdetails
     auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
-    logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
     
-    # Hole die Materialliste
-    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)})
+    # Hole Materialliste
+    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}))
+    
+    # Hole Arbeitsliste
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(id)}))
 
     return render_template('tickets/auftrag_details_modal.html', 
                          ticket=ticket, 
                          notes=notes,
                          messages=messages,
                          auftrag_details=auftrag_details,
-                         material_list=material_list)
+                         material_list=material_list,
+                         arbeit_list=arbeit_list)
 
 @bp.route('/<id>/update-status', methods=['POST'])
 @login_required
@@ -808,23 +818,6 @@ def export_ticket(id):
         flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
         return redirect(url_for('tickets.detail', id=id))
 
-@bp.route('/debug-auftrag-details/<ticket_id>')
-@login_required
-def debug_auftrag_details(ticket_id):
-    """Debug-Route für Auftragsdetails"""
-    ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
-    if not ticket:
-        return jsonify({'error': 'Ticket nicht gefunden'}), 404
-    
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(ticket_id)}))
-    
-    return jsonify({
-        'ticket': ticket,
-        'auftrag_details': auftrag_details,
-        'material_list': material_list
-    })
-
 @bp.route('/<id>/note', methods=['POST'])
 @login_required
 @admin_required
@@ -883,21 +876,6 @@ def get_unassigned_ticket_count():
 def inject_unread_tickets_count():
     count = get_unassigned_ticket_count()
     return dict(unread_tickets_count=count)
-
-@bp.route('/auftrag-neu-debug')
-def public_create_order_debug():
-    """Debug-Version der öffentlichen Auftragserstellung."""
-    # Hole die Kategorien für das Formular
-    categories = get_ticket_categories_from_settings()
-    
-    return render_template('auftrag_public_debug.html', 
-                         categories=categories,
-                         priority_colors={
-                             'niedrig': 'secondary',
-                             'normal': 'primary',
-                             'hoch': 'error',
-                             'dringend': 'error'
-                         })
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 def public_create_order():
@@ -1015,11 +993,12 @@ def auftrag_details_page(id):
 
     # Hole die Auftragsdetails
     auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
-    logging.info(f"DEBUG: auftrag_details für Ticket {id}: {auftrag_details}")
     
-    # Hole die Materialliste
+    # Hole Materialliste
     material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}))
-    logging.info(f"DEBUG: material_list für Ticket {id}: {material_list}")
+    
+    # Hole Arbeitsliste
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(id)}))
     
     # Verarbeite die ausgeführten Arbeiten aus den Auftragsdetails
     arbeit_list = []

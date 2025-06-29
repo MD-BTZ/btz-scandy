@@ -1,3 +1,17 @@
+"""
+Scandy - Werkzeug- und Verbrauchsmaterialverwaltung
+
+Dieses Modul initialisiert die Flask-Anwendung und konfiguriert alle notwendigen
+Komponenten wie Datenbankverbindung, Session-Management, Blueprints und Middleware.
+
+Hauptfunktionen:
+- Flask-App-Erstellung und Konfiguration
+- MongoDB-Verbindung und Index-Erstellung
+- Blueprint-Registrierung
+- Error-Handling und Logging
+- Context-Processor für Template-Variablen
+"""
+
 from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash, current_app
 from flask_session import Session  # Session-Management
 from .constants import Routes
@@ -16,13 +30,14 @@ from app.utils.context_processors import register_context_processors
 from app.config import Config
 from app.routes import init_app
 
-# Logger einrichten
+# Logger für dieses Modul einrichten
 logger = logging.getLogger(__name__)
 
 # Backup-Verzeichnisse erstellen
 backup_dir = Path(__file__).parent.parent / 'backups'
 backup_dir.mkdir(exist_ok=True)
 
+# Flask-Login Manager konfigurieren
 login_manager = LoginManager()
 login_manager.session_protection = "strong"
 login_manager.login_view = 'auth.login'
@@ -30,21 +45,34 @@ login_manager.login_message = "Bitte melden Sie sich an, um auf diese Seite zuzu
 login_manager.login_message_category = "info"
 
 class Config:
+    """Konfigurationsklasse für verschiedene Umgebungen"""
+    
     @staticmethod
     def init_server():
+        """Server-Initialisierung (Platzhalter)"""
         pass
 
     @staticmethod
     def init_client(server_url=None):
+        """Client-Initialisierung (Platzhalter)"""
         pass
 
     @staticmethod
     def is_pythonanywhere():
+        """Prüft, ob die Anwendung auf PythonAnywhere läuft"""
         # This is a placeholder implementation. You might want to implement a more robust check for PythonAnywhere
         return False
 
 def ensure_directories_exist():
-    """Stellt sicher, dass alle benötigten Verzeichnisse existieren"""
+    """
+    Stellt sicher, dass alle benötigten Verzeichnisse existieren.
+    
+    Erstellt folgende Verzeichnisse falls sie nicht existieren:
+    - Backup-Verzeichnis
+    - Upload-Verzeichnis
+    - Temporäres Verzeichnis
+    - Session-Datei-Verzeichnis
+    """
     from app.config import config
     current_config = config['default']()
     project_root = Path(current_config.BASE_DIR)
@@ -67,30 +95,47 @@ def ensure_directories_exist():
             logging.info(f"Verzeichnis existiert bereits: {dir_path}")
 
 def create_app(test_config=None):
-    """Erstellt und konfiguriert die Flask-Anwendung"""
+    """
+    Erstellt und konfiguriert die Flask-Anwendung.
+    
+    Args:
+        test_config: Konfiguration für Tests (optional)
+    
+    Returns:
+        Flask-App: Konfigurierte Flask-Anwendung
+        
+    Initialisiert:
+    - Flask-App und Konfiguration
+    - Systemnamen aus Umgebungsvariablen
+    - Logger und Verzeichnisse
+    - MongoDB-Verbindung und Indizes
+    - Flask-Login und Session-Management
+    - Blueprints und Context-Processor
+    - Error-Handling und Filter
+    - E-Mail-System
+    """
     app = Flask(__name__)
     
-    # Konfiguration laden
+    # ===== KONFIGURATION LADEN =====
     from app.config import config
     config_name = 'default' if test_config is None else test_config
     app.config.from_object(config[config_name])
     
-    # Systemnamen direkt setzen
+    # ===== SYSTEMNAMEN AUS UMGEBUNGSVARIABLEN =====
     app.config['SYSTEM_NAME'] = os.environ.get('SYSTEM_NAME') or 'Scandy'
     app.config['TICKET_SYSTEM_NAME'] = os.environ.get('TICKET_SYSTEM_NAME') or 'Aufgaben'
     app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
     app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
     
-    # Logger einrichten
+    # ===== LOGGER UND VERZEICHNISSE =====
     from app.utils.logger import init_app_logger
     init_app_logger(app)
     app.logger.setLevel(logging.DEBUG)
     app.logger.info("\n=== ANWENDUNGSSTART ===")
     
-    # Verzeichnisse erstellen
     ensure_directories_exist()
     
-    # MongoDB-Initialisierung
+    # ===== MONGODB-INITIALISIERUNG =====
     try:
         from app.models.mongodb_models import create_mongodb_indexes
         with app.app_context():
@@ -99,14 +144,23 @@ def create_app(test_config=None):
     except Exception as e:
         logging.error(f"Fehler bei MongoDB-Initialisierung: {e}")
     
-    # Flask-Login initialisieren
+    # ===== FLASK-LOGIN INITIALISIEREN =====
     login_manager.init_app(app)
     
-    # Flask-Session initialisieren
+    # ===== FLASK-SESSION INITIALISIEREN =====
     Session(app)
     
     @login_manager.user_loader
     def load_user(user_id):
+        """
+        Lädt einen Benutzer aus der Datenbank für Flask-Login.
+        
+        Args:
+            user_id: ID des zu ladenden Benutzers
+            
+        Returns:
+            User-Objekt oder None falls nicht gefunden
+        """
         try:
             from app.models.mongodb_models import MongoDBUser
             from app.models.user import User
@@ -120,12 +174,13 @@ def create_app(test_config=None):
             logging.error(f"Fehler beim Laden des Benutzers {user_id}: {e}")
             return None
     
-    # Context Processors registrieren
+    # ===== CONTEXT PROCESSORS REGISTRIEREN =====
     register_context_processors(app)
     
     # Context Processor für Systemnamen
     @app.context_processor
     def inject_system_names():
+        """Injiziert Systemnamen in alle Templates"""
         return {
             'system_name': app.config['SYSTEM_NAME'],
             'ticket_system_name': app.config['TICKET_SYSTEM_NAME'],
@@ -133,13 +188,22 @@ def create_app(test_config=None):
             'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME']
         }
     
-    # Blueprints registrieren
+    # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
     
-    # Health Check Route (direkt in der App, nicht im Blueprint)
+    # ===== HEALTH CHECK ROUTE =====
     @app.route('/health')
     def health_check():
-        """Health Check für Docker Container"""
+        """
+        Health Check für Docker Container und Monitoring.
+        
+        Prüft:
+        - Datenbankverbindung (MongoDB Ping)
+        - Anwendungsstatus
+        
+        Returns:
+            JSON mit Status-Informationen
+        """
         try:
             from app.models.mongodb_database import MongoDBDatabase
             mongodb = MongoDBDatabase()
@@ -159,20 +223,18 @@ def create_app(test_config=None):
                 'timestamp': datetime.now().isoformat()
             }), 503
     
-    # Fehlerbehandlung registrieren
+    # ===== FEHLERBEHANDLUNG UND FILTER =====
     handle_errors(app)
-    
-    # Filter registrieren
     register_filters(app)
     
     # Register custom filters
     app.jinja_env.filters['status_color'] = status_color
     app.jinja_env.filters['priority_color'] = priority_color
     
-    # Komprimierung aktivieren
+    # ===== KOMPRIMIERUNG AKTIVIEREN =====
     Compress(app)
     
-    # E-Mail-System initialisieren
+    # ===== E-MAIL-SYSTEM INITIALISIEREN =====
     try:
         from app.utils.email_utils import init_mail
         init_mail(app)
@@ -180,9 +242,10 @@ def create_app(test_config=None):
     except Exception as e:
         app.logger.warning(f"E-Mail-System konnte nicht initialisiert werden: {e}")
     
-    # Context Processor für Template-Variablen
+    # ===== CONTEXT PROCESSOR FÜR TEMPLATE-VARIABLEN =====
     @app.context_processor
     def utility_processor():
+        """Injiziert Farben für Status und Prioritäten in alle Templates"""
         return {
             'status_colors': {
                 'offen': 'danger',
