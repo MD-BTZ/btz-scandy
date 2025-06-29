@@ -3315,12 +3315,14 @@ def reset_password():
         
         # Aktualisiere das Passwort in der Datenbank
         try:
+            from bson import ObjectId
             result = mongodb.update_one('users', 
-                                     {'_id': user['_id']}, 
+                                     {'_id': ObjectId(user['_id'])}, 
                                      {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
             
+            # Prüfe ob das Update erfolgreich war (result ist ein bool)
             if not result:
-                logger.error(f"Fehler beim Aktualisieren des Passworts für Benutzer {user['username']}")
+                logger.error(f"Fehler beim Aktualisieren des Passworts für Benutzer {user['username']} - Update fehlgeschlagen")
                 flash('Fehler beim Zurücksetzen des Passworts.', 'error')
                 return render_template('auth/reset_password.html')
             
