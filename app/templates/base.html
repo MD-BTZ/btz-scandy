@@ -131,7 +131,7 @@
 
             <!-- Versionsnummer am unteren Rand -->
             <div class="mt-auto text-xs text-base-content/50 flex flex-col items-center pb-4">
-                <span>v{{ version }}</span>
+                <span>{{ version }}</span>
                 <span class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
                     {{ ''|author }}
                 </span>
@@ -437,7 +437,7 @@
 
     <footer class="footer footer-center p-4 bg-base-300 text-base-content">
         <div>
-            <p>Scandy v{{ version }} - {{ ''|author }}</p>
+            <p>Scandy {{ version }} - {{ ''|author }}</p>
             <p>Veröffentlicht unter MIT License</p>
         </div>
     </footer>
