@@ -137,6 +137,60 @@ def index():
             'by_department': worker_by_department
         }
 
+        # Ticket-Statistiken
+        ticket_pipeline = [
+            {'$match': {'deleted': {'$ne': True}}},
+            {
+                '$group': {
+                    '_id': None,
+                    'total': {'$sum': 1},
+                    'open': {
+                        '$sum': {
+                            '$cond': [{'$eq': ['$status', 'offen']}, 1, 0]
+                        }
+                    },
+                    'in_progress': {
+                        '$sum': {
+                            '$cond': [{'$eq': ['$status', 'in_bearbeitung']}, 1, 0]
+                        }
+                    },
+                    'closed': {
+                        '$sum': {
+                            '$cond': [{'$eq': ['$status', 'geschlossen']}, 1, 0]
+                        }
+                    }
+                }
+            }
+        ]
+        
+        ticket_stats_result = list(mongodb.db.tickets.aggregate(ticket_pipeline))
+        ticket_stats = ticket_stats_result[0] if ticket_stats_result else {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0}
+
+        # Prüfung auf doppelte Barcodes
+        tool_entries = list(mongodb.db.tools.find({'deleted': {'$ne': True}}, {'barcode': 1, 'name': 1}))
+        consumable_entries = list(mongodb.db.consumables.find({'deleted': {'$ne': True}}, {'barcode': 1, 'name': 1}))
+        worker_entries = list(mongodb.db.workers.find({'deleted': {'$ne': True}}, {'barcode': 1, 'firstname': 1, 'lastname': 1}))
+        
+        barcode_map = {}
+        for entry in tool_entries:
+            bc = entry.get('barcode')
+            if bc:
+                barcode_map.setdefault(bc, []).append({'type': 'Werkzeug', 'name': entry.get('name', '')})
+        for entry in consumable_entries:
+            bc = entry.get('barcode')
+            if bc:
+                barcode_map.setdefault(bc, []).append({'type': 'Verbrauchsmaterial', 'name': entry.get('name', '')})
+        for entry in worker_entries:
+            bc = entry.get('barcode')
+            if bc:
+                name = f"{entry.get('firstname', '')} {entry.get('lastname', '')}".strip()
+                barcode_map.setdefault(bc, []).append({'type': 'Mitarbeiter', 'name': name})
+        
+        duplicate_barcodes = [
+            {'barcode': bc, 'entries': infos}
+            for bc, infos in barcode_map.items() if len(infos) > 1
+        ]
+
         # Lade aktive Hinweise aus der Datenbank
         notices = mongodb.find('homepage_notices', {'is_active': True})
         # Sortiere die Hinweise nach Priorität und Erstellungsdatum
@@ -146,6 +200,8 @@ def index():
                            tool_stats=tool_stats,
                            consumable_stats=consumable_stats,
                            worker_stats=worker_stats,
+                           ticket_stats=ticket_stats,
+                           duplicate_barcodes=duplicate_barcodes,
                            notices=notices)
         
     except Exception as e:
@@ -154,6 +210,8 @@ def index():
                            tool_stats={'total': 0, 'available': 0, 'lent': 0, 'defect': 0},
                            consumable_stats={'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0},
                            worker_stats={'total': 0, 'by_department': []},
+                           ticket_stats={'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0},
+                           duplicate_barcodes=[],
                            notices=[])
 
 @bp.route('/about')

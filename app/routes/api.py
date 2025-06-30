@@ -401,7 +401,10 @@ def delete_notice(id):
 def process_lending():
     """Verarbeitet Ausleihe/Rückgabe über Quickscan"""
     try:
+        import logging
+        logger = logging.getLogger("quickscan")
         data = request.get_json()
+        logger.info(f"QuickScan-Request: {data}")
         item_barcode = data.get('item_barcode')
         worker_barcode = data.get('worker_barcode')
         action = data.get('action')  # 'lend', 'return', 'consume'
@@ -409,6 +412,7 @@ def process_lending():
         quantity = data.get('quantity', 1)
         
         if not all([item_barcode, worker_barcode, action, item_type]):
+            logger.error(f"Fehlende Parameter: {data}")
             return jsonify({
                 'success': False,
                 'message': 'Fehlende Parameter'
@@ -417,6 +421,7 @@ def process_lending():
         # Prüfe ob Mitarbeiter existiert
         worker = mongodb.find_one('workers', {'barcode': worker_barcode, 'deleted': {'$ne': True}})
         if not worker:
+            logger.error(f"Mitarbeiter nicht gefunden: {worker_barcode}")
             return jsonify({
                 'success': False,
                 'message': 'Mitarbeiter nicht gefunden'
@@ -426,6 +431,7 @@ def process_lending():
             # Werkzeug-Verarbeitung
             tool = mongodb.find_one('tools', {'barcode': item_barcode, 'deleted': {'$ne': True}})
             if not tool:
+                logger.error(f"Werkzeug nicht gefunden: {item_barcode}")
                 return jsonify({
                     'success': False,
                     'message': 'Werkzeug nicht gefunden'
@@ -434,6 +440,7 @@ def process_lending():
             if action == 'lend':
                 # Prüfe ob Werkzeug verfügbar ist
                 if tool.get('status') != 'verfügbar':
+                    logger.error(f"Werkzeug nicht verfügbar: {item_barcode}")
                     return jsonify({
                         'success': False,
                         'message': 'Werkzeug ist nicht verfügbar'
@@ -448,12 +455,14 @@ def process_lending():
                     'tool_name': tool.get('name', ''),
                     'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip()
                 }
+                logger.info(f"Lege Ausleihe an: {lending_data}")
                 mongodb.insert_one('lendings', lending_data)
                 
                 # Aktualisiere Werkzeug-Status
                 mongodb.update_one('tools', 
                                   {'barcode': item_barcode}, 
                                   {'$set': {'status': 'ausgeliehen'}})
+                logger.info(f"Werkzeug-Status auf 'ausgeliehen' gesetzt: {item_barcode}")
                 
                 return jsonify({
                     'success': True,
@@ -469,6 +478,7 @@ def process_lending():
                 })
                 
                 if not lending:
+                    logger.error(f"Keine aktive Ausleihe gefunden: {item_barcode}, {worker_barcode}")
                     return jsonify({
                         'success': False,
                         'message': 'Keine aktive Ausleihe gefunden'
@@ -478,11 +488,13 @@ def process_lending():
                 mongodb.update_one('lendings', 
                                   {'_id': lending['_id']}, 
                                   {'$set': {'returned_at': datetime.now()}})
+                logger.info(f"Ausleihe als zurückgegeben markiert: {lending['_id']}")
                 
                 # Aktualisiere Werkzeug-Status
                 mongodb.update_one('tools', 
                                   {'barcode': item_barcode}, 
                                   {'$set': {'status': 'verfügbar'}})
+                logger.info(f"Werkzeug-Status auf 'verfügbar' gesetzt: {item_barcode}")
                 
                 return jsonify({
                     'success': True,
@@ -493,6 +505,7 @@ def process_lending():
             # Verbrauchsmaterial-Verarbeitung
             consumable = mongodb.find_one('consumables', {'barcode': item_barcode, 'deleted': {'$ne': True}})
             if not consumable:
+                logger.error(f"Verbrauchsmaterial nicht gefunden: {item_barcode}")
                 return jsonify({
                     'success': False,
                     'message': 'Verbrauchsmaterial nicht gefunden'
@@ -501,25 +514,30 @@ def process_lending():
             if action == 'consume':
                 # Prüfe verfügbare Menge
                 current_quantity = consumable.get('quantity', 0)
+                logger.info(f"Aktuelle Menge: {current_quantity}, Gewünschte Menge: {quantity}")
                 if current_quantity < quantity:
+                    logger.error(f"Nicht genügend verfügbar: {consumable.get('name', '')}, verfügbar: {current_quantity}, benötigt: {quantity}")
                     return jsonify({
                         'success': False,
                         'message': f'Nicht genügend {consumable.get("name", "")} verfügbar (verfügbar: {current_quantity}, benötigt: {quantity})'
                     }), 400
                 
-                # Erstelle Verbrauchseintrag
+                # Erstelle Verbrauchseintrag (immer negativ für Entnahme)
                 usage_data = {
                     'consumable_barcode': item_barcode,
                     'worker_barcode': worker_barcode,
-                    'quantity': quantity,
+                    'quantity': -abs(quantity),  # Negativ für Entnahme
                     'used_at': datetime.now(),
                     'consumable_name': consumable.get('name', ''),
-                    'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip()
+                    'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip(),
+                    'direction': 'out'
                 }
+                logger.info(f"Lege Verbrauchseintrag an: {usage_data}")
                 mongodb.insert_one('consumable_usages', usage_data)
                 
                 # Reduziere verfügbare Menge
                 new_quantity = current_quantity - quantity
+                logger.info(f"Setze neue Menge: {new_quantity}")
                 mongodb.update_one('consumables', 
                                   {'barcode': item_barcode}, 
                                   {'$set': {'quantity': new_quantity}})
@@ -529,13 +547,15 @@ def process_lending():
                     'message': f'{quantity}x {consumable.get("name", "")} erfolgreich an {worker.get("firstname", "")} {worker.get("lastname", "")} ausgegeben'
                 })
         
+        logger.error(f"Ungültige Aktion: {action}, {item_type}")
         return jsonify({
             'success': False,
             'message': 'Ungültige Aktion'
         }), 400
         
     except Exception as e:
-        logger.error(f"Fehler bei der Quickscan-Verarbeitung: {str(e)}")
+        import traceback
+        logger.error(f"Fehler bei der Quickscan-Verarbeitung: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'success': False,
             'message': 'Fehler bei der Verarbeitung'

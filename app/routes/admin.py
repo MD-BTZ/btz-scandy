@@ -377,7 +377,7 @@ def create_multi_sheet_excel(data_dict):
 @bp.route('/')
 @mitarbeiter_required
 def index():
-    """Admin Dashboard"""
+    """Admin-Startseite - Weiterleitung zum Dashboard"""
     return redirect(url_for('admin.dashboard'))
 
 @bp.route('/dashboard')
@@ -584,6 +584,16 @@ def dashboard():
     # Bestandsprognose
     consumables_forecast = get_consumables_forecast()
     
+    # Prüfung auf doppelte Barcodes
+    tool_barcodes = list(mongodb.db.tools.find({'deleted': {'$ne': True}}, {'barcode': 1}))
+    consumable_barcodes = list(mongodb.db.consumables.find({'deleted': {'$ne': True}}, {'barcode': 1}))
+    barcode_count = {}
+    for entry in tool_barcodes + consumable_barcodes:
+        bc = entry.get('barcode')
+        if bc:
+            barcode_count[bc] = barcode_count.get(bc, 0) + 1
+    duplicate_barcodes = [bc for bc, count in barcode_count.items() if count > 1]
+
     return render_template('admin/dashboard.html',
                          tool_stats=tool_stats,
                          consumable_stats=consumable_stats,
@@ -593,7 +603,7 @@ def dashboard():
                          consumable_trend=consumable_trend,
                          current_lendings=current_lendings,
                          recent_consumable_usage=recent_consumable_usage,
-                         consumables_forecast=consumables_forecast)
+                         duplicate_barcodes=duplicate_barcodes)
 
 def get_consumable_trend():
     """Hole die Top 5 Materialverbrauch der letzten 7 Tage"""
@@ -2226,11 +2236,55 @@ def delete_ticket_category(category):
         flash('Ein Fehler ist aufgetreten.', 'error')
         return redirect(url_for('admin.tickets'))
 
-@bp.route('/system')
+@bp.route('/system', methods=['GET', 'POST'])
 @admin_required
 def system():
     """System-Einstellungen"""
     try:
+        if request.method == 'POST':
+            # Begriffe & Icons verarbeiten
+            label_tools_name = request.form.get('label_tools_name', 'Werkzeuge')
+            label_tools_icon = request.form.get('label_tools_icon', 'fas fa-tools')
+            label_consumables_name = request.form.get('label_consumables_name', 'Verbrauchsmaterial')
+            label_consumables_icon = request.form.get('label_consumables_icon', 'fas fa-box')
+            label_tickets_name = request.form.get('label_tickets_name', 'Tickets')
+            label_tickets_icon = request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
+            
+            # Speichere die Einstellungen
+            mongodb.db.settings.update_one(
+                {'key': 'label_tools_name'},
+                {'$set': {'value': label_tools_name}},
+                upsert=True
+            )
+            mongodb.db.settings.update_one(
+                {'key': 'label_tools_icon'},
+                {'$set': {'value': label_tools_icon}},
+                upsert=True
+            )
+            mongodb.db.settings.update_one(
+                {'key': 'label_consumables_name'},
+                {'$set': {'value': label_consumables_name}},
+                upsert=True
+            )
+            mongodb.db.settings.update_one(
+                {'key': 'label_consumables_icon'},
+                {'$set': {'value': label_consumables_icon}},
+                upsert=True
+            )
+            mongodb.db.settings.update_one(
+                {'key': 'label_tickets_name'},
+                {'$set': {'value': label_tickets_name}},
+                upsert=True
+            )
+            mongodb.db.settings.update_one(
+                {'key': 'label_tickets_icon'},
+                {'$set': {'value': label_tickets_icon}},
+                upsert=True
+            )
+            
+            flash('Begriffe & Icons erfolgreich gespeichert!', 'success')
+            return redirect(url_for('admin.system'))
+        
         # Hole alle verfügbaren Logos
         logos = []
         logos_dir = os.path.join(current_app.static_folder, 'uploads', 'logos')
@@ -2242,9 +2296,26 @@ def system():
         # Hole aktuelle Einstellungen
         settings = mongodb.db.settings.find_one({'key': 'system'}) or {}
         
+        # Lade app_labels aus der Datenbank
+        app_labels = {
+            'tools': {
+                'name': mongodb.db.settings.find_one({'key': 'label_tools_name'}, {}).get('value', 'Werkzeuge'),
+                'icon': mongodb.db.settings.find_one({'key': 'label_tools_icon'}, {}).get('value', 'fas fa-tools')
+            },
+            'consumables': {
+                'name': mongodb.db.settings.find_one({'key': 'label_consumables_name'}, {}).get('value', 'Verbrauchsmaterial'),
+                'icon': mongodb.db.settings.find_one({'key': 'label_consumables_icon'}, {}).get('value', 'fas fa-box')
+            },
+            'tickets': {
+                'name': mongodb.db.settings.find_one({'key': 'label_tickets_name'}, {}).get('value', 'Tickets'),
+                'icon': mongodb.db.settings.find_one({'key': 'label_tickets_icon'}, {}).get('value', 'fas fa-ticket-alt')
+            }
+        }
+        
         return render_template('admin/server-settings.html', 
                              logos=logos, 
-                             settings=settings.get('value', {}))
+                             settings=settings.get('value', {}),
+                             app_labels=app_labels)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Systemeinstellungen: {str(e)}")
         flash('Fehler beim Laden der Systemeinstellungen', 'error')

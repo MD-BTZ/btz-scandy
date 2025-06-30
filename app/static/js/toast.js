@@ -12,48 +12,73 @@ class Toast {
 
     show(message, type = 'info') {
         const toast = document.createElement('div');
+        
+        // Vereinfachte Farben: Grün für Erfolg, Rot für Fehler, Blau für Info, Gelb für Warnung
         const colors = {
-            success: { bg: 'hsl(142.1 76.2% 36.3%)', color: '#fff' },
-            error:   { bg: 'hsl(0 84.2% 60.2%)', color: '#fff' },
-            info:    { bg: 'hsl(199 89% 48%)', color: '#fff' },
-            warning: { bg: 'hsl(48 96% 53%)', color: '#fff' }
+            success: { bg: '#10b981', color: '#ffffff', icon: '✓' },
+            error:   { bg: '#ef4444', color: '#ffffff', icon: '✕' },
+            info:    { bg: '#3b82f6', color: '#ffffff', icon: 'ℹ' },
+            warning: { bg: '#f59e0b', color: '#ffffff', icon: '⚠' }
         };
 
-        toast.className = `alert alert-${type} shadow-lg toast-enter`;
+        const color = colors[type] || colors.info;
+
+        toast.className = `toast toast-enter rounded-lg shadow-lg p-4 pr-12 relative min-w-[300px] max-w-[400px]`;
+        toast.style.backgroundColor = color.bg;
+        toast.style.color = color.color;
+        toast.style.border = 'none';
+        toast.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+
         toast.innerHTML = `
-            <div>
-                ${this.getIcon(type)}
-                <span>${message}</span>
+            <div class="flex items-start">
+                <div class="flex-shrink-0 mr-3">
+                    <span class="text-lg font-bold">${color.icon}</span>
+                </div>
+                <div class="flex-1">
+                    <span class="text-sm font-medium">${message}</span>
+                </div>
+                <button class="close-btn absolute top-2 right-2 text-white hover:text-gray-200 transition-colors duration-200" onclick="this.parentElement.parentElement.remove()">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
             </div>
         `;
-
-        // Farben direkt setzen
-        toast.style.backgroundColor = colors[type].bg;
-        toast.style.color = colors[type].color;
-        toast.style.border = 'none';
-        toast.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)';
 
         const container = document.getElementById('toast-container');
         container.appendChild(toast);
 
-        // Nach 3 Sekunden ausblenden
+        // Nach 6 Sekunden ausblenden (erhöht von 3 auf 6 Sekunden)
+        const timeout = setTimeout(() => {
+            this.hideToast(toast);
+        }, 6000);
+
+        // Timeout beim Schließen löschen
+        toast.addEventListener('click', (e) => {
+            if (e.target.closest('.close-btn')) {
+                clearTimeout(timeout);
+            }
+        });
+    }
+
+    hideToast(toast) {
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
         setTimeout(() => {
-            toast.classList.remove('toast-enter');
-            toast.classList.add('toast-exit');
-            setTimeout(() => {
-                container.removeChild(toast);
-            }, 300);
-        }, 3000);
+            if (toast.parentElement) {
+                toast.parentElement.removeChild(toast);
+            }
+        }, 300);
     }
 
     getIcon(type) {
         const icons = {
-            success: '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>',
-            error: '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>',
-            warning: '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>',
-            info: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+            success: '✓',
+            error: '✕',
+            warning: '⚠',
+            info: 'ℹ'
         };
-        return icons[type];
+        return icons[type] || icons.info;
     }
 }
 

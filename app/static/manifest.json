@@ -1,18 +1,18 @@
 {
-  "name": "Inventar App",
-  "short_name": "Inventar",
+  "name": "Scandy",
+  "short_name": "Scandy",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
   "icons": [
     {
-      "src": "/static/icons/icon-192x192.png",
+      "src": "/static/images/scandy-favicon.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/static/icons/icon-512x512.png",
+      "src": "/static/images/scandy-favicon.png",
       "sizes": "512x512",
       "type": "image/png"
     }

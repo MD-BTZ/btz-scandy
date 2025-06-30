@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="de" data-theme="light">
+<html lang="de" data-theme="scandy">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Scandy{% endblock %}</title>
     
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/scandy-favicon.png') }}?v=0.2.4">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}?v=0.2.4">
     
     <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,7 +54,7 @@
         <!-- QuickScan-Trigger (außerhalb der Sidebar) -->
         <div class="w-24 h-24 fixed left-0 top-0 -mt-3 ml-[-10px] z-[9999]" id="quickScanTrigger" title="Quick Scan öffnen">
             <div class="w-full h-full rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer relative shadow-lg hover:shadow-2xl hover:scale-110">
-                <img src="/static/images/scandy-logo.svg" alt="Scandy Logo" class="w-20 h-20 object-contain transition-transform duration-300">
+                <img src="/static/images/scandy-logo.svg" alt="Scandy Logo" class="w-16 h-16 object-contain transition-transform duration-300">
                 <!-- Scanner Animation -->
                 <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
             </div>
@@ -292,7 +292,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    window.showToast('{{ category }}', '{{ message }}');
+                    window.showToast('{{ category }}', '{{ message|safe }}');
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -358,7 +358,7 @@
             @apply z-[100];
         }
         #quickScanTrigger img {
-            @apply w-20 h-20 object-contain;
+            @apply w-16 h-16 object-contain;
             @apply transition-transform duration-300;
         }
         #quickScanTrigger:hover img {
@@ -374,7 +374,7 @@
         #toast-container {
             position: fixed;
             right: 1rem;
-            z-index: 99999; /* Höher als das Modal */
+            z-index: 9999999; /* Höher als das Modal */
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
@@ -383,7 +383,7 @@
 
         .toast {
             pointer-events: auto;
-            z-index: 99999; /* Höher als das Modal */
+            z-index: 9999999; /* Höher als das Modal */
         }
 
         /* Toast Animation */
@@ -419,7 +419,7 @@
 
         /* Modal z-Index anpassen */
         dialog {
-            z-index: 999999; /* Niedriger als das tanzende Emoji */
+            z-index: 999999; /* Niedriger als Toast */
         }
 
         /* Zebra Animation Styles */
@@ -432,6 +432,76 @@
             background-color: rgba(0, 0, 0, 0.7);
             z-index: 9999998;
             pointer-events: none;
+        }
+
+        /* QuickScan Modal Styles */
+        #quickScanModal .modal-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 1.5rem;
+            max-width: 800px;
+            width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #quickScanModal .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            justify-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        #quickScanModal .card {
+            width: 320px;
+            height: 320px;
+            min-width: 320px;
+            min-height: 320px;
+            margin: 0;
+            flex-shrink: 0;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 1.5rem;
+            border: 2px solid #e5e7eb;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        #quickScanModal .card:hover {
+            border-color: #a3a3a3;
+            transform: scale(1.03);
+        }
+        #quickScanModal .card-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 1.5rem;
+        }
+
+        /* Responsive Design für QuickScan */
+        @media (max-width: 768px) {
+            #quickScanModal .grid {
+                grid-template-columns: 1fr;
+            }
+            #quickScanModal .card {
+                width: 280px;
+                height: 280px;
+                min-width: 280px;
+                min-height: 280px;
+            }
+        }
+
+        #quickScanModal .modal-box .grid .card.selected {
+            background-color: #fde68a !important; /* gelb */
+            border-color: #fbbf24 !important;
+        }
+        #quickScanModal .modal-box .grid .card.success {
+            background-color: #bbf7d0 !important; /* grün */
+            border-color: #22c55e !important;
         }
     </style>
 

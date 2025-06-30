@@ -467,15 +467,13 @@ const QuickScan = {
     setCardState(type, state) {
         // type: 'item' oder 'worker', state: 'active', 'success', 'default'
         const card = document.getElementById(type === 'item' ? 'itemCard' : 'workerCard');
-        // Entferne alle Hintergrundfarben
-        card.style.backgroundColor = '';
+        card.classList.remove('selected', 'success', 'active', 'default');
         if (state === 'active') {
-            card.style.backgroundColor = '#FEF08A'; // Tailwind yellow-200
+            card.classList.add('selected');
         } else if (state === 'success') {
-            card.style.backgroundColor = '#BBF7D0'; // Tailwind green-200
-        } else {
-            card.style.backgroundColor = '';
+            card.classList.add('success');
         }
+        // Für 'default' keine Klasse hinzufügen
     },
 
     async handleItemScan(barcode) {
