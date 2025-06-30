@@ -109,6 +109,27 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Deutsche Datumsformatierung für datetime-local Input
+function formatDateForInput(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+// Setze Standard-Datum (heute + 1 Woche) im deutschen Format
+document.addEventListener('DOMContentLoaded', function() {
+    const dueDateInput = document.querySelector('input[name="due_date"]');
+    if (dueDateInput && !dueDateInput.value) {
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        dueDateInput.value = formatDateForInput(nextWeek);
+    }
+});
+
 document.getElementById('categorySelect').addEventListener('change', function() {
     const newCategoryInput = document.getElementById('newCategoryInput');
     if (this.value === '__new__') {

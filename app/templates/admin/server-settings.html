@@ -18,6 +18,36 @@
                     Backup-Verwaltung
                 </h2>
                 <div class="space-y-4">
+                    <!-- Automatisches Backup-System -->
+                    <div class="border-b pb-4">
+                        <h3 class="text-sm font-semibold mb-3">Automatisches Backup-System</h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Status:</span>
+                                <span id="autoBackupStatus" class="badge badge-info">Lade...</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Nächste Backups:</span>
+                                <span id="nextBackupTime" class="text-sm">Lade...</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Backup-Zeiten:</span>
+                                <span class="text-sm">06:00 Uhr, 18:00 Uhr</span>
+                            </div>
+                            <div class="flex gap-2 mt-3">
+                                <button id="startAutoBackup" class="btn btn-success btn-xs">
+                                    <i class="fas fa-play mr-1"></i>Starten
+                                </button>
+                                <button id="stopAutoBackup" class="btn btn-error btn-xs">
+                                    <i class="fas fa-stop mr-1"></i>Stoppen
+                                </button>
+                                <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-primary btn-xs">
+                                    <i class="fas fa-cog mr-1"></i>Verwalten
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Backup erstellen -->
                     <div class="flex justify-between items-center">
                         <span class="text-sm">Neues Backup erstellen</span>

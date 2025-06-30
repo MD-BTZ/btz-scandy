@@ -67,7 +67,7 @@
                     <tbody>
                         {% for entry in history %}
                         <tr>
-                            <td>{{ entry.action_date.strftime('%d.%m.%Y %H:%M') if entry.action_date else 'Unbekannt' }}</td>
+                            <td>{{ entry.action_date | datetime if entry.action_date else 'Unbekannt' }}</td>
                             <td>
                                 {% if entry.worker != 'Admin' %}
                                 {{ entry.worker }}

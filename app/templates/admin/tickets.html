@@ -54,7 +54,7 @@
                                     <td>
                                         <div class="badge badge-{{ ticket.priority|priority_color }} gap-1">{{ ticket.priority }}</div>
                                     </td>
-                                    <td>{{ ticket.created_at }}</td>
+                                    <td>{{ ticket.created_at|datetime if ticket.created_at else '-' }}</td>
                                     <td class="text-right">
                                         <div class="btn-group">
                                             <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost" title="Details anzeigen">

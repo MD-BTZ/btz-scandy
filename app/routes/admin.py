@@ -639,7 +639,7 @@ def get_consumable_trend():
         # Generiere Datums-Labels für die letzten 7 Tage
         for i in range(7):
             date = datetime.now() - timedelta(days=6-i)
-            labels.append(date.strftime('%Y-%m-%d'))
+            labels.append(date.strftime('%d.%m.%Y'))
         
         # Für jedes Top-Verbrauchsmaterial
         for i, consumable in enumerate(top_consumables):
@@ -2993,7 +2993,7 @@ def update_ticket_status(ticket_id):
                           {
                               '$set': {
                                   'status': new_status,
-                                  'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                  'updated_at': datetime.now().strftime('%d.%m.%Y %H:%M:%S')
                               }
                           })
         
@@ -3407,3 +3407,97 @@ def debug_password(username):
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@bp.route('/backup/auto/status')
+@login_required
+@admin_required
+def auto_backup_status():
+    """Gibt den Status des automatischen Backup-Systems zurück"""
+    try:
+        from app.utils.auto_backup import get_auto_backup_status
+        status = get_auto_backup_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen des Auto-Backup-Status: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Abrufen des Status: {str(e)}'
+        })
+
+@bp.route('/backup/auto/start', methods=['POST'])
+@login_required
+@admin_required
+def start_auto_backup():
+    """Startet das automatische Backup-System"""
+    try:
+        from app.utils.auto_backup import start_auto_backup
+        start_auto_backup()
+        return jsonify({
+            'success': True,
+            'message': 'Automatisches Backup-System gestartet'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Auto-Backup-Systems: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Starten: {str(e)}'
+        })
+
+@bp.route('/backup/auto/stop', methods=['POST'])
+@login_required
+@admin_required
+def stop_auto_backup():
+    """Stoppt das automatische Backup-System"""
+    try:
+        from app.utils.auto_backup import stop_auto_backup
+        stop_auto_backup()
+        return jsonify({
+            'success': True,
+            'message': 'Automatisches Backup-System gestoppt'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Stoppen des Auto-Backup-Systems: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Stoppen: {str(e)}'
+        })
+
+@bp.route('/backup/auto/logs')
+@login_required
+@admin_required
+def auto_backup_logs():
+    """Gibt die Auto-Backup-Logs zurück"""
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        log_file = auto_backup_scheduler.log_file
+        
+        if log_file.exists():
+            with open(log_file, 'r', encoding='utf-8') as f:
+                logs = f.readlines()
+            # Letzte 50 Zeilen
+            recent_logs = logs[-50:] if len(logs) > 50 else logs
+            return jsonify({
+                'success': True,
+                'logs': recent_logs
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'logs': ['Keine Logs verfügbar']
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Auto-Backup-Logs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Abrufen der Logs: {str(e)}'
+        })
+
+@bp.route('/auto-backup')
+@login_required
+@admin_required
+def auto_backup():
+    """Automatisches Backup-System Verwaltungsseite"""
+    return render_template('admin/auto_backup.html')

@@ -43,7 +43,7 @@
                             <td>{{ item.name }}</td>
                             <td>{{ item.category }}</td>
                             <td>{{ item.location }}</td>
-                            <td>{{ item.deleted_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                            <td>{{ item.deleted_at | datetime }}</td>
                             <td>
                                 <div class="flex gap-2">
                                     <form method="POST" action="{{ url_for('trash.restore', item_type=active_tab, item_id=item.id) }}" class="inline">

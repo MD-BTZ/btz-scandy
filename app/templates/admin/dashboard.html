@@ -284,6 +284,73 @@
             </div>
         </div>
     </div>
+
+    <!-- Backup-Verwaltung: eigene Zeile -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <!-- Automatisches Backup-System -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-clock text-primary"></i>
+                    Automatisches Backup-System
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Status:</span>
+                        <span id="autoBackupStatus" class="badge badge-info">Lade...</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Nächste Backups:</span>
+                        <span id="nextBackupTime" class="text-sm">Lade...</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Backup-Zeiten:</span>
+                        <span class="text-sm">06:00 Uhr, 18:00 Uhr</span>
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                        <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-cog mr-2"></i>
+                            Verwalten
+                        </a>
+                        <button id="createManualBackup" class="btn btn-success btn-sm">
+                            <i class="fas fa-save mr-2"></i>
+                            Backup erstellen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup-Übersicht -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-database text-primary"></i>
+                    Backup-Übersicht
+                </h2>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Datum</th>
+                                <th>Größe</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backupsList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4">
+                    <a href="{{ url_for('admin.backup_list') }}" class="btn btn-outline btn-sm">
+                        <i class="fas fa-list mr-2"></i>
+                        Alle Backups anzeigen
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 

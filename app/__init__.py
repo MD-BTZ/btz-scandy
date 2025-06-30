@@ -191,6 +191,15 @@ def create_app(test_config=None):
     # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
     
+    # ===== AUTOMATISCHES BACKUP-SYSTEM STARTEN =====
+    try:
+        from app.utils.auto_backup import start_auto_backup
+        with app.app_context():
+            start_auto_backup()
+            logging.info("Automatisches Backup-System gestartet")
+    except Exception as e:
+        logging.error(f"Fehler beim Starten des automatischen Backup-Systems: {e}")
+    
     # ===== HEALTH CHECK ROUTE =====
     @app.route('/health')
     def health_check():

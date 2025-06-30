@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Automatisches Backup-System{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-6">
+                <i class="fas fa-clock mr-2"></i>
+                Automatisches Backup-System
+            </h2>
+
+            <!-- Status-Karte -->
+            <div class="card bg-base-200 mb-6">
+                <div class="card-body">
+                    <h3 class="card-title text-lg mb-4">System-Status</h3>
+                    <div id="autoBackupStatus" class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold">Status:</span>
+                            <span id="statusIndicator" class="badge badge-info">Lade...</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold">Nächste Backups:</span>
+                            <span id="nextBackup" class="text-sm">Lade...</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold">Backup-Zeiten:</span>
+                            <span id="backupTimes" class="text-sm">Lade...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steuerung -->
+            <div class="card bg-base-200 mb-6">
+                <div class="card-body">
+                    <h3 class="card-title text-lg mb-4">Steuerung</h3>
+                    <div class="flex gap-4">
+                        <button id="startAutoBackup" class="btn btn-success">
+                            <i class="fas fa-play mr-2"></i>
+                            Starten
+                        </button>
+                        <button id="stopAutoBackup" class="btn btn-error">
+                            <i class="fas fa-stop mr-2"></i>
+                            Stoppen
+                        </button>
+                        <button id="refreshStatus" class="btn btn-info">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Status aktualisieren
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Konfiguration -->
+            <div class="card bg-base-200 mb-6">
+                <div class="card-body">
+                    <h3 class="card-title text-lg mb-4">Konfiguration</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Backup-Zeiten:</span>
+                            </label>
+                            <div class="text-sm opacity-70">
+                                <p>• 06:00 Uhr - Morgens</p>
+                                <p>• 18:00 Uhr - Abends</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Backup-Inhalt:</span>
+                            </label>
+                            <div class="text-sm opacity-70">
+                                <p>• Werkzeuge, Verbrauchsmaterialien, Mitarbeiter</p>
+                                <p>• Ausleihen, Tickets, Einstellungen</p>
+                                <p>• Alle Datenbank-Collections</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Aufbewahrung:</span>
+                            </label>
+                            <div class="text-sm opacity-70">
+                                <p>• Letzte 10 Backups werden behalten</p>
+                                <p>• Alte Backups werden automatisch gelöscht</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs -->
+            <div class="card bg-base-200">
+                <div class="card-body">
+                    <h3 class="card-title text-lg mb-4">Backup-Logs</h3>
+                    <div class="bg-base-300 p-4 rounded-lg">
+                        <div id="backupLogs" class="font-mono text-sm h-64 overflow-y-auto">
+                            <p class="text-center opacity-50">Lade Logs...</p>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button id="refreshLogs" class="btn btn-sm btn-outline">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Logs aktualisieren
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Status laden
+    loadAutoBackupStatus();
+    loadBackupLogs();
+
+    // Event-Listener
+    document.getElementById('startAutoBackup').addEventListener('click', startAutoBackup);
+    document.getElementById('stopAutoBackup').addEventListener('click', stopAutoBackup);
+    document.getElementById('refreshStatus').addEventListener('click', loadAutoBackupStatus);
+    document.getElementById('refreshLogs').addEventListener('click', loadBackupLogs);
+
+    // Status alle 30 Sekunden aktualisieren
+    setInterval(loadAutoBackupStatus, 30000);
+});
+
+function loadAutoBackupStatus() {
+    fetch('/admin/backup/auto/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const status = data.status;
+                
+                // Status-Indikator
+                const statusIndicator = document.getElementById('statusIndicator');
+                if (status.running) {
+                    statusIndicator.className = 'badge badge-success';
+                    statusIndicator.textContent = 'Aktiv';
+                } else {
+                    statusIndicator.className = 'badge badge-error';
+                    statusIndicator.textContent = 'Gestoppt';
+                }
+                
+                // Nächste Backup-Zeit
+                document.getElementById('nextBackup').textContent = status.next_backup;
+                
+                // Backup-Zeiten
+                document.getElementById('backupTimes').textContent = status.backup_times.join(', ');
+            } else {
+                showToast('error', 'Fehler beim Laden des Status');
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            showToast('error', 'Fehler beim Laden des Status');
+        });
+}
+
+function startAutoBackup() {
+    if (!confirm('Automatisches Backup-System starten?')) return;
+    
+    fetch('/admin/backup/auto/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            loadAutoBackupStatus();
+        } else {
+            showToast('error', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Fehler beim Starten');
+    });
+}
+
+function stopAutoBackup() {
+    if (!confirm('Automatisches Backup-System stoppen?')) return;
+    
+    fetch('/admin/backup/auto/stop', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            loadAutoBackupStatus();
+        } else {
+            showToast('error', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Fehler beim Stoppen');
+    });
+}
+
+function loadBackupLogs() {
+    fetch('/admin/backup/auto/logs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const logsContainer = document.getElementById('backupLogs');
+                if (data.logs && data.logs.length > 0) {
+                    logsContainer.innerHTML = data.logs.map(log => 
+                        `<div class="log-entry">${log}</div>`
+                    ).join('');
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                } else {
+                    logsContainer.innerHTML = '<p class="text-center opacity-50">Keine Logs verfügbar</p>';
+                }
+            } else {
+                showToast('error', 'Fehler beim Laden der Logs');
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            showToast('error', 'Fehler beim Laden der Logs');
+        });
+}
+</script>
+
+<style>
+.log-entry {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %} 

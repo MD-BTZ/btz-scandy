@@ -15,6 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialisiere Backup-System
     loadBackups();
     setupBackupHandlers();
+    
+    // Initialisiere Auto-Backup-System
+    initAutoBackup();
 });
 
 // Hilfsfunktionen
@@ -52,7 +55,13 @@ async function loadBackups() {
                     row.innerHTML = `
                         <td>${backup.name}</td>
                         <td>${formatFileSize(backup.size)}</td>
-                        <td>${new Date(backup.created * 1000).toLocaleString('de-DE')}</td>
+                        <td>${new Date(backup.created * 1000).toLocaleString('de-DE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}</td>
                         <td class="text-right">
                             <button class="btn btn-primary btn-xs mr-2 download-btn" data-filename="${backup.name}">
                                 <i class="fas fa-download"></i>
@@ -277,5 +286,111 @@ function setupBackupHandlers() {
     const createBtn = document.getElementById('createBackupBtn');
     if (createBtn) {
         createBtn.onclick = createBackup;
+    }
+}
+
+// Auto-Backup-System
+function initAutoBackup() {
+    // Event-Listener für Auto-Backup-Buttons
+    const startBtn = document.getElementById('startAutoBackup');
+    const stopBtn = document.getElementById('stopAutoBackup');
+    
+    if (startBtn) {
+        startBtn.addEventListener('click', startAutoBackup);
+    }
+    
+    if (stopBtn) {
+        stopBtn.addEventListener('click', stopAutoBackup);
+    }
+    
+    // Status laden
+    loadAutoBackupStatus();
+    
+    // Status alle 30 Sekunden aktualisieren
+    setInterval(loadAutoBackupStatus, 30000);
+}
+
+async function loadAutoBackupStatus() {
+    const statusElement = document.getElementById('autoBackupStatus');
+    const nextBackupElement = document.getElementById('nextBackupTime');
+    
+    if (!statusElement || !nextBackupElement) return;
+
+    try {
+        const response = await fetch('/admin/backup/auto/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            const status = data.status;
+            
+            // Status-Indikator
+            if (status.running) {
+                statusElement.className = 'badge badge-success';
+                statusElement.textContent = 'Aktiv';
+            } else {
+                statusElement.className = 'badge badge-error';
+                statusElement.textContent = 'Gestoppt';
+            }
+            
+            // Nächste Backup-Zeit
+            nextBackupElement.textContent = status.next_backup;
+        } else {
+            statusElement.className = 'badge badge-warning';
+            statusElement.textContent = 'Fehler';
+            nextBackupElement.textContent = 'Unbekannt';
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden des Auto-Backup-Status:', error);
+        statusElement.className = 'badge badge-warning';
+        statusElement.textContent = 'Fehler';
+        nextBackupElement.textContent = 'Unbekannt';
+    }
+}
+
+async function startAutoBackup() {
+    if (!confirm('Automatisches Backup-System starten?')) return;
+    
+    try {
+        const response = await fetch('/admin/backup/auto/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            loadAutoBackupStatus();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Starten:', error);
+        showToast('error', 'Fehler beim Starten');
+    }
+}
+
+async function stopAutoBackup() {
+    if (!confirm('Automatisches Backup-System stoppen?')) return;
+    
+    try {
+        const response = await fetch('/admin/backup/auto/stop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            loadAutoBackupStatus();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Stoppen:', error);
+        showToast('error', 'Fehler beim Stoppen');
     }
 } 
