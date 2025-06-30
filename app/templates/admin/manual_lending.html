@@ -49,17 +49,17 @@
                                class="input input-bordered mb-4">
 
                         <!-- Werkzeug-Liste -->
-                        <div id="toolsList" class="h-96 overflow-hidden bg-white rounded-lg shadow">
-                            <div class="p-4 border-b">
-                                <h3 class="font-semibold">{{ app_labels.tools.name }}</h3>
+                        <div id="toolsList" class="h-96 overflow-hidden bg-white rounded-lg shadow border border-gray-200">
+                            <div class="p-4 border-b bg-gray-50">
+                                <h3 class="font-semibold text-gray-800">{{ app_labels.tools.name }}</h3>
                             </div>
                             <select size="10" 
                                     id="toolSelect"
                                     onchange="ManualLending.selectItem(this.value)"
-                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2">
+                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2 bg-white text-gray-800 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 {% for tool in tools %}
                                     <option value="tool:{{ tool.id }}:{{ tool.barcode }}:{{ tool.name }}"
-                                            class="p-3 hover:bg-gray-50 cursor-pointer">
+                                            class="p-3 hover:bg-blue-50 cursor-pointer text-gray-800">
                                         {{ tool.name }} (#{{ tool.barcode }})
                                         {% if tool.current_status == 'lent' %}
                                             - Ausgeliehen
@@ -74,17 +74,17 @@
                         </div>
 
                         <!-- Verbrauchsmaterial-Liste -->
-                        <div id="consumablesList" class="h-96 overflow-hidden bg-white rounded-lg shadow hidden">
-                            <div class="p-4 border-b">
-                                <h3 class="font-semibold">{{ app_labels.consumables.name }}</h3>
+                        <div id="consumablesList" class="h-96 overflow-hidden bg-white rounded-lg shadow border border-gray-200 hidden">
+                            <div class="p-4 border-b bg-gray-50">
+                                <h3 class="font-semibold text-gray-800">{{ app_labels.consumables.name }}</h3>
                             </div>
                             <select size="10" 
                                     id="consumableSelect"
                                     onchange="ManualLending.selectItem(this.value)"
-                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2">
+                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2 bg-white text-gray-800 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 {% for item in consumables %}
                                     <option value="consumable:{{ item.id }}:{{ item.barcode }}:{{ item.name }}"
-                                            class="p-3 hover:bg-gray-50 cursor-pointer">
+                                            class="p-3 hover:bg-blue-50 cursor-pointer text-gray-800">
                                         {{ item.name }} ({{ item.quantity }} Stk)
                                     </option>
                                 {% endfor %}
@@ -123,17 +123,17 @@
                                class="input input-bordered mb-4">
 
                         <!-- Mitarbeiter-Liste -->
-                        <div class="h-96 overflow-hidden bg-white rounded-lg shadow">
-                            <div class="p-4 border-b">
-                                <h3 class="font-semibold">Mitarbeiter</h3>
+                        <div class="h-96 overflow-hidden bg-white rounded-lg shadow border border-gray-200">
+                            <div class="p-4 border-b bg-gray-50">
+                                <h3 class="font-semibold text-gray-800">Mitarbeiter</h3>
                             </div>
                             <select size="10" 
                                     id="workerSelect"
                                     onchange="ManualLending.selectWorker(this.value)"
-                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2">
+                                    class="w-full h-[calc(100%-4rem)] overflow-y-auto p-2 bg-white text-gray-800 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 {% for worker in workers %}
                                     <option value="worker:{{ worker.barcode }}:{{ worker.firstname }}:{{ worker.lastname }}:{{ worker.department }}"
-                                            class="p-3 hover:bg-gray-50 cursor-pointer">
+                                            class="p-3 hover:bg-blue-50 cursor-pointer text-gray-800">
                                         {{ worker.firstname }} {{ worker.lastname }}
                                         {% if worker.department %}({{ worker.department }}){% endif %}
                                     </option>
@@ -262,6 +262,7 @@
                         {% if lending.category == app_labels.tools.name %}
                             <button class="btn btn-sm btn-error" 
                                     data-barcode="{{ lending.item_barcode }}"
+                                    data-action="return"
                                     title="{{ app_labels.tools.name }} zurückgeben">
                                 <i class="fas fa-undo-alt"></i> Zurückgeben
                             </button>
@@ -585,6 +586,53 @@ function returnTool(barcode) {
 /* Hover-Effekt für inaktive Buttons */
 .btn-square:not(.btn-active):hover {
     @apply bg-base-200;
+}
+
+/* Verbesserte Auswahlfelder */
+select option {
+    padding: 8px 12px;
+    margin: 2px 0;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+select option:hover {
+    background-color: #eff6ff !important;
+}
+
+select option:checked {
+    background-color: #3b82f6 !important;
+    color: white !important;
+}
+
+/* Fokus-Zustand für Auswahlfelder */
+select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* Verbesserte Lesbarkeit der Auswahlfelder */
+select {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+select::-webkit-scrollbar {
+    width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 </style>
 {% endblock %}

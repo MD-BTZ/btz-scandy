@@ -146,19 +146,36 @@ def return_tool():
         
         logger.info(f"Return request: tool_barcode={tool_barcode}, worker_barcode={worker_barcode}")
         
-        if not all([tool_barcode, worker_barcode]):
-            logger.warning("Missing parameters in return request")
+        if not tool_barcode:
+            logger.warning("Missing tool_barcode in return request")
             return jsonify({
                 'success': False,
-                'message': 'Fehlende Parameter'
+                'message': 'Fehlender tool_barcode Parameter'
             }), 400
         
-        # Finde aktuelle Ausleihe
-        lending = mongodb.find_one('lendings', {
-            'tool_barcode': tool_barcode,
-            'worker_barcode': worker_barcode,
-            'returned_at': None
-        })
+        # Wenn kein worker_barcode angegeben ist, finde die aktuelle Ausleihe
+        if not worker_barcode:
+            lending = mongodb.find_one('lendings', {
+                'tool_barcode': tool_barcode,
+                'returned_at': None
+            })
+            
+            if not lending:
+                logger.warning(f"No active lending found for tool_barcode={tool_barcode}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine aktive Ausleihe für dieses Werkzeug gefunden'
+                }), 404
+                
+            worker_barcode = lending.get('worker_barcode')
+            logger.info(f"Found active lending with worker_barcode={worker_barcode}")
+        else:
+            # Finde aktuelle Ausleihe mit worker_barcode
+            lending = mongodb.find_one('lendings', {
+                'tool_barcode': tool_barcode,
+                'worker_barcode': worker_barcode,
+                'returned_at': None
+            })
         
         logger.info(f"Found lending: {lending}")
         
@@ -169,7 +186,7 @@ def return_tool():
                 'message': 'Keine aktive Ausleihe gefunden'
             }), 404
         
-        # Markiere als zurückgegeben - verwende den ursprünglichen Filter
+        # Markiere als zurückgegeben
         success = mongodb.update_one('lendings', 
                           {
                               'tool_barcode': tool_barcode,

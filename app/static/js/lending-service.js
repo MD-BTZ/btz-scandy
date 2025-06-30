@@ -28,34 +28,52 @@
     }
 
     // Rückgabe-Funktionalität
-    function returnTool(barcode) {
+    function returnTool(barcode, button = null) {
         log('Starte Rückgabe für:', barcode);
         
-        if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
-            return;
-        }
-
-        fetch('/api/lending/return', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                tool_barcode: barcode
-            })
-        })
-        .then(response => response.json())
-        .then(result => {
-            log('Rückgabe Ergebnis:', result);
-            if (result.success) {
-                showToast('success', 'Werkzeug erfolgreich zurückgegeben');
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                showToast('error', result.message || 'Fehler bei der Rückgabe');
+        // Bestätigung in einem separaten Task
+        Promise.resolve().then(() => {
+            if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+                if (button) {
+                    button.disabled = false;
+                    button.style.opacity = '1';
+                }
+                return;
             }
-        })
-        .catch(error => {
-            showToast('error', 'Ein Fehler ist aufgetreten');
+
+            // Fetch in einem separaten Task
+            Promise.resolve().then(() => {
+                fetch('/api/lending/return', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tool_barcode: barcode
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    log('Rückgabe Ergebnis:', result);
+                    if (result.success) {
+                        showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        showToast('error', result.message || 'Fehler bei der Rückgabe');
+                        if (button) {
+                            button.disabled = false;
+                            button.style.opacity = '1';
+                        }
+                    }
+                })
+                .catch(error => {
+                    showToast('error', 'Ein Fehler ist aufgetreten');
+                    if (button) {
+                        button.disabled = false;
+                        button.style.opacity = '1';
+                    }
+                });
+            });
         });
     }
 
@@ -119,37 +137,27 @@
     function initializeReturnButtons() {
         log('Initialisiere Event-Listener');
         
-        // Funktion zum Hinzufügen von Event-Listenern
-        function addReturnButtonListeners() {
-            const returnButtons = document.querySelectorAll('[data-action="return"]');
-            log('Gefundene Rückgabe-Buttons:', returnButtons.length);
+        // Event-Delegation statt individuelle Event-Listener
+        document.addEventListener('click', function(e) {
+            const button = e.target.closest('[data-action="return"]');
+            if (!button) return;
             
-            returnButtons.forEach(button => {
-                const barcode = button.dataset.barcode;
-                log('Initialisiere Button mit Barcode:', barcode);
-                
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    returnTool(barcode);
-                });
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const barcode = button.dataset.barcode;
+            if (!barcode) return;
+            
+            // Verhindere mehrfache Klicks
+            if (button.disabled) return;
+            
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            
+            // Sofortige visuelle Rückmeldung
+            requestAnimationFrame(() => {
+                returnTool(barcode, button);
             });
-        }
-
-        // Initial hinzufügen
-        addReturnButtonListeners();
-
-        // Für dynamisch hinzugefügte Buttons (MutationObserver)
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    addReturnButtonListeners();
-                }
-            });
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
         });
     }
 
@@ -297,6 +305,70 @@
             toast.remove();
         }, 3000);
     }
+
+    // Globale returnItem-Funktion für manuelle Ausleihe
+    window.LendingService = {
+        returnItem: function(barcode) {
+            return new Promise((resolve, reject) => {
+                // Verhindere mehrfache Klicks
+                const button = event?.target?.closest('[data-action="return"]');
+                if (button) {
+                    button.disabled = true;
+                    button.style.opacity = '0.6';
+                }
+                
+                // Bestätigung in einem separaten Task
+                Promise.resolve().then(() => {
+                    if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
+                        if (button) {
+                            button.disabled = false;
+                            button.style.opacity = '1';
+                        }
+                        resolve(false);
+                        return;
+                    }
+
+                    // Fetch in einem separaten Task
+                    Promise.resolve().then(() => {
+                        fetch('/api/lending/return', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                tool_barcode: barcode,
+                                worker_barcode: null  // Wird vom Server automatisch ermittelt
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.success) {
+                                showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+                                resolve(true);
+                            } else {
+                                showToast('error', result.message || 'Fehler bei der Rückgabe');
+                                if (button) {
+                                    button.disabled = false;
+                                    button.style.opacity = '1';
+                                }
+                                resolve(false);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Fehler bei der Rückgabe:', error);
+                            showToast('error', 'Ein Fehler ist aufgetreten');
+                            if (button) {
+                                button.disabled = false;
+                                button.style.opacity = '1';
+                            }
+                            resolve(false);
+                        });
+                    });
+                });
+            });
+        }
+    };
 
     // Service starten wenn DOM geladen ist
     if (document.readyState === 'loading') {
