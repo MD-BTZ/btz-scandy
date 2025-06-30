@@ -4,48 +4,48 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="card bg-base-100 shadow-xl">
+    <div class="card bg-white shadow-lg border border-gray-200">
         <div class="card-body">
-            <h2 class="card-title mb-6">
-                <i class="fas fa-clock mr-2"></i>
+            <h2 class="card-title mb-6 text-gray-800">
+                <i class="fas fa-clock mr-2 text-orange-500"></i>
                 Automatisches Backup-System
             </h2>
 
             <!-- Status-Karte -->
-            <div class="card bg-base-200 mb-6">
+            <div class="card bg-gray-50 border border-gray-200 mb-6">
                 <div class="card-body">
-                    <h3 class="card-title text-lg mb-4">System-Status</h3>
+                    <h3 class="card-title text-lg mb-4 text-gray-700">System-Status</h3>
                     <div id="autoBackupStatus" class="space-y-4">
                         <div class="flex items-center justify-between">
-                            <span class="font-semibold">Status:</span>
-                            <span id="statusIndicator" class="badge badge-info">Lade...</span>
+                            <span class="font-semibold text-gray-600">Status:</span>
+                            <span id="statusIndicator" class="badge bg-gray-400 text-white">Lade...</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="font-semibold">Nächste Backups:</span>
-                            <span id="nextBackup" class="text-sm">Lade...</span>
+                            <span class="font-semibold text-gray-600">Nächste Backups:</span>
+                            <span id="nextBackup" class="text-sm text-gray-700">Lade...</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="font-semibold">Backup-Zeiten:</span>
-                            <span id="backupTimes" class="text-sm">Lade...</span>
+                            <span class="font-semibold text-gray-600">Backup-Zeiten:</span>
+                            <span id="backupTimes" class="text-sm text-gray-700">Lade...</span>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Steuerung -->
-            <div class="card bg-base-200 mb-6">
+            <div class="card bg-gray-50 border border-gray-200 mb-6">
                 <div class="card-body">
-                    <h3 class="card-title text-lg mb-4">Steuerung</h3>
+                    <h3 class="card-title text-lg mb-4 text-gray-700">Steuerung</h3>
                     <div class="flex gap-4">
-                        <button id="startAutoBackup" class="btn btn-success">
+                        <button id="startAutoBackup" class="btn bg-orange-500 hover:bg-orange-600 text-white border-0">
                             <i class="fas fa-play mr-2"></i>
                             Starten
                         </button>
-                        <button id="stopAutoBackup" class="btn btn-error">
+                        <button id="stopAutoBackup" class="btn bg-gray-600 hover:bg-gray-700 text-white border-0">
                             <i class="fas fa-stop mr-2"></i>
                             Stoppen
                         </button>
-                        <button id="refreshStatus" class="btn btn-info">
+                        <button id="refreshStatus" class="btn btn-outline border-gray-300 text-gray-700 hover:bg-gray-100">
                             <i class="fas fa-sync-alt mr-2"></i>
                             Status aktualisieren
                         </button>
@@ -54,24 +54,24 @@
             </div>
 
             <!-- Konfiguration -->
-            <div class="card bg-base-200 mb-6">
+            <div class="card bg-gray-50 border border-gray-200 mb-6">
                 <div class="card-body">
-                    <h3 class="card-title text-lg mb-4">Konfiguration</h3>
+                    <h3 class="card-title text-lg mb-4 text-gray-700">Konfiguration</h3>
                     <div class="space-y-4">
                         <div>
                             <label class="label">
-                                <span class="label-text font-semibold">Backup-Zeiten:</span>
+                                <span class="label-text font-semibold text-gray-600">Backup-Zeiten:</span>
                             </label>
-                            <div class="text-sm opacity-70">
+                            <div class="text-sm text-gray-600">
                                 <p>• 06:00 Uhr - Morgens</p>
                                 <p>• 18:00 Uhr - Abends</p>
                             </div>
                         </div>
                         <div>
                             <label class="label">
-                                <span class="label-text font-semibold">Backup-Inhalt:</span>
+                                <span class="label-text font-semibold text-gray-600">Backup-Inhalt:</span>
                             </label>
-                            <div class="text-sm opacity-70">
+                            <div class="text-sm text-gray-600">
                                 <p>• Werkzeuge, Verbrauchsmaterialien, Mitarbeiter</p>
                                 <p>• Ausleihen, Tickets, Einstellungen</p>
                                 <p>• Alle Datenbank-Collections</p>
@@ -79,9 +79,9 @@
                         </div>
                         <div>
                             <label class="label">
-                                <span class="label-text font-semibold">Aufbewahrung:</span>
+                                <span class="label-text font-semibold text-gray-600">Aufbewahrung:</span>
                             </label>
-                            <div class="text-sm opacity-70">
+                            <div class="text-sm text-gray-600">
                                 <p>• Letzte 10 Backups werden behalten</p>
                                 <p>• Alte Backups werden automatisch gelöscht</p>
                             </div>
@@ -91,16 +91,16 @@
             </div>
 
             <!-- Logs -->
-            <div class="card bg-base-200">
+            <div class="card bg-gray-50 border border-gray-200">
                 <div class="card-body">
-                    <h3 class="card-title text-lg mb-4">Backup-Logs</h3>
-                    <div class="bg-base-300 p-4 rounded-lg">
-                        <div id="backupLogs" class="font-mono text-sm h-64 overflow-y-auto">
-                            <p class="text-center opacity-50">Lade Logs...</p>
+                    <h3 class="card-title text-lg mb-4 text-gray-700">Backup-Logs</h3>
+                    <div class="bg-white p-4 rounded-lg border border-gray-200">
+                        <div id="backupLogs" class="font-mono text-sm h-64 overflow-y-auto text-gray-700">
+                            <p class="text-center text-gray-500">Lade Logs...</p>
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button id="refreshLogs" class="btn btn-sm btn-outline">
+                        <button id="refreshLogs" class="btn btn-sm btn-outline border-gray-300 text-gray-700 hover:bg-gray-100">
                             <i class="fas fa-sync-alt mr-2"></i>
                             Logs aktualisieren
                         </button>
@@ -137,10 +137,10 @@ function loadAutoBackupStatus() {
                 // Status-Indikator
                 const statusIndicator = document.getElementById('statusIndicator');
                 if (status.running) {
-                    statusIndicator.className = 'badge badge-success';
+                    statusIndicator.className = 'badge bg-orange-500 text-white';
                     statusIndicator.textContent = 'Aktiv';
                 } else {
-                    statusIndicator.className = 'badge badge-error';
+                    statusIndicator.className = 'badge bg-gray-500 text-white';
                     statusIndicator.textContent = 'Gestoppt';
                 }
                 
@@ -219,7 +219,7 @@ function loadBackupLogs() {
                     ).join('');
                     logsContainer.scrollTop = logsContainer.scrollHeight;
                 } else {
-                    logsContainer.innerHTML = '<p class="text-center opacity-50">Keine Logs verfügbar</p>';
+                    logsContainer.innerHTML = '<p class="text-center text-gray-500">Keine Logs verfügbar</p>';
                 }
             } else {
                 showToast('error', 'Fehler beim Laden der Logs');
@@ -235,7 +235,8 @@ function loadBackupLogs() {
 <style>
 .log-entry {
     padding: 2px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid #e5e7eb;
+    color: #374151;
 }
 
 .log-entry:last-child {

@@ -219,7 +219,7 @@ async function deleteBackup(filename) {
     
     try {
         const response = await fetch(`/admin/backup/delete/${filename}`, {
-            method: 'POST',
+            method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'

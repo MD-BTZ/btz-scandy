@@ -1,54 +1,151 @@
 @echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
 echo ========================================
-echo Scandy Update - Windows
+echo Scandy App Update
+echo ========================================
+echo Dieses Skript aktualisiert NUR die Scandy-App:
+echo - ✅ Scandy App wird aktualisiert
+echo - 🔒 MongoDB bleibt unverändert
+echo - 🔒 Mongo Express bleibt unverändert
+echo - 💾 Alle Daten bleiben erhalten
 echo ========================================
 echo.
 
 REM Prüfe ob Docker installiert ist
 docker --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Docker ist nicht installiert oder nicht verfügbar!
-    echo Bitte installiere Docker Desktop und starte es neu.
+    echo ❌ ERROR: Docker ist nicht installiert oder nicht verfügbar!
     pause
     exit /b 1
 )
 
-echo Docker gefunden. Starte Update...
+REM Prüfe ob Docker läuft
+docker info >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ ERROR: Docker läuft nicht!
+    pause
+    exit /b 1
+)
+
+REM Prüfe ob docker-compose.yml existiert
+if not exist "docker-compose.yml" (
+    echo ❌ ERROR: docker-compose.yml nicht gefunden!
+    echo Bitte führen Sie zuerst install.bat aus.
+    pause
+    exit /b 1
+)
+
+echo 🔍 Prüfe bestehende Installation...
+docker-compose ps
+
+echo.
+echo ⚠️  WARNUNG: Dieses Update betrifft NUR die Scandy-App!
+echo    MongoDB und Mongo Express bleiben unverändert.
+echo    Alle Daten bleiben erhalten.
 echo.
 
-REM Stoppe nur den App-Container
-echo Stoppe App-Container...
-docker-compose stop scandy-app
+set /p confirm="Möchten Sie fortfahren? (j/N): "
+if /i not "!confirm!"=="j" (
+    echo Update abgebrochen.
+    pause
+    exit /b 0
+)
 
-REM Lösche nur das App-Image
-echo Lösche altes App-Image...
-docker-compose down --rmi local
+echo.
+echo 🔄 Starte App-Update...
 
-REM Baue und starte nur den App-Container neu
-echo Baue und starte App-Container neu...
-docker-compose up -d --build scandy-app
+REM Stoppe nur die App-Container
+echo 🛑 Stoppe App-Container...
+docker-compose stop scandy-app >nul 2>&1
+
+REM Entferne nur die App-Container
+echo 🗑️  Entferne alte App-Container...
+docker-compose rm -f scandy-app >nul 2>&1
+
+REM Entferne alte App-Images
+echo 🗑️  Entferne alte App-Images...
+for /f "tokens=3" %%i in ('docker images ^| findstr scandy-local') do docker rmi -f %%i >nul 2>&1
+
+REM Baue nur die App neu
+echo 🔨 Baue neue App-Version...
+docker-compose build --no-cache scandy-app
 
 if %errorlevel% neq 0 (
-    echo ERROR: Fehler beim Update des App-Containers!
+    echo ❌ Fehler beim Bauen der App!
+    echo Versuche es mit einfachem Build...
+    docker-compose build scandy-app
+)
+
+if %errorlevel% neq 0 (
+    echo ❌ App-Update fehlgeschlagen!
+    pause
+    exit /b 1
+)
+
+REM Starte nur die App
+echo 🚀 Starte neue App-Version...
+docker-compose up -d scandy-app
+
+if %errorlevel% neq 0 (
+    echo ❌ Fehler beim Starten der App!
     pause
     exit /b 1
 )
 
 echo.
+echo ⏳ Warte auf App-Start...
+timeout /t 10 /nobreak >nul
+
+REM Prüfe App-Status
+echo 🔍 Prüfe App-Status...
+docker-compose ps scandy-app
+
+REM Prüfe App-Logs
+echo.
+echo 📋 Letzte App-Logs:
+docker-compose logs --tail=10 scandy-app
+
+REM Prüfe ob App läuft
+echo.
+echo 🔍 Prüfe App-Verfügbarkeit...
+timeout /t 5 /nobreak >nul
+
+curl -s http://localhost:5000 >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✅ Scandy App läuft erfolgreich
+) else (
+    echo ⚠️  Scandy App startet noch...
+    echo    Bitte warten Sie einen Moment und prüfen Sie:
+    echo    docker-compose logs scandy-app
+)
+
+echo.
 echo ========================================
-echo Update abgeschlossen!
+echo ✅ APP-UPDATE ABGESCHLOSSEN!
 echo ========================================
 echo.
-echo Die Scandy-App wurde erfolgreich aktualisiert.
-echo MongoDB-Daten bleiben unberührt.
+echo 🎉 Die Scandy-App wurde erfolgreich aktualisiert!
 echo.
-echo Die App ist verfügbar unter:
-echo - Web-App: http://localhost:5000
+echo 🌐 Verfügbare Services:
+echo - Scandy App:     http://localhost:5000 ✅ AKTUALISIERT
+echo - Mongo Express:  http://localhost:8081 🔒 UNVERÄNDERT
 echo.
-echo Container-Status prüfen:
-echo docker-compose ps
+echo 💾 Datenbank-Status:
+echo - MongoDB:        🔒 Unverändert ^(Daten erhalten^)
+echo - Mongo Express:  🔒 Unverändert ^(Daten erhalten^)
 echo.
-echo App-Logs anzeigen:
-echo docker-compose logs -f scandy-app
+echo 🔧 Nützliche Befehle:
+echo - App-Logs:       docker-compose logs -f scandy-app
+echo - App-Status:     docker-compose ps scandy-app
+echo - App-Neustart:   docker-compose restart scandy-app
+echo - Alle Container: docker-compose ps
 echo.
+echo 📁 Datenverzeichnisse ^(unverändert^):
+echo - Backups: .\backups\
+echo - Logs:    .\logs\
+echo - Uploads: .\data\uploads\
+echo.
+echo ========================================
 pause 
