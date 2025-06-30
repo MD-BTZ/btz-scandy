@@ -18,37 +18,21 @@ const QuickScan = {
     },
             
     init() {
-        console.log("QuickScan.init() aufgerufen");
-        this.scannedItem = null;
-        this.scannedWorker = null;
-        this.activeInputType = null;
-        this.currentProcess = {};
         this.setupEventListeners();
-        
-        // Button-Status sofort initialisieren
-        setTimeout(() => {
-            updateQuickScanButton();
-            console.log("Button-Status nach Init:", {
-                scannedItem: !!this.scannedItem,
-                scannedWorker: !!this.scannedWorker
-            });
-        }, 100);
+        this.updateButtonStates();
     },
 
     setupEventListeners() {
         const input = document.getElementById('quickScanActiveInput');
         if (input) {
-            // Event-Listener für manuelle Eingaben
             input.addEventListener('input', function(e) {
-                console.log("Eingabe erkannt:", e.target.value);
                 checkManualInput();
             });
             
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    console.log("Enter gedrückt, verarbeite Eingabe:", e.target.value);
-                    QuickScan.handleManualInput(e.target.value);
+                    QuickScan.confirm();
                 }
             });
             
@@ -79,7 +63,6 @@ const QuickScan = {
 
         // Prüfe ob wir uns auf einer QuickScan-Seite befinden
         if (!modal) {
-            console.log('QuickScan-Modal nicht gefunden - Event-Listener werden nicht initialisiert');
             return;
         }
 
@@ -103,7 +86,6 @@ const QuickScan = {
 
             itemInput.addEventListener('input', (e) => {
                 if (e.target.value && e.target.value.length > this.keyBuffer.length && e.target.value.includes(this.keyBuffer)) {
-                    console.log(`[DEBUG] itemInput 'input' event, potenzieller Scanner-Input ohne Enter: ${e.target.value}`);
                     this.handleScannerInput(e.target.value, itemInput);
                     e.target.value = '';
                     this.keyBuffer = '';
@@ -139,7 +121,6 @@ const QuickScan = {
             
             workerInput.addEventListener('input', (e) => {
                  if (e.target.value && e.target.value.length > this.keyBuffer.length && e.target.value.includes(this.keyBuffer)) {
-                    console.log(`[DEBUG] workerInput 'input' event, potenzieller Scanner-Input ohne Enter: ${e.target.value}`);
                     this.handleScannerInput(e.target.value, workerInput);
                     e.target.value = '';
                     this.keyBuffer = '';
@@ -356,24 +337,17 @@ const QuickScan = {
     },
 
     handleScannerInput(barcode, input) {
-        console.log('[DEBUG] handleScannerInput - Barcode:', barcode, 'Input ID:', input.id);
-
         // Easter Egg Checks - Case Insensitive
         const upperBarcode = barcode.toUpperCase();
-        console.log('[DEBUG] Checking for Easter Eggs with:', upperBarcode);
-        console.log('[DEBUG] Is AIIO?', upperBarcode === 'AIIO');
         
         if (upperBarcode === 'DANCE') {
-            console.log("[DEBUG] Easter Egg: DANCE detected!");
             this.showDancingEmojis();
-            showToast('success', '🦓 Zebra-Party! 🦓');
             this.keyBuffer = '';
             this.updateDisplay(this.keyBuffer, input.id === 'workerScanInput');
             return;
         }
 
         if (upperBarcode === 'VIBE') {
-            console.log("[DEBUG] Easter Egg: VIBE detected!");
             const overlay = document.createElement('div');
             overlay.className = 'zebra-overlay';
             document.body.appendChild(overlay);
@@ -405,7 +379,6 @@ const QuickScan = {
         }
 
         if (upperBarcode === 'AIIO') {
-            console.log("[DEBUG] Easter Egg: AIIO detected!");
             const overlay = document.createElement('div');
             overlay.className = 'zebra-overlay';
             document.body.appendChild(overlay);
@@ -533,7 +506,6 @@ const QuickScan = {
             }
             
             this.scannedItem = item;
-            console.log("Item gescannt:", item);
             
             // Bestandswert robust ermitteln
             let quantity = (typeof item.quantity === 'number') ? item.quantity :
@@ -590,7 +562,6 @@ const QuickScan = {
             }
             const worker = result.worker;
             this.scannedWorker = worker;
-            console.log("Worker gescannt:", worker);
             
             // Anzeige auf Karte aktualisieren
             const workerCardContent = document.getElementById('workerCardContent');
@@ -700,10 +671,6 @@ const QuickScan = {
         // Button-Status zurücksetzen
         setTimeout(() => {
             updateQuickScanButton();
-            console.log("Button-Status nach Reset:", {
-                scannedItem: !!this.scannedItem,
-                scannedWorker: !!this.scannedWorker
-            });
         }, 100);
     },
 
@@ -1076,6 +1043,14 @@ const QuickScan = {
             showToast('error', 'Fehler bei der Verarbeitung der Eingabe');
         }
     },
+
+    updateButtonStates() {
+        // Button-Status aktualisieren
+        const buttons = document.querySelectorAll('[data-action]');
+        buttons.forEach(button => {
+            button.disabled = false;
+        });
+    }
 };
 
 // QuickScan initialisieren wenn Modal geöffnet wird

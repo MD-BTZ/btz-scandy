@@ -14,6 +14,7 @@
                 <p>Anzahl gelöschter {{ app_labels.tools.name }}: {{ tools|length }}</p>
                 <p>Anzahl gelöschter {{ app_labels.consumables.name }}: {{ consumables|length }}</p>
                 <p>Anzahl gelöschter Mitarbeiter: {{ workers|length }}</p>
+                <p>Anzahl gelöschter Tickets: {{ tickets|length }}</p>
             </div>
         </div>
     </div>
@@ -134,6 +135,50 @@
                             </tr>
                             {% else %}
                             <tr><td colspan="5" class="text-center py-4">Keine gelöschten Mitarbeiter vorhanden</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tickets Tabelle -->
+    <div class="mb-8">
+        <h2 class="text-xl font-bold mb-2">Gelöschte Tickets</h2>
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <div class="overflow-x-auto w-full">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Titel</th>
+                                <th>Erstellt von</th>
+                                <th>Status</th>
+                                <th>Priorität</th>
+                                <th>Gelöscht am</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in tickets %}
+                            <tr class="hover data-row">
+                                <td><div class="badge badge-outline">{{ ticket.id }}</div></td>
+                                <td>{{ ticket.title }}</td>
+                                <td>{{ ticket.created_by }}</td>
+                                <td><div class="badge badge-{{ 'success' if ticket.status == 'geschlossen' else 'warning' if ticket.status == 'in_bearbeitung' else 'info' }}">{{ ticket.status }}</div></td>
+                                <td><div class="badge badge-{{ 'error' if ticket.priority == 'hoch' else 'warning' if ticket.priority == 'mittel' else 'success' }}">{{ ticket.priority }}</div></td>
+                                <td>{{ ticket.deleted_at }}</td>
+                                <td class="text-right">
+                                    <div class="btn-group">
+                                        <button onclick="restoreItem('ticket', '{{ ticket.id }}')" class="btn btn-sm btn-primary"><i class="fas fa-undo mr-2"></i>Wiederherstellen</button>
+                                        <button onclick="deletePermanently('ticket', '{{ ticket.id }}')" class="btn btn-sm btn-error"><i class="fas fa-trash mr-2"></i>Endgültig löschen</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="7" class="text-center py-4">Keine gelöschten Tickets vorhanden</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

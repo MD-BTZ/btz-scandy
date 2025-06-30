@@ -182,41 +182,32 @@ function closeEditModal() {
     document.getElementById('editModal').close();
 }
 
-async function returnTool(barcode) {
-    console.log('returnTool called with barcode:', barcode);
-    
-    if (!confirm('Möchten Sie dieses {{ app_labels.tools.name }} wirklich zurückgeben?')) {
-        console.log('User cancelled return');
+function returnTool(barcode) {
+    if (!confirm('Möchten Sie dieses Werkzeug wirklich zurückgeben?')) {
         return;
     }
-    
-    try {
-        console.log('Sending return request...');
-        const response = await fetch('/api/lending/return', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                tool_barcode: barcode,
-                worker_barcode: '{{ worker.barcode }}'
-            })
-        });
-        
-        console.log('Response status:', response.status);
-        const result = await response.json();
-        console.log('Response result:', result);
-        
+
+    fetch('/api/lending/return', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            tool_barcode: barcode
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
         if (result.success) {
-            alert('Werkzeug erfolgreich zurückgegeben!');
-            window.location.reload();
+            showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            alert(result.message || 'Ein Fehler ist aufgetreten');
+            showToast('error', result.message || 'Fehler bei der Rückgabe');
         }
-    } catch (error) {
-        console.error('Fehler bei der Rückgabe:', error);
-        alert('Ein Fehler ist aufgetreten: ' + error.message);
-    }
+    })
+    .catch(error => {
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
 }
 
 // Formular-Handling

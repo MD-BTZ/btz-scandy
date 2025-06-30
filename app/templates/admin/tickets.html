@@ -56,9 +56,16 @@
                                     </td>
                                     <td>{{ ticket.created_at }}</td>
                                     <td class="text-right">
-                                        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
+                                        <div class="btn-group">
+                                            <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost" title="Details anzeigen">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            {% if current_user.is_admin %}
+                                            <button type="button" class="btn btn-sm btn-ghost btn-error" title="Löschen" onclick="deleteTicket('{{ ticket.id }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -135,5 +142,45 @@ document.addEventListener('DOMContentLoaded', function() {
     priorityFilter.addEventListener('change', filterTickets);
     searchInput.addEventListener('input', filterTickets);
 });
+
+// Ticket-Löschfunktion
+function deleteTicket(ticketId) {
+    if (confirm('Möchten Sie dieses Ticket wirklich löschen? Es wird in den Papierkorb verschoben.')) {
+        fetch(`/admin/tickets/${ticketId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', 'Ticket wurde erfolgreich gelöscht');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen des Tickets');
+            }
+        })
+        .catch(error => {
+            showToast('error', 'Ein Fehler ist aufgetreten');
+        });
+    }
+}
+
+// Toast-Funktion
+function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} fixed bottom-4 right-4 z-50`;
+    toast.innerHTML = `
+        <div class="alert alert-${type}">
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
 </script>
 {% endblock %} 

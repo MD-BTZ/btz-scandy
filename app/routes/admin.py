@@ -20,7 +20,7 @@ from app.models.mongodb_database import mongodb
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings
+from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings, get_departments_from_settings, get_locations_from_settings
 from docxtpl import DocxTemplate
 from urllib.parse import unquote
 import pandas as pd
@@ -712,28 +712,27 @@ def manual_lending():
         logger.info("POST-Anfrage für manuelle Ausleihe empfangen")
         
         try:
-            # JSON-Daten verarbeiten
+            # JSON-Daten für manuelle Ausleihe
             data = request.get_json()
-            if data is None:
-                return jsonify({
-                    'success': False,
-                    'message': 'Keine gültigen JSON-Daten empfangen'
-                }), 400
-                
-            logger.debug(f"JSON-Daten für manuelle Ausleihe: {data}")
             
-            item_barcode = data.get('item_barcode')
-            worker_barcode = data.get('worker_barcode')
-            action = data.get('action')  # 'lend' oder 'return'
-            quantity = data.get('quantity')
-            if quantity is not None:
-                quantity = int(quantity)
+            if not data:
+                return jsonify({'success': False, 'message': 'Keine Daten empfangen'}), 400
             
-            if not item_barcode:
-                return jsonify({
-                    'success': False, 
-                    'message': 'Artikel muss ausgewählt sein'
-                }), 400
+            # Validiere erforderliche Felder
+            required_fields = ['item_barcode', 'worker_barcode', 'action', 'item_type']
+            for field in required_fields:
+                if field not in data:
+                    return jsonify({'success': False, 'message': f'Feld {field} ist erforderlich'}), 400
+            
+            # Hole Daten aus JSON
+            item_barcode = data.get('item_barcode', '').strip()
+            worker_barcode = data.get('worker_barcode', '').strip()
+            action = data.get('action', '').strip()
+            item_type = data.get('item_type', '').strip()
+            quantity = data.get('quantity', 1)
+            
+            if not item_barcode or not worker_barcode or not action or not item_type:
+                return jsonify({'success': False, 'message': 'Alle Felder sind erforderlich'}), 400
             
             if action == 'lend' and not worker_barcode:
                 return jsonify({
@@ -1007,10 +1006,14 @@ def trash():
         # Gelöschte Mitarbeiter
         workers = mongodb.find('workers', {'deleted': True}, sort=[('deleted_at', -1)])
         
+        # Gelöschte Tickets
+        tickets = mongodb.find('tickets', {'deleted': True}, sort=[('deleted_at', -1)])
+        
         return render_template('admin/trash.html',
                            tools=tools,
                            consumables=consumables,
-                           workers=workers)
+                           workers=workers,
+                           tickets=tickets)
     except Exception as e:
         logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
         flash('Fehler beim Laden des Papierkorbs', 'error')
@@ -1067,6 +1070,21 @@ def restore_item(type, barcode):
             # Stelle den Mitarbeiter wieder her
             mongodb.update_one('workers', 
                              {'barcode': decoded_barcode}, 
+                             {'$set': {'deleted': False, 'deleted_at': None}})
+                             
+        elif type == 'ticket':
+            # Prüfe ob das Ticket existiert
+            ticket = mongodb.find_one('tickets', {'_id': ObjectId(decoded_barcode), 'deleted': True})
+            
+            if not ticket:
+                return jsonify({
+                    'success': False,
+                    'message': 'Ticket nicht gefunden'
+                }), 404
+                
+            # Stelle das Ticket wieder her
+            mongodb.update_one('tickets', 
+                             {'_id': ObjectId(decoded_barcode)}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
         else:
             return jsonify({
@@ -1457,6 +1475,24 @@ def ticket_detail(ticket_id):
     # Hole alle Kategorien aus der settings Collection
     categories = get_ticket_categories_from_settings()
 
+    # Hole Arbeitszeiten
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(ticket_id)}))
+    
+    # Hole Notizen
+    notes = list(mongodb.find('ticket_notes', {'ticket_id': ObjectId(ticket_id)}, sort=[('created_at', -1)]))
+    
+    # Hole Nachrichten
+    messages = list(mongodb.find('ticket_messages', {'ticket_id': ObjectId(ticket_id)}, sort=[('created_at', -1)]))
+    
+    # Hole alle Mitarbeiter für Zuweisung
+    workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('lastname', 1)]))
+    
+    # Hole alle Abteilungen
+    departments = get_departments_from_settings()
+    
+    # Hole alle Standorte
+    locations = get_locations_from_settings()
+
     return render_template('admin/ticket_detail.html', 
                          ticket=ticket, 
                          notes=notes,
@@ -1467,7 +1503,8 @@ def ticket_detail(ticket_id):
                          auftrag_details=auftrag_details,
                          material_list=material_list,
                          categories=categories,
-                         now=datetime.now())
+                         now=datetime.now(),
+                         arbeit_list=arbeit_list)
 
 @bp.route('/tickets/<ticket_id>/message', methods=['POST'])
 @login_required
@@ -1530,57 +1567,36 @@ def add_ticket_message(ticket_id):
 @login_required
 @admin_required
 def add_ticket_note(ticket_id):
-    """Fügt eine neue Notiz zu einem Ticket hinzu."""
+    """Fügt eine neue Notiz zu einem Ticket hinzu"""
     try:
-        logger.debug(f"Notiz-Anfrage für Ticket {ticket_id} erhalten")
-        # Hole das Ticket
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
-        
-        if not ticket:
-            logger.warning(f"Ticket {ticket_id} nicht gefunden")
-            return jsonify({
-                'success': False,
-                'message': 'Ticket nicht gefunden'
-            }), 404
-
-        # Hole die Notiz
         if not request.is_json:
-            logger.warning("Ungültiges Anfrageformat. JSON erwartet.")
-            return jsonify({
-                'success': False,
-                'message': 'Ungültiges Anfrageformat. JSON erwartet.'
-            }), 400
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
 
         data = request.get_json()
-        note = data.get('note')
+        note_text = data.get('note', '').strip()
         
-        if not note or not note.strip():
-            logger.warning("Notiz ist leer")
-            return jsonify({
-                'success': False,
-                'message': 'Notiz ist erforderlich'
-            }), 400
+        if not note_text:
+            return jsonify({'success': False, 'message': 'Notiz darf nicht leer sein'}), 400
 
-        logger.debug(f"Notiz hinzufügen: {note}")
-        # Füge die Notiz hinzu
+        # Erstelle die Notiz
         note_data = {
             'ticket_id': ObjectId(ticket_id),
-            'note': note.strip(),
+            'note': note_text,
             'created_by': current_user.username,
             'created_at': datetime.now()
         }
         
         result = mongodb.insert_one('ticket_notes', note_data)
         
-        # Aktualisiere das updated_at Feld des Tickets
-        mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': {'updated_at': datetime.now()}})
+        if not result:
+            return jsonify({'success': False, 'message': 'Fehler beim Speichern der Notiz'}), 500
 
         return jsonify({
             'success': True,
-            'message': 'Notiz wurde gespeichert',
+            'message': 'Notiz erfolgreich hinzugefügt',
             'note': {
                 'id': str(result),
-                'note': note.strip(),
+                'text': note_text,
                 'created_by': current_user.username,
                 'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
             }
@@ -1588,10 +1604,7 @@ def add_ticket_note(ticket_id):
 
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Notiz: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        }), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/tickets/<ticket_id>/update', methods=['POST'])
 @login_required
@@ -1887,24 +1900,16 @@ def create_mongodb_backup():
 @login_required
 @mitarbeiter_required
 def tickets():
-    """Zeigt die Ticket-Verwaltungsseite an."""
-    # Hole alle Tickets aus der Datenbank
-    tickets = list(mongodb.db.tickets.find({}).sort('created_at', -1))
+    """Zeigt die Ticket-Übersicht für Admins."""
+    # Hole alle Tickets (nur nicht gelöschte)
+    all_tickets = mongodb.find('tickets', {'deleted': {'$ne': True}})
+    all_tickets = list(all_tickets)
     
-    # Formatiere die Tickets für die Anzeige
-    for ticket in tickets:
+    # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
+    for ticket in all_tickets:
         ticket['id'] = str(ticket['_id'])
-        ticket['created_at'] = ticket['created_at'].strftime('%d.%m.%Y %H:%M')
-        if 'last_update' in ticket:
-            ticket['last_update'] = ticket['last_update'].strftime('%d.%m.%Y %H:%M')
     
-    # Hole alle Kategorien
-    categories = get_ticket_categories_from_settings()
-    
-    return render_template('admin/tickets.html', 
-                         tickets=tickets,
-                         categories=categories,
-                         title="Ticket-Verwaltung")
+    return render_template('admin/tickets.html', tickets=all_tickets)
 
 @bp.route('/manage_users')
 @mitarbeiter_required
@@ -3005,7 +3010,7 @@ def update_ticket_status(ticket_id):
 @login_required
 @admin_required
 def delete_ticket(ticket_id):
-    """Ticket löschen"""
+    """Ticket soft löschen (markieren als gelöscht)"""
     try:
         # Prüfe ob das Ticket existiert
         ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
@@ -3016,15 +3021,13 @@ def delete_ticket(ticket_id):
                 'message': 'Ticket nicht gefunden'
             }), 404
             
-        # Lösche das Ticket
-        mongodb.delete_one('tickets', {'_id': ObjectId(ticket_id)})
-        
-        # Lösche auch zugehörige Daten
-        mongodb.delete_many('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+        # Führe das Soft-Delete durch (markieren als gelöscht)
+        mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {
+            '$set': {
+                'deleted': True,
+                'deleted_at': datetime.now()
+            }
+        })
         
         return jsonify({
             'success': True,
@@ -3033,6 +3036,42 @@ def delete_ticket(ticket_id):
         
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Tickets: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen: {str(e)}'
+        }), 500
+
+@bp.route('/tickets/<ticket_id>/delete-permanent', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_ticket_permanent(ticket_id):
+    """Ticket endgültig löschen"""
+    try:
+        # Prüfe ob das Ticket existiert und gelöscht ist
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id), 'deleted': True})
+        
+        if not ticket:
+            return jsonify({
+                'success': False,
+                'message': 'Ticket nicht gefunden oder nicht gelöscht'
+            }), 404
+            
+        # Lösche das Ticket und alle zugehörigen Daten endgültig
+        mongodb.delete_one('tickets', {'_id': ObjectId(ticket_id)})
+        mongodb.delete_many('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_many('auftrag_arbeit', {'ticket_id': ObjectId(ticket_id)})
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket wurde endgültig gelöscht'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim endgültigen Löschen des Tickets: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Fehler beim Löschen: {str(e)}'

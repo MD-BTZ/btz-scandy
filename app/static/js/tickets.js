@@ -32,32 +32,26 @@ window.showToast = function(type, message) {
 };
 
 window.deleteTicket = function(ticketId) {
-    console.log('deleteTicket aufgerufen mit ID:', ticketId);
-    if (!confirm('Möchten Sie dieses Ticket wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
-        return;
+    if (confirm('Möchten Sie dieses Ticket wirklich löschen? Es wird in den Papierkorb verschoben.')) {
+        fetch(`/admin/tickets/${ticketId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', 'Ticket wurde erfolgreich gelöscht');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('error', data.message || 'Fehler beim Löschen des Tickets');
+            }
+        })
+        .catch(error => {
+            showToast('error', 'Ein Fehler ist aufgetreten');
+        });
     }
-    
-    fetch(`/tickets/${ticketId}/delete`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Ticket erfolgreich gelöscht');
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
-        } else {
-            showToast('error', data.message || 'Fehler beim Löschen des Tickets');
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten');
-    });
 };
 
 function createTicket() {

@@ -15,46 +15,26 @@ bp = Blueprint('workers', __name__, url_prefix='/workers')
 @bp.route('/')
 @mitarbeiter_required
 def index():
-    """Mitarbeiter-Übersicht"""
+    """Zeigt die Mitarbeiter-Übersicht an"""
     try:
-        # Debug-Ausgabe
-        print("\n=== WORKERS INDEX ===")
-        
-        # Hole alle aktiven Mitarbeiter
+        # Hole alle nicht gelöschten Mitarbeiter
         workers = mongodb.find('workers', {'deleted': {'$ne': True}})
         workers = list(workers)
         
-        # Füge aktive Ausleihen hinzu
-        for worker in workers:
-            active_lendings = mongodb.count_documents('lendings', {
-                'worker_barcode': worker['barcode'],
-                'returned_at': None
-            })
-            worker['active_lendings'] = active_lendings
-        
-        # Sortiere nach Nachname, Vorname
-        workers.sort(key=lambda x: (x.get('lastname', ''), x.get('firstname', '')))
-        
-        print(f"Gefundene Mitarbeiter: {len(workers)}")
-        if workers:
-            print("Erster Datensatz:", workers[0])
-        
-        # Hole alle Abteilungen
+        # Hole alle Abteilungen für Filter
         departments = get_departments_from_settings()
         
-        print(f"Gefundene Abteilungen: {departments}")
+        # Sortiere nach Nachname
+        workers.sort(key=lambda x: x.get('lastname', ''))
         
-        return render_template('workers/index.html',
-                             workers=workers,
-                             departments=departments,
-                             is_admin=current_user.is_admin)
-                             
+        return render_template('workers/index.html', 
+                           workers=workers,
+                           departments=departments)
+                           
     except Exception as e:
-        print(f"Fehler beim Laden der Mitarbeiter: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}", exc_info=True)
         flash('Fehler beim Laden der Mitarbeiter', 'error')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -255,9 +235,7 @@ def details(original_barcode):
                              is_admin=current_user.is_admin)
 
     except Exception as e:
-        print(f"Fehler beim Laden der Mitarbeiterdetails: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Fehler beim Laden der Mitarbeiterdetails: {str(e)}", exc_info=True)
         flash('Fehler beim Laden der Mitarbeiterdetails', 'error')
         return redirect(url_for('workers.index'))
 
@@ -303,7 +281,7 @@ def edit(barcode):
             return redirect(url_for('workers.details', original_barcode=new_barcode))
             
     except Exception as e:
-        print(f"Fehler beim Aktualisieren des Mitarbeiters: {str(e)}")
+        logger.error(f"Fehler beim Aktualisieren des Mitarbeiters: {str(e)}", exc_info=True)
         flash('Fehler beim Aktualisieren des Mitarbeiters', 'error')
         return redirect(url_for('workers.details', barcode=barcode))
 

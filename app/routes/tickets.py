@@ -17,10 +17,11 @@ bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 @login_required
 def index():
     """Zeigt die Ticket-Übersicht für den Benutzer."""
-    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
+    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene und nicht gelöschte)
     my_tickets = mongodb.find('tickets', {
         'created_by': current_user.username,
-        'status': {'$ne': 'geschlossen'}
+        'status': {'$ne': 'geschlossen'},
+        'deleted': {'$ne': True}
     })
     my_tickets = list(my_tickets)
     
@@ -124,10 +125,11 @@ def create():
             flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
             return redirect(url_for('tickets.create'))
     
-    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene)
+    # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene und nicht gelöschte)
     my_tickets = mongodb.find('tickets', {
         'created_by': current_user.username,
-        'status': {'$ne': 'geschlossen'}
+        'status': {'$ne': 'geschlossen'},
+        'deleted': {'$ne': True}
     })
     my_tickets = list(my_tickets)
     
@@ -136,10 +138,11 @@ def create():
         message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
         ticket['message_count'] = message_count
 
-    # Hole die zugewiesenen Tickets (nur nicht geschlossene)
+    # Hole die zugewiesenen Tickets (nur nicht geschlossene und nicht gelöschte)
     assigned_tickets = mongodb.find('tickets', {
         'assigned_to': current_user.username,
-        'status': {'$ne': 'geschlossen'}
+        'status': {'$ne': 'geschlossen'},
+        'deleted': {'$ne': True}
     })
     assigned_tickets = list(assigned_tickets)
     
@@ -148,13 +151,14 @@ def create():
         message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
         ticket['message_count'] = message_count
 
-    # Hole offene Tickets (nur nicht geschlossene)
+    # Hole offene Tickets (nur nicht geschlossene und nicht gelöschte)
     open_tickets = mongodb.find('tickets', {
         '$or': [
             {'assigned_to': None},
             {'assigned_to': ''}
         ],
-        'status': 'offen'
+        'status': 'offen',
+        'deleted': {'$ne': True}
     })
     open_tickets = list(open_tickets)
     
@@ -659,164 +663,150 @@ def update_details(id):
 
 @bp.route('/<id>/export')
 @login_required
+@admin_required
 def export_ticket(id):
-    """Exportiert das Ticket als ausgefülltes Word-Dokument."""
-    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
-    if not ticket:
-        return abort(404)
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)}) or {}
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)})) or []
-
-    # --- Auftragnehmer (Vorname Nachname) ---
-    auftragnehmer_user = None
-    assigned_to_username = ticket.get('assigned_to')
-    if assigned_to_username:
-        auftragnehmer_user = User.get_by_username(assigned_to_username)
-    
-    if auftragnehmer_user:
-        auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
-    else:
-        auftragnehmer_name = ''
-
-    # --- Checkboxen für Auftraggeber intern/extern ---
-    intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
-    extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
-
-    # --- Ausgeführte Arbeiten (bis zu 5) ---
-    arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
-    arbeiten_zeilen = []
-    if arbeiten_liste:
-        for zeile in arbeiten_liste.split('\n'):
-            if not zeile.strip():
-                continue
-            teile = [t.strip() for t in zeile.split('|')]
-            eintrag = {
-                'arbeiten': teile[0] if len(teile) > 0 else '',
-                'arbeitsstunden': teile[1] if len(teile) > 1 else '',
-                'leistungskategorie': teile[2] if len(teile) > 2 else ''
-            }
-            arbeiten_zeilen.append(eintrag)
-    # Fülle auf 5 Zeilen auf
-    while len(arbeiten_zeilen) < 5:
-        arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
-
-    # Materialdaten aufbereiten
-    material_rows = []
-    summe_material = 0
-    for m in material_list:
-        menge = float(m.get('menge') or 0)
-        einzelpreis = float(m.get('einzelpreis') or 0)
-        gesamtpreis = menge * einzelpreis
-        summe_material += gesamtpreis
-        material_rows.append({
-            'material': m.get('material', '') or '',
-            'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
-            'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
-            'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
-        })
-    while len(material_rows) < 5:
-        material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
-
-    arbeitspausch = 0
-    ubertrag = 0
-    zwischensumme = summe_material + arbeitspausch + ubertrag
-    mwst = zwischensumme * 0.07
-    gesamtsumme = zwischensumme + mwst
-
-    # --- Kontext für docxtpl bauen ---
-    context = {
-        'auftragnehmer': auftragnehmer_name,
-        'auftragnummer': ticket.get('ticket_number', id),
-        'datum': datetime.now().strftime('%d.%m.%Y'),
-        'internchk': '☒' if auftrag_details.get('auftraggeber_intern') else '☐',
-        'externchk': '☒' if auftrag_details.get('auftraggeber_extern') else '☐',
-        'auftraggebername': auftrag_details.get('auftraggeber_name', ''),
-        'auftraggebermail': auftrag_details.get('kontakt', ''),
-        'bereich': auftrag_details.get('bereich', ''),
-        'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
-        'duedate': auftrag_details.get('fertigstellungstermin', ''),
-        'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ','),
-        'matsum': f"{summe_material:.2f}".replace('.', ','),
-        'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
-        'arpausch': f"{arbeitspausch:.2f}".replace('.', ','),
-        'zwsum': f"{zwischensumme:.2f}".replace('.', ','),
-        'mwst': f"{mwst:.2f}".replace('.', ','),
-        'arbeitenblock': '\n'.join([arbeit['arbeiten'] for arbeit in arbeiten_zeilen]),
-        'stundenblock': '\n'.join([arbeit['arbeitsstunden'] for arbeit in arbeiten_zeilen]),
-        'kategorieblock': '\n'.join([arbeit['leistungskategorie'] for arbeit in arbeiten_zeilen]),
-        'materialblock': '\n'.join([material['material'] for material in material_rows]),
-        'mengenblock': '\n'.join([material['materialmenge'] for material in material_rows]),
-        'preisblock': '\n'.join([material['materialpreis'] for material in material_rows]),
-        'gesamtblock': '\n'.join([material['materialpreisges'] for material in material_rows])
-    }
-
-    # Detailliertes Logging für Debugging
-    logging.info(f"=== EXPORT DEBUG INFO für Ticket {id} ===")
-    logging.info(f"auftragnehmer: '{context['auftragnehmer']}'")
-    logging.info(f"auftragnummer: '{context['auftragnummer']}'")
-    logging.info(f"datum: '{context['datum']}'")
-    logging.info(f"internchk: '{context['internchk']}'")
-    logging.info(f"externchk: '{context['externchk']}'")
-    logging.info(f"auftraggebername: '{context['auftraggebername']}'")
-    logging.info(f"auftraggebermail: '{context['auftraggebermail']}'")
-    logging.info(f"bereich: '{context['bereich']}'")
-    logging.info(f"auftragsbeschreibung: '{context['auftragsbeschreibung']}'")
-    logging.info(f"duedate: '{context['duedate']}'")
-    logging.info(f"gesamtsumme: '{context['gesamtsumme']}'")
-    logging.info(f"matsum: '{context['matsum']}'")
-    logging.info(f"ubertrag: '{context['ubertrag']}'")
-    logging.info(f"arpausch: '{context['arpausch']}'")
-    logging.info(f"zwsum: '{context['zwsum']}'")
-    logging.info(f"mwst: '{context['mwst']}'")
-    logging.info(f"arbeitenblock: '{context['arbeitenblock']}'")
-    logging.info(f"stundenblock: '{context['stundenblock']}'")
-    logging.info(f"kategorieblock: '{context['kategorieblock']}'")
-    logging.info(f"materialblock: '{context['materialblock']}'")
-    logging.info(f"mengenblock: '{context['mengenblock']}'")
-    logging.info(f"preisblock: '{context['preisblock']}'")
-    logging.info(f"gesamtblock: '{context['gesamtblock']}'")
-    logging.info(f"=== ENDE EXPORT DEBUG INFO ===")
-
-    # --- Word-Dokument generieren ---
+    """Exportiert ein Ticket als Word-Dokument"""
     try:
-        logging.info(f"Starte Export für Ticket {id}")
+        # Hole Ticket-Daten
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
+        if not ticket:
+            flash('Ticket nicht gefunden', 'error')
+            return redirect(url_for('tickets.index'))
         
-        # Lade das Template
-        template_path = os.path.join(current_app.root_path, 'static', 'word', 'btzauftrag.docx')
-        logging.info(f"Template-Pfad: {template_path}")
+        # Hole Auftragsdetails
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
         
-        if not os.path.exists(template_path):
-            logging.error(f"Template-Datei nicht gefunden: {template_path}")
-            flash('Word-Template nicht gefunden.', 'error')
-            return redirect(url_for('tickets.detail', id=id))
+        # Hole Materialliste
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}))
         
-        doc = DocxTemplate(template_path)
-        logging.info("Template erfolgreich geladen")
+        # Hole Arbeitszeiten
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(id)}))
         
-        # Rendere das Dokument
-        logging.info(f"Rendere Dokument mit Kontext: {context}")
-        doc.render(context)
-        logging.info("Dokument erfolgreich gerendert")
+        # Erstelle Word-Dokument
+        from docx import Document
+        from docx.shared import Inches
+        import tempfile
+        import os
         
-        # Speichere das generierte Dokument
-        ticket_number = ticket.get('ticket_number', id)
-        output_path = os.path.join(current_app.root_path, 'static', 'uploads', f'ticket_{ticket_number}_export.docx')
+        doc = Document()
         
-        # Erstelle das uploads-Verzeichnis falls es nicht existiert
-        uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
-        os.makedirs(uploads_dir, exist_ok=True)
+        # Titel
+        title = doc.add_heading(f'Auftrag: {ticket.get("title", "Unbekannt")}', 0)
+        title.alignment = 1  # Zentriert
         
-        logging.info(f"Speichere Dokument unter: {output_path}")
-        doc.save(output_path)
-        logging.info("Dokument erfolgreich gespeichert")
+        # Ticket-Informationen
+        doc.add_heading('Ticket-Informationen', level=1)
+        table = doc.add_table(rows=1, cols=2)
+        table.style = 'Table Grid'
         
-        # Sende das Dokument
-        return send_file(output_path, as_attachment=True, download_name=f'ticket_{ticket_number}_export.docx')
+        # Header-Zeile
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = 'Feld'
+        hdr_cells[1].text = 'Wert'
+        
+        # Ticket-Daten
+        ticket_data = [
+            ('Ticket-ID', str(ticket.get('_id', ''))),
+            ('Titel', ticket.get('title', '')),
+            ('Beschreibung', ticket.get('description', '')),
+            ('Status', ticket.get('status', '')),
+            ('Priorität', ticket.get('priority', '')),
+            ('Erstellt von', ticket.get('created_by', '')),
+            ('Erstellt am', ticket.get('created_at', '').strftime('%d.%m.%Y %H:%M') if ticket.get('created_at') else ''),
+            ('Zugewiesen an', ticket.get('assigned_to', '')),
+            ('Kategorie', ticket.get('category', ''))
+        ]
+        
+        for field, value in ticket_data:
+            row_cells = table.add_row().cells
+            row_cells[0].text = field
+            row_cells[1].text = str(value)
+        
+        # Auftragsdetails
+        if auftrag_details:
+            doc.add_heading('Auftragsdetails', level=1)
+            auftrag_table = doc.add_table(rows=1, cols=2)
+            auftrag_table.style = 'Table Grid'
+            
+            # Header
+            auftrag_hdr = auftrag_table.rows[0].cells
+            auftrag_hdr[0].text = 'Feld'
+            auftrag_hdr[1].text = 'Wert'
+            
+            # Auftragsdaten
+            auftrag_data = [
+                ('Kunde', auftrag_details.get('customer_name', '')),
+                ('Kontakt', auftrag_details.get('customer_contact', '')),
+                ('Bereich', auftrag_details.get('customer_department', '')),
+                ('Auftragsnummer', auftrag_details.get('order_number', '')),
+                ('Startdatum', auftrag_details.get('start_date', '').strftime('%d.%m.%Y') if auftrag_details.get('start_date') else ''),
+                ('Enddatum', auftrag_details.get('end_date', '').strftime('%d.%m.%Y') if auftrag_details.get('end_date') else '')
+            ]
+            
+            for field, value in auftrag_data:
+                row_cells = auftrag_table.add_row().cells
+                row_cells[0].text = field
+                row_cells[1].text = str(value)
+        
+        # Materialliste
+        if material_list:
+            doc.add_heading('Materialliste', level=1)
+            material_table = doc.add_table(rows=1, cols=4)
+            material_table.style = 'Table Grid'
+            
+            # Header
+            material_hdr = material_table.rows[0].cells
+            material_hdr[0].text = 'Material'
+            material_hdr[1].text = 'Menge'
+            material_hdr[2].text = 'Einzelpreis'
+            material_hdr[3].text = 'Gesamtpreis'
+            
+            # Materialdaten
+            for material in material_list:
+                row_cells = material_table.add_row().cells
+                row_cells[0].text = material.get('name', '')
+                row_cells[1].text = str(material.get('quantity', 0))
+                row_cells[2].text = f"{material.get('unit_price', 0):.2f} €"
+                row_cells[3].text = f"{material.get('total_price', 0):.2f} €"
+        
+        # Arbeitszeiten
+        if arbeit_list:
+            doc.add_heading('Arbeitszeiten', level=1)
+            arbeit_table = doc.add_table(rows=1, cols=4)
+            arbeit_table.style = 'Table Grid'
+            
+            # Header
+            arbeit_hdr = arbeit_table.rows[0].cells
+            arbeit_hdr[0].text = 'Beschreibung'
+            arbeit_hdr[1].text = 'Stunden'
+            arbeit_hdr[2].text = 'Stundensatz'
+            arbeit_hdr[3].text = 'Gesamtpreis'
+            
+            # Arbeitsdaten
+            for arbeit in arbeit_list:
+                row_cells = arbeit_table.add_row().cells
+                row_cells[0].text = arbeit.get('description', '')
+                row_cells[1].text = str(arbeit.get('hours', 0))
+                row_cells[2].text = f"{arbeit.get('hourly_rate', 0):.2f} €"
+                row_cells[3].text = f"{arbeit.get('total_price', 0):.2f} €"
+        
+        # Speichere temporäre Datei
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_file:
+            doc.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        # Sende Datei als Download
+        return send_file(
+            tmp_file_path,
+            as_attachment=True,
+            download_name=f'ticket_{id}_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
         
     except Exception as e:
-        logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}", exc_info=True)
-        flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
-        return redirect(url_for('tickets.detail', id=id))
+        logging.error(f"Fehler beim Exportieren des Tickets: {str(e)}", exc_info=True)
+        flash('Fehler beim Exportieren des Tickets', 'error')
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/<id>/note', methods=['POST'])
 @login_required
@@ -863,10 +853,16 @@ def add_note(id):
 
 def get_unassigned_ticket_count():
     count = mongodb.count_documents('tickets', {
-        '$or': [
-            {'assigned_to': {'$exists': False}},
-            {'assigned_to': None},
-            {'assigned_to': ''}
+        '$and': [
+            {
+                '$or': [
+                    {'assigned_to': {'$exists': False}},
+                    {'assigned_to': None},
+                    {'assigned_to': ''}
+                ]
+            },
+            {'status': {'$ne': 'geschlossen'}},
+            {'deleted': {'$ne': True}}
         ]
     })
     return count
