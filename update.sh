@@ -3,8 +3,9 @@
 echo "========================================"
 echo "Scandy App Update"
 echo "========================================"
-echo "Dieses Skript aktualisiert NUR die Scandy-App:"
-echo "- ✅ Scandy App wird aktualisiert"
+echo "Dieses Skript aktualisiert die Scandy-App:"
+echo "- 📥 Holt neuesten Code von GitHub"
+echo "- ✅ Scandy App wird neu gebaut und aktualisiert"
 echo "- 🔒 MongoDB bleibt unverändert"
 echo "- 🔒 Mongo Express bleibt unverändert"
 echo "- 💾 Alle Daten bleiben erhalten"
@@ -30,6 +31,20 @@ if [ ! -f "docker-compose.yml" ]; then
     exit 1
 fi
 
+# Prüfe ob Git installiert ist
+if ! command -v git &> /dev/null; then
+    echo "❌ ERROR: Git ist nicht installiert!"
+    echo "Bitte installieren Sie Git und versuchen Sie es erneut."
+    exit 1
+fi
+
+# Prüfe ob wir in einem Git-Repository sind
+if [ ! -d ".git" ]; then
+    echo "❌ ERROR: Kein Git-Repository gefunden!"
+    echo "Bitte stellen Sie sicher, dass Sie in einem Scandy Git-Repository sind."
+    exit 1
+fi
+
 echo "🔍 Prüfe bestehende Installation..."
 docker-compose ps
 
@@ -48,6 +63,23 @@ fi
 echo
 echo "🔄 Starte App-Update..."
 
+# Git-Pull: Hole neuesten Code
+echo "📥 Hole neuesten Code von GitHub..."
+git pull origin main
+
+if [ $? -ne 0 ]; then
+    echo "⚠️  Git-Pull fehlgeschlagen. Versuche mit master Branch..."
+    git pull origin master
+fi
+
+if [ $? -ne 0 ]; then
+    echo "❌ ERROR: Git-Pull fehlgeschlagen!"
+    echo "Bitte prüfen Sie Ihre Internetverbindung und Git-Konfiguration."
+    exit 1
+fi
+
+echo "✅ Code erfolgreich aktualisiert!"
+
 # Stoppe nur die App-Container
 echo "🛑 Stoppe App-Container..."
 docker-compose stop scandy-app 2>/dev/null || true
@@ -56,9 +88,18 @@ docker-compose stop scandy-app 2>/dev/null || true
 echo "🗑️  Entferne alte App-Container..."
 docker-compose rm -f scandy-app 2>/dev/null || true
 
-# Entferne alte App-Images
-echo "🗑️  Entferne alte App-Images..."
+# Entferne alte App-Images und Build-Cache
+echo "🗑️  Entferne alte App-Images und Build-Cache..."
 docker images | grep scandy-local | awk '{print $3}' | xargs -r docker rmi -f
+docker images | grep scandy-app | awk '{print $3}' | xargs -r docker rmi -f
+
+# Entferne ungenutzte Images (dangling images)
+echo "🧹 Entferne ungenutzte Images..."
+docker image prune -f
+
+# Entferne Build-Cache für besseren Neubau
+echo "🧹 Entferne Build-Cache..."
+docker builder prune -f
 
 # Baue nur die App neu
 echo "🔨 Baue neue App-Version..."
@@ -116,6 +157,7 @@ echo "✅ APP-UPDATE ABGESCHLOSSEN!"
 echo "========================================"
 echo
 echo "🎉 Die Scandy-App wurde erfolgreich aktualisiert!"
+echo "📥 Neuester Code von GitHub wurde eingespielt."
 echo
 echo "🌐 Verfügbare Services:"
 echo "- Scandy App:     http://localhost:5000 ✅ AKTUALISIERT"
@@ -135,5 +177,9 @@ echo "📁 Datenverzeichnisse (unverändert):"
 echo "- Backups: ./backups/"
 echo "- Logs:    ./logs/"
 echo "- Uploads: ./data/uploads/"
+echo
+echo "🧹 Optional: Docker-System bereinigen"
+echo "   Falls Sie Speicherplatz freigeben möchten:"
+echo "   docker system prune -f"
 echo
 echo "========================================" 
