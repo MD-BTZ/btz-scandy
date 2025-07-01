@@ -23,7 +23,8 @@ def get_email_config():
             'mail_username': '',
             'mail_password': '',
             'test_email': '',
-            'enabled': False
+            'enabled': False,
+            'use_auth': True
         }
         
         # Lade Konfiguration aus der Datenbank
@@ -102,7 +103,7 @@ def test_email_config(config_data):
             
             # Methode 1: Prüfe esmtp_features (am zuverlässigsten)
             if hasattr(server, 'esmtp_features') and server.esmtp_features:
-                starttls_available = 'STARTTLS' in server.esmtp_features
+                starttls_available = 'starttls' in server.esmtp_features
             
             # Methode 2: Prüfe in den Capabilities-Strings (Fallback)
             if not starttls_available and capabilities_before and len(capabilities_before) > 1:
@@ -115,7 +116,7 @@ def test_email_config(config_data):
                     else:
                         cap_str = str(cap)
                     
-                    if 'STARTTLS' in cap_str.upper():
+                    if 'starttls' in cap_str.lower():
                         starttls_available = True
                         break
             
@@ -132,14 +133,14 @@ def test_email_config(config_data):
             else:
                 capabilities_after = capabilities_before
             
-            # Prüfe ob AUTH unterstützt wird (nach TLS)
+            # Prüfe ob AUTH unterstützt wird (nach TLS, also nach dem zweiten EHLO!)
             auth_supported = False
             
-            # Methode 1: Prüfe esmtp_features
+            # Methode 1: Prüfe esmtp_features NACH TLS
             if hasattr(server, 'esmtp_features') and server.esmtp_features:
-                auth_supported = 'AUTH' in server.esmtp_features
+                auth_supported = 'auth' in server.esmtp_features
             
-            # Methode 2: Fallback - Prüfe in den Capabilities-Strings
+            # Methode 2: Fallback - Prüfe in den Capabilities-Strings NACH TLS
             if not auth_supported and capabilities_after and len(capabilities_after) > 1:
                 for cap in capabilities_after[1]:
                     if isinstance(cap, bytes):
@@ -150,13 +151,12 @@ def test_email_config(config_data):
                     else:
                         cap_str = str(cap)
                     
-                    if 'AUTH' in cap_str.upper():
+                    if 'auth' in cap_str.lower():
                         auth_supported = True
                         break
             
-            # Methode 3: Konvertiere ASCII-Codes zu String und prüfe AUTH
+            # Methode 3: Konvertiere ASCII-Codes zu String und prüfe AUTH NACH TLS
             if not auth_supported and capabilities_after and len(capabilities_after) > 1:
-                # Konvertiere alle Capabilities zu Strings für bessere Suche
                 all_capabilities = []
                 for cap in capabilities_after[1]:
                     if isinstance(cap, bytes):
@@ -167,10 +167,8 @@ def test_email_config(config_data):
                     else:
                         cap_str = str(cap)
                     all_capabilities.append(cap_str)
-                
-                # Suche nach AUTH in allen konvertierten Capabilities
                 combined_capabilities = ' '.join(all_capabilities)
-                if 'AUTH' in combined_capabilities.upper():
+                if 'auth' in combined_capabilities.lower():
                     auth_supported = True
             
             # Methode 4: Für bekannte Server - AUTH wird unterstützt
@@ -178,13 +176,19 @@ def test_email_config(config_data):
             if not auth_supported and config_data['mail_server'] in known_servers and starttls_available:
                 auth_supported = True
             
-            if not auth_supported:
-                server.quit()
-                return False, "SMTP-Server unterstützt keine Authentifizierung. Prüfen Sie die Server-Einstellungen oder verwenden Sie einen anderen Port."
-            
-            # Authentifizierung testen
-            if config_data['mail_username'] and config_data['mail_password']:
-                server.login(config_data['mail_username'], config_data['mail_password'])
+            # Authentifizierung nur testen, wenn unterstützt
+            if auth_supported:
+                if config_data['mail_username'] and config_data['mail_password']:
+                    server.login(config_data['mail_username'], config_data['mail_password'])
+                else:
+                    server.quit()
+                    return False, "Authentifizierung erforderlich, aber keine Anmeldedaten angegeben."
+            else:
+                # Server ohne Authentifizierung - verwende nur Absender-E-Mail
+                if not config_data.get('mail_username'):
+                    server.quit()
+                    return False, "Für Server ohne Authentifizierung ist eine Absender-E-Mail-Adresse erforderlich."
+                logger.info(f"SMTP-Server {config_data['mail_server']} verwendet ohne Authentifizierung")
             
             server.quit()
             
@@ -231,15 +235,40 @@ def init_mail(app):
     # Lade Konfiguration aus der Datenbank
     config = get_email_config()
     
-    if config and config['enabled'] and config['mail_username'] and config['mail_password']:
+    if config and config['enabled']:
         # Verwende Datenbank-Konfiguration
         app.config['MAIL_SERVER'] = config['mail_server']
         app.config['MAIL_PORT'] = config['mail_port']
         app.config['MAIL_USE_TLS'] = config['mail_use_tls']
         app.config['MAIL_USE_SSL'] = not config['mail_use_tls'] and int(config['mail_port']) == 465
-        app.config['MAIL_USERNAME'] = config['mail_username']
-        app.config['MAIL_PASSWORD'] = config['mail_password']
-        app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']  # Absender = SMTP-Username
+        
+        # Prüfe ob Server Authentifizierung unterstützt
+        # Verwende use_auth Einstellung, falls vorhanden, sonst prüfe Server-Capabilities
+        if 'use_auth' in config:
+            auth_required = config['use_auth']
+        else:
+            auth_required = _check_auth_required(config['mail_server'], config['mail_port'], config['mail_use_tls'])
+        
+        if auth_required:
+            # Server benötigt Authentifizierung
+            if not config['mail_username'] or not config['mail_password']:
+                app.logger.error("E-Mail-Server benötigt Authentifizierung, aber keine Anmeldedaten angegeben")
+                mail = None
+                return
+            
+            app.config['MAIL_USERNAME'] = config['mail_username']
+            app.config['MAIL_PASSWORD'] = config['mail_password']
+            app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']  # Absender = SMTP-Username
+        else:
+            # Server ohne Authentifizierung
+            if not config.get('mail_username'):
+                app.logger.error("Für Server ohne Authentifizierung ist eine Absender-E-Mail-Adresse erforderlich")
+                mail = None
+                return
+                
+            app.config['MAIL_USERNAME'] = config['mail_username']  # Wird als Absender verwendet
+            app.config['MAIL_PASSWORD'] = ''  # Kein Passwort für Server ohne Auth
+            app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']
         
         # Zusätzliche Flask-Mail Konfiguration für bessere Kompatibilität
         app.config['MAIL_ASCII_ATTACHMENTS'] = False
@@ -283,6 +312,57 @@ def init_mail(app):
             except Exception as e:
                 app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
                 mail = None
+
+
+def _check_auth_required(server, port, use_tls):
+    """Prüft ob ein SMTP-Server Authentifizierung benötigt"""
+    try:
+        import smtplib
+        
+        # Verbindung testen
+        if use_tls and port == 465:
+            smtp_server = smtplib.SMTP_SSL(server, port)
+        else:
+            smtp_server = smtplib.SMTP(server, port)
+        
+        # EHLO senden
+        capabilities = smtp_server.ehlo()
+        
+        # STARTTLS aktivieren falls konfiguriert
+        if use_tls and port == 587:
+            try:
+                smtp_server.starttls()
+                capabilities = smtp_server.ehlo()
+            except:
+                pass  # STARTTLS nicht verfügbar
+        
+        # Prüfe AUTH in Capabilities (korrigiert für btz-koeln.net)
+        auth_supported = False
+        if hasattr(smtp_server, 'esmtp_features') and smtp_server.esmtp_features:
+            auth_supported = 'auth' in smtp_server.esmtp_features
+        
+        # Fallback: Prüfe in Capabilities-Strings
+        if not auth_supported and capabilities and len(capabilities) > 1:
+            for cap in capabilities[1]:
+                if isinstance(cap, bytes):
+                    try:
+                        cap_str = cap.decode('utf-8', errors='ignore')
+                    except UnicodeDecodeError:
+                        cap_str = cap.decode('latin-1', errors='ignore')
+                else:
+                    cap_str = str(cap)
+                
+                if 'auth' in cap_str.lower():
+                    auth_supported = True
+                    break
+        
+        smtp_server.quit()
+        return auth_supported
+        
+    except Exception as e:
+        logger.warning(f"Konnte Auth-Status für {server}:{port} nicht prüfen: {e}")
+        # Bei Fehlern annehmen, dass Auth erforderlich ist (sicherer Fallback)
+        return True
 
 
 def _log_email(subject, recipient, body):
@@ -420,7 +500,7 @@ def diagnose_smtp_connection(config_data):
         
         # Methode 1: Prüfe esmtp_features (am zuverlässigsten)
         if hasattr(server, 'esmtp_features') and server.esmtp_features:
-            starttls_available = 'STARTTLS' in server.esmtp_features
+            starttls_available = 'starttls' in server.esmtp_features
             logger.info(f"STARTTLS in esmtp_features gefunden: {starttls_available}")
         
         # Methode 2: Prüfe in den Capabilities-Strings (Fallback)
@@ -434,7 +514,7 @@ def diagnose_smtp_connection(config_data):
                 else:
                     cap_str = str(cap)
                 
-                if 'STARTTLS' in cap_str.upper():
+                if 'starttls' in cap_str.lower():
                     starttls_available = True
                     logger.info(f"STARTTLS in Capability gefunden: {cap_str}")
                     break
@@ -473,7 +553,7 @@ def diagnose_smtp_connection(config_data):
         
         # Methode 1: Prüfe esmtp_features nach TLS
         if hasattr(server, 'esmtp_features') and server.esmtp_features:
-            auth_supported = 'AUTH' in server.esmtp_features
+            auth_supported = 'auth' in server.esmtp_features
             logger.info(f"AUTH in esmtp_features gefunden: {auth_supported}")
         
         # Methode 2: Fallback - Prüfe in den Capabilities-Strings
@@ -487,7 +567,7 @@ def diagnose_smtp_connection(config_data):
                 else:
                     cap_str = str(cap)
                 
-                if 'AUTH' in cap_str.upper():
+                if 'auth' in cap_str.lower():
                     auth_supported = True
                     logger.info(f"AUTH in Capability gefunden: {cap_str}")
                     break
@@ -508,7 +588,7 @@ def diagnose_smtp_connection(config_data):
             
             # Suche nach AUTH in allen konvertierten Capabilities
             combined_capabilities = ' '.join(all_capabilities)
-            if 'AUTH' in combined_capabilities.upper():
+            if 'auth' in combined_capabilities.lower():
                 auth_supported = True
                 logger.info(f"AUTH in kombinierten Capabilities gefunden: {combined_capabilities}")
         
@@ -539,7 +619,9 @@ def diagnose_smtp_connection(config_data):
         
         server.quit()
         
-        # Bytes in Strings konvertieren für JSON-Serialisierung
+        # Nach TLS: Capabilities loggen
+        logger.info(f"Capabilities nach STARTTLS (zweites EHLO): {capabilities_after}")
+        # Capabilities nach TLS auch im Diagnose-Resultat anzeigen
         capabilities_list = []
         if capabilities_after and len(capabilities_after) > 1:
             for cap in capabilities_after[1]:
@@ -551,21 +633,8 @@ def diagnose_smtp_connection(config_data):
                     capabilities_list.append(cap_str)
                 else:
                     capabilities_list.append(str(cap))
-        
-        # Zusätzlich: Konvertiere ASCII-Codes zu lesbaren Strings für Debugging
-        if capabilities_after and len(capabilities_after) > 1:
-            # Prüfe ob die ersten Capabilities ASCII-Codes sind
-            first_cap = capabilities_after[1][0] if capabilities_after[1] else None
-            if isinstance(first_cap, bytes) and len(first_cap) > 0:
-                # Versuche die ASCII-Codes zu konvertieren
-                try:
-                    ascii_codes = [b for b in first_cap]
-                    if all(32 <= code <= 126 for code in ascii_codes):  # Druckbare ASCII-Zeichen
-                        ascii_string = ''.join(chr(code) for code in ascii_codes)
-                        capabilities_list.insert(0, f"ASCII-Codes konvertiert: {ascii_string}")
-                except Exception as e:
-                    logger.warning(f"Fehler bei ASCII-Code-Konvertierung: {e}")
-        
+        # Zusätzlich: Capabilities nach TLS als kombinierten String für die Diagnose
+        combined_capabilities_after = ' | '.join(capabilities_list)
         result = {
             'connection': 'Erfolgreich',
             'server': server_info['server'],
@@ -576,6 +645,7 @@ def diagnose_smtp_connection(config_data):
             'starttls_available': 'Ja' if starttls_available else 'Nein',
             'auth_supported': 'Ja' if auth_supported else 'Nein',
             'capabilities': capabilities_list,
+            'capabilities_after_tls': combined_capabilities_after,
             'auth_status': auth_status
         }
         

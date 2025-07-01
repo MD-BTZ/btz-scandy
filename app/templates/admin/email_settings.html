@@ -92,7 +92,23 @@
                 <div class="divider"></div>
                 
                 <!-- Anmeldedaten -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Authentifizierung -->
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text font-bold text-lg">SMTP-Authentifizierung verwenden</span>
+                        <input type="checkbox" name="use_auth" class="toggle toggle-primary" 
+                               {% if config.use_auth != False %}checked{% endif %}>
+                    </label>
+                    <label class="label">
+                        <span class="label-text-alt text-info">
+                            Aktivieren Sie diese Option, wenn Ihr SMTP-Server Authentifizierung benötigt. 
+                            Für lokale Server ohne Authentifizierung deaktivieren.
+                        </span>
+                    </label>
+                </div>
+                
+                <div id="auth_fields" class="grid grid-cols-1 md:grid-cols-2 gap-6" 
+                     style="display: {% if config.use_auth != False %}block{% else %}none{% endif %};">
                     <div class="form-control">
                         <label class="label">
                             <span class="label-text font-medium">E-Mail-Adresse</span>
@@ -114,6 +130,18 @@
                             <span class="label-text-alt text-info">Für Gmail: App-Passwort verwenden</span>
                         </label>
                     </div>
+                </div>
+                
+                <div id="no_auth_fields" class="form-control" 
+                     style="display: {% if config.use_auth == False %}block{% else %}none{% endif %};">
+                    <label class="label">
+                        <span class="label-text font-medium">Absender-E-Mail-Adresse</span>
+                    </label>
+                    <input type="email" name="sender_email" value="{{ config.mail_username or 'noreply@' + config.mail_server.replace('smtp.', '') }}" 
+                           class="input input-bordered" placeholder="noreply@ihre-domain.de">
+                    <label class="label">
+                        <span class="label-text-alt text-info">E-Mail-Adresse, die als Absender angezeigt wird</span>
+                    </label>
                 </div>
                 
                 <div class="form-control">
@@ -258,6 +286,26 @@ document.addEventListener('DOMContentLoaded', function() {
         
         tlsToggle.addEventListener('change', updateTlsStatus);
         updateTlsStatus(); // Initial status setzen
+    }
+    
+    // Auth Toggle Funktionalität
+    const authToggle = document.querySelector('input[name="use_auth"]');
+    const authFields = document.getElementById('auth_fields');
+    const noAuthFields = document.getElementById('no_auth_fields');
+    
+    if (authToggle && authFields && noAuthFields) {
+        function updateAuthFields() {
+            if (authToggle.checked) {
+                authFields.style.display = 'grid';
+                noAuthFields.style.display = 'none';
+            } else {
+                authFields.style.display = 'none';
+                noAuthFields.style.display = 'block';
+            }
+        }
+        
+        authToggle.addEventListener('change', updateAuthFields);
+        updateAuthFields(); // Initial status setzen
     }
     
     // Diagnose-Button

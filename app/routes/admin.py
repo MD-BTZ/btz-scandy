@@ -3585,15 +3585,32 @@ def email_settings():
             
             if action == 'save':
                 # E-Mail-Konfiguration speichern
-                config_data = {
-                    'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
-                    'mail_port': int(request.form.get('mail_port', 587)),
-                    'mail_use_tls': request.form.get('mail_use_tls') == 'on',
-                    'mail_username': request.form.get('mail_username', ''),
-                    'mail_password': request.form.get('mail_password', ''),
-                    'test_email': request.form.get('test_email', ''),
-                    'enabled': request.form.get('enabled') == 'on'
-                }
+                use_auth = request.form.get('use_auth') == 'on'
+                
+                if use_auth:
+                    # Mit Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('mail_username', ''),
+                        'mail_password': request.form.get('mail_password', ''),
+                        'test_email': request.form.get('test_email', ''),
+                        'enabled': request.form.get('enabled') == 'on',
+                        'use_auth': True
+                    }
+                else:
+                    # Ohne Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('sender_email', ''),  # Absender-E-Mail
+                        'mail_password': '',  # Kein Passwort
+                        'test_email': request.form.get('test_email', ''),
+                        'enabled': request.form.get('enabled') == 'on',
+                        'use_auth': False
+                    }
                 
                 if save_email_config(config_data):
                     # E-Mail-Konfiguration neu laden
@@ -3605,14 +3622,28 @@ def email_settings():
                     
             elif action == 'test':
                 # E-Mail-Konfiguration testen
-                config_data = {
-                    'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
-                    'mail_port': int(request.form.get('mail_port', 587)),
-                    'mail_use_tls': request.form.get('mail_use_tls') == 'on',
-                    'mail_username': request.form.get('mail_username', ''),
-                    'mail_password': request.form.get('mail_password', ''),
-                    'test_email': request.form.get('test_email', '')
-                }
+                use_auth = request.form.get('use_auth') == 'on'
+                
+                if use_auth:
+                    # Mit Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('mail_username', ''),
+                        'mail_password': request.form.get('mail_password', ''),
+                        'test_email': request.form.get('test_email', '')
+                    }
+                else:
+                    # Ohne Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('sender_email', ''),  # Absender-E-Mail
+                        'mail_password': '',  # Kein Passwort
+                        'test_email': request.form.get('test_email', '')
+                    }
                 
                 success, message = test_email_config(config_data)
                 if success:
@@ -3630,7 +3661,8 @@ def email_settings():
                 'mail_username': '',
                 'mail_password': '',
                 'test_email': '',
-                'enabled': False
+                'enabled': False,
+                'use_auth': True
             }
         
         return render_template('admin/email_settings.html', config=config)
