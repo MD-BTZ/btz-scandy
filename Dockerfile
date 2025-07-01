@@ -27,6 +27,7 @@ WORKDIR /app
 
 # Aktualisiere npm und installiere Abhängigkeiten
 RUN npm install --silent
+RUN npm update --silent
 RUN npm audit fix --silent || true
 RUN npm run build:css
 
