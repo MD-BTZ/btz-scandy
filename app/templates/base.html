@@ -94,6 +94,10 @@
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Mitarbeiter</span>
             </a>
+            {% endif %}
+            
+            {# Ticketsystem für alle eingeloggten Benutzer #}
+            {% if current_user.is_authenticated %}
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">

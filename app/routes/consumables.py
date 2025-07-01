@@ -93,7 +93,7 @@ def add():
                        locations=locations)
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
-@mitarbeiter_required
+@login_required
 def detail(barcode):
     """Zeigt die Details eines Verbrauchsmaterials und verarbeitet Updates"""
     if request.method == 'POST':

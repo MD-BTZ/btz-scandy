@@ -38,7 +38,7 @@ def index():
                            is_admin=current_user.is_admin)
 
 @bp.route('/add', methods=['GET', 'POST'])
-@mitarbeiter_required
+@login_required
 def add():
     """Fügt ein neues Werkzeug hinzu"""
     if request.method == 'POST':
@@ -204,7 +204,7 @@ def detail(barcode):
                          lending_history=history)
 
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
-@mitarbeiter_required
+@login_required
 def edit(barcode):
     """Bearbeitet ein Werkzeug"""
     try:

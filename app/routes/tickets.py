@@ -223,7 +223,11 @@ def view(ticket_id):
         return redirect(url_for('tickets.create'))
         
     # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
-    if ticket.get('created_by') != current_user.username and current_user.role not in ['admin', 'mitarbeiter']:
+    if (
+        ticket.get('created_by') != current_user.username
+        and ticket.get('assigned_to') not in [None, '', current_user.username]
+        and current_user.role not in ['admin', 'mitarbeiter']
+    ):
         logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
         flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
         return redirect(url_for('tickets.create'))
