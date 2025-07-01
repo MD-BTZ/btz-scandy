@@ -3718,74 +3718,8 @@ def test_weekly_backup():
             'message': f'Fehler beim Versenden: {str(e)}'
         })
 
-# Docker Update-Verwaltung
-@bp.route('/docker-update', methods=['GET', 'POST'])
-@admin_required
-def docker_update():
-    """Docker Update-Verwaltungsseite"""
-    return render_template('admin/docker-update.html')
 
-@bp.route('/docker-update/execute', methods=['POST'])
-@admin_required
-def execute_docker_update():
-    """Führt das Docker-Update aus"""
-    try:
-        import subprocess
-        import os
-        import threading
-        import time
-        
-        # Prüfe ob update.sh existiert
-        update_script = os.path.join(current_app.root_path, '..', 'update.sh')
-        if not os.path.exists(update_script):
-            return jsonify({
-                'status': 'error',
-                'message': 'Update-Script nicht gefunden'
-            }), 404
-        
-        # Führe das Update in einem separaten Thread aus
-        def run_update():
-            try:
-                # Ändere zum Projektverzeichnis
-                project_dir = os.path.dirname(update_script)
-                os.chdir(project_dir)
-                
-                # Führe das Update-Script aus
-                result = subprocess.run(
-                    ['./update.sh'],
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 Minuten Timeout
-                )
-                
-                # Speichere das Ergebnis in einer temporären Datei
-                with open('/tmp/scandy_update_result.txt', 'w') as f:
-                    f.write(f"Return Code: {result.returncode}\n")
-                    f.write(f"STDOUT:\n{result.stdout}\n")
-                    f.write(f"STDERR:\n{result.stderr}\n")
-                
-            except subprocess.TimeoutExpired:
-                with open('/tmp/scandy_update_result.txt', 'w') as f:
-                    f.write("Update timed out after 5 minutes\n")
-            except Exception as e:
-                with open('/tmp/scandy_update_result.txt', 'w') as f:
-                    f.write(f"Error: {str(e)}\n")
-        
-        # Starte Update in separatem Thread
-        update_thread = threading.Thread(target=run_update)
-        update_thread.daemon = True
-        update_thread.start()
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Update gestartet. Bitte prüfen Sie den Status in einigen Minuten.'
-        })
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Starten des Docker-Updates: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Fehler beim Starten des Updates: {str(e)}'
-        }), 500
+
+
 
 

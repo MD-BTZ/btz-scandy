@@ -224,8 +224,7 @@
 | `/admin/updates/apply` | POST | `@admin_required` | Updates anwenden |
 | `/admin/updates/status` | GET | `@admin_required` | Update-Status |
 | `/admin/updates/history` | GET | `@admin_required` | Update-Historie |
-| `/admin/docker-update` | GET | `@admin_required` | Docker Update-Verwaltung |
-| `/admin/docker-update/execute` | POST | `@admin_required` | Docker Update ausführen |
+
 
 
 ### 📧 E-Mail (Admin)

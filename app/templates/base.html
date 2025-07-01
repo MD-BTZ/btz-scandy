@@ -213,18 +213,7 @@
                                 <i class="fas fa-envelope mr-2"></i>E-Mail-Einstellungen
                             </a>
                         </li>
-                        <li>
-                            <a href="{{ url_for('admin.docker_update') }}" class="{% if request.endpoint and 'admin.docker_update' in request.endpoint %}active{% endif %}">
-                                <i class="fas fa-sync-alt mr-2"></i>Docker Update
-                            </a>
-                        </li>
-                        <!-- Update-Button deaktiviert
-                        <li>
-                            <a href="{{ url_for('admin.updates') }}" class="{% if request.endpoint and 'admin.updates' in request.endpoint %}active{% endif %}">
-                                <i class="fas fa-sync-alt mr-2"></i>System-Updates
-                            </a>
-                        </li>
-                        -->
+
                         {% endif %}
                         <li>
                             <a href="{{ url_for('admin.manual_lending') }}" class="{% if request.endpoint and request.endpoint == 'admin.manual_lending' %}active{% endif %}">
