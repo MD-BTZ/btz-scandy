@@ -2,7 +2,7 @@
 Flask==3.0.2
 Flask-Login==0.6.3
 Flask-WTF==1.2.1
-Werkzeug==3.0.1
+Werkzeug==3.0.3
 WTForms==3.1.2
 python-dotenv==1.0.1
 
@@ -13,7 +13,7 @@ bcrypt==4.1.2
 Pillow>=10.2.0
 
 # Web server
-gunicorn==21.2.0
+gunicorn==23.0.0
 
 # Barcode generation
 python-barcode==0.14.0
@@ -30,14 +30,14 @@ Flask-Session==0.5.0
 # Excel processing (nur wenn benötigt)
 openpyxl==3.1.2
 
-# Data processing (nur wenn benötigt)
-pandas==2.1.4
+# Data processing (nur wenn benötigt) - Python 3.13 kompatibel
+pandas>=2.2.0
 
 # Scheduling
 APScheduler==3.9.1
 
 # Production server
-waitress==2.1.2
+waitress==3.0.1
 
 # Word document processing
 python-docx==1.1.0
@@ -51,4 +51,7 @@ dnspython==2.4.2
 # Entfernt: docker==7.0.0 (nicht im Container benötigt)
 
 # Email
-Flask-Mail 
+Flask-Mail
+
+# Setuptools (für Sicherheitsupdates)
+setuptools>=78.1.1 

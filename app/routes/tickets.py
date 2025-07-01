@@ -919,7 +919,6 @@ def external_create_order():
 
 def _handle_auftrag_creation(external=False):
     """Gemeinsame Logik für interne und externe Auftragserstellung."""
-    """Öffentliche Auftragserstellung ohne Login."""
     if request.method == 'POST':
         try:
             # Hole die Formulardaten

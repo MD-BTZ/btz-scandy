@@ -21,6 +21,14 @@ def index():
         workers = mongodb.find('workers', {'deleted': {'$ne': True}})
         workers = list(workers)
         
+        # Für jeden Mitarbeiter die aktiven Ausleihen zählen
+        for worker in workers:
+            active_lendings_count = mongodb.count_documents('lendings', {
+                'worker_barcode': worker.get('barcode'),
+                'returned_at': None
+            })
+            worker['active_lendings'] = active_lendings_count
+        
         # Hole alle Abteilungen für Filter
         departments = get_departments_from_settings()
         
@@ -29,7 +37,8 @@ def index():
         
         return render_template('workers/index.html', 
                            workers=workers,
-                           departments=departments)
+                           departments=departments,
+                           is_admin=current_user.is_admin)
                            
     except Exception as e:
         logger.error(f"Fehler beim Laden der Mitarbeiter: {str(e)}", exc_info=True)
@@ -349,12 +358,7 @@ def timesheet_list():
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
         return redirect(url_for('main.index'))
-
-@bp.route('/teilnehmer/timesheets')
-@teilnehmer_required
-def teilnehmer_timesheet_list():
-    """Spezielle Route für Teilnehmer zu den Wochenberichten"""
-    return timesheet_list()
+    
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
     
@@ -465,6 +469,12 @@ def teilnehmer_timesheet_list():
                          datetime=datetime,
                          timedelta=timedelta
     )
+
+@bp.route('/teilnehmer/timesheets')
+@teilnehmer_required
+def teilnehmer_timesheet_list():
+    """Spezielle Route für Teilnehmer zu den Wochenberichten"""
+    return timesheet_list()
 
 @bp.route('/timesheet/new', methods=['GET', 'POST'])
 @login_required

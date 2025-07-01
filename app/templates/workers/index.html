@@ -1,13 +1,11 @@
 {% extends "shared/list_base.html" %}
 
 {% block actions %}
-{% if is_admin %}
 <div class="flex gap-2">
     <a href="{{ url_for('workers.add') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Neuer Mitarbeiter
     </a>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block filters %}
@@ -25,9 +23,7 @@
 <th>Abteilung</th>
 <th>E-Mail</th>
 <th>Status</th>
-{% if is_admin %}
 <th class="text-right">Aktionen</th>
-{% endif %}
 {% endblock %}
 
 {% block table_rows %}
@@ -74,7 +70,6 @@
             </div>
         {% endif %}
     </td>
-    {% if is_admin %}
     <td class="text-right">
         <div class="btn-group">
             <a href="{{ url_for('workers.details', original_barcode=worker.barcode) }}" class="btn btn-sm btn-ghost">
@@ -85,7 +80,6 @@
             </button>
         </div>
     </td>
-    {% endif %}
 </tr>
 {% endfor %}
 {% endblock %}
