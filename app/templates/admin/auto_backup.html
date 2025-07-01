@@ -18,15 +18,15 @@
                     <div id="autoBackupStatus" class="space-y-4">
                         <div class="flex items-center justify-between">
                             <span class="font-semibold text-gray-600">Status:</span>
-                            <span id="statusIndicator" class="badge bg-gray-400 text-white">Lade...</span>
+                            <span id="statusIndicator" class="badge badge-info">Lade...</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="font-semibold text-gray-600">Nächste Backups:</span>
-                            <span id="nextBackup" class="text-sm text-gray-700">Lade...</span>
+                            <span id="nextBackup" class="text-sm text-gray-700 font-medium">Lade...</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="font-semibold text-gray-600">Backup-Zeiten:</span>
-                            <span id="backupTimes" class="text-sm text-gray-700">Lade...</span>
+                            <span id="backupTimes" class="text-sm text-gray-700 font-medium">Lade...</span>
                         </div>
                     </div>
                 </div>
@@ -36,16 +36,16 @@
             <div class="card bg-gray-50 border border-gray-200 mb-6">
                 <div class="card-body">
                     <h3 class="card-title text-lg mb-4 text-gray-700">Steuerung</h3>
-                    <div class="flex gap-4">
-                        <button id="startAutoBackup" class="btn bg-orange-500 hover:bg-orange-600 text-white border-0">
+                    <div class="flex gap-4 flex-wrap">
+                        <button id="startAutoBackup" class="btn btn-success">
                             <i class="fas fa-play mr-2"></i>
                             Starten
                         </button>
-                        <button id="stopAutoBackup" class="btn bg-gray-600 hover:bg-gray-700 text-white border-0">
+                        <button id="stopAutoBackup" class="btn btn-error">
                             <i class="fas fa-stop mr-2"></i>
                             Stoppen
                         </button>
-                        <button id="refreshStatus" class="btn btn-outline border-gray-300 text-gray-700 hover:bg-gray-100">
+                        <button id="refreshStatus" class="btn btn-primary">
                             <i class="fas fa-sync-alt mr-2"></i>
                             Status aktualisieren
                         </button>
@@ -57,16 +57,31 @@
             <div class="card bg-gray-50 border border-gray-200 mb-6">
                 <div class="card-body">
                     <h3 class="card-title text-lg mb-4 text-gray-700">Konfiguration</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="label">
-                                <span class="label-text font-semibold text-gray-600">Backup-Zeiten:</span>
-                            </label>
-                            <div class="text-sm text-gray-600">
-                                <p>• 06:00 Uhr - Morgens</p>
-                                <p>• 18:00 Uhr - Abends</p>
+                    
+                    <!-- Backup-Zeiten konfigurieren -->
+                    <div class="mb-6">
+                        <form method="POST" class="space-y-4">
+                            <input type="hidden" name="action" value="save_times">
+                            <div>
+                                <label class="label">
+                                    <span class="label-text font-semibold text-gray-600">Backup-Zeiten konfigurieren:</span>
+                                </label>
+                                <div class="text-sm text-gray-500 mb-2">
+                                    Geben Sie die gewünschten Backup-Zeiten im Format HH:MM ein, getrennt durch Kommas (z.B. 06:00,18:00)
+                                </div>
+                                <input type="text" name="backup_times" 
+                                       value="{{ backup_times|join(',') }}" 
+                                       placeholder="06:00,18:00"
+                                       class="input input-bordered w-full max-w-md">
                             </div>
-                        </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save mr-2"></i>
+                                Zeiten speichern
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="space-y-4">
                         <div>
                             <label class="label">
                                 <span class="label-text font-semibold text-gray-600">Backup-Inhalt:</span>
@@ -100,7 +115,7 @@
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button id="refreshLogs" class="btn btn-sm btn-outline border-gray-300 text-gray-700 hover:bg-gray-100">
+                        <button id="refreshLogs" class="btn btn-primary btn-sm">
                             <i class="fas fa-sync-alt mr-2"></i>
                             Logs aktualisieren
                         </button>
@@ -137,10 +152,10 @@ function loadAutoBackupStatus() {
                 // Status-Indikator
                 const statusIndicator = document.getElementById('statusIndicator');
                 if (status.running) {
-                    statusIndicator.className = 'badge bg-orange-500 text-white';
+                    statusIndicator.className = 'badge badge-success';
                     statusIndicator.textContent = 'Aktiv';
                 } else {
-                    statusIndicator.className = 'badge bg-gray-500 text-white';
+                    statusIndicator.className = 'badge badge-error';
                     statusIndicator.textContent = 'Gestoppt';
                 }
                 

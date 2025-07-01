@@ -3566,12 +3566,38 @@ def auto_backup_logs():
             'message': f'Fehler beim Abrufen der Logs: {str(e)}'
         })
 
-@bp.route('/auto-backup')
+@bp.route('/auto-backup', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def auto_backup():
     """Automatisches Backup-System Verwaltungsseite"""
-    return render_template('admin/auto_backup.html')
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        
+        if request.method == 'POST':
+            action = request.form.get('action')
+            
+            if action == 'save_times':
+                # Backup-Zeiten speichern
+                times_input = request.form.get('backup_times', '')
+                times_list = [t.strip() for t in times_input.split(',') if t.strip()]
+                
+                success, message = auto_backup_scheduler.save_backup_times(times_list)
+                
+                if success:
+                    flash('Backup-Zeiten erfolgreich gespeichert.', 'success')
+                else:
+                    flash(f'Fehler beim Speichern der Backup-Zeiten: {message}', 'error')
+        
+        # Lade aktuelle Backup-Zeiten
+        current_times = auto_backup_scheduler.get_backup_times()
+        
+        return render_template('admin/auto_backup.html', backup_times=current_times)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei Auto-Backup-Einstellungen: {e}")
+        flash('Fehler beim Laden der Auto-Backup-Einstellungen.', 'error')
+        return render_template('admin/auto_backup.html', backup_times=['06:00', '18:00'])
 
 @bp.route('/email_settings', methods=['GET', 'POST'])
 @admin_required

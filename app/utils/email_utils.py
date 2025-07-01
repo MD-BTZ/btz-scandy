@@ -56,6 +56,8 @@ def save_email_config(config_data):
         config_data['mail_default_sender'] = config_data['mail_username']
         
         # Konfiguration speichern oder aktualisieren
+        # HINWEIS: Passwort wird im Klartext gespeichert, da es für SMTP-Auth benötigt wird
+        # Für zusätzliche Sicherheit sollte der Server abgesichert werden
         mongodb.update_one(
             'email_config',
             {'_id': 'email_config'},
@@ -377,6 +379,72 @@ def _log_email(subject, recipient, body):
     logger.info("=" * 60)
 
 
+def _send_email_direct(recipient, subject, body, attachments=None):
+    """Sendet E-Mails direkt über SMTP ohne Speicherung im 'Gesendet'-Ordner"""
+    try:
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.base import MIMEBase
+        from email import encoders
+        import smtplib
+        
+        # Lade E-Mail-Konfiguration
+        config = get_email_config()
+        if not config or not config['enabled']:
+            logger.error("E-Mail-Konfiguration nicht verfügbar oder deaktiviert")
+            return False
+        
+        # Erstelle E-Mail-Nachricht
+        msg = MIMEMultipart()
+        msg['From'] = config['mail_username']
+        msg['To'] = recipient
+        msg['Subject'] = subject
+        
+        # Spezielle Header um Speicherung im "Gesendet"-Ordner zu verhindern
+        msg['X-Auto-Response-Suppress'] = 'All'
+        msg['Precedence'] = 'bulk'
+        msg['X-Mailer'] = 'Scandy-System'
+        
+        # Body hinzufügen
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # Anhänge hinzufügen (falls vorhanden)
+        if attachments:
+            for attachment in attachments:
+                with open(attachment['path'], 'rb') as f:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(f.read())
+                    encoders.encode_base64(part)
+                    part.add_header('Content-Disposition', 
+                                   f'attachment; filename= {attachment["filename"]}')
+                    msg.attach(part)
+        
+        # SMTP-Verbindung aufbauen
+        if config['mail_use_tls'] and config['mail_port'] == 465:
+            server = smtplib.SMTP_SSL(config['mail_server'], config['mail_port'])
+        else:
+            server = smtplib.SMTP(config['mail_server'], config['mail_port'])
+        
+        # STARTTLS aktivieren falls konfiguriert
+        if config['mail_use_tls'] and config['mail_port'] == 587:
+            server.starttls()
+        
+        # Authentifizierung (falls erforderlich)
+        if config.get('use_auth', True) and config['mail_username'] and config['mail_password']:
+            server.login(config['mail_username'], config['mail_password'])
+        
+        # E-Mail senden
+        text = msg.as_string()
+        server.sendmail(config['mail_username'], recipient, text)
+        server.quit()
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Fehler beim direkten E-Mail-Versand: {e}")
+        return False
+
+
 def send_password_mail(recipient, password):
     subject = 'Ihr Zugang zu Scandy'
     body = f"Willkommen bei Scandy!\n\nIhr initiales Passwort lautet: {password}\nBitte ändern Sie es nach dem ersten Login.\n\nViele Grüße\nIhr Scandy-Team"
@@ -386,11 +454,11 @@ def send_password_mail(recipient, password):
         return True
     else:
         try:
-            msg = Message(subject, recipients=[recipient])
-            msg.body = body
-            mail.send(msg)
-            logger.info(f"Passwort-E-Mail erfolgreich an {recipient} gesendet")
-            return True
+            # Verwende direkte SMTP-Verbindung um "Gesendet"-Ordner zu vermeiden
+            success = _send_email_direct(recipient, subject, body)
+            if success:
+                logger.info(f"Passwort-E-Mail erfolgreich an {recipient} gesendet (ohne Speicherung im Gesendet-Ordner)")
+            return success
         except Exception as e:
             logger.error(f"Fehler beim Versenden der Passwort-E-Mail: {e}")
             return False
@@ -411,11 +479,11 @@ def send_password_reset_mail(recipient, password=None, reset_link=None):
         return True
     else:
         try:
-            msg = Message(subject, recipients=[recipient])
-            msg.body = body
-            mail.send(msg)
-            logger.info(f"Passwort-Reset-E-Mail erfolgreich an {recipient} gesendet")
-            return True
+            # Verwende direkte SMTP-Verbindung um "Gesendet"-Ordner zu vermeiden
+            success = _send_email_direct(recipient, subject, body)
+            if success:
+                logger.info(f"Passwort-Reset-E-Mail erfolgreich an {recipient} gesendet (ohne Speicherung im Gesendet-Ordner)")
+            return success
         except Exception as e:
             logger.error(f"Fehler beim Versenden der Passwort-Reset-E-Mail: {e}")
             return False
@@ -435,14 +503,18 @@ def send_backup_mail(recipient, backup_path):
         return True
     else:
         try:
-            msg = Message(subject, recipients=[recipient])
-            msg.body = body
+            # Verwende direkte SMTP-Verbindung um "Gesendet"-Ordner zu vermeiden
+            attachments = None
             if os.path.getsize(backup_path) < 15 * 1024 * 1024:  # 15MB Limit
-                with open(backup_path, 'rb') as f:
-                    msg.attach(os.path.basename(backup_path), 'application/zip', f.read())
-            mail.send(msg)
-            logger.info(f"Backup-E-Mail erfolgreich an {recipient} gesendet")
-            return True
+                attachments = [{
+                    'path': backup_path,
+                    'filename': os.path.basename(backup_path)
+                }]
+            
+            success = _send_email_direct(recipient, subject, body, attachments)
+            if success:
+                logger.info(f"Backup-E-Mail erfolgreich an {recipient} gesendet (ohne Speicherung im Gesendet-Ordner)")
+            return success
         except Exception as e:
             logger.error(f"Fehler beim Versenden der Backup-E-Mail: {e}")
             return False

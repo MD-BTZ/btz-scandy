@@ -313,6 +313,7 @@ function initAutoBackup() {
 async function loadAutoBackupStatus() {
     const statusElement = document.getElementById('autoBackupStatus');
     const nextBackupElement = document.getElementById('nextBackupTime');
+    const backupTimesElement = document.getElementById('backupTimesDisplay');
     
     if (!statusElement || !nextBackupElement) return;
 
@@ -334,16 +335,27 @@ async function loadAutoBackupStatus() {
             
             // Nächste Backup-Zeit
             nextBackupElement.textContent = status.next_backup;
+            
+            // Backup-Zeiten anzeigen
+            if (backupTimesElement && status.backup_times) {
+                backupTimesElement.textContent = status.backup_times.join(' Uhr, ') + ' Uhr';
+            }
         } else {
             statusElement.className = 'badge badge-warning';
             statusElement.textContent = 'Fehler';
             nextBackupElement.textContent = 'Unbekannt';
+            if (backupTimesElement) {
+                backupTimesElement.textContent = 'Unbekannt';
+            }
         }
     } catch (error) {
         console.error('Fehler beim Laden des Auto-Backup-Status:', error);
         statusElement.className = 'badge badge-warning';
         statusElement.textContent = 'Fehler';
         nextBackupElement.textContent = 'Unbekannt';
+        if (backupTimesElement) {
+            backupTimesElement.textContent = 'Unbekannt';
+        }
     }
 }
 

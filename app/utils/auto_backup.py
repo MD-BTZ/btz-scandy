@@ -20,7 +20,7 @@ class AutoBackupScheduler:
         self.running = False
         self.thread = None
         
-        # Backup-Zeiten (24h Format)
+        # Standard-Backup-Zeiten (24h Format) - werden aus DB überschrieben
         self.backup_times = [
             dt_time(6, 0),   # 06:00 Uhr
             dt_time(18, 0)   # 18:00 Uhr
@@ -30,6 +30,86 @@ class AutoBackupScheduler:
         self.log_file = Path(__file__).parent.parent.parent / 'logs' / 'auto_backup.log'
         self.log_file.parent.mkdir(exist_ok=True)
         
+        # Lade konfigurierte Zeiten beim Start
+        self._load_backup_times()
+        
+    def _load_backup_times(self):
+        """Lädt die konfigurierten Backup-Zeiten aus der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Lade konfigurierte Backup-Zeiten
+            backup_times_setting = mongodb.find_one('settings', {'key': 'auto_backup_times'})
+            
+            if backup_times_setting and backup_times_setting.get('value'):
+                # Parse die Zeiten aus dem String-Format "06:00,18:00"
+                time_strings = backup_times_setting['value'].split(',')
+                self.backup_times = []
+                
+                for time_str in time_strings:
+                    time_str = time_str.strip()
+                    if ':' in time_str:
+                        try:
+                            hour, minute = map(int, time_str.split(':'))
+                            if 0 <= hour <= 23 and 0 <= minute <= 59:
+                                self.backup_times.append(dt_time(hour, minute))
+                        except ValueError:
+                            logger.warning(f"Ungültige Backup-Zeit: {time_str}")
+                
+                # Stelle sicher, dass mindestens eine Zeit vorhanden ist
+                if not self.backup_times:
+                    self.backup_times = [dt_time(6, 0), dt_time(18, 0)]
+                    
+                logger.info(f"Backup-Zeiten geladen: {[t.strftime('%H:%M') for t in self.backup_times]}")
+            else:
+                logger.info("Keine konfigurierten Backup-Zeiten gefunden, verwende Standard-Zeiten")
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Backup-Zeiten: {e}")
+            # Verwende Standard-Zeiten bei Fehlern
+            self.backup_times = [dt_time(6, 0), dt_time(18, 0)]
+    
+    def save_backup_times(self, times_list):
+        """Speichert neue Backup-Zeiten in der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Validiere und konvertiere Zeiten
+            valid_times = []
+            for time_str in times_list:
+                time_str = time_str.strip()
+                if ':' in time_str:
+                    try:
+                        hour, minute = map(int, time_str.split(':'))
+                        if 0 <= hour <= 23 and 0 <= minute <= 59:
+                            valid_times.append(f"{hour:02d}:{minute:02d}")
+                    except ValueError:
+                        logger.warning(f"Ungültige Backup-Zeit übersprungen: {time_str}")
+            
+            if valid_times:
+                # Speichere in Datenbank
+                times_string = ','.join(valid_times)
+                mongodb.update_one('settings', 
+                                 {'key': 'auto_backup_times'}, 
+                                 {'$set': {'value': times_string}}, 
+                                 upsert=True)
+                
+                # Aktualisiere lokale Zeiten
+                self.backup_times = [dt_time(int(t.split(':')[0]), int(t.split(':')[1])) for t in valid_times]
+                
+                logger.info(f"Backup-Zeiten aktualisiert: {valid_times}")
+                return True, "Backup-Zeiten erfolgreich gespeichert"
+            else:
+                return False, "Keine gültigen Zeiten gefunden"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der Backup-Zeiten: {e}")
+            return False, f"Fehler beim Speichern: {str(e)}"
+    
+    def get_backup_times(self):
+        """Gibt die aktuellen Backup-Zeiten zurück"""
+        return [t.strftime('%H:%M') for t in self.backup_times]
+    
     def start(self):
         """Startet den automatischen Backup-Scheduler"""
         if self.running:
