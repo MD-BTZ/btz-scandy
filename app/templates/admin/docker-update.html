@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Docker Update{% endblock %}
+
+{% block head %}
+<script src="{{ url_for('static', filename='js/docker-update.js') }}" defer></script>
+{% endblock %}
+
+{% block page_content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-sync-alt text-primary mr-2"></i>
+                Docker Update
+            </h2>
+            
+            <div class="divider"></div>
+            
+            <div class="space-y-6">
+                <!-- Wichtige Warnung -->
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <h3 class="font-bold">Wichtige Information</h3>
+                        <p>Während des Updates ist die Scandy-App für ca. 10-15 Minuten nicht erreichbar. 
+                        Bitte führen Sie das Update nur durch, wenn keine anderen Benutzer aktiv sind.</p>
+                    </div>
+                </div>
+                
+                <!-- Update-Informationen -->
+                <div class="bg-info/10 p-4 rounded-lg">
+                    <h3 class="font-bold mb-2 flex items-center">
+                        <i class="fas fa-info-circle text-info mr-2"></i>
+                        Update-Informationen
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li>• 📥 Holt neuesten Code von GitHub</li>
+                        <li>• ✅ Scandy App wird neu gebaut und aktualisiert</li>
+                        <li>• 🔒 MongoDB bleibt unverändert</li>
+                        <li>• 🔒 Mongo Express bleibt unverändert</li>
+                        <li>• 💾 Alle Daten bleiben erhalten</li>
+                        <li>• ⏱️ Downtime: ca. 10-15 Minuten</li>
+                    </ul>
+                </div>
+                
+                <!-- Update-Aktionen -->
+                <div class="flex gap-4">
+                    <button id="startUpdate" class="btn btn-primary">
+                        <i class="fas fa-play mr-2"></i>
+                        Update starten
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bestätigungs-Modal -->
+<div id="confirmModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Update bestätigen</h3>
+        <div class="py-4">
+            <div class="alert alert-warning mb-4">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Die App wird für ca. 10-15 Minuten nicht erreichbar sein!</span>
+            </div>
+            <p>Sind Sie sicher, dass Sie das Docker-Update starten möchten?</p>
+            <ul class="mt-2 text-sm space-y-1">
+                <li>• Alle anderen Benutzer sollten sich abmelden</li>
+                <li>• Das Update kann nicht abgebrochen werden</li>
+                <li>• Nach dem Update ist die App automatisch wieder verfügbar</li>
+            </ul>
+        </div>
+        <div class="modal-action">
+            <button id="confirmUpdate" class="btn btn-primary">Update starten</button>
+            <button id="cancelUpdate" class="btn">Abbrechen</button>
+        </div>
+    </div>
+</div>
+{% endblock %} 

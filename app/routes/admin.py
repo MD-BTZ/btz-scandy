@@ -2911,117 +2911,7 @@ def available_logos():
             'message': 'Fehler beim Laden der Logos'
         }), 500
 
-# Update-Verwaltung
-@bp.route('/updates')
-@admin_required
-def updates():
-    """Update-Verwaltungsseite"""
-    return render_template('admin/updates.html')
 
-@bp.route('/updates/check', methods=['POST'])
-@admin_required
-def check_updates():
-    """Prüft auf verfügbare Updates"""
-    try:
-        from app.utils.update_manager import UpdateManager
-        
-        update_manager = UpdateManager(current_app.root_path)
-        update_info = update_manager.check_for_updates()
-        
-        if update_info.get('update_available'):
-            return jsonify({
-                'status': 'success',
-                'updates_available': True,
-                'current_version': update_info['current_version'],
-                'latest_version': update_info['latest_version'],
-                'release_notes': update_info.get('release_notes', ''),
-                'commits_behind': f"Version {update_info['current_version']} → {update_info['latest_version']}"
-            })
-        else:
-            return jsonify({
-                'status': 'success',
-                'updates_available': False,
-                'current_version': update_info['current_version'],
-                'latest_version': update_info['latest_version'],
-                'message': 'Keine Updates verfügbar'
-            })
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Prüfen auf Updates: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Fehler beim Prüfen auf Updates: {str(e)}'
-        }), 500
-
-@bp.route('/updates/apply', methods=['POST'])
-@admin_required
-def apply_updates():
-    """Führt ein Update durch"""
-    try:
-        from app.utils.update_manager import UpdateManager
-        
-        update_manager = UpdateManager(current_app.root_path)
-        result = update_manager.perform_update()
-        
-        if result.get('success'):
-            return jsonify({
-                'status': 'success',
-                'message': result['message'],
-                'backup_file': result.get('backup_file', '')
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': result.get('message', 'Unbekannter Fehler beim Update')
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Durchführen des Updates: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Fehler beim Durchführen des Updates: {str(e)}'
-        }), 500
-
-@bp.route('/updates/status')
-@admin_required
-def update_status():
-    """Gibt den aktuellen Update-Status zurück"""
-    try:
-        from app.utils.update_manager import UpdateManager
-        
-        update_manager = UpdateManager(current_app.root_path)
-        status = update_manager.get_update_status()
-        
-        return jsonify(status)
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen des Update-Status: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'error': str(e)
-        }), 500
-
-@bp.route('/updates/history')
-@admin_required
-def update_history():
-    """Gibt die Update-Historie zurück"""
-    try:
-        from app.utils.update_manager import UpdateManager
-        
-        update_manager = UpdateManager(current_app.root_path)
-        history = update_manager.get_update_history()
-        
-        return jsonify({
-            'status': 'success',
-            'history': history
-        })
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen der Update-Historie: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Fehler beim Abrufen der Update-Historie: {str(e)}'
-        }), 500
 
 @bp.route('/tickets/<ticket_id>/update-assignment', methods=['POST'])
 @login_required
@@ -3827,3 +3717,75 @@ def test_weekly_backup():
             'success': False,
             'message': f'Fehler beim Versenden: {str(e)}'
         })
+
+# Docker Update-Verwaltung
+@bp.route('/docker-update', methods=['GET', 'POST'])
+@admin_required
+def docker_update():
+    """Docker Update-Verwaltungsseite"""
+    return render_template('admin/docker-update.html')
+
+@bp.route('/docker-update/execute', methods=['POST'])
+@admin_required
+def execute_docker_update():
+    """Führt das Docker-Update aus"""
+    try:
+        import subprocess
+        import os
+        import threading
+        import time
+        
+        # Prüfe ob update.sh existiert
+        update_script = os.path.join(current_app.root_path, '..', 'update.sh')
+        if not os.path.exists(update_script):
+            return jsonify({
+                'status': 'error',
+                'message': 'Update-Script nicht gefunden'
+            }), 404
+        
+        # Führe das Update in einem separaten Thread aus
+        def run_update():
+            try:
+                # Ändere zum Projektverzeichnis
+                project_dir = os.path.dirname(update_script)
+                os.chdir(project_dir)
+                
+                # Führe das Update-Script aus
+                result = subprocess.run(
+                    ['./update.sh'],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 Minuten Timeout
+                )
+                
+                # Speichere das Ergebnis in einer temporären Datei
+                with open('/tmp/scandy_update_result.txt', 'w') as f:
+                    f.write(f"Return Code: {result.returncode}\n")
+                    f.write(f"STDOUT:\n{result.stdout}\n")
+                    f.write(f"STDERR:\n{result.stderr}\n")
+                
+            except subprocess.TimeoutExpired:
+                with open('/tmp/scandy_update_result.txt', 'w') as f:
+                    f.write("Update timed out after 5 minutes\n")
+            except Exception as e:
+                with open('/tmp/scandy_update_result.txt', 'w') as f:
+                    f.write(f"Error: {str(e)}\n")
+        
+        # Starte Update in separatem Thread
+        update_thread = threading.Thread(target=run_update)
+        update_thread.daemon = True
+        update_thread.start()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Update gestartet. Bitte prüfen Sie den Status in einigen Minuten.'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Docker-Updates: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Starten des Updates: {str(e)}'
+        }), 500
+
+
