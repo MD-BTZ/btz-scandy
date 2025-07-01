@@ -6,9 +6,60 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from werkzeug.security import generate_password_hash, check_password_hash
+import base64
+import os
+import hashlib
 
 mail = None
 logger = logging.getLogger(__name__)
+
+def _get_encryption_key():
+    """Generiert einen einfachen Verschlüsselungsschlüssel für E-Mail-Passwörter"""
+    # Verwende SECRET_KEY als Basis für den Verschlüsselungsschlüssel
+    secret_key = current_app.config.get('SECRET_KEY', 'default-secret-key')
+    # Erstelle einen 32-Byte-Schlüssel aus dem Secret Key
+    key = hashlib.sha256(secret_key.encode()).digest()
+    return base64.urlsafe_b64encode(key)
+
+def _encrypt_password(password):
+    """Verschlüsselt ein E-Mail-Passwort mit XOR und Base64"""
+    if not password:
+        return None
+    try:
+        key = _get_encryption_key()
+        # Einfache XOR-Verschlüsselung mit dem Schlüssel
+        key_bytes = base64.urlsafe_b64decode(key)
+        password_bytes = password.encode('utf-8')
+        
+        # XOR-Verschlüsselung
+        encrypted = bytearray()
+        for i, byte in enumerate(password_bytes):
+            encrypted.append(byte ^ key_bytes[i % len(key_bytes)])
+        
+        return base64.urlsafe_b64encode(bytes(encrypted)).decode()
+    except Exception as e:
+        logger.error(f"Fehler beim Verschlüsseln des Passworts: {e}")
+        return None
+
+def _decrypt_password(encrypted_password):
+    """Entschlüsselt ein E-Mail-Passwort"""
+    if not encrypted_password:
+        return None
+    try:
+        key = _get_encryption_key()
+        key_bytes = base64.urlsafe_b64decode(key)
+        encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode())
+        
+        # XOR-Entschlüsselung
+        decrypted = bytearray()
+        for i, byte in enumerate(encrypted_bytes):
+            decrypted.append(byte ^ key_bytes[i % len(key_bytes)])
+        
+        return bytes(decrypted).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Fehler beim Entschlüsseln des Passworts: {e}")
+        return None
 
 def get_email_config():
     """Lädt die E-Mail-Konfiguration aus der Datenbank"""
@@ -33,7 +84,14 @@ def get_email_config():
             # Überschreibe Standard-Konfiguration mit Datenbank-Werten
             for key, value in db_config.items():
                 if key != '_id':  # Überspringe MongoDB _id
-                    config[key] = value
+                    if key == 'mail_password' and value:
+                        # Passwort entschlüsseln, falls es verschlüsselt ist
+                        if not value.startswith('$2b$'):  # Nicht gehasht
+                            config[key] = _decrypt_password(value)
+                        else:
+                            config[key] = value  # Bereits gehasht (alte Daten)
+                    else:
+                        config[key] = value
         
         # Konvertiere Typen
         config['mail_port'] = int(config['mail_port'])
@@ -55,9 +113,19 @@ def save_email_config(config_data):
         # Absender-E-Mail automatisch aus SMTP-Anmeldedaten setzen
         config_data['mail_default_sender'] = config_data['mail_username']
         
+        # Passwort verschlüsseln, falls vorhanden
+        if 'mail_password' in config_data and config_data['mail_password']:
+            # Prüfe ob das Passwort bereits verschlüsselt ist
+            if not config_data['mail_password'].startswith('$2b$') and not config_data['mail_password'].startswith('gAAAAA'):
+                encrypted_password = _encrypt_password(config_data['mail_password'])
+                if encrypted_password:
+                    config_data['mail_password'] = encrypted_password
+                else:
+                    logger.error("Fehler beim Verschlüsseln des E-Mail-Passworts")
+                    return False
+        
         # Konfiguration speichern oder aktualisieren
-        # HINWEIS: Passwort wird im Klartext gespeichert, da es für SMTP-Auth benötigt wird
-        # Für zusätzliche Sicherheit sollte der Server abgesichert werden
+        # Passwort wird jetzt verschlüsselt gespeichert
         mongodb.update_one(
             'email_config',
             {'_id': 'email_config'},
