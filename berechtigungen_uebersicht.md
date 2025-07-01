@@ -27,10 +27,18 @@
 - Kann Wochenberichte erstellen (wenn aktiviert)
 - **Kein Zugriff** auf Mitarbeiter-Verwaltung oder Admin-Funktionen
 
+### 🧑‍🎓 Teilnehmer (NEU)
+- Kann eigene Wochenberichte erstellen und verwalten
+- Kann eigene Aufträge erstellen
+- Sieht eine eigene Startseite und Navigation
+- **Kein Zugriff** auf Verwaltung, Tools, Consumables, QuickScan, Admin, API-Änderungen, Ticket-Listen
+
 ## 📋 Legende
-- `@login_required` = Alle eingeloggten Benutzer (admin, mitarbeiter, anwender)
+- `@login_required` = Alle eingeloggten Benutzer (admin, mitarbeiter, anwender, teilnehmer)
 - `@mitarbeiter_required` = Nur admin und mitarbeiter
 - `@admin_required` = Nur admin
+- `@teilnehmer_required` = Nur teilnehmer
+- `@not_teilnehmer_required` = Alle außer teilnehmer
 - Kein Decorator = Öffentlich (auch ohne Login)
 
 ---
@@ -46,25 +54,25 @@
 ## 🏠 Hauptseiten
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
-| `/` | GET | `@login_required` | Dashboard/Startseite |
+| `/` | GET | `@login_required` | Dashboard/Startseite (Teilnehmer sehen eigene Startseite) |
 | `/about` | GET | Öffentlich | Über-Seite |
 
 ## 🛠️ Werkzeuge (`/tools`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/tools/` | GET | `@login_required` | Werkzeug-Übersicht |
-| `/tools/add` | GET, POST | `@login_required` | Werkzeug hinzufügen |
+| `/tools/add` | GET, POST | `@not_teilnehmer_required` | Werkzeug hinzufügen |
 | `/tools/<barcode>` | GET | `@login_required` | Werkzeug-Details |
-| `/tools/<barcode>/edit` | GET, POST | `@login_required` | Werkzeug bearbeiten |
-| `/tools/<barcode>/status` | POST | `@login_required` | Status ändern |
+| `/tools/<barcode>/edit` | GET, POST | `@not_teilnehmer_required` | Werkzeug bearbeiten |
+| `/tools/<barcode>/status` | POST | `@not_teilnehmer_required` | Status ändern |
 
 ## 📦 Verbrauchsgüter (`/consumables`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/consumables/` | GET | `@login_required` | Verbrauchsgüter-Übersicht |
-| `/consumables/add` | GET, POST | `@login_required` | Verbrauchsgut hinzufügen |
-| `/consumables/<barcode>` | GET, POST | `@login_required` | Verbrauchsgut-Details/Bearbeiten |
-| `/consumables/<barcode>/adjust-stock` | POST | `@login_required` | Bestand anpassen |
+| `/consumables/add` | GET, POST | `@not_teilnehmer_required` | Verbrauchsgut hinzufügen |
+| `/consumables/<barcode>` | GET, POST | `@not_teilnehmer_required` | Verbrauchsgut-Details/Bearbeiten |
+| `/consumables/<barcode>/adjust-stock` | POST | `@not_teilnehmer_required` | Bestand anpassen |
 | `/consumables/<barcode>/delete` | DELETE | `@mitarbeiter_required` | Verbrauchsgut löschen |
 | `/consumables/<barcode>/forecast` | GET | `@login_required` | Bestandsprognose |
 
@@ -77,15 +85,16 @@
 | `/workers/<barcode>/edit` | GET, POST | `@mitarbeiter_required` | Mitarbeiter bearbeiten |
 | `/workers/<barcode>/delete` | DELETE | `@mitarbeiter_required` | Mitarbeiter löschen |
 | `/workers/search` | GET | `@mitarbeiter_required` | Mitarbeiter-Suche |
-| `/workers/timesheets` | GET | `@login_required` | Wochenberichte-Übersicht |
+| `/workers/timesheets` | GET | `@login_required` | Wochenberichte-Übersicht (alle mit timesheet_enabled) |
 | `/workers/timesheet/new` | GET, POST | `@login_required` | Neuer Wochenbericht |
 | `/workers/timesheet/<id>/edit` | GET, POST | `@login_required` | Wochenbericht bearbeiten |
 | `/workers/timesheet/<id>/download` | GET | `@login_required` | Wochenbericht downloaden |
+| `/workers/teilnehmer/timesheets` | GET | `@teilnehmer_required` | Wochenberichte für Teilnehmer (eigene Ansicht) |
 
 ## 📊 Dashboard
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
-| `/dashboard/` | GET | `@login_required` | Dashboard |
+| `/dashboard/` | GET | `@login_required` | Dashboard (Teilnehmer werden zu Wochenberichten weitergeleitet) |
 
 ## 📈 Historie
 | Route | Methode | Berechtigung | Beschreibung |
@@ -95,26 +104,26 @@
 ## 🔄 Quick Scan
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
-| `/quick_scan/` | GET | `@login_required` | Quick-Scan-Interface |
-| `/quick_scan/process` | POST | `@login_required` | Quick-Scan verarbeiten |
+| `/quick_scan/` | GET | `@not_teilnehmer_required` | Quick-Scan-Interface |
+| `/quick_scan/process` | POST | `@not_teilnehmer_required` | Quick-Scan verarbeiten |
 
 ## 🎫 Tickets (`/tickets`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
-| `/tickets/` | GET | `@login_required` | Ticket-Übersicht (nur eigene) |
-| `/tickets/create` | GET, POST | `@login_required` | Ticket erstellen |
-| `/tickets/view/<id>` | GET | `@login_required` | Ticket anzeigen (eigene, zugewiesene oder offene) |
-| `/tickets/<id>/message` | POST | `@login_required` | Nachricht hinzufügen |
-| `/tickets/<id>` | GET | `@login_required` | Ticket-Details (eigene, zugewiesene oder offene) |
-| `/tickets/<id>/delete` | POST | `@login_required` | Ticket löschen |
-| `/tickets/<id>/auftrag-details-modal` | GET | `@login_required` | Auftrag-Details Modal |
-| `/tickets/<id>/update-status` | POST | `@login_required` | Status aktualisieren |
-| `/tickets/<id>/update-assignment` | POST | `@login_required` | Zuweisung aktualisieren |
-| `/tickets/<id>/update-details` | POST | `@login_required` | Details aktualisieren |
-| `/tickets/<id>/export` | GET | `@login_required` | Ticket exportieren |
-| `/tickets/<id>/note` | POST | `@login_required` | Notiz hinzufügen |
-| `/tickets/auftrag-neu` | GET, POST | `@login_required` | Neuer Auftrag |
-| `/tickets/<id>/auftrag-details` | GET | `@login_required` | Auftrag-Details |
+| `/tickets/` | GET | `@not_teilnehmer_required` | Ticket-Übersicht (nur eigene) |
+| `/tickets/create` | GET, POST | `@not_teilnehmer_required` | Ticket erstellen |
+| `/tickets/view/<id>` | GET | `@not_teilnehmer_required` | Ticket anzeigen (eigene, zugewiesene oder offene) |
+| `/tickets/<id>/message` | POST | `@not_teilnehmer_required` | Nachricht hinzufügen |
+| `/tickets/<id>` | GET | `@not_teilnehmer_required` | Ticket-Details (eigene, zugewiesene oder offene) |
+| `/tickets/<id>/delete` | POST | `@not_teilnehmer_required` | Ticket löschen |
+| `/tickets/<id>/auftrag-details-modal` | GET | `@not_teilnehmer_required` | Auftrag-Details Modal |
+| `/tickets/<id>/update-status` | POST | `@not_teilnehmer_required` | Status aktualisieren |
+| `/tickets/<id>/update-assignment` | POST | `@not_teilnehmer_required` | Zuweisung aktualisieren |
+| `/tickets/<id>/update-details` | POST | `@not_teilnehmer_required` | Details aktualisieren |
+| `/tickets/<id>/export` | GET | `@not_teilnehmer_required` | Ticket exportieren |
+| `/tickets/<id>/note` | POST | `@not_teilnehmer_required` | Notiz hinzufügen |
+| `/tickets/auftrag-neu` | GET, POST | `@login_required` | Neuer Auftrag (auch für Teilnehmer) |
+| `/tickets/<id>/auftrag-details` | GET | `@not_teilnehmer_required` | Auftrag-Details |
 
 ## 🔌 API (`/api`)
 | Route | Methode | Berechtigung | Beschreibung |
@@ -129,14 +138,14 @@
 | `/api/consumables/<barcode>/forecast` | GET | `@login_required` | Bestandsprognose |
 | `/api/notices` | GET, POST | `@login_required` | Notizen verwalten |
 | `/api/notices/<id>` | GET, PUT, DELETE | `@login_required` | Notiz verwalten |
-| `/api/quickscan/process_lending` | POST | `@login_required` | Quick-Scan Ausleihe |
+| `/api/quickscan/process_lending` | POST | `@not_teilnehmer_required` | Quick-Scan Ausleihe |
 
 ## ⚙️ Admin (`/admin`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/` | GET | `@mitarbeiter_required` | Admin-Startseite |
 | `/admin/dashboard` | GET | `@mitarbeiter_required` | Admin-Dashboard |
-| `/admin/manual-lending` | GET, POST | `@login_required` | Manuelle Ausleihe |
+| `/admin/manual-lending` | GET, POST | `@not_teilnehmer_required` | Manuelle Ausleihe |
 | `/admin/trash` | GET | `@mitarbeiter_required` | Papierkorb |
 | `/admin/trash/restore/<type>/<barcode>` | POST | `@mitarbeiter_required` | Wiederherstellen |
 
@@ -224,8 +233,6 @@
 | `/admin/updates/apply` | POST | `@admin_required` | Updates anwenden |
 | `/admin/updates/status` | GET | `@admin_required` | Update-Status |
 | `/admin/updates/history` | GET | `@admin_required` | Update-Historie |
-
-
 
 ### 📧 E-Mail (Admin)
 | Route | Methode | Berechtigung | Beschreibung |

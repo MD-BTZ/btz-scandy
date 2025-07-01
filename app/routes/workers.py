@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from app.models.mongodb_models import MongoDBWorker
 from app.models.mongodb_database import mongodb
-from app.utils.decorators import login_required, admin_required, mitarbeiter_required
+from app.utils.decorators import login_required, admin_required, mitarbeiter_required, teilnehmer_required
 from app.utils.database_helpers import get_departments_from_settings
 from datetime import datetime, timedelta
 from flask_login import current_user
@@ -344,10 +344,17 @@ def search():
 @bp.route('/timesheets')
 @login_required
 def timesheet_list():
+    """Zeigt die Wochenberichte für den aktuellen Benutzer an (für alle Rollen mit timesheet_enabled)"""
     # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
         return redirect(url_for('main.index'))
+
+@bp.route('/teilnehmer/timesheets')
+@teilnehmer_required
+def teilnehmer_timesheet_list():
+    """Spezielle Route für Teilnehmer zu den Wochenberichten"""
+    return timesheet_list()
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
     

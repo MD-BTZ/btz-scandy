@@ -12,7 +12,7 @@ def index():
     """Dashboard-Hauptseite"""
     # Für Teilnehmer: Weiterleitung zu Wochenberichten
     if current_user.role == 'teilnehmer':
-        return redirect(url_for('workers.timesheet_list'))
+        return redirect(url_for('workers.teilnehmer_timesheet_list'))
     
     # Statistiken laden
     stats = MongoDBTool.get_statistics()

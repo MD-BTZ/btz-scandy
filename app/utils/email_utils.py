@@ -109,7 +109,7 @@ def save_email_config(config_data):
         
         mongodb = MongoDBDatabase()
         
-        # Absender-E-Mail automatisch aus SMTP-Anmeldedaten setzen
+        # Absender-E-Mail automatisch aus SMTP-Anmeldedaten setzen (wird in init_mail verwendet)
         config_data['mail_default_sender'] = config_data['mail_username']
         
         # Passwort verschlüsseln, falls vorhanden
@@ -352,35 +352,9 @@ def init_mail(app):
             app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
             mail = None
     else:
-        # Fallback auf Umgebungsvariablen oder Entwicklungsmodus
-        app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-        app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-        app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
-        app.config['MAIL_USE_SSL'] = not app.config['MAIL_USE_TLS'] and int(app.config['MAIL_PORT']) == 465
-        app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'dummy@example.com')
-        app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'dummy-password')
-        app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'dummy@example.com')
-        
-        # Zusätzliche Flask-Mail Konfiguration
-        app.config['MAIL_ASCII_ATTACHMENTS'] = False
-        app.config['MAIL_SUPPRESS_SEND'] = False
-        
-        # Prüfe ob wir im Entwicklungsmodus sind (Dummy-E-Mail-Daten)
-        is_dev_mode = (app.config['MAIL_USERNAME'] == 'dummy@example.com' or 
-                       app.config['MAIL_PASSWORD'] == 'dummy-password')
-        
-        if is_dev_mode:
-            app.logger.info("E-Mail-System im Entwicklungsmodus - E-Mails werden in der Konsole ausgegeben")
-            mail = None
-        else:
-            try:
-                mail = Mail(app)
-                app.logger.info("E-Mail-System mit Umgebungsvariablen initialisiert")
-                app.logger.info(f"SMTP-Server: {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}")
-                app.logger.info(f"TLS: {app.config['MAIL_USE_TLS']}, SSL: {app.config['MAIL_USE_SSL']}")
-            except Exception as e:
-                app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
-                mail = None
+        # Keine E-Mail-Konfiguration verfügbar
+        app.logger.warning("Keine E-Mail-Konfiguration verfügbar - E-Mail-System wird nicht initialisiert")
+        mail = None
 
 
 def _check_auth_required(server, port, use_tls):
@@ -434,16 +408,7 @@ def _check_auth_required(server, port, use_tls):
         return True
 
 
-def _log_email(subject, recipient, body):
-    """Loggt E-Mails in der Entwicklungsumgebung"""
-    logger.info("=" * 60)
-    logger.info("E-MAIL SIMULATION (Entwicklungsmodus)")
-    logger.info("=" * 60)
-    logger.info(f"An: {recipient}")
-    logger.info(f"Betreff: {subject}")
-    logger.info("-" * 60)
-    logger.info(body)
-    logger.info("=" * 60)
+
 
 
 def _send_email_direct(recipient, subject, body, attachments=None, mail_type="default"):
@@ -667,11 +632,6 @@ def send_email(to_email, subject, html_content=None, text_content=None, from_nam
 def send_auftrag_confirmation_email(ticket_data, auftrag_details, recipient_email):
     """Sendet eine Bestätigungs-E-Mail für einen neuen Auftrag"""
     try:
-        # Debug: Logge die empfangenen Daten
-        logger.info(f"[MAIL][auftrag] DEBUG - ticket_data: {ticket_data}")
-        logger.info(f"[MAIL][auftrag] DEBUG - auftrag_details: {auftrag_details}")
-        logger.info(f"[MAIL][auftrag] DEBUG - recipient_email: {recipient_email}")
-        
         # E-Mail-Einstellungen laden
         email_config = get_email_config()
         if not email_config:
@@ -1068,5 +1028,12 @@ def diagnose_smtp_connection(config_data):
         }
 
 def reload_email_config(app):
-    """Dummy-Implementierung, damit der Import-Fehler verschwindet. Ein echter Reload erfolgt durch Neustart."""
-    pass 
+    """Lädt die E-Mail-Konfiguration neu und initialisiert das E-Mail-System"""
+    try:
+        # E-Mail-System neu initialisieren
+        init_mail(app)
+        logger.info("E-Mail-Konfiguration erfolgreich neu geladen")
+        return True
+    except Exception as e:
+        logger.error(f"Fehler beim Neuladen der E-Mail-Konfiguration: {e}")
+        return False 
