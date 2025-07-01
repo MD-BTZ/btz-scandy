@@ -107,7 +107,7 @@
             {% endif %}
 
             {# Wochenplan-Link für alle authentifizierten Benutzer (Mitarbeiter, Admins und Anwender) #}
-            {% if current_user.is_authenticated %}
+            {% if current_user.is_authenticated and current_user.timesheet_enabled %}
             <a href="{{ url_for('workers.timesheet_list') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">

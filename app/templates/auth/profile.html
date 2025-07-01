@@ -85,6 +85,28 @@
                         </div>
                     </div>
                     
+                    <!-- Wochenbericht-Einstellung -->
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">
+                            <i class="fas fa-clock text-success"></i>
+                            Wochenbericht-Feature
+                        </h3>
+                        <div class="form-control">
+                            <label class="cursor-pointer label justify-start">
+                                <input type="checkbox" name="timesheet_enabled" value="on"
+                                       class="checkbox checkbox-primary mr-3"
+                                       {% if user.timesheet_enabled %}checked{% endif %}>
+                                <span class="label-text font-medium">Wochenbericht-Feature aktivieren</span>
+                            </label>
+                            <label class="label">
+                                <span class="label-text-alt text-info">
+                                    Wenn aktiviert, können Sie Wochenberichte erstellen und verwalten. 
+                                    Das Feature wird in der Navigation angezeigt.
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
                     <!-- Passwort ändern -->
                     <div class="bg-base-200 p-4 rounded-lg">
                         <h3 class="text-lg font-semibold mb-4">

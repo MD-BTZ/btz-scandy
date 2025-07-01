@@ -6,6 +6,7 @@ import os
 import time
 import threading
 import logging
+import zipfile
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from app.utils.backup_manager import BackupManager
@@ -26,12 +27,17 @@ class AutoBackupScheduler:
             dt_time(18, 0)   # 18:00 Uhr
         ]
         
+        # Wöchentliches Backup-Archiv (Freitag um 17:00)
+        self.weekly_backup_time = dt_time(17, 0)  # 17:00 Uhr
+        self.last_weekly_backup_date = None
+        
         # Backup-Log-Datei
         self.log_file = Path(__file__).parent.parent.parent / 'logs' / 'auto_backup.log'
         self.log_file.parent.mkdir(exist_ok=True)
         
         # Lade konfigurierte Zeiten beim Start
         self._load_backup_times()
+        self._load_weekly_backup_config()
         
     def _load_backup_times(self):
         """Lädt die konfigurierten Backup-Zeiten aus der Datenbank"""
@@ -68,6 +74,34 @@ class AutoBackupScheduler:
             logger.error(f"Fehler beim Laden der Backup-Zeiten: {e}")
             # Verwende Standard-Zeiten bei Fehlern
             self.backup_times = [dt_time(6, 0), dt_time(18, 0)]
+    
+    def _load_weekly_backup_config(self):
+        """Lädt die wöchentliche Backup-Konfiguration aus der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Lade wöchentliche Backup-Zeit
+            weekly_time_setting = mongodb.find_one('settings', {'key': 'weekly_backup_time'})
+            if weekly_time_setting and weekly_time_setting.get('value'):
+                try:
+                    hour, minute = map(int, weekly_time_setting['value'].split(':'))
+                    if 0 <= hour <= 23 and 0 <= minute <= 59:
+                        self.weekly_backup_time = dt_time(hour, minute)
+                        logger.info(f"Wöchentliche Backup-Zeit geladen: {self.weekly_backup_time.strftime('%H:%M')}")
+                except ValueError:
+                    logger.warning(f"Ungültige wöchentliche Backup-Zeit: {weekly_time_setting['value']}")
+            
+            # Lade letztes wöchentliches Backup-Datum
+            last_weekly_setting = mongodb.find_one('settings', {'key': 'last_weekly_backup_date'})
+            if last_weekly_setting and last_weekly_setting.get('value'):
+                try:
+                    self.last_weekly_backup_date = datetime.strptime(last_weekly_setting['value'], '%Y-%m-%d').date()
+                    logger.info(f"Letztes wöchentliches Backup: {self.last_weekly_backup_date}")
+                except ValueError:
+                    logger.warning(f"Ungültiges Datum für letztes wöchentliches Backup: {last_weekly_setting['value']}")
+                    
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der wöchentlichen Backup-Konfiguration: {e}")
     
     def save_backup_times(self, times_list):
         """Speichert neue Backup-Zeiten in der Datenbank"""
@@ -106,9 +140,45 @@ class AutoBackupScheduler:
             logger.error(f"Fehler beim Speichern der Backup-Zeiten: {e}")
             return False, f"Fehler beim Speichern: {str(e)}"
     
+    def save_weekly_backup_time(self, time_str):
+        """Speichert die wöchentliche Backup-Zeit in der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Validiere Zeit
+            if ':' in time_str:
+                try:
+                    hour, minute = map(int, time_str.split(':'))
+                    if 0 <= hour <= 23 and 0 <= minute <= 59:
+                        # Speichere in Datenbank
+                        mongodb.update_one('settings', 
+                                         {'key': 'weekly_backup_time'}, 
+                                         {'$set': {'value': f"{hour:02d}:{minute:02d}"}}, 
+                                         upsert=True)
+                        
+                        # Aktualisiere lokale Zeit
+                        self.weekly_backup_time = dt_time(hour, minute)
+                        
+                        logger.info(f"Wöchentliche Backup-Zeit aktualisiert: {self.weekly_backup_time.strftime('%H:%M')}")
+                        return True, "Wöchentliche Backup-Zeit erfolgreich gespeichert"
+                    else:
+                        return False, "Ungültige Zeit (Stunden: 0-23, Minuten: 0-59)"
+                except ValueError:
+                    return False, "Ungültiges Zeitformat (HH:MM)"
+            else:
+                return False, "Ungültiges Zeitformat (HH:MM)"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der wöchentlichen Backup-Zeit: {e}")
+            return False, f"Fehler beim Speichern: {str(e)}"
+    
     def get_backup_times(self):
         """Gibt die aktuellen Backup-Zeiten zurück"""
         return [t.strftime('%H:%M') for t in self.backup_times]
+    
+    def get_weekly_backup_time(self):
+        """Gibt die aktuelle wöchentliche Backup-Zeit zurück"""
+        return self.weekly_backup_time.strftime('%H:%M')
     
     def start(self):
         """Startet den automatischen Backup-Scheduler"""
@@ -137,8 +207,9 @@ class AutoBackupScheduler:
             try:
                 now = datetime.now()
                 current_time = now.time()
+                current_date = now.date()
                 
-                # Prüfe ob es Zeit für ein Backup ist
+                # Prüfe ob es Zeit für ein normales Backup ist
                 for backup_time in self.backup_times:
                     if (current_time.hour == backup_time.hour and 
                         current_time.minute == backup_time.minute):
@@ -147,6 +218,17 @@ class AutoBackupScheduler:
                         # Warte 1 Minute um doppelte Backups zu vermeiden
                         time.sleep(60)
                         break
+                
+                # Prüfe ob es Zeit für ein wöchentliches Backup-Archiv ist (Freitag)
+                if (now.weekday() == 4 and  # Freitag = 4
+                    current_time.hour == self.weekly_backup_time.hour and 
+                    current_time.minute == self.weekly_backup_time.minute and
+                    (self.last_weekly_backup_date is None or 
+                     current_date > self.last_weekly_backup_date)):
+                    
+                    self._create_weekly_backup_archive()
+                    # Warte 1 Minute um doppelte Backups zu vermeiden
+                    time.sleep(60)
                 
                 # Warte 30 Sekunden bis zur nächsten Prüfung
                 time.sleep(30)
@@ -180,6 +262,121 @@ class AutoBackupScheduler:
             logger.error(f"Fehler beim automatischen Backup: {e}")
             self._log_backup_event(f"Backup-Fehler: {e}")
             self._send_backup_notification(None, success=False)
+    
+    def _create_weekly_backup_archive(self):
+        """Erstellt ein wöchentliches Backup-Archiv und sendet es per E-Mail"""
+        try:
+            logger.info("Erstelle wöchentliches Backup-Archiv...")
+            self._log_backup_event("Starte wöchentliches Backup-Archiv")
+            
+            # Alle aktuellen Backups finden
+            backup_files = list(self.backup_manager.backup_dir.glob('scandy_backup_*.json'))
+            
+            if not backup_files:
+                logger.warning("Keine Backup-Dateien für wöchentliches Archiv gefunden")
+                self._log_backup_event("Keine Backup-Dateien für wöchentliches Archiv gefunden")
+                return
+            
+            # Sortiere nach Änderungsdatum (neueste zuerst)
+            backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            # Erstelle ZIP-Archiv
+            archive_filename = f"scandy_weekly_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            archive_path = self.backup_manager.backup_dir / archive_filename
+            
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for backup_file in backup_files:
+                    zipf.write(backup_file, backup_file.name)
+            
+            logger.info(f"Wöchentliches Backup-Archiv erstellt: {archive_filename}")
+            self._log_backup_event(f"Wöchentliches Backup-Archiv erstellt: {archive_filename}")
+            
+            # Sende E-Mail mit Archiv
+            email_sent = self._send_weekly_backup_archive(archive_path)
+            
+            # Aktualisiere letztes wöchentliches Backup-Datum
+            self._update_last_weekly_backup_date()
+            
+            # Lösche ZIP-Datei nach erfolgreichem Versand
+            if email_sent and archive_path.exists():
+                try:
+                    archive_path.unlink()
+                    logger.info(f"ZIP-Archiv nach Versand gelöscht: {archive_filename}")
+                    self._log_backup_event(f"ZIP-Archiv nach Versand gelöscht: {archive_filename}")
+                except Exception as e:
+                    logger.error(f"Fehler beim Löschen der ZIP-Datei: {e}")
+                    self._log_backup_event(f"Fehler beim Löschen der ZIP-Datei: {e}")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des wöchentlichen Backup-Archivs: {e}")
+            self._log_backup_event(f"Fehler beim wöchentlichen Backup-Archiv: {e}")
+    
+    def _send_weekly_backup_archive(self, archive_path):
+        """Sendet das wöchentliche Backup-Archiv per E-Mail"""
+        try:
+            from app.utils.email_utils import send_weekly_backup_mail
+            
+            # E-Mail-Empfänger aus Einstellungen laden
+            recipient_email = self._get_weekly_backup_email()
+            
+            if recipient_email:
+                success = send_weekly_backup_mail(recipient_email, str(archive_path))
+                if success:
+                    logger.info(f"Wöchentliches Backup-Archiv erfolgreich an {recipient_email} gesendet")
+                    self._log_backup_event(f"Wöchentliches Backup-Archiv an {recipient_email} gesendet")
+                    return True
+                else:
+                    logger.error("Fehler beim Senden des wöchentlichen Backup-Archivs")
+                    self._log_backup_event("Fehler beim Senden des wöchentlichen Backup-Archivs")
+                    return False
+            else:
+                logger.warning("Keine E-Mail-Adresse für wöchentliche Backups konfiguriert")
+                self._log_backup_event("Keine E-Mail-Adresse für wöchentliche Backups konfiguriert")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Senden des wöchentlichen Backup-Archivs: {e}")
+            self._log_backup_event(f"Fehler beim Senden des wöchentlichen Backup-Archivs: {e}")
+            return False
+    
+    def _get_weekly_backup_email(self):
+        """Ermittelt die E-Mail-Adresse für wöchentliche Backups aus den Einstellungen"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Suche nach E-Mail-Einstellung für wöchentliche Backups
+            email_setting = mongodb.find_one('settings', {'key': 'weekly_backup_email'})
+            if email_setting and email_setting.get('value'):
+                return email_setting['value']
+            
+            # Fallback: Admin-E-Mail
+            admin_user = mongodb.find_one('users', {'role': 'admin'})
+            if admin_user and admin_user.get('email'):
+                return admin_user['email']
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Ermitteln der E-Mail für wöchentliche Backups: {e}")
+            return None
+    
+    def _update_last_weekly_backup_date(self):
+        """Aktualisiert das Datum des letzten wöchentlichen Backups"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            current_date = datetime.now().date()
+            self.last_weekly_backup_date = current_date
+            
+            mongodb.update_one('settings', 
+                             {'key': 'last_weekly_backup_date'}, 
+                             {'$set': {'value': current_date.strftime('%Y-%m-%d')}}, 
+                             upsert=True)
+            
+            logger.info(f"Letztes wöchentliches Backup-Datum aktualisiert: {current_date}")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren des letzten wöchentlichen Backup-Datums: {e}")
             
     def _log_backup_event(self, message):
         """Loggt Backup-Ereignisse in eine separate Datei"""
@@ -238,7 +435,11 @@ class AutoBackupScheduler:
             return {
                 'running': self.running,
                 'backup_times': [t.strftime('%H:%M') for t in self.backup_times],
+                'weekly_backup_time': self.weekly_backup_time.strftime('%H:%M'),
                 'next_backup': self._get_next_backup_time(),
+                'next_weekly_backup': self._get_next_weekly_backup_time(),
+                'last_weekly_backup': self.last_weekly_backup_date.strftime('%d.%m.%Y') if self.last_weekly_backup_date else 'Nie',
+                'weekly_backup_email': self._get_weekly_backup_email(),
                 'log_file': str(self.log_file)
             }
         except Exception as e:
@@ -246,7 +447,11 @@ class AutoBackupScheduler:
             return {
                 'running': self.running,
                 'backup_times': [t.strftime('%H:%M') for t in self.backup_times],
+                'weekly_backup_time': self.weekly_backup_time.strftime('%H:%M'),
                 'next_backup': 'Fehler beim Berechnen',
+                'next_weekly_backup': 'Fehler beim Berechnen',
+                'last_weekly_backup': 'Fehler beim Laden',
+                'weekly_backup_email': 'Fehler beim Laden',
                 'log_file': str(self.log_file)
             }
         
@@ -267,6 +472,23 @@ class AutoBackupScheduler:
                 return next_backup.strftime('%d.%m.%Y %H:%M')
                 
         return "Unbekannt"
+    
+    def _get_next_weekly_backup_time(self):
+        """Ermittelt die nächste wöchentliche Backup-Zeit (Freitag)"""
+        now = datetime.now()
+        current_time = now.time()
+        current_date = now.date()
+        
+        # Berechne nächsten Freitag
+        days_until_friday = (4 - now.weekday()) % 7  # 4 = Freitag
+        if days_until_friday == 0 and current_time >= self.weekly_backup_time:
+            # Heute ist Freitag, aber Zeit ist schon vorbei -> nächster Freitag
+            days_until_friday = 7
+        
+        next_friday = current_date + timedelta(days=days_until_friday)
+        next_weekly_backup = datetime.combine(next_friday, self.weekly_backup_time)
+        
+        return next_weekly_backup.strftime('%d.%m.%Y %H:%M')
 
 # Globale Instanz
 auto_backup_scheduler = AutoBackupScheduler()

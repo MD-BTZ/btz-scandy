@@ -28,6 +28,18 @@
                             <span class="font-semibold text-gray-600">Backup-Zeiten:</span>
                             <span id="backupTimes" class="text-sm text-gray-700 font-medium">Lade...</span>
                         </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold text-gray-600">Nächstes wöchentliches Backup:</span>
+                            <span id="nextWeeklyBackup" class="text-sm text-gray-700 font-medium">Lade...</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold text-gray-600">Letztes wöchentliches Backup:</span>
+                            <span id="lastWeeklyBackup" class="text-sm text-gray-700 font-medium">Lade...</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold text-gray-600">Wöchentliche Backup-E-Mail:</span>
+                            <span id="weeklyBackupEmail" class="text-sm text-gray-700 font-medium">Lade...</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -48,6 +60,10 @@
                         <button id="refreshStatus" class="btn btn-primary">
                             <i class="fas fa-sync-alt mr-2"></i>
                             Status aktualisieren
+                        </button>
+                        <button id="testWeeklyBackup" class="btn btn-warning">
+                            <i class="fas fa-archive mr-2"></i>
+                            Backup jetzt versenden
                         </button>
                     </div>
                 </div>
@@ -81,6 +97,52 @@
                         </form>
                     </div>
                     
+                    <!-- Wöchentliche Backup-Zeit konfigurieren -->
+                    <div class="mb-6">
+                        <form method="POST" class="space-y-4">
+                            <input type="hidden" name="action" value="save_weekly_time">
+                            <div>
+                                <label class="label">
+                                    <span class="label-text font-semibold text-gray-600">Wöchentliche Backup-Zeit (Freitag):</span>
+                                </label>
+                                <div class="text-sm text-gray-500 mb-2">
+                                    Geben Sie die gewünschte Zeit für das wöchentliche Backup-Archiv im Format HH:MM ein
+                                </div>
+                                <input type="text" name="weekly_backup_time" 
+                                       value="{{ weekly_backup_time }}" 
+                                       placeholder="17:00"
+                                       class="input input-bordered w-full max-w-md">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save mr-2"></i>
+                                Wöchentliche Zeit speichern
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- E-Mail für wöchentliche Backups konfigurieren -->
+                    <div class="mb-6">
+                        <form method="POST" class="space-y-4">
+                            <input type="hidden" name="action" value="save_weekly_email">
+                            <div>
+                                <label class="label">
+                                    <span class="label-text font-semibold text-gray-600">E-Mail für wöchentliche Backups:</span>
+                                </label>
+                                <div class="text-sm text-gray-500 mb-2">
+                                    Geben Sie die E-Mail-Adresse ein, an die das wöchentliche Backup-Archiv gesendet werden soll
+                                </div>
+                                <input type="email" name="weekly_backup_email" 
+                                       value="{{ weekly_backup_email }}" 
+                                       placeholder="admin@example.com"
+                                       class="input input-bordered w-full max-w-md">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save mr-2"></i>
+                                E-Mail-Adresse speichern
+                            </button>
+                        </form>
+                    </div>
+                    
                     <div class="space-y-4">
                         <div>
                             <label class="label">
@@ -99,6 +161,17 @@
                             <div class="text-sm text-gray-600">
                                 <p>• Letzte 10 Backups werden behalten</p>
                                 <p>• Alte Backups werden automatisch gelöscht</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold text-gray-600">Wöchentliche Backup-Archive:</span>
+                            </label>
+                            <div class="text-sm text-gray-600">
+                                <p>• Jeden Freitag wird ein ZIP-Archiv aller aktuellen Backups erstellt</p>
+                                <p>• Das Archiv wird automatisch per E-Mail versendet</p>
+                                <p>• Maximale E-Mail-Größe: 25MB</p>
+                                <p>• Archiv-Dateiname: scandy_weekly_backup_YYYYMMDD_HHMMSS.zip</p>
                             </div>
                         </div>
                     </div>
@@ -137,6 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('stopAutoBackup').addEventListener('click', stopAutoBackup);
     document.getElementById('refreshStatus').addEventListener('click', loadAutoBackupStatus);
     document.getElementById('refreshLogs').addEventListener('click', loadBackupLogs);
+    document.getElementById('testWeeklyBackup').addEventListener('click', testWeeklyBackup);
 
     // Status alle 30 Sekunden aktualisieren
     setInterval(loadAutoBackupStatus, 30000);
@@ -164,6 +238,11 @@ function loadAutoBackupStatus() {
                 
                 // Backup-Zeiten
                 document.getElementById('backupTimes').textContent = status.backup_times.join(', ');
+                
+                // Wöchentliche Backup-Informationen
+                document.getElementById('nextWeeklyBackup').textContent = status.next_weekly_backup;
+                document.getElementById('lastWeeklyBackup').textContent = status.last_weekly_backup;
+                document.getElementById('weeklyBackupEmail').textContent = status.weekly_backup_email || 'Nicht konfiguriert';
             } else {
                 showToast('error', 'Fehler beim Laden des Status');
             }
@@ -219,6 +298,42 @@ function stopAutoBackup() {
     .catch(error => {
         console.error('Fehler:', error);
         showToast('error', 'Fehler beim Stoppen');
+    });
+}
+
+function testWeeklyBackup() {
+    if (!confirm('Backup-Archiv jetzt versenden?\n\nDies wird ein ZIP-Archiv aller aktuellen Backups erstellen und per E-Mail versenden. Die ZIP-Datei wird nach dem Versand automatisch gelöscht.')) return;
+    
+    // Button deaktivieren während des Tests
+    const button = document.getElementById('testWeeklyBackup');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Teste...';
+    
+    fetch('/admin/backup/weekly/test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            loadAutoBackupStatus();
+            loadBackupLogs();
+        } else {
+            showToast('error', data.message);
+        }
+    })
+            .catch(error => {
+            console.error('Fehler:', error);
+            showToast('error', 'Fehler beim Versenden des Backup-Archivs');
+        })
+    .finally(() => {
+        // Button wieder aktivieren
+        button.disabled = false;
+        button.innerHTML = originalText;
     });
 }
 

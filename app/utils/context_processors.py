@@ -107,9 +107,56 @@ def inject_app_labels():
             }
         }
 
+def inject_unfilled_timesheet_days():
+    """Berechnet die Anzahl fehlender Wochenberichte für alle Templates"""
+    try:
+        from flask import current_app, g
+        from flask_login import current_user
+        from datetime import datetime, timedelta
+        
+        # Nur für eingeloggte Benutzer mit aktiviertem Wochenbericht-Feature berechnen
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return {'unfilled_timesheet_days': 0}
+        
+        # Prüfe ob Wochenbericht-Feature aktiviert ist
+        if not hasattr(current_user, 'timesheet_enabled') or not current_user.timesheet_enabled:
+            return {'unfilled_timesheet_days': 0}
+        
+        # Berechne unausgefüllte Tage für den aktuellen Benutzer
+        user_id = current_user.username
+        today = datetime.now()
+        
+        # Hole alle Timesheets des Benutzers
+        timesheets = list(mongodb.find('timesheets', {'user_id': user_id}))
+        
+        # Berechne unausgefüllte Tage für alle Wochen
+        unfilled_days = 0
+        for ts in timesheets:
+            # Berechne den Wochenstart
+            week_start = datetime.fromisocalendar(ts['year'], ts['kw'], 1)  # 1 = Montag
+            days = ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag']
+            
+            for i, day in enumerate(days):
+                # Berechne das Datum für den aktuellen Tag
+                current_day = week_start + timedelta(days=i)
+                
+                # Prüfe nur vergangene Tage
+                if current_day.date() < today.date():
+                    has_times = ts.get(f'{day}_start') or ts.get(f'{day}_end')
+                    has_tasks = ts.get(f'{day}_tasks')
+                    if not (has_times and has_tasks):
+                        unfilled_days += 1
+        
+        return {'unfilled_timesheet_days': unfilled_days}
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Berechnen der fehlenden Wochenberichte: {str(e)}")
+        return {'unfilled_timesheet_days': 0}
+
 def register_context_processors(app):
     """Registriert alle Context Processors"""
     app.context_processor(inject_colors)
     app.context_processor(inject_routes)
     app.context_processor(inject_version)
     app.context_processor(inject_app_labels)
+    app.context_processor(inject_unfilled_timesheet_days)

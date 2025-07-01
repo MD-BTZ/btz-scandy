@@ -107,6 +107,7 @@ def setup():
             'password_hash': generate_password_hash(password),
             'role': 'admin',
             'is_active': True,
+            'timesheet_enabled': True,  # Standardmäßig aktiviert für Admin
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
@@ -179,6 +180,7 @@ def profile():
             current_password = request.form.get('current_password', '').strip()
             new_password = request.form.get('new_password', '').strip()
             new_password_confirm = request.form.get('new_password_confirm', '').strip()
+            timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
             
             # ===== E-MAIL ÄNDERN =====
             if email and email != user.get('email', ''):
@@ -229,6 +231,18 @@ def profile():
                                  {'_id': ObjectId(user['_id'])}, 
                                  {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
                 flash('Passwort erfolgreich geändert.', 'success')
+            
+            # ===== WOCHENBERICHT-EINSTELLUNG ÄNDERN =====
+            if timesheet_enabled != user.get('timesheet_enabled', False):
+                from bson import ObjectId
+                mongodb.update_one('users', 
+                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'$set': {'timesheet_enabled': timesheet_enabled, 'updated_at': datetime.now()}})
+                
+                if timesheet_enabled:
+                    flash('Wochenbericht-Feature wurde aktiviert.', 'success')
+                else:
+                    flash('Wochenbericht-Feature wurde deaktiviert.', 'success')
             
             # Aktualisiere user für Template
             user = mongodb.find_one('users', {'username': current_user.username})

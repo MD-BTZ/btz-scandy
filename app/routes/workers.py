@@ -344,6 +344,10 @@ def search():
 @bp.route('/timesheets')
 @login_required
 def timesheet_list():
+    # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
+    if not current_user.timesheet_enabled:
+        flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
     
@@ -458,6 +462,10 @@ def timesheet_list():
 @bp.route('/timesheet/new', methods=['GET', 'POST'])
 @login_required
 def timesheet_create():
+    # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
+    if not current_user.timesheet_enabled:
+        flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
     if request.method == 'POST':
         user_id = current_user.username
         week = request.form.get('week')  # z.B. '2024-W20'
@@ -488,6 +496,10 @@ def timesheet_create():
 @bp.route('/timesheet/<string:ts_id>/edit', methods=['GET', 'POST'])
 @login_required
 def timesheet_edit(ts_id):
+    # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
+    if not current_user.timesheet_enabled:
+        flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
     user_id = current_user.username
     
     # Konvertiere ts_id zu ObjectId
@@ -534,6 +546,10 @@ def timesheet_edit(ts_id):
 @bp.route('/timesheet/<string:ts_id>/download')
 @login_required
 def timesheet_download(ts_id):
+    # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
+    if not current_user.timesheet_enabled:
+        flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
     user_id = current_user.username
     
     # Konvertiere ts_id zu ObjectId

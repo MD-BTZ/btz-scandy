@@ -16,6 +16,27 @@ class User(UserMixin):
             self.is_mitarbeiter = user_data.get('role', 'anwender') in ['admin', 'mitarbeiter']
             # Speichere is_active als normales Attribut
             self._active = user_data.get('is_active', True)
+            
+            # Wochenbericht-Feature: Prüfe ob Feld existiert, sonst setze Standard
+            if 'timesheet_enabled' in user_data:
+                current_value = user_data.get('timesheet_enabled', False)
+                
+                # Korrigiere Admin-Benutzer automatisch
+                if user_data.get('role') == 'admin' and not current_value:
+                    self.timesheet_enabled = True
+                    # Speichere die Korrektur automatisch
+                    self._save_timesheet_enabled(user_data['_id'], True)
+                else:
+                    self.timesheet_enabled = current_value
+            else:
+                # Feld existiert nicht - setze Standard basierend auf Rolle
+                if user_data.get('role') == 'admin':
+                    self.timesheet_enabled = True  # Admin standardmäßig aktiviert
+                else:
+                    self.timesheet_enabled = False  # Andere Benutzer standardmäßig deaktiviert
+                
+                # Speichere das Feld automatisch in der Datenbank
+                self._save_timesheet_enabled(user_data['_id'], self.timesheet_enabled)
         else:
             self.id = None
             self.username = None
@@ -23,6 +44,7 @@ class User(UserMixin):
             self.is_admin = False
             self.is_mitarbeiter = False
             self._active = True
+            self.timesheet_enabled = False
     
     def get_id(self):
         return str(self.id)
@@ -35,4 +57,19 @@ class User(UserMixin):
     
     @property
     def is_active(self):
-        return getattr(self, '_active', True) 
+        return getattr(self, '_active', True)
+    
+    def _save_timesheet_enabled(self, user_id, timesheet_enabled):
+        """Speichert das timesheet_enabled Feld automatisch in der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            from bson import ObjectId
+            
+            mongodb.update_one('users', 
+                             {'_id': ObjectId(user_id)}, 
+                             {'$set': {'timesheet_enabled': timesheet_enabled}})
+        except Exception as e:
+            # Logge den Fehler, aber lass das System weiterlaufen
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Konnte timesheet_enabled nicht automatisch speichern für Benutzer {user_id}: {e}") 

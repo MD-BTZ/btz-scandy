@@ -398,14 +398,26 @@ def _send_email_direct(recipient, subject, body, attachments=None):
         msg = MIMEMultipart()
         msg['From'] = config['mail_username']
         msg['To'] = recipient
-        msg['Subject'] = subject
+        
+        # Subject korrekt als UTF-8 kodieren
+        from email.header import Header
+        msg['Subject'] = Header(subject, 'utf-8')
+        
+        # Message-ID hinzufügen (RFC 5322 Compliance für Gmail)
+        import uuid
+        import socket
+        from email.utils import formatdate
+        hostname = socket.gethostname()
+        message_id = f"<{uuid.uuid4()}@{hostname}>"
+        msg['Message-ID'] = message_id
+        msg['Date'] = formatdate(localtime=True)
         
         # Spezielle Header um Speicherung im "Gesendet"-Ordner zu verhindern
         msg['X-Auto-Response-Suppress'] = 'All'
         msg['Precedence'] = 'bulk'
         msg['X-Mailer'] = 'Scandy-System'
         
-        # Body hinzufügen
+        # Body hinzufügen - explizit UTF-8 kodieren
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         
         # Anhänge hinzufügen (falls vorhanden)
@@ -429,12 +441,23 @@ def _send_email_direct(recipient, subject, body, attachments=None):
         if config['mail_use_tls'] and config['mail_port'] == 587:
             server.starttls()
         
+        # UTF-8 für SMTP-Verbindung aktivieren
+        server.ehlo()
+        if hasattr(server, 'esmtp_features') and server.esmtp_features:
+            if '8bitmime' in server.esmtp_features:
+                logger.info("8BITMIME wird unterstützt - UTF-8 E-Mails möglich")
+            else:
+                logger.warning("8BITMIME nicht unterstützt - E-Mails werden als 7-bit gesendet")
+        
         # Authentifizierung (falls erforderlich)
         if config.get('use_auth', True) and config['mail_username'] and config['mail_password']:
             server.login(config['mail_username'], config['mail_password'])
         
-        # E-Mail senden
+        # E-Mail senden - explizit als UTF-8 kodieren
         text = msg.as_string()
+        # Stelle sicher, dass der Text als UTF-8 Bytes gesendet wird
+        if isinstance(text, str):
+            text = text.encode('utf-8')
         server.sendmail(config['mail_username'], recipient, text)
         server.quit()
         
@@ -447,7 +470,7 @@ def _send_email_direct(recipient, subject, body, attachments=None):
 
 def send_password_mail(recipient, password):
     subject = 'Ihr Zugang zu Scandy'
-    body = f"Willkommen bei Scandy!\n\nIhr initiales Passwort lautet: {password}\nBitte ändern Sie es nach dem ersten Login.\n\nViele Grüße\nIhr Scandy-Team"
+    body = f"Willkommen bei Scandy!\n\nIhr initiales Passwort lautet: {password}\nBitte ändern Sie es nach dem ersten Login.\n\nMit freundlichen Grüßen\nIhr Scandy-Team"
     
     if mail is None:
         _log_email(subject, recipient, body)
@@ -468,9 +491,9 @@ def send_password_reset_mail(recipient, password=None, reset_link=None):
     subject = 'Scandy Passwort-Reset'
     
     if reset_link:
-        body = f"Sie haben einen Passwort-Reset angefordert.\nBitte klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen:\n{reset_link}\n\nViele Grüße\nIhr Scandy-Team"
+        body = f"Sie haben einen Passwort-Reset angefordert.\nBitte klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen:\n{reset_link}\n\nMit freundlichen Grüßen\nIhr Scandy-Team"
     elif password:
-        body = f"Ihr neues Passwort lautet: {password}\nBitte ändern Sie es nach dem Login.\n\nViele Grüße\nIhr Scandy-Team"
+        body = f"Ihr neues Passwort lautet: {password}\nBitte ändern Sie es nach dem Login.\n\nMit freundlichen Grüßen\nIhr Scandy-Team"
     else:
         body = "Es ist ein Fehler aufgetreten."
     
@@ -517,6 +540,43 @@ def send_backup_mail(recipient, backup_path):
             return success
         except Exception as e:
             logger.error(f"Fehler beim Versenden der Backup-E-Mail: {e}")
+            return False
+
+def send_weekly_backup_mail(recipient, archive_path):
+    """Sendet wöchentliches Backup-Archiv per E-Mail"""
+    subject = 'Scandy - Wöchentliches Backup-Archiv'
+    body = f"""Hallo,
+
+anbei erhalten Sie das wöchentliche Backup-Archiv von Scandy.
+
+Das Archiv enthält alle aktuellen Backups der letzten Woche und wurde automatisch am {datetime.now().strftime('%d.%m.%Y um %H:%M')} erstellt.
+
+Archiv-Datei: {os.path.basename(archive_path)}
+
+Mit freundlichen Grüßen
+Ihr Scandy-System"""
+
+    if mail is None:
+        _log_email(subject, recipient, body)
+        return True
+    else:
+        try:
+            # Verwende direkte SMTP-Verbindung um "Gesendet"-Ordner zu vermeiden
+            attachments = None
+            if os.path.getsize(archive_path) < 25 * 1024 * 1024:  # 25MB Limit für Archive
+                attachments = [{
+                    'path': archive_path,
+                    'filename': os.path.basename(archive_path)
+                }]
+            else:
+                body += f"\n\nDas Backup-Archiv ist zu groß für den E-Mail-Versand (>25MB).\nSie finden es unter: {archive_path}"
+            
+            success = _send_email_direct(recipient, subject, body, attachments)
+            if success:
+                logger.info(f"Wöchentliches Backup-Archiv erfolgreich an {recipient} gesendet (ohne Speicherung im Gesendet-Ordner)")
+            return success
+        except Exception as e:
+            logger.error(f"Fehler beim Versenden des wöchentlichen Backup-Archivs: {e}")
             return False
 
 def reload_email_config(app):

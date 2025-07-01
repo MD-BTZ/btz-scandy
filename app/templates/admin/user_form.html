@@ -91,6 +91,21 @@
             </select>
         </div>
 
+        <div class="form-control">
+            <label class="cursor-pointer label justify-start">
+                <input type="checkbox" name="timesheet_enabled" 
+                       class="checkbox checkbox-primary mr-3" 
+                       {% if request.form.timesheet_enabled == 'on' or (current_user_data.timesheet_enabled if current_user_data else False) %}checked{% endif %}>
+                <span class="label-text font-medium">Wochenbericht-Feature aktivieren</span>
+            </label>
+            <label class="label">
+                <span class="label-text-alt text-info">
+                    Wenn aktiviert, kann der Benutzer Wochenberichte erstellen und verwalten. 
+                    Das Feature wird in der Navigation angezeigt.
+                </span>
+            </label>
+        </div>
+
         <div class="flex justify-end space-x-3 pt-4">
             <a href="{{ url_for('admin.manage_users') }}" class="btn btn-ghost">Abbrechen</a>
             <button type="submit" class="btn btn-primary">{{ 'Änderungen speichern' if current_user_data else 'Benutzer erstellen' }}</button>

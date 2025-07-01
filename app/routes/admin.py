@@ -1990,6 +1990,9 @@ def add_user():
                                  roles=['admin', 'mitarbeiter', 'anwender'],
                                  form_data=request.form)
         
+        # Hole timesheet_enabled aus dem Formular
+        timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
+        
         # Benutzer erstellen
         user_data = {
             'username': username,
@@ -1998,6 +2001,7 @@ def add_user():
             'firstname': firstname,
             'lastname': lastname,
             'role': role,
+            'timesheet_enabled': timesheet_enabled,
             'is_active': True,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -2076,6 +2080,9 @@ def edit_user(user_id):
                                  user=user,
                                  roles=['admin', 'mitarbeiter', 'anwender'])
         
+        # Hole timesheet_enabled aus dem Formular
+        timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
+        
         # Benutzer aktualisieren
         update_data = {
             'username': username,
@@ -2084,6 +2091,7 @@ def edit_user(user_id):
             'firstname': firstname,
             'lastname': lastname,
             'role': role,
+            'timesheet_enabled': timesheet_enabled,
             'updated_at': datetime.now()
         }
         
@@ -3588,16 +3596,53 @@ def auto_backup():
                     flash('Backup-Zeiten erfolgreich gespeichert.', 'success')
                 else:
                     flash(f'Fehler beim Speichern der Backup-Zeiten: {message}', 'error')
+            
+            elif action == 'save_weekly_time':
+                # Wöchentliche Backup-Zeit speichern
+                weekly_time = request.form.get('weekly_backup_time', '').strip()
+                
+                success, message = auto_backup_scheduler.save_weekly_backup_time(weekly_time)
+                
+                if success:
+                    flash('Wöchentliche Backup-Zeit erfolgreich gespeichert.', 'success')
+                else:
+                    flash(f'Fehler beim Speichern der wöchentlichen Backup-Zeit: {message}', 'error')
+            
+            elif action == 'save_weekly_email':
+                # E-Mail für wöchentliche Backups speichern
+                weekly_email = request.form.get('weekly_backup_email', '').strip()
+                
+                if weekly_email and '@' in weekly_email:
+                    try:
+                        from app.models.mongodb_database import mongodb
+                        mongodb.update_one('settings', 
+                                         {'key': 'weekly_backup_email'}, 
+                                         {'$set': {'value': weekly_email}}, 
+                                         upsert=True)
+                        flash('E-Mail-Adresse für wöchentliche Backups erfolgreich gespeichert.', 'success')
+                    except Exception as e:
+                        logger.error(f"Fehler beim Speichern der wöchentlichen Backup-E-Mail: {e}")
+                        flash(f'Fehler beim Speichern der E-Mail-Adresse: {str(e)}', 'error')
+                else:
+                    flash('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'error')
         
-        # Lade aktuelle Backup-Zeiten
+        # Lade aktuelle Einstellungen
         current_times = auto_backup_scheduler.get_backup_times()
+        current_weekly_time = auto_backup_scheduler.get_weekly_backup_time()
+        current_weekly_email = auto_backup_scheduler._get_weekly_backup_email()
         
-        return render_template('admin/auto_backup.html', backup_times=current_times)
+        return render_template('admin/auto_backup.html', 
+                             backup_times=current_times,
+                             weekly_backup_time=current_weekly_time,
+                             weekly_backup_email=current_weekly_email)
         
     except Exception as e:
         logger.error(f"Fehler bei Auto-Backup-Einstellungen: {e}")
         flash('Fehler beim Laden der Auto-Backup-Einstellungen.', 'error')
-        return render_template('admin/auto_backup.html', backup_times=['06:00', '18:00'])
+        return render_template('admin/auto_backup.html', 
+                             backup_times=['06:00', '18:00'],
+                             weekly_backup_time='17:00',
+                             weekly_backup_email='')
 
 @bp.route('/email_settings', methods=['GET', 'POST'])
 @admin_required
@@ -3759,4 +3804,26 @@ def test_email_simple():
         return jsonify({
             'success': False,
             'message': f'Test-Fehler: {str(e)}'
+        })
+
+@bp.route('/backup/weekly/test', methods=['POST'])
+@login_required
+@admin_required
+def test_weekly_backup():
+    """Sendet das wöchentliche Backup-Archiv manuell"""
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        
+        # Führe wöchentliches Backup-Archiv manuell aus
+        auto_backup_scheduler._create_weekly_backup_archive()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Backup-Archiv erfolgreich erstellt, versendet und ZIP-Datei gelöscht'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Versenden des Backup-Archivs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Versenden: {str(e)}'
         })
