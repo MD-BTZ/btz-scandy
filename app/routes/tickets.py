@@ -494,22 +494,45 @@ def auftrag_details_modal(id):
 @bp.route('/<id>/update-status', methods=['POST'])
 @login_required
 def update_status(id):
-    """Aktualisiert den Status eines Tickets"""
+    """Aktualisiert den Status eines Tickets und weist es ggf. automatisch zu"""
     try:
         if not request.is_json:
             return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
 
         data = request.get_json()
         new_status = data.get('status')
-        
         if not new_status:
             return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
 
-        # Aktualisiere den Status
-        if not mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': {'status': new_status, 'updated_at': datetime.now()}}):
+        ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        update_fields = {'status': new_status, 'updated_at': datetime.now()}
+
+        # Automatische Zuweisung: Wenn Status von 'offen' auf etwas anderes wechselt und noch niemand zugewiesen ist
+        if new_status != 'offen' and (not ticket.get('assigned_to')):
+            update_fields['assigned_to'] = current_user.username
+        # Wenn Status auf 'offen' gesetzt wird, Zuweisung entfernen
+        elif new_status == 'offen':
+            update_fields['assigned_to'] = None
+
+        if not mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': update_fields}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
 
-        return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
+        # Spezielle Nachricht bei automatischer Zuweisung
+        if new_status != 'offen' and (not ticket.get('assigned_to')):
+            return jsonify({
+                'success': True, 
+                'message': f'Status erfolgreich auf "{new_status}" geändert. Ticket wurde automatisch Ihnen zugewiesen.'
+            })
+        elif new_status == 'offen':
+            return jsonify({
+                'success': True, 
+                'message': f'Status erfolgreich auf "{new_status}" geändert. Zuweisung wurde entfernt.'
+            })
+        else:
+            return jsonify({'success': True, 'message': 'Status erfolgreich aktualisiert'})
 
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren des Status: {str(e)}")
