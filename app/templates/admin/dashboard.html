@@ -285,6 +285,33 @@
                 </form>
             </div>
         </div>
+
+        <!-- Ticket-Kategorien -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-ticket-alt text-primary"></i>
+                    Ticket-Kategorien
+                </h2>
+                <div class="overflow-y-auto max-h-64">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketCategoriesList">
+                            <!-- Dynamisch per JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <form id="addTicketCategoryForm" class="mt-4 flex gap-2">
+                    <input type="text" name="name" class="input input-bordered flex-1" placeholder="Ticket-Kategorie eingeben" required>
+                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -3,6 +3,7 @@ from flask_login import login_required
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker
 from app.models.mongodb_database import mongodb
 from datetime import datetime
+from app.utils.decorators import not_teilnehmer_required
 import logging
 
 bp = Blueprint('quick_scan', __name__, url_prefix='/quick_scan')
@@ -10,11 +11,13 @@ logger = logging.getLogger(__name__)
 
 @bp.route('/')
 @login_required
+@not_teilnehmer_required
 def quick_scan():
     return render_template('quick_scan.html')
 
 @bp.route('/process', methods=['POST'])
 @login_required
+@not_teilnehmer_required
 def process():
     try:
         data = request.get_json()

@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string, current_app
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb
-from app.utils.decorators import login_required, admin_required
+from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
 from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number
 from app.models.user import User
 import logging
@@ -15,6 +15,7 @@ bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 
 @bp.route('/')
 @login_required
+@not_teilnehmer_required
 def index():
     """Zeigt die Ticket-Übersicht für den Benutzer."""
     # Hole die eigenen Tickets für die Anzeige (nur nicht geschlossene und nicht gelöschte)
@@ -878,7 +879,23 @@ def inject_unread_tickets_count():
     return dict(unread_tickets_count=count)
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
+@login_required
 def public_create_order():
+    """Interne Auftragserstellung für eingeloggte Benutzer."""
+    return _handle_auftrag_creation()
+
+@bp.route('/auftrag-extern', methods=['GET', 'POST'])
+def external_create_order():
+    """Externe Auftragserstellung ohne Login für externe Einbindungen."""
+    if request.method == 'POST':
+        return _handle_auftrag_creation(external=True)
+    categories = get_ticket_categories_from_settings()
+    return render_template('tickets/auftrag_external_embed.html', 
+                         categories=categories,
+                         error=None)
+
+def _handle_auftrag_creation(external=False):
+    """Gemeinsame Logik für interne und externe Auftragserstellung."""
     """Öffentliche Auftragserstellung ohne Login."""
     if request.method == 'POST':
         try:
@@ -896,16 +913,29 @@ def public_create_order():
             
             # Validiere die Pflichtfelder
             if not title:
-                flash('Titel ist erforderlich.', 'error')
-                return redirect(url_for('tickets.public_create_order'))
+                categories = get_ticket_categories_from_settings()
+                if external or not current_user.is_authenticated:
+                    return render_template('tickets/auftrag_external_embed.html', 
+                                         categories=categories,
+                                         error='Titel ist erforderlich.')
+                else:
+                    flash('Titel ist erforderlich.', 'error')
+                    return redirect(url_for('tickets.public_create_order'))
                 
             if not description:
-                flash('Beschreibung ist erforderlich.', 'error')
-                return redirect(url_for('tickets.public_create_order'))
+                categories = get_ticket_categories_from_settings()
+                if external or not current_user.is_authenticated:
+                    return render_template('tickets/auftrag_external_embed.html', 
+                                         categories=categories,
+                                         error='Beschreibung ist erforderlich.')
+                else:
+                    flash('Beschreibung ist erforderlich.', 'error')
+                    return redirect(url_for('tickets.public_create_order'))
                 
-            if not category:
-                flash('Kategorie ist erforderlich.', 'error')
-                return redirect(url_for('tickets.public_create_order'))
+            # Kategorie ist optional, daher entfernen wir die Validierung
+            # if not category:
+            #     flash('Kategorie ist erforderlich.', 'error')
+            #     return redirect(url_for('tickets.public_create_order'))
             
             # Erstelle das Ticket
             ticket_data = {
@@ -919,7 +949,8 @@ def public_create_order():
                 'status': 'offen',
                 'created_at': datetime.now(),
                 'updated_at': datetime.now(),
-                'ticket_number': get_next_ticket_number()  # Neue Auftragsnummer
+                'ticket_number': get_next_ticket_number(),  # Neue Auftragsnummer
+                'is_external': not current_user.is_authenticated  # Markiere externe Aufträge
             }
             
             result = mongodb.insert_one('tickets', ticket_data)
@@ -940,18 +971,48 @@ def public_create_order():
             
             mongodb.insert_one('auftrag_details', auftrag_details_data)
             
-            flash('Ihr Auftrag wurde erfolgreich erstellt. Wir werden uns schnellstmöglich bei Ihnen melden.', 'success')
-            return redirect(url_for('tickets.public_create_order'))
+            # Sende Bestätigungs-E-Mail
+            if kontakt:  # Nur wenn Kontaktdaten vorhanden sind
+                try:
+                    from app.utils.email_utils import send_auftrag_confirmation_email
+                    # Datum formatieren für E-Mail
+                    ticket_data_for_email = ticket_data.copy()
+                    if ticket_data_for_email.get('created_at'):
+                        ticket_data_for_email['created_at'] = ticket_data_for_email['created_at'].strftime('%d.%m.%Y %H:%M Uhr')
+                    
+                    send_auftrag_confirmation_email(
+                        ticket_data=ticket_data_for_email,
+                        auftrag_details=auftrag_details_data,
+                        recipient_email=kontakt
+                    )
+                except Exception as email_error:
+                    logger.error(f"Fehler beim Senden der Bestätigungs-E-Mail: {str(email_error)}")
+                    # E-Mail-Fehler soll den Auftrag nicht verhindern
+            
+            # Für alle Benutzer zur Bestätigungsseite
+            return render_template('auftrag_public_success.html', 
+                                 ticket_number=ticket_data['ticket_number'],
+                                 ticket=ticket_data)
             
         except Exception as e:
             logging.error(f"Fehler bei der öffentlichen Auftragserstellung: {str(e)}", exc_info=True)
-            flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
-            return redirect(url_for('tickets.public_create_order'))
+            categories = get_ticket_categories_from_settings()
+            if external or not current_user.is_authenticated:
+                return render_template('tickets/auftrag_external_embed.html', 
+                                     categories=categories,
+                                     error='Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.')
+            else:
+                flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
+                return redirect(url_for('tickets.public_create_order'))
     
     # Hole die Kategorien für das Formular
     categories = get_ticket_categories_from_settings()
     
-    return render_template('auftrag_public.html', 
+    if external or not current_user.is_authenticated:
+        return render_template('tickets/auftrag_external_embed.html', 
+                             categories=categories,
+                             error=None)
+    return render_template('tickets/create_auftrag.html', 
                          categories=categories,
                          priority_colors={
                              'niedrig': 'secondary',

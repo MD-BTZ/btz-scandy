@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   scandy-mongodb:
     image: mongo:7.0
@@ -92,7 +90,7 @@ services:
     networks:
       - scandy-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "powershell", "-Command", "try { Invoke-WebRequest -Uri 'http://localhost:5000/health' -UseBasicParsing -TimeoutSec 5 | Out-Null; exit 0 } catch { exit 1 }"]
       interval: 30s
       timeout: 10s
       retries: 3

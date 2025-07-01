@@ -147,8 +147,8 @@ echo "- Scandy App:     http://localhost:5000"
 echo "- Mongo Express:  http://localhost:8081"
 echo
 echo "🔐 Standard-Zugangsdaten:"
-echo "- Benutzer: admin"
-echo "- Passwort: admin123"
+echo "- Admin: admin / admin123"
+echo "- Teilnehmer: teilnehmer / admin123"
 echo
 echo "📊 Datenbank-Zugang (Mongo Express):"
 echo "- Benutzer: admin"

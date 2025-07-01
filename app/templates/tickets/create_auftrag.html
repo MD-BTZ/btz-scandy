@@ -1,0 +1,176 @@
+{% if current_user.is_authenticated %}
+{% extends "base.html" %}
+{% else %}
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <title>Neuer Auftrag - BTZ Werkstatt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.0.7/dist/full.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e0e7ff 100%);
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+{% endif %}
+
+{% block title %}Neuer Auftrag{% endblock %}
+
+{% block content %}
+{% if current_user.is_authenticated %}
+<div class="container mx-auto p-4">
+    <div class="max-w-2xl mx-auto">
+{% else %}
+<div class="flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-2xl">
+{% endif %}
+        <!-- Header -->
+        <div class="mb-8">
+            {% if not current_user.is_authenticated %}
+            <div class="text-center mb-6">
+                <img src="{{ url_for('static', filename='images/BTZ_logo.jpg') }}" 
+                     alt="BTZ Logo" 
+                     class="h-16 w-auto mx-auto mb-4">
+                <h2 class="text-xl font-semibold text-base-content/70">BTZ Köln - Werkstattauftrag</h2>
+            </div>
+            {% endif %}
+            <h1 class="text-3xl font-bold text-center mb-4">
+                <i class="fas fa-clipboard-list text-primary mr-3"></i>
+                Neuen Auftrag an die Werkstatt senden
+            </h1>
+            <p class="text-center text-base-content/70">
+                Erstellen Sie einen neuen Auftrag für die Werkstatt. Wir werden uns schnellstmöglich bei Ihnen melden.
+            </p>
+        </div>
+
+        <!-- Formular -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                {% if error %}
+                    <div class="alert alert-error mb-6">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>{{ error }}</span>
+                    </div>
+                {% endif %}
+
+                <form method="POST" autocomplete="off">
+                    <!-- Titel und Kategorie -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-semibold">Auftragstitel *</span>
+                            </label>
+                            <input type="text" name="title" class="input input-bordered w-full" required 
+                                   placeholder="z.B. Reparatur Stuhl">
+                        </div>
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-semibold">Kategorie</span>
+                            </label>
+                            <select name="category" class="select select-bordered w-full">
+                                <option value="">Keine Kategorie</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat }}">{{ cat }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Beschreibung -->
+                    <div class="form-control mb-6">
+                        <label class="label">
+                            <span class="label-text font-semibold">Beschreibung *</span>
+                        </label>
+                        <textarea name="description" class="textarea textarea-bordered w-full min-h-[120px]" 
+                                  required placeholder="Beschreibe den Auftrag möglichst genau..."></textarea>
+                    </div>
+
+                    <!-- Name und Kontakt -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-semibold">Ihr Name *</span>
+                            </label>
+                            <input type="text" name="name" class="input input-bordered w-full" required 
+                                   placeholder="Ihr Name">
+                        </div>
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-semibold">Kontakt (E-Mail) *</span>
+                            </label>
+                            <input type="email" name="kontakt" class="input input-bordered w-full" required 
+                                   placeholder="z.B. max@beispiel.de">
+                        </div>
+                    </div>
+
+                    <!-- Bereich -->
+                    <div class="form-control mb-6">
+                        <label class="label">
+                            <span class="label-text font-semibold">Bereich</span>
+                        </label>
+                        <input type="text" name="bereich" class="input input-bordered w-full" 
+                               placeholder="z.B. Metallwerkstatt">
+                    </div>
+
+                    <!-- Auftraggeber Typ -->
+                    <div class="form-control mb-6">
+                        <label class="label">
+                            <span class="label-text font-semibold">Auftraggeber *</span>
+                        </label>
+                        <div class="flex gap-6 items-center mt-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="auftraggeber_typ" value="intern" 
+                                       class="radio radio-primary" required>
+                                <span>Intern</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="auftraggeber_typ" value="extern" 
+                                       class="radio radio-primary" required>
+                                <span>Extern</span>
+                            </label>
+                        </div>
+                        <div class="mt-3 p-4 bg-base-200 rounded-lg">
+                            <p class="text-sm">
+                                <strong>Was bedeutet "intern" und "extern"?</strong><br>
+                                Wähle <strong>intern</strong>, wenn der Auftrag für die Verwendung im BTZ selbst gedacht ist.<br>
+                                Wähle <strong>extern</strong>, wenn der Auftrag für den privaten Gebrauch gedacht ist.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="flex justify-center mt-8">
+                        <button type="submit" class="btn btn-primary btn-lg px-8">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Auftrag absenden
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Zusätzliche Informationen -->
+        <div class="mt-8 text-center">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <span>
+                    <strong>Hinweis:</strong> Nach dem Absenden Ihres Auftrags erhalten Sie eine Bestätigung 
+                    und wir werden uns schnellstmöglich bei Ihnen melden.
+                </span>
+            </div>
+        </div>
+    </div>
+{% if current_user.is_authenticated %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% if not current_user.is_authenticated %}
+</body>
+</html>
+{% endif %} 

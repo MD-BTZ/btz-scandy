@@ -597,3 +597,18 @@ def timesheet_download(ts_id):
     output_path = os.path.join(temp_dir, f'woplan_{datetime.now().strftime("%Y%m%d_%H%M%S")}.docx')
     doc.save(output_path)
     return send_file(output_path, as_attachment=True, download_name=f'woplan_kw{ts["kw"]}.docx')
+
+@bp.route('/timesheet/<ts_id>/delete', methods=['POST'])
+@login_required
+def timesheet_delete(ts_id):
+    ts = mongodb.find_one('timesheets', {'_id': ObjectId(ts_id)})
+    if not ts:
+        flash('Wochenbericht nicht gefunden.', 'error')
+        return redirect(url_for('workers.timesheet_list'))
+    # Nur Besitzer oder Admin darf löschen
+    if ts.get('user_id') != current_user.username and not current_user.is_admin:
+        flash('Sie dürfen nur Ihre eigenen Wochenberichte löschen.', 'error')
+        return redirect(url_for('workers.timesheet_list'))
+    mongodb.delete_one('timesheets', {'_id': ObjectId(ts_id)})
+    flash('Wochenbericht wurde gelöscht.', 'success')
+    return redirect(url_for('workers.timesheet_list'))

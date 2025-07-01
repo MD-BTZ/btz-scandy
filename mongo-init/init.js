@@ -1,5 +1,5 @@
-// MongoDB Initialisierung für Scandy production
-// Datenbank: scandy_production
+// MongoDB Initialisierung für Scandy
+// Datenbank: scandy
 
 // Erstelle MongoDB-Authentifizierungsbenutzer in der admin-Datenbank
 db = db.getSiblingDB('admin');
@@ -7,15 +7,15 @@ db = db.getSiblingDB('admin');
 // Erstelle den MongoDB-Authentifizierungsbenutzer
 db.createUser({
     user: 'admin',
-    pwd: '9jzJdz_AauYF7G4s',
+    pwd: 'scandy123',
     roles: [
-        { role: 'readWrite', db: 'scandy_production' },
-        { role: 'dbAdmin', db: 'scandy_production' }
+        { role: 'readWrite', db: 'scandy' },
+        { role: 'dbAdmin', db: 'scandy' }
     ]
 });
 
 // Wechsle zur Instanz-spezifischen Datenbank
-db = db.getSiblingDB('scandy_production');
+db = db.getSiblingDB('scandy');
 
 // Erstelle Collections
 db.createCollection('tools');
@@ -52,7 +52,7 @@ db.tickets.createIndex({ "assigned_to": 1 });
 // Erstelle Admin-Benutzer
 db.users.insertOne({
     username: 'admin',
-    email: 'admin@production.local',
+    email: 'admin@scandy.local',
     password_hash: '$2b$12$EawTS69lQeWoJoeVRms9BuU6XfePQzgTjZwVjn8dl4xqA3rnxVbHy',
     role: 'admin',
     is_active: true,
@@ -60,10 +60,22 @@ db.users.insertOne({
     updated_at: new Date()
 });
 
+// Erstelle Beispiel-Teilnehmer
+db.users.insertOne({
+    username: 'teilnehmer',
+    email: 'teilnehmer@scandy.local',
+    password_hash: '$2b$12$EawTS69lQeWoJoeVRms9BuU6XfePQzgTjZwVjn8dl4xqA3rnxVbHy',
+    role: 'teilnehmer',
+    is_active: true,
+    timesheet_enabled: true,
+    created_at: new Date(),
+    updated_at: new Date()
+});
+
 // Erstelle Standard-Einstellungen
 db.settings.insertOne({
     key: 'system_name',
-    value: 'Scandy production',
+    value: 'Scandy',
     created_at: new Date(),
     updated_at: new Date()
 });
@@ -89,7 +101,7 @@ db.settings.insertOne({
     updated_at: new Date()
 });
 
-print('MongoDB für Scandy production initialisiert!');
-print('Datenbank: scandy_production');
-print('MongoDB-Authentifizierungsbenutzer: admin / 9jzJdz_AauYF7G4s');
+print('MongoDB für Scandy initialisiert!');
+print('Datenbank: scandy');
+print('MongoDB-Authentifizierungsbenutzer: admin / scandy123');
 print('App-Admin-Benutzer: admin / admin123');

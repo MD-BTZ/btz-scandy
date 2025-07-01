@@ -52,8 +52,8 @@
 <body class="min-h-screen bg-base-200">
     <div class="flex flex-col min-h-screen">
         <!-- QuickScan-Trigger (außerhalb der Sidebar) -->
-        <div class="w-24 h-24 fixed left-0 top-0 -mt-3 ml-[-10px] z-[9999]" id="quickScanTrigger" title="Quick Scan öffnen">
-            <div class="w-full h-full rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer relative shadow-lg hover:shadow-2xl hover:scale-110">
+        <div class="w-24 h-24 fixed left-0 top-0 -mt-3 ml-[-10px] z-[9999]" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
+            <div class="w-full h-full rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center {% if current_user.role == 'teilnehmer' %}bg-base-300 opacity-50{% else %}bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200{% endif %} cursor-pointer relative shadow-lg hover:shadow-2xl hover:scale-110">
                 <img src="/static/images/scandy-logo.svg" alt="Scandy Logo" class="w-16 h-16 object-contain transition-transform duration-300">
                 <!-- Scanner Animation -->
                 <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
@@ -69,6 +69,8 @@
             <div class="w-8 h-0.5 bg-base-content/20 rounded-full ml-4 mb-2"></div>
             
             <!-- Navigation Items (using flex) -->
+            {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
+            <!-- Werkzeuge - nur für Nicht-Teilnehmer -->
             <a href="{{ url_for('tools.index') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and 'tools' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -76,7 +78,7 @@
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">{{ app_labels['tools']['name'] }}</span>
             </a>
-            
+            <!-- Verbrauchsgüter - nur für Nicht-Teilnehmer -->
             <a href="{{ url_for('consumables.index') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and 'consumables' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -84,6 +86,7 @@
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">{{ app_labels['consumables']['name'] }}</span>
             </a>
+            {% endif %}
             
             {# Mitarbeiter Link nur für Mitarbeiter und Admins #}
             {% if current_user.is_authenticated and current_user.is_mitarbeiter %}
@@ -96,8 +99,8 @@
             </a>
             {% endif %}
             
-            {# Ticketsystem für alle eingeloggten Benutzer #}
-            {% if current_user.is_authenticated %}
+            {# Ticketsystem für alle eingeloggten Benutzer außer Teilnehmer #}
+            {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
@@ -110,7 +113,7 @@
             </a>
             {% endif %}
 
-            {# Wochenplan-Link für alle authentifizierten Benutzer (Mitarbeiter, Admins und Anwender) #}
+            {# Wochenplan-Link für alle authentifizierten Benutzer (Mitarbeiter, Admins, Anwender und Teilnehmer) #}
             {% if current_user.is_authenticated and current_user.timesheet_enabled %}
             <a href="{{ url_for('workers.timesheet_list') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
@@ -121,6 +124,17 @@
                      {% endif %}
                  </div>
                  <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Wochenberichte</span>
+            </a>
+            {% endif %}
+            
+            {# Auftragserstellung - für alle Benutzer #}
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('tickets.public_create_order') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.public_create_order' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-file-alt text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Auftragserstellung</span>
             </a>
             {% endif %}
 

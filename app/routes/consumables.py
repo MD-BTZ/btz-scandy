@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from app.models.mongodb_database import mongodb
-from app.utils.decorators import admin_required, login_required, mitarbeiter_required
+from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 @bp.route('/')
 @login_required
+@not_teilnehmer_required
 def index():
     """Zeigt alle Verbrauchsmaterialien an"""
     try:

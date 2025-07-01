@@ -14,6 +14,7 @@ class User(UserMixin):
             self.role = user_data.get('role', 'anwender')
             self.is_admin = user_data.get('role', 'anwender') == 'admin'
             self.is_mitarbeiter = user_data.get('role', 'anwender') in ['admin', 'mitarbeiter']
+            self.is_teilnehmer = user_data.get('role', 'anwender') == 'teilnehmer'
             # Speichere is_active als normales Attribut
             self._active = user_data.get('is_active', True)
             
@@ -23,8 +24,8 @@ class User(UserMixin):
                 self.timesheet_enabled = user_data.get('timesheet_enabled', False)
             else:
                 # Feld existiert nicht - setze Standard basierend auf Rolle
-                if user_data.get('role') == 'anwender':
-                    self.timesheet_enabled = True  # Anwender standardmäßig aktiviert
+                if user_data.get('role') in ['anwender', 'teilnehmer']:
+                    self.timesheet_enabled = True  # Anwender und Teilnehmer standardmäßig aktiviert
                 else:
                     self.timesheet_enabled = False  # Andere Rollen standardmäßig deaktiviert
                 
@@ -36,6 +37,7 @@ class User(UserMixin):
             self.role = 'anwender'
             self.is_admin = False
             self.is_mitarbeiter = False
+            self.is_teilnehmer = False
             self._active = True
             self.timesheet_enabled = False
     
@@ -50,19 +52,17 @@ class User(UserMixin):
     
     @property
     def is_active(self):
-        return getattr(self, '_active', True)
+        return self._active
     
-    def _save_timesheet_enabled(self, user_id, timesheet_enabled):
-        """Speichert das timesheet_enabled Feld automatisch in der Datenbank"""
+    def _save_timesheet_enabled(self, user_id, enabled):
+        """Speichert das timesheet_enabled Feld in der Datenbank"""
         try:
             from app.models.mongodb_database import mongodb
-            from bson import ObjectId
-            
-            mongodb.update_one('users', 
-                             {'_id': ObjectId(user_id)}, 
-                             {'$set': {'timesheet_enabled': timesheet_enabled}})
+            mongodb.db.users.update_one(
+                {'_id': user_id},
+                {'$set': {'timesheet_enabled': enabled}}
+            )
         except Exception as e:
-            # Logge den Fehler, aber lass das System weiterlaufen
+            # Logge den Fehler, aber falle nicht aus
             import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Konnte timesheet_enabled nicht automatisch speichern für Benutzer {user_id}: {e}") 
+            logging.error(f"Fehler beim Speichern von timesheet_enabled für User {user_id}: {e}") 

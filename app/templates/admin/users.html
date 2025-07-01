@@ -77,6 +77,22 @@
                         <li><i class="fas fa-times text-error mr-1"></i>Keine manuelle Ausleihe</li>
                     </ul>
                 </div>
+                <!-- Teilnehmer -->
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h3 class="font-bold mb-2 flex items-center">
+                        <span class="badge badge-secondary mr-2">Teilnehmer</span>
+                        <span>Teilnehmer</span>
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li><i class="fas fa-check text-success mr-1"></i>Wochenberichte erstellen</li>
+                        <li><i class="fas fa-check text-success mr-1"></i>Auftragserstellung</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine Mitarbeiter-Funktionen</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine {{ app_labels.tools.name }}-Übersicht</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Keine {{ app_labels.consumables.name }}-Übersicht</li>
+                        <li><i class="fas fa-times text-error mr-1"></i>Kein Quickscan</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -101,6 +117,8 @@
                             <span class="badge badge-error">Admin</span>
                         {% elif user.role == 'mitarbeiter' %}
                             <span class="badge badge-warning">Mitarbeiter</span>
+                        {% elif user.role == 'teilnehmer' %}
+                            <span class="badge badge-secondary">Teilnehmer</span>
                         {% else %}
                             <span class="badge badge-info">Benutzer</span>
                         {% endif %}

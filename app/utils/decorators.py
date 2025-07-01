@@ -96,6 +96,64 @@ def mitarbeiter_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def teilnehmer_required(f):
+    """Decorator für Routen, die nur Teilnehmern zugänglich sind."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        logger.debug(f"[DECORATOR] teilnehmer_required: Checking user {getattr(current_user, 'id', 'Guest')}")
+        if not current_user.is_authenticated:
+            logger.warning(f"[DECORATOR] teilnehmer_required: User not authenticated. Redirecting to login.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Bitte melden Sie sich an.',
+                    'redirect': url_for('auth.login', next=request.url)
+                }), 401
+            flash("Bitte melden Sie sich an.", "info")
+            return redirect(url_for('auth.login', next=request.url))
+        
+        if current_user.role != 'teilnehmer':
+            logger.warning(f"[DECORATOR] teilnehmer_required: User {current_user.id} lacks permission. Aborting with 403.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine Berechtigung für diese Aktion.'
+                }), 403
+            abort(403)
+        
+        logger.debug(f"[DECORATOR] teilnehmer_required: Access granted for user {current_user.id}. Proceeding to route function.")
+        return f(*args, **kwargs)
+    return decorated_function
+
+def not_teilnehmer_required(f):
+    """Decorator für Routen, die Teilnehmern NICHT zugänglich sind."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        logger.debug(f"[DECORATOR] not_teilnehmer_required: Checking user {getattr(current_user, 'id', 'Guest')}")
+        if not current_user.is_authenticated:
+            logger.warning(f"[DECORATOR] not_teilnehmer_required: User not authenticated. Redirecting to login.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Bitte melden Sie sich an.',
+                    'redirect': url_for('auth.login', next=request.url)
+                }), 401
+            flash("Bitte melden Sie sich an.", "info")
+            return redirect(url_for('auth.login', next=request.url))
+        
+        if current_user.role == 'teilnehmer':
+            logger.warning(f"[DECORATOR] not_teilnehmer_required: User {current_user.id} is teilnehmer. Aborting with 403.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine Berechtigung für diese Aktion.'
+                }), 403
+            abort(403)
+        
+        logger.debug(f"[DECORATOR] not_teilnehmer_required: Access granted for user {current_user.id}. Proceeding to route function.")
+        return f(*args, **kwargs)
+    return decorated_function
+
 def log_route(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):

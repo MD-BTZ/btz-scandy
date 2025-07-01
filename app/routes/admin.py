@@ -1940,7 +1940,7 @@ def add_user():
         role = request.form.get('role', '').strip()
         if current_user.role != 'admin' and role == 'admin':
             flash('Sie dürfen keine Admin-Benutzer anlegen.', 'error')
-            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'], form_data=request.form)
+            return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'], form_data=request.form)
     try:
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
@@ -1954,7 +1954,7 @@ def add_user():
         if not username or not firstname or not lastname or not role:
             flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
             return render_template('admin/user_form.html', 
-                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                  form_data=request.form)
         
         # Automatische Passwort-Generierung wenn keines eingegeben wurde
@@ -1979,7 +1979,7 @@ def add_user():
             if password != password_confirm:
                 flash('Passwörter stimmen nicht überein', 'error')
                 return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender'],
+                                     roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                      form_data=request.form)
         
         # Prüfe ob Benutzername bereits existiert
@@ -1987,7 +1987,7 @@ def add_user():
         if existing_user:
             flash('Benutzername existiert bereits', 'error')
             return render_template('admin/user_form.html', 
-                                 roles=['admin', 'mitarbeiter', 'anwender'],
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                  form_data=request.form)
         
         # Hole timesheet_enabled aus dem Formular
@@ -2027,10 +2027,10 @@ def add_user():
         logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
         flash('Fehler beim Erstellen des Benutzers', 'error')
         return render_template('admin/user_form.html', 
-                             roles=['admin', 'mitarbeiter', 'anwender'],
+                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                              form_data=request.form)
     
-    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
 
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -2056,7 +2056,7 @@ def edit_user(user_id):
             flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
             return render_template('admin/user_form.html', 
                                  user=user,
-                                 roles=['admin', 'mitarbeiter', 'anwender'])
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
         
         # Prüfe ob Passwort geändert werden soll
         if password:
@@ -2064,7 +2064,7 @@ def edit_user(user_id):
                 flash('Passwörter stimmen nicht überein', 'error')
                 return render_template('admin/user_form.html', 
                                      user=user,
-                                     roles=['admin', 'mitarbeiter', 'anwender'])
+                                     roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
             password_hash = generate_password_hash(password)
         else:
             password_hash = user.get('password_hash')
@@ -2078,7 +2078,7 @@ def edit_user(user_id):
             flash('Benutzername existiert bereits', 'error')
             return render_template('admin/user_form.html', 
                                  user=user,
-                                 roles=['admin', 'mitarbeiter', 'anwender'])
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
         
         # Hole timesheet_enabled aus dem Formular
         timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
@@ -2107,11 +2107,11 @@ def edit_user(user_id):
         flash('Fehler beim Aktualisieren des Benutzers', 'error')
         return render_template('admin/user_form.html', 
                              user=user,
-                             roles=['admin', 'mitarbeiter', 'anwender'])
+                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
     
     return render_template('admin/user_form.html', 
                          user=user,
-                         roles=['admin', 'mitarbeiter', 'anwender'])
+                         roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
 
 @bp.route('/notices')
 @admin_required
@@ -2204,6 +2204,7 @@ def add_ticket_category():
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
             mongodb.update_one_array(
+                'settings',
                 {'key': 'ticket_categories'},
                 {'$push': {'value': name}}
             )
@@ -2233,6 +2234,7 @@ def delete_ticket_category(category):
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.update_one_array(
+            'settings',
             {'key': 'ticket_categories'},
             {'$pull': {'value': category}}
         )
@@ -2359,7 +2361,8 @@ def get_departments():
 def add_department():
     """Fügt eine neue Abteilung hinzu"""
     try:
-        name = request.form.get('department', '').strip()
+        # Unterstütze beide Feldnamen für Kompatibilität
+        name = request.form.get('name', '').strip() or request.form.get('department', '').strip()
         if not name:
             return jsonify({
                 'success': False,
@@ -2386,12 +2389,23 @@ def add_department():
         # Abteilung zur Liste hinzufügen
         current_departments.append(name)
         
-        # Speichere als Array
-        mongodb.db.settings.update_one(
-            {'key': 'departments'},
-            {'$set': {'value': current_departments}},
-            upsert=True
-        )
+        # Speichere als Array mit robuster Methode
+        try:
+            mongodb.update_one(
+                'settings',
+                {'key': 'departments'},
+                {'value': current_departments},
+                upsert=True
+            )
+        except Exception as db_error:
+            logger.error(f"Datenbankfehler beim Speichern der Abteilung: {str(db_error)}")
+            # Fallback: Versuche es mit update_one_array
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'departments'},
+                {'$set': {'value': current_departments}},
+                upsert=True
+            )
 
         return jsonify({
             'success': True,
@@ -2408,8 +2422,11 @@ def add_department():
 @mitarbeiter_required
 def delete_department(name):
     try:
+        # URL-dekodieren
+        decoded_name = unquote(name)
+        
         # Überprüfen, ob die Abteilung in Verwendung ist
-        workers_with_department = mongodb.db.workers.find_one({'department': name})
+        workers_with_department = mongodb.db.workers.find_one({'department': decoded_name})
         if workers_with_department:
             return jsonify({
                 'success': False,
@@ -2427,12 +2444,24 @@ def delete_department(name):
                 current_departments = value
         
         # Abteilung aus der Liste entfernen
-        if name in current_departments:
-            current_departments.remove(name)
-            mongodb.db.settings.update_one(
-                {'key': 'departments'},
-                {'$set': {'value': current_departments}}
-            )
+        if decoded_name in current_departments:
+            current_departments.remove(decoded_name)
+            try:
+                mongodb.update_one(
+                    'settings',
+                    {'key': 'departments'},
+                    {'value': current_departments},
+                    upsert=True
+                )
+            except Exception as db_error:
+                logger.error(f"Datenbankfehler beim Löschen der Abteilung: {str(db_error)}")
+                # Fallback: Versuche es mit update_one_array
+                mongodb.update_one_array(
+                    'settings',
+                    {'key': 'departments'},
+                    {'$set': {'value': current_departments}},
+                    upsert=True
+                )
         
         return jsonify({
             'success': True,
@@ -2475,7 +2504,8 @@ def get_categories_admin():
 def add_category():
     """Fügt eine neue Kategorie hinzu"""
     try:
-        name = request.form.get('category', '').strip()
+        # Unterstütze beide Feldnamen für Kompatibilität
+        name = request.form.get('name', '').strip() or request.form.get('category', '').strip()
         if not name:
             return jsonify({
                 'success': False,
@@ -2502,12 +2532,23 @@ def add_category():
         # Kategorie zur Liste hinzufügen
         current_categories.append(name)
         
-        # Speichere als Array
-        mongodb.db.settings.update_one(
-            {'key': 'categories'},
-            {'$set': {'value': current_categories}},
-            upsert=True
-        )
+        # Speichere als Array mit robuster Methode
+        try:
+            mongodb.update_one(
+                'settings',
+                {'key': 'categories'},
+                {'value': current_categories},
+                upsert=True
+            )
+        except Exception as db_error:
+            logger.error(f"Datenbankfehler beim Speichern der Kategorie: {str(db_error)}")
+            # Fallback: Versuche es mit update_one_array
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'categories'},
+                {'$set': {'value': current_categories}},
+                upsert=True
+            )
 
         return jsonify({
             'success': True,
@@ -2524,8 +2565,11 @@ def add_category():
 @mitarbeiter_required
 def delete_category(name):
     try:
+        # URL-dekodieren
+        decoded_name = unquote(name)
+        
         # Überprüfen, ob die Kategorie in Verwendung ist
-        tools_with_category = mongodb.db.tools.find_one({'category': name})
+        tools_with_category = mongodb.db.tools.find_one({'category': decoded_name})
         if tools_with_category:
             return jsonify({
                 'success': False,
@@ -2543,12 +2587,24 @@ def delete_category(name):
                 current_categories = value
         
         # Kategorie aus der Liste entfernen
-        if name in current_categories:
-            current_categories.remove(name)
-            mongodb.db.settings.update_one(
-                {'key': 'categories'},
-                {'$set': {'value': current_categories}}
-            )
+        if decoded_name in current_categories:
+            current_categories.remove(decoded_name)
+            try:
+                mongodb.update_one(
+                    'settings',
+                    {'key': 'categories'},
+                    {'value': current_categories},
+                    upsert=True
+                )
+            except Exception as db_error:
+                logger.error(f"Datenbankfehler beim Löschen der Kategorie: {str(db_error)}")
+                # Fallback: Versuche es mit update_one_array
+                mongodb.update_one_array(
+                    'settings',
+                    {'key': 'categories'},
+                    {'$set': {'value': current_categories}},
+                    upsert=True
+                )
         
         return jsonify({
             'success': True,
@@ -2591,7 +2647,8 @@ def get_locations():
 def add_location():
     """Fügt einen neuen Standort hinzu"""
     try:
-        name = request.form.get('location', '').strip()
+        # Unterstütze beide Feldnamen für Kompatibilität
+        name = request.form.get('name', '').strip() or request.form.get('location', '').strip()
         if not name:
             return jsonify({
                 'success': False,
@@ -2618,12 +2675,23 @@ def add_location():
         # Standort zur Liste hinzufügen
         current_locations.append(name)
         
-        # Speichere als Array
-        mongodb.db.settings.update_one(
-            {'key': 'locations'},
-            {'$set': {'value': current_locations}},
-            upsert=True
-        )
+        # Speichere als Array mit robuster Methode
+        try:
+            mongodb.update_one(
+                'settings',
+                {'key': 'locations'},
+                {'value': current_locations},
+                upsert=True
+            )
+        except Exception as db_error:
+            logger.error(f"Datenbankfehler beim Speichern des Standorts: {str(db_error)}")
+            # Fallback: Versuche es mit update_one_array
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'locations'},
+                {'$set': {'value': current_locations}},
+                upsert=True
+            )
 
         return jsonify({
             'success': True,
@@ -2640,8 +2708,11 @@ def add_location():
 @mitarbeiter_required
 def delete_location(name):
     try:
+        # URL-dekodieren
+        decoded_name = unquote(name)
+        
         # Überprüfen, ob der Standort in Verwendung ist
-        tools_with_location = mongodb.db.tools.find_one({'location': name})
+        tools_with_location = mongodb.db.tools.find_one({'location': decoded_name})
         if tools_with_location:
             return jsonify({
                 'success': False,
@@ -2659,12 +2730,24 @@ def delete_location(name):
                 current_locations = value
         
         # Standort aus der Liste entfernen
-        if name in current_locations:
-            current_locations.remove(name)
-            mongodb.db.settings.update_one(
-                {'key': 'locations'},
-                {'$set': {'value': current_locations}}
-            )
+        if decoded_name in current_locations:
+            current_locations.remove(decoded_name)
+            try:
+                mongodb.update_one(
+                    'settings',
+                    {'key': 'locations'},
+                    {'value': current_locations},
+                    upsert=True
+                )
+            except Exception as db_error:
+                logger.error(f"Datenbankfehler beim Löschen des Standorts: {str(db_error)}")
+                # Fallback: Versuche es mit update_one_array
+                mongodb.update_one_array(
+                    'settings',
+                    {'key': 'locations'},
+                    {'$set': {'value': current_locations}},
+                    upsert=True
+                )
         
         return jsonify({
             'success': True,
@@ -2676,6 +2759,204 @@ def delete_location(name):
             'success': False,
             'message': 'Ein Fehler ist aufgetreten.'
         })
+
+# Ticket-Kategorienverwaltung (JSON-API)
+@bp.route('/ticket_categories')
+@mitarbeiter_required
+def get_ticket_categories():
+    """Gibt alle Ticket-Kategorien zurück"""
+    try:
+        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+        categories = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+            elif isinstance(value, list):
+                categories = value
+        return jsonify({
+            'success': True,
+            'categories': [{'name': cat} for cat in categories]
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Ticket-Kategorien: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Laden der Ticket-Kategorien'
+        })
+
+@bp.route('/ticket_categories/add', methods=['POST'])
+@admin_required
+def add_ticket_category_json():
+    """Fügt eine neue Ticket-Kategorie hinzu (JSON-API)"""
+    try:
+        # Unterstütze beide Feldnamen für Kompatibilität
+        name = request.form.get('name', '').strip() or request.form.get('category', '').strip()
+        if not name:
+            return jsonify({
+                'success': False,
+                'message': 'Bitte geben Sie einen Namen ein.'
+            })
+
+        # Prüfen ob Ticket-Kategorie bereits existiert
+        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+        current_categories = []
+        if settings and 'value' in settings:
+            value = settings['value']
+            if isinstance(value, str):
+                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+            elif isinstance(value, list):
+                current_categories = value
+        
+        # Prüfe auf Duplikate (case-insensitive)
+        if any(cat.lower() == name.lower() for cat in current_categories):
+            return jsonify({
+                'success': False,
+                'message': 'Diese Ticket-Kategorie existiert bereits.'
+            })
+
+        # Ticket-Kategorie zur Liste hinzufügen
+        current_categories.append(name)
+        
+        # Speichere als Array mit robuster Methode
+        try:
+            mongodb.update_one(
+                'settings',
+                {'key': 'ticket_categories'},
+                {'value': current_categories},
+                upsert=True
+            )
+        except Exception as db_error:
+            logger.error(f"Datenbankfehler beim Speichern der Ticket-Kategorie: {str(db_error)}")
+            # Fallback: Versuche es mit update_one_array
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'ticket_categories'},
+                {'$set': {'value': current_categories}},
+                upsert=True
+            )
+
+        return jsonify({
+            'success': True,
+            'message': 'Ticket-Kategorie erfolgreich hinzugefügt.'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Ein Fehler ist aufgetreten.'
+        })
+
+@bp.route('/ticket_categories/delete/<name>', methods=['POST'])
+@admin_required
+def delete_ticket_category_json(name):
+    """Löscht eine Ticket-Kategorie (JSON-API)"""
+    try:
+        # URL-dekodieren
+        decoded_name = unquote(name)
+        
+        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
+        tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name})
+        if tickets_with_category:
+            return jsonify({
+                'success': False,
+                'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
+            })
+
+        # Ticket-Kategorie aus der Liste entfernen
+        try:
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'ticket_categories'},
+                {'$pull': {'value': decoded_name}}
+            )
+        except Exception as db_error:
+            logger.error(f"Datenbankfehler beim Löschen der Ticket-Kategorie: {str(db_error)}")
+            # Fallback: Lade alle Kategorien und entferne die gewünschte
+            settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+            if settings and 'value' in settings:
+                current_categories = settings['value']
+                if isinstance(current_categories, list) and decoded_name in current_categories:
+                    current_categories.remove(decoded_name)
+                    mongodb.update_one(
+                        'settings',
+                        {'key': 'ticket_categories'},
+                        {'value': current_categories},
+                        upsert=True
+                    )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Ticket-Kategorie erfolgreich gelöscht.'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Ein Fehler ist aufgetreten.'
+        })
+
+# Legacy-Routen für Ticket-Kategorien (für Kompatibilität)
+@bp.route('/add_ticket_category', methods=['POST'])
+@admin_required
+def add_ticket_category_legacy():
+    """Fügt eine neue Ticket-Kategorie hinzu (Legacy-Route)"""
+    try:
+        name = request.form.get('category')
+        if not name:
+            flash('Bitte geben Sie einen Namen ein.', 'error')
+            return redirect(url_for('admin.tickets'))
+
+        # Prüfen ob Ticket-Kategorie bereits existiert
+        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+        if settings and name in settings.get('value', []):
+            flash('Diese Ticket-Kategorie existiert bereits.', 'error')
+            return redirect(url_for('admin.tickets'))
+
+        # Ticket-Kategorie zur Liste hinzufügen
+        if settings:
+            mongodb.update_one_array(
+                'settings',
+                {'key': 'ticket_categories'},
+                {'$push': {'value': name}}
+            )
+        else:
+            mongodb.insert_one('settings', {
+                'key': 'ticket_categories',
+                'value': [name]
+            })
+
+        flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
+        return redirect(url_for('admin.tickets'))
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
+        flash('Ein Fehler ist aufgetreten.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+@bp.route('/delete_ticket_category/<category>', methods=['POST'])
+@admin_required
+def delete_ticket_category_legacy(category):
+    """Löscht eine Ticket-Kategorie (Legacy-Route)"""
+    try:
+        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
+        tickets_with_category = mongodb.db.tickets.find_one({'category': category})
+        if tickets_with_category:
+            flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
+            return redirect(url_for('admin.tickets'))
+
+        # Ticket-Kategorie aus der Liste entfernen
+        mongodb.update_one_array(
+            'settings',
+            {'key': 'ticket_categories'},
+            {'$pull': {'value': category}}
+        )
+        
+        flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
+        return redirect(url_for('admin.tickets'))
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
+        flash('Ein Fehler ist aufgetreten.', 'error')
+        return redirect(url_for('admin.tickets'))
 
 @bp.route('/backup/list')
 @mitarbeiter_required
@@ -3162,7 +3443,7 @@ def delete_user(user_id):
 @mitarbeiter_required
 def user_form():
     """Benutzer-Formular (für neue Benutzer)"""
-    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender'])
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
 
 @bp.route('/export_all_data')
 @admin_required
@@ -3557,7 +3838,6 @@ def email_settings():
                         'mail_username': request.form.get('mail_username', ''),
                         'mail_password': request.form.get('mail_password', ''),
                         'test_email': request.form.get('test_email', ''),
-                        'enabled': request.form.get('enabled') == 'on',
                         'use_auth': True
                     }
                 else:
@@ -3569,7 +3849,6 @@ def email_settings():
                         'mail_username': request.form.get('sender_email', ''),  # Absender-E-Mail
                         'mail_password': '',  # Kein Passwort
                         'test_email': request.form.get('test_email', ''),
-                        'enabled': request.form.get('enabled') == 'on',
                         'use_auth': False
                     }
                 
@@ -3622,7 +3901,6 @@ def email_settings():
                 'mail_username': '',
                 'mail_password': '',
                 'test_email': '',
-                'enabled': False,
                 'use_auth': True
             }
         

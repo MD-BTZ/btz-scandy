@@ -2,20 +2,21 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+REM ========================================
 echo ========================================
 echo Scandy Komplette Installation
 echo ========================================
 echo Dieses Skript installiert Scandy komplett neu:
 echo - Scandy App
 echo - MongoDB Datenbank
-echo - Mongo Express ^(Datenbank-Verwaltung^)
+echo - Mongo Express (Datenbank-Verwaltung)
 echo ========================================
 echo.
 
 REM Prüfe ob Docker installiert ist
 docker --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ ERROR: Docker ist nicht installiert oder nicht verfügbar!
+    echo ❌ ERROR: Docker ist nicht installiert oder nicht verfuegbar!
     echo Bitte installiere Docker und starte es neu.
     pause
     exit /b 1
@@ -39,8 +40,8 @@ if exist "docker-compose.yml" (
     echo.
     echo Optionen:
     echo 1 = Abbrechen
-    echo 2 = Komplett neu installieren ^(ALLE Daten gehen verloren!^)
-    echo 3 = Nur App neu installieren ^(Daten bleiben erhalten^)
+    echo 2 = Komplett neu installieren (ALLE Daten gehen verloren!)
+    echo 3 = Nur App neu installieren (Daten bleiben erhalten)
     echo.
     set /p choice="Wählen Sie (1-3): "
     if "!choice!"=="1" (
@@ -68,7 +69,7 @@ if exist "docker-compose.yml" (
         call update.bat
         exit /b 0
     ) else (
-        echo Ungültige Auswahl. Installation abgebrochen.
+        echo Ungueltige Auswahl. Installation abgebrochen.
         pause
         exit /b 1
     )
@@ -90,20 +91,18 @@ docker-compose down -v >nul 2>&1
 
 REM Entferne alte Images
 echo 🗑️  Entferne alte Images...
-for /f "tokens=3" %%i in ('docker images ^| findstr scandy') do docker rmi -f %%i >nul 2>&1
-for /f "tokens=3" %%i in ('docker images ^| findstr mongo') do docker rmi -f %%i >nul 2>&1
+docker images | findstr scandy >nul 2>&1 && for /f "tokens=3" %%i in ('docker images ^| findstr scandy') do docker rmi -f %%i >nul 2>&1
+docker images | findstr mongo >nul 2>&1 && for /f "tokens=3" %%i in ('docker images ^| findstr mongo') do docker rmi -f %%i >nul 2>&1
 
 REM Baue und starte alle Container
 echo 🔨 Baue und starte alle Container...
 docker-compose up -d --build
-
 if %errorlevel% neq 0 (
     echo ❌ ERROR: Fehler beim Bauen der Container!
     echo Versuche es mit einfachem Build...
     docker-compose build --no-cache
     docker-compose up -d
 )
-
 if %errorlevel% neq 0 (
     echo ❌ ERROR: Installation fehlgeschlagen!
     pause
@@ -112,35 +111,38 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ⏳ Warte auf Start aller Services...
-timeout /t 20 /nobreak >nul
+REM Warte 30 Sekunden, dann prüfe Health Status
+set /a retries=0
+:wait_for_mongo
+REM Prüfe Health Status von MongoDB
+for /f "delims=" %%H in ('docker inspect -f "{{.State.Health.Status}}" scandy-mongodb 2^>nul') do set HEALTH=%%H
+if not "!HEALTH!"=="healthy" (
+    set /a retries+=1
+    if !retries! geq 20 (
+        echo MongoDB wird nicht healthy!
+        docker-compose logs --tail=50 scandy-mongodb
+        pause
+        exit /b 1
+    )
+    echo Warte auf MongoDB... (!retries!/20)
+    timeout /t 6 >nul
+    goto wait_for_mongo
+)
+echo MongoDB ist healthy!
 
-REM Prüfe Container-Status
 echo 🔍 Prüfe Container-Status...
 docker-compose ps
 
-REM Prüfe ob alle Container laufen
-echo.
 echo 🔍 Prüfe Service-Verfügbarkeit...
-timeout /t 5 /nobreak >nul
-
-REM Prüfe MongoDB
-docker-compose exec -T scandy-mongodb mongosh --eval "db.adminCommand('ping')" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ✅ MongoDB läuft
-) else (
-    echo ⚠️  MongoDB startet noch...
-)
-
 REM Prüfe Mongo Express
-curl -s http://localhost:8081 >nul 2>&1
+powershell -Command "try { Invoke-WebRequest -Uri 'http://localhost:8081' -UseBasicParsing -TimeoutSec 5 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Mongo Express läuft
 ) else (
     echo ⚠️  Mongo Express startet noch...
 )
-
 REM Prüfe Scandy App
-curl -s http://localhost:5000 >nul 2>&1
+powershell -Command "try { Invoke-WebRequest -Uri 'http://localhost:5000' -UseBasicParsing -TimeoutSec 5 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Scandy App läuft
 ) else (
@@ -159,10 +161,10 @@ echo - Scandy App:     http://localhost:5000
 echo - Mongo Express:  http://localhost:8081
 echo.
 echo 🔐 Standard-Zugangsdaten:
-echo - Benutzer: admin
-echo - Passwort: admin123
+echo - Admin: admin / admin123
+echo - Teilnehmer: teilnehmer / admin123
 echo.
-echo 📊 Datenbank-Zugang ^(Mongo Express^):
+echo 📊 Datenbank-Zugang (Mongo Express):
 echo - Benutzer: admin
 echo - Passwort: scandy123
 echo.

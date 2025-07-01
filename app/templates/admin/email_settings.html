@@ -27,22 +27,6 @@
             {% endwith %}
             
             <form method="POST" class="space-y-6">
-                <!-- E-Mail aktivieren -->
-                <div class="form-control">
-                    <label class="label cursor-pointer">
-                        <span class="label-text font-bold text-lg">E-Mail-System aktivieren</span>
-                        <input type="checkbox" name="enabled" class="toggle toggle-primary" 
-                               {% if config.enabled %}checked{% endif %}>
-                    </label>
-                    <label class="label">
-                        <span class="label-text-alt text-info">
-                            Aktivieren Sie diese Option, um E-Mails zu versenden. Im Entwicklungsmodus werden E-Mails in der Konsole ausgegeben.
-                        </span>
-                    </label>
-                </div>
-                
-                <div class="divider"></div>
-                
                 <!-- SMTP-Einstellungen -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="form-control">

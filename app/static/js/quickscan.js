@@ -1066,6 +1066,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event Listener für den Trigger Button hinzufügen
     if (trigger) {
         trigger.addEventListener('click', () => {
+            // Prüfe ob der Benutzer Teilnehmer ist
+            const isTeilnehmer = trigger.getAttribute('data-role') === 'teilnehmer';
+            
+            if (isTeilnehmer) {
+                // Zeige Meldung für Teilnehmer
+                showToast('warning', 'QuickScan ist für Teilnehmer nicht verfügbar');
+                return;
+            }
+            
             if (modal) {
                 modal.showModal(); 
                 QuickScan.init(); 
