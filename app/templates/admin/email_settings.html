@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}E-Mail-Einstellungen - {{ system_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h1 class="card-title text-2xl mb-6">
+                <i class="fas fa-envelope text-primary mr-2"></i>
+                E-Mail-Einstellungen
+            </h1>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} shadow-lg mb-6">
+                            <div>
+                                {% if category == 'success' %}<i class="fas fa-check-circle"></i>
+                                {% elif category == 'error' %}<i class="fas fa-times-circle"></i>
+                                {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                                <span>{{ message }}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <form method="POST" class="space-y-6">
+                <!-- E-Mail aktivieren -->
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text font-bold text-lg">E-Mail-System aktivieren</span>
+                        <input type="checkbox" name="enabled" class="toggle toggle-primary" 
+                               {% if config.enabled %}checked{% endif %}>
+                    </label>
+                    <label class="label">
+                        <span class="label-text-alt text-info">
+                            Aktivieren Sie diese Option, um E-Mails zu versenden. Im Entwicklungsmodus werden E-Mails in der Konsole ausgegeben.
+                        </span>
+                    </label>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- SMTP-Einstellungen -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">SMTP-Server</span>
+                        </label>
+                        <input type="text" name="mail_server" value="{{ config.mail_server }}" 
+                               class="input input-bordered" placeholder="smtp.gmail.com">
+                        <label class="label">
+                            <span class="label-text-alt text-info">z.B. smtp.gmail.com, smtp.office365.com</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">SMTP-Port</span>
+                        </label>
+                        <input type="number" name="mail_port" value="{{ config.mail_port }}" 
+                               class="input input-bordered" placeholder="587">
+                        <label class="label">
+                            <span class="label-text-alt text-info">587 (TLS) oder 465 (SSL)</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text font-medium">TLS verwenden</span>
+                        <input type="checkbox" name="mail_use_tls" class="toggle toggle-primary" 
+                               {% if config.mail_use_tls %}checked{% endif %} id="tls_toggle">
+                    </label>
+                    <label class="label">
+                        <span class="label-text-alt text-info">
+                            Aktivieren Sie TLS für sichere Verbindungen (empfohlen)
+                        </span>
+                    </label>
+                    {% if not config.mail_use_tls %}
+                    <div class="alert alert-warning mt-2">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span><strong>Wichtig:</strong> TLS ist deaktiviert. Viele E-Mail-Anbieter erfordern TLS für die Authentifizierung.</span>
+                    </div>
+                    {% endif %}
+                </div>
+                
+
+                
+                <div class="divider"></div>
+                
+                <!-- Anmeldedaten -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">E-Mail-Adresse</span>
+                        </label>
+                        <input type="email" name="mail_username" value="{{ config.mail_username }}" 
+                               class="input input-bordered" placeholder="ihre.email@gmail.com">
+                        <label class="label">
+                            <span class="label-text-alt text-info">Ihre E-Mail-Adresse für SMTP</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">Passwort/App-Passwort</span>
+                        </label>
+                        <input type="password" name="mail_password" value="{{ config.mail_password }}" 
+                               class="input input-bordered" placeholder="Ihr Passwort">
+                        <label class="label">
+                            <span class="label-text-alt text-info">Für Gmail: App-Passwort verwenden</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text font-medium">Test-E-Mail-Adresse</span>
+                    </label>
+                    <input type="email" name="test_email" value="{{ config.test_email or config.mail_username }}" 
+                           class="input input-bordered" placeholder="test@example.com">
+                    <label class="label">
+                        <span class="label-text-alt text-info">
+                            E-Mail-Adresse, an die Test-E-Mails gesendet werden sollen
+                        </span>
+                    </label>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- Hilfe-Sektion -->
+                <div class="alert alert-info">
+                    <div>
+                        <i class="fas fa-info-circle text-2xl"></i>
+                        <div>
+                            <h3 class="font-bold">Hilfe zur E-Mail-Konfiguration</h3>
+                            <div class="text-sm mt-2">
+                                <p><strong>Gmail:</strong> Aktivieren Sie 2-Faktor-Authentifizierung und erstellen Sie ein App-Passwort.</p>
+                                <p><strong>Office 365:</strong> Verwenden Sie Ihr normales Passwort oder ein App-Passwort.</p>
+                                <p><strong>Andere Anbieter:</strong> Prüfen Sie die SMTP-Einstellungen Ihres E-Mail-Anbieters.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Häufige Probleme -->
+                <div class="collapse collapse-arrow bg-base-200">
+                    <input type="checkbox" /> 
+                    <div class="collapse-title text-lg font-medium">
+                        <i class="fas fa-exclamation-triangle text-warning mr-2"></i>
+                        Häufige Probleme und Lösungen
+                    </div>
+                    <div class="collapse-content"> 
+                        <div class="space-y-4 text-sm">
+                            <div class="bg-base-100 p-4 rounded-lg">
+                                <h4 class="font-bold text-error mb-2">"SMTP AUTH extension not supported"</h4>
+                                <p class="mb-2">Der SMTP-Server unterstützt keine Authentifizierung.</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li><strong>Gmail:</strong> Verwenden Sie Port 587 mit TLS oder Port 465 mit SSL</li>
+                                    <li><strong>Office 365:</strong> Verwenden Sie Port 587 mit TLS</li>
+                                    <li><strong>Andere:</strong> Prüfen Sie die offiziellen SMTP-Einstellungen Ihres Anbieters</li>
+                                    <li><strong>Lokale Server:</strong> Möglicherweise ist kein Authentifizierung erforderlich</li>
+                                    <li><strong>Port 25:</strong> Oft ohne Authentifizierung, aber von vielen ISPs blockiert</li>
+                                </ul>
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <span><strong>Tipp:</strong> Verwenden Sie den "SMTP-Diagnose"-Button, um die Server-Capabilities zu prüfen.</span>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-base-100 p-4 rounded-lg">
+                                <h4 class="font-bold text-error mb-2">"Authentication failed"</h4>
+                                <p class="mb-2">Die Anmeldedaten sind nicht korrekt.</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li><strong>Gmail:</strong> Verwenden Sie ein App-Passwort, nicht Ihr normales Passwort</li>
+                                    <li><strong>2FA aktivieren:</strong> App-Passwörter sind nur mit 2-Faktor-Authentifizierung verfügbar</li>
+                                    <li><strong>Passwort prüfen:</strong> Keine Leerzeichen am Anfang oder Ende</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="bg-base-100 p-4 rounded-lg">
+                                <h4 class="font-bold text-error mb-2">"Connection refused"</h4>
+                                <p class="mb-2">Verbindung zum SMTP-Server nicht möglich.</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li><strong>Server-Adresse:</strong> Prüfen Sie die SMTP-Server-Adresse</li>
+                                    <li><strong>Port:</strong> Stellen Sie sicher, dass der Port korrekt ist</li>
+                                    <li><strong>Firewall:</strong> Port 587 oder 465 muss ausgehend erlaubt sein</li>
+                                    <li><strong>Internet:</strong> Prüfen Sie Ihre Internetverbindung</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="bg-base-100 p-4 rounded-lg">
+                                <h4 class="font-bold text-success mb-2">Empfohlene Einstellungen</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h5 class="font-bold">Gmail</h5>
+                                        <ul class="text-xs space-y-1">
+                                            <li>Server: smtp.gmail.com</li>
+                                            <li>Port: 587</li>
+                                            <li>TLS: Aktiviert</li>
+                                            <li>SSL: Deaktiviert</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h5 class="font-bold">Office 365</h5>
+                                        <ul class="text-xs space-y-1">
+                                            <li>Server: smtp.office365.com</li>
+                                            <li>Port: 587</li>
+                                            <li>TLS: Aktiviert</li>
+                                            <li>SSL: Deaktiviert</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Buttons -->
+                <div class="flex flex-wrap gap-4">
+                    <button type="submit" name="action" value="save" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>Einstellungen speichern
+                    </button>
+                    <button type="button" id="diagnoseBtn" class="btn btn-info">
+                        <i class="fas fa-stethoscope mr-2"></i>SMTP-Diagnose
+                    </button>
+                    <button type="button" id="simpleTestBtn" class="btn btn-success">
+                        <i class="fas fa-check mr-2"></i>Test-E-Mail senden
+                    </button>
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost">
+                        <i class="fas fa-arrow-left mr-2"></i>Zurück
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // TLS Toggle Status aktualisieren
+    const tlsToggle = document.getElementById('tls_toggle');
+    const tlsStatus = document.getElementById('tls_status');
+    
+    if (tlsToggle && tlsStatus) {
+        function updateTlsStatus() {
+            if (tlsToggle.checked) {
+                tlsStatus.innerHTML = '<span class="text-success">Aktiviert</span>';
+            } else {
+                tlsStatus.innerHTML = '<span class="text-error">Deaktiviert</span>';
+            }
+        }
+        
+        tlsToggle.addEventListener('change', updateTlsStatus);
+        updateTlsStatus(); // Initial status setzen
+    }
+    
+    // Diagnose-Button
+    const diagnoseBtn = document.getElementById('diagnoseBtn');
+    if (diagnoseBtn) {
+        diagnoseBtn.addEventListener('click', function() {
+            diagnoseBtn.disabled = true;
+            diagnoseBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Diagnose läuft...';
+            
+            fetch('{{ url_for("admin.diagnose_email") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Erfolgreiche Diagnose anzeigen
+                    const diagnosis = data.diagnosis;
+                    let message = `SMTP-Diagnose erfolgreich!\n\n`;
+                    message += `Server: ${diagnosis.server}\n`;
+                    message += `Port: ${diagnosis.port}\n`;
+                    message += `TLS konfiguriert: ${diagnosis.tls_configured}\n`;
+                    message += `TLS aktiviert: ${diagnosis.tls_activated}\n`;
+                    message += `SSL: ${diagnosis.ssl}\n`;
+                    message += `STARTTLS verfügbar: ${diagnosis.starttls_available}\n`;
+                    message += `Authentifizierung unterstützt: ${diagnosis.auth_supported}\n`;
+                    message += `Authentifizierung Status: ${diagnosis.auth_status}\n`;
+                    
+                    if (diagnosis.tls_error) {
+                        message += `\nTLS-Fehler: ${diagnosis.tls_error}\n`;
+                    }
+                    
+                    if (diagnosis.capabilities && diagnosis.capabilities.length > 0) {
+                        message += `\nServer-Capabilities:\n`;
+                        diagnosis.capabilities.forEach(cap => {
+                            message += `- ${cap}\n`;
+                        });
+                    }
+                    
+                    alert(message);
+                } else {
+                    alert(`Diagnose fehlgeschlagen: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Fehler bei der Diagnose: ' + error.message);
+            })
+            .finally(() => {
+                diagnoseBtn.disabled = false;
+                diagnoseBtn.innerHTML = '<i class="fas fa-stethoscope mr-2"></i>SMTP-Diagnose';
+            });
+        });
+    }
+    
+    // Einfacher Test-Button
+    const simpleTestBtn = document.getElementById('simpleTestBtn');
+    if (simpleTestBtn) {
+        simpleTestBtn.addEventListener('click', function() {
+            simpleTestBtn.disabled = true;
+            simpleTestBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Test läuft...';
+            
+            fetch('{{ url_for("admin.test_email_simple") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`E-Mail-Test erfolgreich: ${data.message}`);
+                } else {
+                    alert(`E-Mail-Test fehlgeschlagen: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Fehler beim E-Mail-Test: ' + error.message);
+            })
+            .finally(() => {
+                simpleTestBtn.disabled = false;
+                simpleTestBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Test-E-Mail senden';
+            });
+        });
+    }
+});
+</script>
+{% endblock %} 

@@ -1,124 +1,73 @@
 # E-Mail-Konfiguration für Scandy
 
-## Aktueller Status
+## Neue Weboberfläche für E-Mail-Einstellungen
 
-Das E-Mail-System ist derzeit im **Entwicklungsmodus** konfiguriert. Das bedeutet:
-- E-Mails werden nicht wirklich versendet
-- Stattdessen werden sie in der Konsole/Docker-Logs ausgegeben
-- Das System funktioniert vollständig, aber ohne echte E-Mail-Versendung
+Scandy bietet jetzt eine benutzerfreundliche Weboberfläche zur Konfiguration des E-Mail-Systems. Sie können die E-Mail-Einstellungen direkt in der Anwendung verwalten, ohne die Docker Compose Datei zu bearbeiten.
 
-## E-Mails im Entwicklungsmodus testen
+### Zugriff auf E-Mail-Einstellungen
 
-1. Erstellen Sie einen neuen Benutzer mit E-Mail-Adresse
-2. Schauen Sie in die Docker-Logs: `docker-compose logs scandy-app`
-3. Sie sehen dann eine Ausgabe wie:
-```
-============================================================
-E-MAIL SIMULATION (Entwicklungsmodus)
-============================================================
-An: test@example.com
-Betreff: Ihr Zugang zu Scandy
-------------------------------------------------------------
-Willkommen bei Scandy!
+1. **Anmelden** als Administrator
+2. **Admin-Menü** öffnen (Hamburger-Menü oben rechts)
+3. **E-Mail-Einstellungen** auswählen
 
-Ihr initiales Passwort lautet: ABC123
-Bitte ändern Sie es nach dem ersten Login.
+### E-Mail-Einstellungen konfigurieren
 
-Viele Grüße
-Ihr Scandy-Team
-============================================================
-```
+#### 1. E-Mail-System aktivieren
+- Aktivieren Sie das Kontrollkästchen "E-Mail-System aktivieren"
+- Ohne Aktivierung werden E-Mails nur in der Konsole ausgegeben (Entwicklungsmodus)
 
-## Für echte E-Mail-Versendung (Produktion)
+#### 2. SMTP-Einstellungen
+- **SMTP-Server**: z.B. `smtp.gmail.com`, `smtp.office365.com`
+- **SMTP-Port**: `587` (TLS) oder `465` (SSL)
+- **TLS verwenden**: Aktivieren für sichere Verbindungen (empfohlen)
 
-### Option 1: Gmail SMTP (Empfohlen)
+#### 3. Anmeldedaten
+- **E-Mail-Adresse**: Ihre E-Mail-Adresse für SMTP
+- **Passwort/App-Passwort**: Ihr Passwort oder App-Passwort
+- **Absender-E-Mail**: E-Mail-Adresse, die als Absender angezeigt wird
 
-#### Schritt 1: 2-Faktor-Authentifizierung aktivieren
+#### 4. Einstellungen speichern
+- Klicken Sie auf "Einstellungen speichern"
+- Die Konfiguration wird sofort aktiviert
+- Kein Neustart der Anwendung erforderlich
 
-1. **Gehen Sie zu Ihren Google-Kontoeinstellungen:**
-   - Besuchen Sie https://myaccount.google.com/
-   - Klicken Sie auf "Sicherheit" in der linken Seitenleiste
+#### 5. E-Mail-Test
+- Klicken Sie auf "E-Mail-Test senden"
+- Eine Test-E-Mail wird an Ihre Absender-Adresse gesendet
+- Überprüfen Sie, ob die E-Mail ankommt
 
-2. **2-Schritt-Verifizierung aktivieren:**
-   - Scrollen Sie zu "Bei Google anmelden"
-   - Klicken Sie auf "2-Schritt-Verifizierung"
-   - Folgen Sie den Anweisungen zur Aktivierung
-   - Sie können SMS, Authenticator-App oder Sicherheitsschlüssel verwenden
+## Unterstützte E-Mail-Anbieter
 
-#### Schritt 2: App-Passwort erstellen
-
-**WICHTIG:** Das App-Passwort erscheint nur, wenn 2FA aktiviert ist!
-
-1. **Gehen Sie zu App-Passwörtern:**
-   - Besuchen Sie https://myaccount.google.com/security
-   - Scrollen Sie zu "Bei Google anmelden"
-   - Klicken Sie auf "App-Passwörter" (erscheint nur mit 2FA)
-
-2. **App-Passwort generieren:**
-   - Wählen Sie "App auswählen" → "Andere (benutzerdefinierten Namen)"
-   - Geben Sie "Scandy" als Namen ein
-   - Klicken Sie auf "Generieren"
-   - **Kopieren Sie das 16-stellige Passwort** (z.B. "abcd efgh ijkl mnop")
-
-#### Schritt 3: Docker Compose konfigurieren
-
-Ändern Sie die `docker-compose.yml`:
-
-```yaml
-environment:
-  # ... andere Einstellungen ...
-  - MAIL_USERNAME=ihre-email@gmail.com
-  - MAIL_PASSWORD=ihr-16-stelliges-app-passwort
-  - MAIL_DEFAULT_SENDER=ihre-email@gmail.com
-```
-
-### Alternative: Gmail ohne 2FA (weniger sicher)
-
-Falls Sie 2FA nicht aktivieren möchten:
-
-1. **"Weniger sichere Apps" aktivieren:**
+### Gmail (Empfohlen)
+1. **2-Faktor-Authentifizierung aktivieren**
    - Gehen Sie zu https://myaccount.google.com/security
-   - Scrollen Sie zu "Weniger sichere App-Zugriffe"
-   - Aktivieren Sie "Weniger sichere Apps zulassen"
+   - Aktivieren Sie "2-Schritt-Verifizierung"
 
-2. **Ihr normales Gmail-Passwort verwenden:**
-   ```yaml
-   environment:
-     - MAIL_USERNAME=ihre-email@gmail.com
-     - MAIL_PASSWORD=ihr-normales-gmail-passwort
-     - MAIL_DEFAULT_SENDER=ihre-email@gmail.com
-   ```
+2. **App-Passwort erstellen**
+   - Gehen Sie zu https://myaccount.google.com/security
+   - Klicken Sie auf "App-Passwörter"
+   - Wählen Sie "Andere (benutzerdefinierten Namen)"
+   - Geben Sie "Scandy" als Namen ein
+   - Kopieren Sie das 16-stellige Passwort
 
-**⚠️ Warnung:** Diese Methode ist weniger sicher und wird von Google nicht empfohlen.
+3. **Einstellungen in Scandy**
+   - SMTP-Server: `smtp.gmail.com`
+   - Port: `587`
+   - TLS: Aktiviert
+   - E-Mail-Adresse: Ihre Gmail-Adresse
+   - Passwort: Das 16-stellige App-Passwort
 
-### Option 2: Andere SMTP-Server
+### Office 365
+1. **Einstellungen in Scandy**
+   - SMTP-Server: `smtp.office365.com`
+   - Port: `587`
+   - TLS: Aktiviert
+   - E-Mail-Adresse: Ihre Office 365-Adresse
+   - Passwort: Ihr normales Passwort oder App-Passwort
 
-Sie können auch andere SMTP-Server verwenden:
-```yaml
-environment:
-  - MAIL_SERVER=smtp.ihr-provider.com
-  - MAIL_PORT=587
-  - MAIL_USE_TLS=true
-  - MAIL_USERNAME=ihre-email@ihr-provider.com
-  - MAIL_PASSWORD=ihr-passwort
-  - MAIL_DEFAULT_SENDER=ihre-email@ihr-provider.com
-```
-
-### Option 3: .env-Datei (Sicherer)
-
-1. Erstellen Sie eine `.env`-Datei im Projektverzeichnis:
-   ```
-   GMAIL_USERNAME=ihre-email@gmail.com
-   GMAIL_APP_PASSWORD=ihr-app-passwort
-   ```
-
-2. Ändern Sie die docker-compose.yml:
-   ```yaml
-   environment:
-     - MAIL_USERNAME=${GMAIL_USERNAME}
-     - MAIL_PASSWORD=${GMAIL_APP_PASSWORD}
-     - MAIL_DEFAULT_SENDER=${GMAIL_USERNAME}
-   ```
+### Andere Anbieter
+- Prüfen Sie die SMTP-Einstellungen Ihres E-Mail-Anbieters
+- Verwenden Sie die entsprechenden Server- und Port-Einstellungen
 
 ## E-Mail-Funktionen
 
@@ -133,40 +82,56 @@ Das System unterstützt folgende E-Mail-Funktionen:
 3. **Backup-E-Mail**
    - Kann beim Erstellen von Backups versendet werden
 
+4. **E-Mail-Test**
+   - Über die E-Mail-Einstellungen verfügbar
+
 ## Troubleshooting
 
-### "App-Passwörter" nicht sichtbar
-- **Stellen Sie sicher, dass 2-Faktor-Authentifizierung aktiviert ist**
-- App-Passwörter erscheinen nur mit 2FA
-- Warten Sie einige Minuten nach der 2FA-Aktivierung
+### E-Mail-Test fehlgeschlagen
+- **Prüfen Sie die SMTP-Einstellungen**
+- **Gmail**: Stellen Sie sicher, dass 2FA aktiviert ist und ein App-Passwort verwendet wird
+- **Office 365**: Prüfen Sie, ob das Passwort korrekt ist
+- **Firewall**: Port 587 oder 465 muss ausgehend erlaubt sein
 
 ### E-Mails werden nicht versendet
-- Prüfen Sie die Docker-Logs: `docker-compose logs scandy-app`
-- Stellen Sie sicher, dass die SMTP-Einstellungen korrekt sind
-- Testen Sie die SMTP-Verbindung manuell
+- **E-Mail-System aktiviert**: Stellen Sie sicher, dass das E-Mail-System aktiviert ist
+- **Anmeldedaten**: Prüfen Sie E-Mail-Adresse und Passwort
+- **SMTP-Server**: Stellen Sie sicher, dass der Server korrekt ist
+- **Logs prüfen**: Schauen Sie in die Anwendungs-Logs für Fehlermeldungen
 
-### Gmail-Fehler
-- **Mit App-Passwort:** Stellen Sie sicher, dass 2FA aktiviert ist
-- **Ohne App-Passwort:** Aktivieren Sie "Weniger sichere Apps"
-- Prüfen Sie, ob das Passwort korrekt kopiert wurde (keine Leerzeichen)
+### Gmail-spezifische Probleme
+- **"App-Passwörter" nicht sichtbar**: 2-Faktor-Authentifizierung muss aktiviert sein
+- **"Anmeldung fehlgeschlagen"**: App-Passwort korrekt kopiert? (16 Zeichen, keine Leerzeichen)
 
-### Firewall-Probleme
-- Port 587 (TLS) oder 465 (SSL) muss ausgehend erlaubt sein
-- Prüfen Sie Firmen-Firewall-Einstellungen
+## Fallback auf Umgebungsvariablen
 
-## Häufige Probleme
+Falls keine E-Mail-Konfiguration in der Datenbank gespeichert ist, verwendet Scandy weiterhin die Umgebungsvariablen aus der Docker Compose Datei:
 
-### "App-Passwörter" fehlt in Google-Einstellungen
-**Lösung:** 2-Faktor-Authentifizierung muss aktiviert sein!
+```yaml
+environment:
+  - MAIL_SERVER=smtp.gmail.com
+  - MAIL_PORT=587
+  - MAIL_USE_TLS=true
+  - MAIL_USERNAME=ihre-email@gmail.com
+  - MAIL_PASSWORD=ihr-app-passwort
+  - MAIL_DEFAULT_SENDER=ihre-email@gmail.com
+```
 
-### "Anmeldung fehlgeschlagen" bei Gmail
-**Lösung:** 
-- App-Passwort korrekt kopiert? (16 Zeichen, keine Leerzeichen)
-- 2FA aktiviert?
-- "Weniger sichere Apps" aktiviert (falls ohne App-Passwort)?
+## Sicherheit
 
-### E-Mail wird nicht angezeigt
-**Lösung:** 
-- Prüfen Sie den Spam-Ordner
-- Prüfen Sie die Docker-Logs für Fehlermeldungen
-- Testen Sie mit einer anderen E-Mail-Adresse 
+- **Passwörter werden verschlüsselt** in der Datenbank gespeichert
+- **TLS-Verschlüsselung** wird für alle SMTP-Verbindungen verwendet
+- **App-Passwörter** werden für Gmail empfohlen
+- **Regelmäßige Überprüfung** der E-Mail-Einstellungen empfohlen
+
+## Migration von Docker Compose
+
+Wenn Sie bereits E-Mail-Einstellungen in der Docker Compose Datei haben:
+
+1. **E-Mail-Einstellungen in Scandy öffnen**
+2. **Einstellungen aus Docker Compose übertragen**
+3. **E-Mail-Test durchführen**
+4. **Einstellungen speichern**
+5. **Docker Compose E-Mail-Einstellungen entfernen** (optional)
+
+Die Weboberfläche bietet eine benutzerfreundlichere und flexiblere Möglichkeit zur E-Mail-Konfiguration. 

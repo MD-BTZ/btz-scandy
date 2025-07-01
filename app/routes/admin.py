@@ -3572,3 +3572,133 @@ def auto_backup_logs():
 def auto_backup():
     """Automatisches Backup-System Verwaltungsseite"""
     return render_template('admin/auto_backup.html')
+
+@bp.route('/email_settings', methods=['GET', 'POST'])
+@admin_required
+def email_settings():
+    """E-Mail-Konfiguration verwalten"""
+    try:
+        from app.utils.email_utils import get_email_config, save_email_config, test_email_config
+        
+        if request.method == 'POST':
+            action = request.form.get('action')
+            
+            if action == 'save':
+                # E-Mail-Konfiguration speichern
+                config_data = {
+                    'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                    'mail_port': int(request.form.get('mail_port', 587)),
+                    'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                    'mail_username': request.form.get('mail_username', ''),
+                    'mail_password': request.form.get('mail_password', ''),
+                    'test_email': request.form.get('test_email', ''),
+                    'enabled': request.form.get('enabled') == 'on'
+                }
+                
+                if save_email_config(config_data):
+                    # E-Mail-Konfiguration neu laden
+                    from app.utils.email_utils import reload_email_config
+                    reload_email_config(current_app)
+                    flash('E-Mail-Konfiguration erfolgreich gespeichert und aktiviert.', 'success')
+                else:
+                    flash('Fehler beim Speichern der E-Mail-Konfiguration.', 'error')
+                    
+            elif action == 'test':
+                # E-Mail-Konfiguration testen
+                config_data = {
+                    'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                    'mail_port': int(request.form.get('mail_port', 587)),
+                    'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                    'mail_username': request.form.get('mail_username', ''),
+                    'mail_password': request.form.get('mail_password', ''),
+                    'test_email': request.form.get('test_email', '')
+                }
+                
+                success, message = test_email_config(config_data)
+                if success:
+                    flash(f'E-Mail-Test erfolgreich: {message}', 'success')
+                else:
+                    flash(f'E-Mail-Test fehlgeschlagen: {message}', 'error')
+        
+        # Lade aktuelle Konfiguration
+        config = get_email_config()
+        if not config:
+            config = {
+                'mail_server': 'smtp.gmail.com',
+                'mail_port': 587,
+                'mail_use_tls': True,
+                'mail_username': '',
+                'mail_password': '',
+                'test_email': '',
+                'enabled': False
+            }
+        
+        return render_template('admin/email_settings.html', config=config)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei E-Mail-Einstellungen: {e}")
+        flash('Fehler beim Laden der E-Mail-Einstellungen.', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@bp.route('/admin/email/diagnose', methods=['POST'])
+@login_required
+@admin_required
+def diagnose_email():
+    """Diagnostiziert die SMTP-Verbindung"""
+    try:
+        from app.utils.email_utils import get_email_config, diagnose_smtp_connection
+        
+        config_data = get_email_config()
+        if not config_data:
+            return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
+        
+        success, result = diagnose_smtp_connection(config_data)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'SMTP-Diagnose erfolgreich',
+                'diagnosis': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Diagnose-Fehler: {str(e)}'
+        })
+
+@bp.route('/admin/email/test-simple', methods=['POST'])
+@login_required
+@admin_required
+def test_email_simple():
+    """Einfacher E-Mail-Test"""
+    try:
+        from app.utils.email_utils import get_email_config, test_email_config
+        
+        config_data = get_email_config()
+        if not config_data:
+            return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
+        
+        success, message = test_email_config(config_data)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': message
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Test-Fehler: {str(e)}'
+        })
