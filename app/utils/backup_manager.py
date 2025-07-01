@@ -21,7 +21,11 @@ class BackupManager:
             backup_path = self.backup_dir / backup_filename
             
             # Alle Collections sichern
-            collections_to_backup = ['tools', 'workers', 'consumables', 'lendings', 'consumable_usages', 'settings', 'tickets', 'ticket_messages', 'ticket_notes']
+            collections_to_backup = [
+                'tools', 'workers', 'consumables', 'lendings', 'consumable_usages', 
+                'settings', 'tickets', 'timesheets', 'users', 'auftrag_details', 
+                'auftrag_material', 'email_config', 'email_settings', 'system_logs'
+            ]
             backup_data = {}
             
             for collection in collections_to_backup:

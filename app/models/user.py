@@ -19,21 +19,14 @@ class User(UserMixin):
             
             # Wochenbericht-Feature: Prüfe ob Feld existiert, sonst setze Standard
             if 'timesheet_enabled' in user_data:
-                current_value = user_data.get('timesheet_enabled', False)
-                
-                # Korrigiere Admin-Benutzer automatisch
-                if user_data.get('role') == 'admin' and not current_value:
-                    self.timesheet_enabled = True
-                    # Speichere die Korrektur automatisch
-                    self._save_timesheet_enabled(user_data['_id'], True)
-                else:
-                    self.timesheet_enabled = current_value
+                # Feld existiert - verwende den gespeicherten Wert
+                self.timesheet_enabled = user_data.get('timesheet_enabled', False)
             else:
                 # Feld existiert nicht - setze Standard basierend auf Rolle
-                if user_data.get('role') == 'admin':
-                    self.timesheet_enabled = True  # Admin standardmäßig aktiviert
+                if user_data.get('role') == 'anwender':
+                    self.timesheet_enabled = True  # Anwender standardmäßig aktiviert
                 else:
-                    self.timesheet_enabled = False  # Andere Benutzer standardmäßig deaktiviert
+                    self.timesheet_enabled = False  # Andere Rollen standardmäßig deaktiviert
                 
                 # Speichere das Feld automatisch in der Datenbank
                 self._save_timesheet_enabled(user_data['_id'], self.timesheet_enabled)

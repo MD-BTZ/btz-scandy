@@ -107,7 +107,7 @@ def setup():
             'password_hash': generate_password_hash(password),
             'role': 'admin',
             'is_active': True,
-            'timesheet_enabled': True,  # Standardmäßig aktiviert für Admin
+            'timesheet_enabled': False,  # Admin standardmäßig deaktiviert
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
