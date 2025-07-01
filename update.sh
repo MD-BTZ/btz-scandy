@@ -88,18 +88,18 @@ docker-compose stop scandy-app 2>/dev/null || true
 echo "🗑️  Entferne alte App-Container..."
 docker-compose rm -f scandy-app 2>/dev/null || true
 
-# Entferne alte App-Images und Build-Cache
-echo "🗑️  Entferne alte App-Images und Build-Cache..."
+# Entferne nur Scandy-spezifische Images
+echo "🗑️  Entferne alte Scandy-App-Images..."
 docker images | grep scandy-local | awk '{print $3}' | xargs -r docker rmi -f
 docker images | grep scandy-app | awk '{print $3}' | xargs -r docker rmi -f
 
-# Entferne ungenutzte Images (dangling images)
-echo "🧹 Entferne ungenutzte Images..."
-docker image prune -f
+# Entferne nur Scandy-spezifische ungenutzte Images
+echo "🧹 Entferne Scandy-spezifische ungenutzte Images..."
+docker images --filter "dangling=true" --filter "label=com.docker.compose.project=scandy" -q | xargs -r docker rmi -f
 
-# Entferne Build-Cache für besseren Neubau
-echo "🧹 Entferne Build-Cache..."
-docker builder prune -f
+# Entferne nur Scandy-spezifischen Build-Cache
+echo "🧹 Entferne Scandy-spezifischen Build-Cache..."
+docker builder prune --filter "label=com.docker.compose.project=scandy" -f
 
 # Baue nur die App neu
 echo "🔨 Baue neue App-Version..."
@@ -178,8 +178,9 @@ echo "- Backups: ./backups/"
 echo "- Logs:    ./logs/"
 echo "- Uploads: ./data/uploads/"
 echo
-echo "🧹 Optional: Docker-System bereinigen"
-echo "   Falls Sie Speicherplatz freigeben möchten:"
-echo "   docker system prune -f"
+echo "🧹 Optional: Scandy-spezifische Bereinigung"
+echo "   Falls Sie Scandy-spezifischen Speicherplatz freigeben möchten:"
+echo "   docker images | grep scandy | xargs -r docker rmi -f"
+echo "   docker builder prune --filter \"label=com.docker.compose.project=scandy\" -f"
 echo
 echo "========================================" 
