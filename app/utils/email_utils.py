@@ -795,7 +795,7 @@ Scandy - Ihr Auftragssystem
             subject=subject,
             html_content=html_content,
             text_content=text_content,
-            from_name="BTZ Weilheim - Auftragssystem"
+            from_name="BTZ Köln - Auftragssystem"
         )
         if result:
             logger.info(f"Bestätigungs-E-Mail für Auftrag {ticket_data.get('ticket_number')} erfolgreich an {recipient_email} versendet.")
