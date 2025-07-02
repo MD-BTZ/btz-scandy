@@ -24,7 +24,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="label"><span class="label-text">Bereich</span></label>
-                        <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                        {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                            <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                        {% else %}
+                            <input type="text" class="input input-bordered w-full bg-base-200" value="{{ ticket.auftrag_details.bereich | default('', true) }}" readonly>
+                            <input type="hidden" name="bereich" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                        {% endif %}
                     </div>
                     <div>
                         <label class="label"><span class="label-text">Fertigstellungstermin</span></label>
@@ -45,11 +50,21 @@
                     </div>
                     <div>
                         <label class="label"><span class="label-text">Name Auftraggeber</span></label>
-                        <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}">
+                        {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                            <input type="text" name="auftraggeber_name" class="input input-bordered w-full" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}">
+                        {% else %}
+                            <input type="text" class="input input-bordered w-full bg-base-200" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}" readonly>
+                            <input type="hidden" name="auftraggeber_name" value="{{ ticket.auftrag_details.auftraggeber_name | default('', true) }}">
+                        {% endif %}
                     </div>
                     <div class="md:col-span-2">
                         <label class="label"><span class="label-text">Kontakt</span></label>
-                        <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ ticket.auftrag_details.kontakt | default('', true) }}">
+                        {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                            <input type="text" name="kontakt" class="input input-bordered w-full" value="{{ ticket.auftrag_details.kontakt | default('', true) }}">
+                        {% else %}
+                            <input type="text" class="input input-bordered w-full bg-base-200" value="{{ ticket.auftrag_details.kontakt | default('', true) }}" readonly>
+                            <input type="hidden" name="kontakt" value="{{ ticket.auftrag_details.kontakt | default('', true) }}">
+                        {% endif %}
                     </div>
                     <div class="md:col-span-2">
                         <label class="label"><span class="label-text">Auftragsbeschreibung</span></label>
@@ -80,15 +95,14 @@
                                     <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
                                 </tr>
                                 {% endfor %}
-                            {% else %}
-                                <tr class="material-row">
-                                    <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
-                                    <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
-                                    <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
-                                    <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-                                    <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
-                                </tr>
                             {% endif %}
+                            <tr class="material-row">
+                                <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+                                <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                            </tr>
                         </tbody>
                     </table>
                     <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>

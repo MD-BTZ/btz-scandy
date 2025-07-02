@@ -65,15 +65,14 @@
                                 <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                            <tr class="material-row">
-                                <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
-                                <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
-                                <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
-                                <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
-                                <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
-                            </tr>
                         {% endif %}
+                        <tr class="material-row">
+                            <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+                            <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+                            <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+                            <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                            <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                        </tr>
                     </tbody>
                 </table>
                 <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>
@@ -131,6 +130,7 @@
     </div>
 </dialog>
 
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
 <script>
 // Setze die Ticket-ID für die JavaScript-Funktionen
 const ticketId = '{{ ticket._id }}';

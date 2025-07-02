@@ -33,7 +33,7 @@ window.showToast = function(type, message) {
 
 window.deleteTicket = function(ticketId) {
     if (confirm('Möchten Sie dieses Ticket wirklich löschen? Es wird in den Papierkorb verschoben.')) {
-        fetch(`/admin/tickets/${ticketId}/delete`, {
+        fetch(`/tickets/${ticketId}/delete`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -191,6 +191,9 @@ function addMaterialRow() {
     tbody.appendChild(newRow);
     initializeMaterialRowEvents(newRow);
 }
+
+// Mache die Funktion global verfügbar
+window.addMaterialRow = addMaterialRow;
 
 function initializeMaterialRowEvents(row) {
     console.log('Initialisiere Materialzeile Events:', row);
@@ -393,13 +396,12 @@ function collectMaterialList() {
         const menge = parseFloat(row.querySelector('.menge-input')?.value) || 0;
         const einzelpreis = parseFloat(row.querySelector('.einzelpreis-input')?.value) || 0;
         
-        if (material || menge > 0 || einzelpreis > 0) {
-            materialList.push({
-                material: material,
-                menge: menge,
-                einzelpreis: einzelpreis
-            });
-        }
+        // Sammle alle Zeilen, auch leere (für das Hinzufügen neuer Zeilen)
+        materialList.push({
+            material: material,
+            menge: menge,
+            einzelpreis: einzelpreis
+        });
     });
     return materialList;
 }
@@ -411,13 +413,12 @@ function collectArbeitList() {
         const arbeitsstunden = parseFloat(row.querySelector('.arbeitsstunden-input')?.value) || 0;
         const leistungskategorie = row.querySelector('.leistungskategorie-input')?.value.trim();
         
-        if (arbeit || arbeitsstunden > 0 || leistungskategorie) {
-            arbeitList.push({
-                arbeit: arbeit,
-                arbeitsstunden: arbeitsstunden,
-                leistungskategorie: leistungskategorie
-            });
-        }
+        // Sammle alle Zeilen, auch leere (für das Hinzufügen neuer Zeilen)
+        arbeitList.push({
+            arbeit: arbeit,
+            arbeitsstunden: arbeitsstunden,
+            leistungskategorie: leistungskategorie
+        });
     });
     return arbeitList;
 } 

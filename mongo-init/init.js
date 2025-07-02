@@ -43,7 +43,13 @@ db.lendings.createIndex({ "worker_barcode": 1 });
 db.lendings.createIndex({ "returned_at": 1 });
 
 db.users.createIndex({ "username": 1 }, { unique: true });
-db.users.createIndex({ "email": 1 }, { sparse: true });
+// Email-Index nur erstellen wenn er nicht existiert
+try {
+    db.users.createIndex({ "email": 1 }, { sparse: true });
+} catch (e) {
+    // Index existiert bereits, ignoriere Fehler
+    print("Email-Index existiert bereits oder konnte nicht erstellt werden: " + e.message);
+}
 
 db.tickets.createIndex({ "created_at": 1 });
 db.tickets.createIndex({ "status": 1 });

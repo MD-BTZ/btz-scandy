@@ -34,7 +34,7 @@
                     </span>
                 </td>
                 <td>{{ ticket.category or '-' }}</td>
-                <td>{{ ticket.due_date|datetime if ticket.due_date else '-' }}</td>
+                <td>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else '-' }}</td>
                 <td>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</td>
                 <td>
                     {% if ticket.message_count > 0 %}

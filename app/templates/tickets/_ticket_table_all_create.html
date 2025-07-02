@@ -1,22 +1,7 @@
-<!-- Filter für zugewiesene Tickets -->
-<div class="flex flex-wrap gap-2 mb-4">
-    <select class="select select-bordered w-full max-w-xs" name="status" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('status') %}selected{% endif %}>Status: Alle</option>
-        <option value="offen" {% if request.args.get('status') == 'offen' %}selected{% endif %}>Offen</option>
-        <option value="in_bearbeitung" {% if request.args.get('status') == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-        <option value="erledigt" {% if request.args.get('status') == 'erledigt' %}selected{% endif %}>Erledigt</option>
-    </select>
-    <select class="select select-bordered w-full max-w-xs" name="priority" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('priority') %}selected{% endif %}>Priorität: Alle</option>
-        <option value="niedrig" {% if request.args.get('priority') == 'niedrig' %}selected{% endif %}>Niedrig</option>
-        <option value="normal" {% if request.args.get('priority') == 'normal' %}selected{% endif %}>Normal</option>
-        <option value="hoch" {% if request.args.get('priority') == 'hoch' %}selected{% endif %}>Hoch</option>
-    </select>
-</div>
+<!-- Filter entfernt - alle Tickets werden ohne Filter angezeigt -->
 
-<!-- Tabelle für zugewiesene Tickets -->
+<!-- Tabelle für alle Tickets -->
 <div class="overflow-x-auto">
-    {% if assigned_tickets %}
     <table class="table w-full">
         <thead>
             <tr>
@@ -24,6 +9,7 @@
                 <th>Titel</th>
                 <th>Status</th>
                 <th>Priorität</th>
+                <th>Zugewiesen an</th>
                 <th>Erstellt von</th>
                 <th>Kontakt</th>
                 <th>Erstellt am</th>
@@ -34,8 +20,8 @@
             </tr>
         </thead>
         <tbody>
-            {% for ticket in assigned_tickets %}
-            <tr class="hover {% if ticket.status in ['gelöst', 'geschlossen'] %}opacity-60{% endif %}">
+            {% for ticket in all_tickets %}
+            <tr class="hover">
                 <td>#{{ ticket.ticket_number or ticket.id }}</td>
                 <td>
                     <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
@@ -43,11 +29,7 @@
                     </a>
                 </td>
                 <td>
-                    <span class="badge 
-                        {% if ticket.status == 'offen' %}badge-info
-                        {% elif ticket.status == 'in_bearbeitung' %}badge-warning
-                        {% elif ticket.status in ['erledigt', 'gelöst'] %}badge-success
-                        {% else %}badge-ghost{% endif %}">
+                    <span class="badge badge-{{ status_colors[ticket.status] }}">
                         {% if ticket.status == 'offen' %}Offen
                         {% elif ticket.status == 'in_bearbeitung' %}In Bearbeitung
                         {% elif ticket.status == 'erledigt' %}Erledigt
@@ -56,12 +38,7 @@
                     </span>
                 </td>
                 <td>
-                    <span class="badge 
-                        {% if ticket.priority == 'niedrig' %}badge-secondary
-                        {% elif ticket.priority == 'normal' %}badge-primary
-                        {% elif ticket.priority == 'hoch' %}badge-danger
-                        {% elif ticket.priority == 'kritisch' %}badge-error
-                        {% else %}badge-ghost{% endif %}">
+                    <span class="badge badge-{{ priority_colors[ticket.priority] }}">
                         {% if ticket.priority == 'niedrig' %}Niedrig
                         {% elif ticket.priority == 'normal' %}Normal
                         {% elif ticket.priority == 'hoch' %}Hoch
@@ -69,6 +46,7 @@
                         {% else %}{{ ticket.priority|capitalize }}{% endif %}
                     </span>
                 </td>
+                <td>{{ ticket.assigned_to or '-' }}</td>
                 <td>{{ ticket.created_by }}</td>
                 <td>
                     {% if ticket.auftrag_details and ticket.auftrag_details.kontakt %}
@@ -107,7 +85,33 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p class="text-base-content/60">Es sind keine {{ app_labels.tickets.name }} an Sie zugewiesen.</p>
-    {% endif %}
-</div> 
+</div>
+
+<script>
+function deleteTicket(id) {
+    if (!confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
+        return;
+    }
+    fetch(`/tickets/${id}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Fehler beim Löschen des Tickets');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Fehler beim Löschen des Tickets');
+    });
+}
+
+
+</script> 

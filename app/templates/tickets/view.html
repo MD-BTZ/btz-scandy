@@ -29,7 +29,16 @@
                             <p class="text-sm opacity-70 mt-2">Erstellt am</p>
                             <p>{{ ticket.created_at|datetime if ticket.created_at else '-' }}</p>
                             <p class="text-sm opacity-70 mt-2">Priorität</p>
-                            <p>{{ ticket.priority }}</p>
+                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                                <select id="prioritySelect" class="select select-bordered w-full" onchange="updateTicketPriority(this.value)">
+                                    <option value="niedrig" {% if ticket.priority == 'niedrig' %}selected{% endif %}>Niedrig</option>
+                                    <option value="normal" {% if ticket.priority == 'normal' %}selected{% endif %}>Normal</option>
+                                    <option value="hoch" {% if ticket.priority == 'hoch' %}selected{% endif %}>Hoch</option>
+                                    <option value="kritisch" {% if ticket.priority == 'kritisch' %}selected{% endif %}>Kritisch</option>
+                                </select>
+                            {% else %}
+                                <p>{{ ticket.priority }}</p>
+                            {% endif %}
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
@@ -42,21 +51,29 @@
                                 {% endfor %}
                             </select>
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                   value="{{ ticket.due_date | datetime if ticket.due_date else '' }}"
-                                   onchange="updateTicketDueDate(this.value)">
+                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                                <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
+                                       value="{{ ticket.due_date | datetime if ticket.due_date else '' }}"
+                                       onchange="updateTicketDueDate(this.value)">
+                            {% else %}
+                                <p>{{ ticket.due_date | datetime if ticket.due_date else 'Nicht gesetzt' }}</p>
+                            {% endif %}
                             <div>
                                 <p class="text-sm opacity-70">Geschätzte Zeit</p>
                                 <div class="flex items-center gap-2">
-                                    <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                           value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
-                                           onchange="updateTicketEstimatedTime(this.value)"
-                                           min="0" step="1">
-                                    <span class="text-sm opacity-70">Minuten</span>
+                                    {% if current_user.role in ['admin', 'mitarbeiter'] or ticket.assigned_to == current_user.username %}
+                                        <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
+                                               value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
+                                               onchange="updateTicketEstimatedTime(this.value)"
+                                               min="0" step="1">
+                                        <span class="text-sm opacity-70">Minuten</span>
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="saveTicketChanges()">
+                                            <i class="fas fa-save mr-2"></i>Speichern
+                                        </button>
+                                    {% else %}
+                                        <p>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</p>
+                                    {% endif %}
                                 </div>
-                                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="saveTicketChanges()">
-                                    <i class="fas fa-save mr-2"></i>Speichern
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -163,13 +180,24 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
-                            <p class="font-medium">
-                                {% if ticket.assigned_to %}
-                                    {{ ticket.assigned_to }}
-                                {% else %}
-                                    Nicht zugewiesen
-                                {% endif %}
-                            </p>
+                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                                <select id="assignmentSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
+                                    <option value="">Nicht zugewiesen</option>
+                                    {% for user in workers %}
+                                        <option value="{{ user.username }}" {% if ticket.assigned_to == user.username %}selected{% endif %}>
+                                            {{ user.firstname }} {{ user.lastname }} ({{ user.username }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <p class="font-medium">
+                                    {% if ticket.assigned_to %}
+                                        {{ ticket.assigned_to }}
+                                    {% else %}
+                                        Nicht zugewiesen
+                                    {% endif %}
+                                </p>
+                            {% endif %}
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Letzte Aktualisierung</p>
@@ -291,7 +319,7 @@ function updateTicketStatus(newStatus) {
 }
 
 function updateTicketCategory(newCategory) {
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -316,7 +344,7 @@ function updateTicketCategory(newCategory) {
 }
 
 function updateTicketDueDate(newDueDate) {
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -340,17 +368,38 @@ function updateTicketDueDate(newDueDate) {
     });
 }
 
-function updateTicketEstimatedTime(newEstimatedTime) {
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(newEstimatedTime) / 60;
-    
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+function updateTicketAssignment(newAssignment) {
+    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            estimated_time: hours
+            assigned_to: newAssignment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Zuweisung erfolgreich aktualisiert');
+        } else {
+            showToast('error', 'Fehler beim Aktualisieren der Zuweisung: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+    });
+}
+
+function updateTicketEstimatedTime(newEstimatedTime) {
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            estimated_time: parseFloat(newEstimatedTime)
         })
     })
     .then(response => response.json())
@@ -370,18 +419,28 @@ function updateTicketEstimatedTime(newEstimatedTime) {
 function saveTicketChanges() {
     const estimatedTime = document.getElementById('estimatedTimeInput').value;
     const category = document.getElementById('categoryInput').value;
-    const dueDate = document.getElementById('dueDateInput').value;
+    const dueDate = document.getElementById('dueDateInput') ? document.getElementById('dueDateInput').value : null;
+    const priority = document.getElementById('prioritySelect') ? document.getElementById('prioritySelect').value : null;
     
-    fetch(`/tickets/{{ ticket.id }}/update-details`, {
+    const updateData = {
+        estimated_time: parseFloat(estimatedTime),
+        category: category
+    };
+    
+    if (dueDate) {
+        updateData.due_date = dueDate;
+    }
+    
+    if (priority) {
+        updateData.priority = priority;
+    }
+    
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            estimated_time: parseInt(estimatedTime),
-            category: category,
-            due_date: dueDate
-        })
+        body: JSON.stringify(updateData)
     })
     .then(response => response.json())
     .then(data => {
@@ -394,6 +453,30 @@ function saveTicketChanges() {
     .catch(error => {
         console.error('Fehler:', error);
         showToast('error', 'Ein Fehler ist aufgetreten beim Speichern.');
+    });
+}
+
+function updateTicketPriority(newPriority) {
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            priority: newPriority
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Priorität erfolgreich aktualisiert');
+        } else {
+            showToast('error', 'Fehler beim Aktualisieren der Priorität: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der Priorität.');
     });
 }
 

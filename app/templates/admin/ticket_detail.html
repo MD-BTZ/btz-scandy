@@ -6,7 +6,7 @@
 <div class="container mx-auto px-4 py-8">
     <!-- Zurück Button -->
     <div class="mb-6">
-        <a href="{{ url_for('admin.tickets') }}" class="btn btn-outline">
+        <a href="{{ url_for('tickets.index') }}" class="btn btn-outline">
             <i class="fas fa-arrow-left mr-2"></i>
             Zurück zur Admin-Übersicht
         </a>
@@ -385,16 +385,13 @@ function updateTicketDueDate(newDueDate) {
 }
 
 function updateTicketEstimatedTime(newEstimatedTime) {
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(newEstimatedTime) / 60;
-    
     fetch(`/admin/tickets/{{ ticket.id }}/update-details`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            estimated_time: hours
+            estimated_time: parseFloat(newEstimatedTime)
         })
     })
     .then(response => response.json())
@@ -416,16 +413,13 @@ function saveTicketChanges() {
     const category = document.getElementById('categoryInput').value;
     const dueDate = document.getElementById('dueDateInput').value;
     
-    // Konvertiere Minuten in Stunden für die Speicherung
-    const hours = parseFloat(estimatedTime) / 60;
-    
     fetch(`/admin/tickets/{{ ticket.id }}/update-details`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            estimated_time: hours,
+            estimated_time: parseFloat(estimatedTime),
             category: category,
             due_date: dueDate
         })

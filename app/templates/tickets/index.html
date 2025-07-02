@@ -8,120 +8,134 @@
 </div>
 {% endblock %}
 
-{% block filters %}
-<div class="flex flex-wrap gap-2">
-    <select class="select select-bordered w-full max-w-xs" name="status" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('status') %}selected{% endif %}>Status: Alle</option>
-        <option value="offen" {% if request.args.get('status') == 'offen' %}selected{% endif %}>Offen</option>
-        <option value="in_bearbeitung" {% if request.args.get('status') == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-        <option value="erledigt" {% if request.args.get('status') == 'erledigt' %}selected{% endif %}>Erledigt</option>
-    </select>
-    <select class="select select-bordered w-full max-w-xs" name="priority" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('priority') %}selected{% endif %}>Priorität: Alle</option>
-        <option value="niedrig" {% if request.args.get('priority') == 'niedrig' %}selected{% endif %}>Niedrig</option>
-        <option value="normal" {% if request.args.get('priority') == 'normal' %}selected{% endif %}>Normal</option>
-        <option value="hoch" {% if request.args.get('priority') == 'hoch' %}selected{% endif %}>Hoch</option>
-    </select>
-    <select class="select select-bordered w-full max-w-xs" name="assigned_to" onchange="this.form.submit()">
-        <option value="">Zugewiesen an: Alle</option>
-        {% for worker in workers %}
-        <option value="{{ worker.barcode }}" {% if request.args.get('assigned_to') == worker.barcode %}selected{% endif %}>{{ worker.name }}</option>
-        {% endfor %}
-    </select>
-    <select class="select select-bordered w-full max-w-xs" name="created_by" onchange="this.form.submit()">
-        <option value="">Erstellt von: Alle</option>
-        {% for worker in workers %}
-        <option value="{{ worker.barcode }}" {% if request.args.get('created_by') == worker.barcode %}selected{% endif %}>{{ worker.name }}</option>
-        {% endfor %}
-    </select>
+{% block content %}
+<div class="container mx-auto p-4">
+    {% if show_all_tickets %}
+    <!-- Tabs für Admins und Mitarbeiter -->
+    <div class="tabs tabs-boxed mb-4">
+        <a class="tab tab-active" onclick="switchTab('my-tickets')" id="tab-my-tickets">Meine Tickets</a>
+        <a class="tab" onclick="switchTab('assigned-tickets')" id="tab-assigned-tickets">Zugewiesen an mich</a>
+        <a class="tab" onclick="switchTab('all-tickets')" id="tab-all-tickets">Alle Tickets</a>
+    </div>
+    {% endif %}
+
+    <!-- Tab-Inhalte -->
+    {% if show_all_tickets %}
+    <div id="my-tickets-content" class="tab-content">
+        <h2 class="text-2xl font-bold mb-4">Meine Tickets</h2>
+        {% include 'tickets/_ticket_table_my.html' %}
+    </div>
+
+    <div id="assigned-tickets-content" class="tab-content hidden">
+        <h2 class="text-2xl font-bold mb-4">Zugewiesen an mich</h2>
+        {% include 'tickets/_ticket_table_assigned.html' %}
+    </div>
+
+    <div id="all-tickets-content" class="tab-content hidden">
+        <h2 class="text-2xl font-bold mb-4">Alle Tickets</h2>
+        {% include 'tickets/_ticket_table_all.html' %}
+    </div>
+    {% else %}
+    <!-- Für normale User: Direkte Anzeige der eigenen Tickets -->
+    <div class="overflow-x-auto">
+        <table class="table w-full">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Titel</th>
+                    <th>Status</th>
+                    <th>Priorität</th>
+                    <th>Zugewiesen an</th>
+                    <th>Erstellt am</th>
+                    <th>Fällig am</th>
+                    <th>Geschätzte Zeit</th>
+                    <th>Tatsächliche Zeit</th>
+                    <th class="text-right">Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr class="hover">
+                    <td>#{{ ticket.ticket_number or ticket.id }}</td>
+                    <td>
+                        <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
+                            {{ ticket.title }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge 
+                            {% if ticket.status == 'offen' %}badge-info
+                            {% elif ticket.status == 'in_bearbeitung' %}badge-warning
+                            {% elif ticket.status in ['erledigt', 'gelöst'] %}badge-success
+                            {% else %}badge-ghost{% endif %}">
+                            {% if ticket.status == 'offen' %}Offen
+                            {% elif ticket.status == 'in_bearbeitung' %}In Bearbeitung
+                            {% elif ticket.status == 'erledigt' %}Erledigt
+                            {% elif ticket.status == 'gelöst' %}Gelöst
+                            {% else %}{{ ticket.status|capitalize }}{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge 
+                            {% if ticket.priority == 'niedrig' %}badge-secondary
+                            {% elif ticket.priority == 'normal' %}badge-primary
+                            {% elif ticket.priority == 'hoch' %}badge-danger
+                            {% elif ticket.priority == 'kritisch' %}badge-error
+                            {% else %}badge-ghost{% endif %}">
+                            {% if ticket.priority == 'niedrig' %}Niedrig
+                            {% elif ticket.priority == 'normal' %}Normal
+                            {% elif ticket.priority == 'hoch' %}Hoch
+                            {% elif ticket.priority == 'kritisch' %}Kritisch
+                            {% else %}{{ ticket.priority|capitalize }}{% endif %}
+                        </span>
+                    </td>
+                    <td>{{ ticket.assigned_to or '-' }}</td>
+                    <td>{{ ticket.created_at }}</td>
+                    <td>
+                        {% if ticket.due_date %}
+                            {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
+                                <span class="text-danger">{{ ticket.due_date }}</span>
+                            {% else %}
+                                {{ ticket.due_date }}
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</td>
+                    <td>{{ ticket.actual_time or '-' }}</td>
+                    <td class="text-right">
+                        <div class="btn-group">
+                            <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost" title="Details anzeigen">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </div>
-{% endblock %}
 
-{% block table_headers %}
-<th>ID</th>
-<th>Titel</th>
-<th>Status</th>
-<th>Priorität</th>
-<th>Zugewiesen an</th>
-<th>Erstellt von</th>
-<th>Erstellt am</th>
-<th>Fällig am</th>
-<th>Geschätzte Zeit</th>
-<th>Tatsächliche Zeit</th>
-<th class="text-right">Aktionen</th>
-{% endblock %}
-
-{% block table_rows %}
-{% for ticket in tickets %}
-<tr class="hover">
-    <td>#{{ ticket.ticket_number or ticket.id }}</td>
-    <td>
-        <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="link link-hover font-medium">
-            {{ ticket.title }}
-        </a>
-    </td>
-    <td>
-        <span class="badge 
-            {% if ticket.status == 'offen' %}badge-info
-            {% elif ticket.status == 'in_bearbeitung' %}badge-warning
-            {% elif ticket.status in ['erledigt', 'gelöst'] %}badge-success
-            {% else %}badge-ghost{% endif %}">
-            {% if ticket.status == 'offen' %}Offen
-            {% elif ticket.status == 'in_bearbeitung' %}In Bearbeitung
-            {% elif ticket.status == 'erledigt' %}Erledigt
-            {% elif ticket.status == 'gelöst' %}Gelöst
-            {% else %}{{ ticket.status|capitalize }}{% endif %}
-        </span>
-    </td>
-    <td>
-        <span class="badge 
-            {% if ticket.priority == 'niedrig' %}badge-secondary
-            {% elif ticket.priority == 'normal' %}badge-primary
-            {% elif ticket.priority == 'hoch' %}badge-danger
-            {% elif ticket.priority == 'kritisch' %}badge-error
-            {% else %}badge-ghost{% endif %}">
-            {% if ticket.priority == 'niedrig' %}Niedrig
-            {% elif ticket.priority == 'normal' %}Normal
-            {% elif ticket.priority == 'hoch' %}Hoch
-            {% elif ticket.priority == 'kritisch' %}Kritisch
-            {% else %}{{ ticket.priority|capitalize }}{% endif %}
-        </span>
-    </td>
-    <td>{{ ticket.assigned_to or '-' }}</td>
-    <td>{{ ticket.created_by }}</td>
-    <td>{{ ticket.created_at }}</td>
-    <td>
-        {% if ticket.due_date %}
-            {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
-                <span class="text-danger">{{ ticket.due_date }}</span>
-            {% else %}
-                {{ ticket.due_date }}
-            {% endif %}
-        {% else %}
-            -
-        {% endif %}
-    </td>
-    <td>{{ ticket.estimated_time or '-' }}</td>
-    <td>{{ ticket.actual_time or '-' }}</td>
-    <td class="text-right">
-        <div class="btn-group">
-            <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}" class="btn btn-sm btn-ghost" title="Details anzeigen">
-                <i class="fas fa-eye"></i>
-            </a>
-            {% if current_user.is_admin %}
-            <button type="button" class="btn btn-sm btn-ghost btn-error" title="Löschen" onclick="deleteTicket({{ ticket.id }})">
-                <i class="fas fa-trash"></i>
-            </button>
-            {% endif %}
-        </div>
-    </td>
-</tr>
-{% endfor %}
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
 <script>
+function switchTab(tabName) {
+    // Alle Tab-Inhalte ausblenden
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Alle Tabs inaktiv machen
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('tab-active');
+    });
+    
+    // Gewählten Tab aktivieren
+    document.getElementById('tab-' + tabName).classList.add('tab-active');
+    document.getElementById(tabName + '-content').classList.remove('hidden');
+}
+
 function deleteTicket(id) {
     if (!confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
         return;
@@ -147,4 +161,6 @@ function deleteTicket(id) {
     });
 }
 </script>
-{% endblock %} 
+{% endblock %}
+
+ 

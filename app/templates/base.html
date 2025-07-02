@@ -208,7 +208,7 @@
                         </li>
                         {% if current_user.is_admin %}
                         <li>
-                            <a href="{{ url_for('admin.tickets') }}" class="{% if request.endpoint and 'admin.tickets' in request.endpoint %}active{% endif %}">
+                            <a href="{{ url_for('tickets.index') }}" class="{% if request.endpoint and 'tickets.index' in request.endpoint %}active{% endif %}">
                                 <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}
                             </a>
                         </li>

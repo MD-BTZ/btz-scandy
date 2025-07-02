@@ -17,11 +17,20 @@ logger = logging.getLogger(__name__)
 
 def _get_encryption_key():
     """Generiert einen einfachen Verschlüsselungsschlüssel für E-Mail-Passwörter"""
-    # Verwende SECRET_KEY als Basis für den Verschlüsselungsschlüssel
-    secret_key = current_app.config.get('SECRET_KEY', 'default-secret-key')
-    # Erstelle einen 32-Byte-Schlüssel aus dem Secret Key
-    key = hashlib.sha256(secret_key.encode()).digest()
-    return base64.urlsafe_b64encode(key)
+    try:
+        # Prüfe ob App-Kontext verfügbar ist
+        if not has_app_context():
+            logger.warning("Kein App-Kontext verfügbar für E-Mail-Verschlüsselung")
+            return None
+        
+        # Verwende SECRET_KEY als Basis für den Verschlüsselungsschlüssel
+        secret_key = current_app.config.get('SECRET_KEY', 'default-secret-key')
+        # Erstelle einen 32-Byte-Schlüssel aus dem Secret Key
+        key = hashlib.sha256(secret_key.encode()).digest()
+        return base64.urlsafe_b64encode(key)
+    except Exception as e:
+        logger.error(f"Fehler beim Generieren des Verschlüsselungsschlüssels: {e}")
+        return None
 
 def _encrypt_password(password):
     """Verschlüsselt ein E-Mail-Passwort mit XOR und Base64"""
@@ -301,60 +310,73 @@ def test_email_config(config_data):
 
 def init_mail(app):
     global mail
-    # Lade Konfiguration aus der Datenbank
-    config = get_email_config()
     
-    if config:
-        # Verwende Datenbank-Konfiguration
-        app.config['MAIL_SERVER'] = config['mail_server']
-        app.config['MAIL_PORT'] = config['mail_port']
-        app.config['MAIL_USE_TLS'] = config['mail_use_tls']
-        app.config['MAIL_USE_SSL'] = not config['mail_use_tls'] and int(config['mail_port']) == 465
+    # Prüfe ob bereits initialisiert
+    if mail is not None:
+        return mail
+    
+    try:
+        # Lade Konfiguration aus der Datenbank
+        config = get_email_config()
         
-        # Prüfe ob Server Authentifizierung unterstützt
-        # Verwende use_auth Einstellung, falls vorhanden, sonst prüfe Server-Capabilities
-        if 'use_auth' in config:
-            auth_required = config['use_auth']
-        else:
-            auth_required = _check_auth_required(config['mail_server'], config['mail_port'], config['mail_use_tls'])
-        
-        if auth_required:
-            # Server benötigt Authentifizierung
-            if not config['mail_username'] or not config['mail_password']:
-                app.logger.error("E-Mail-Server benötigt Authentifizierung, aber keine Anmeldedaten angegeben")
-                mail = None
-                return
+        if config:
+            # Verwende Datenbank-Konfiguration
+            app.config['MAIL_SERVER'] = config['mail_server']
+            app.config['MAIL_PORT'] = config['mail_port']
+            app.config['MAIL_USE_TLS'] = config['mail_use_tls']
+            app.config['MAIL_USE_SSL'] = not config['mail_use_tls'] and int(config['mail_port']) == 465
             
-            app.config['MAIL_USERNAME'] = config['mail_username']
-            app.config['MAIL_PASSWORD'] = config['mail_password']
-            app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']  # Absender = SMTP-Username
-        else:
-            # Server ohne Authentifizierung
-            if not config.get('mail_username'):
-                app.logger.error("Für Server ohne Authentifizierung ist eine Absender-E-Mail-Adresse erforderlich")
-                mail = None
-                return
+            # Prüfe ob Server Authentifizierung unterstützt
+            # Verwende use_auth Einstellung, falls vorhanden, sonst prüfe Server-Capabilities
+            if 'use_auth' in config:
+                auth_required = config['use_auth']
+            else:
+                auth_required = _check_auth_required(config['mail_server'], config['mail_port'], config['mail_use_tls'])
+            
+            if auth_required:
+                # Server benötigt Authentifizierung
+                if not config['mail_username'] or not config['mail_password']:
+                    app.logger.error("E-Mail-Server benötigt Authentifizierung, aber keine Anmeldedaten angegeben")
+                    mail = None
+                    return None
                 
-            app.config['MAIL_USERNAME'] = config['mail_username']  # Wird als Absender verwendet
-            app.config['MAIL_PASSWORD'] = ''  # Kein Passwort für Server ohne Auth
-            app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']
-        
-        # Zusätzliche Flask-Mail Konfiguration für bessere Kompatibilität
-        app.config['MAIL_ASCII_ATTACHMENTS'] = False
-        app.config['MAIL_SUPPRESS_SEND'] = False
-        
-        try:
-            mail = Mail(app)
-            app.logger.info("E-Mail-System mit Datenbank-Konfiguration initialisiert")
-            app.logger.info(f"SMTP-Server: {config['mail_server']}:{config['mail_port']}")
-            app.logger.info(f"TLS: {config['mail_use_tls']}, SSL: {app.config['MAIL_USE_SSL']}")
-        except Exception as e:
-            app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
+                app.config['MAIL_USERNAME'] = config['mail_username']
+                app.config['MAIL_PASSWORD'] = config['mail_password']
+                app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']  # Absender = SMTP-Username
+            else:
+                # Server ohne Authentifizierung
+                if not config.get('mail_username'):
+                    app.logger.error("Für Server ohne Authentifizierung ist eine Absender-E-Mail-Adresse erforderlich")
+                    mail = None
+                    return None
+                    
+                app.config['MAIL_USERNAME'] = config['mail_username']  # Wird als Absender verwendet
+                app.config['MAIL_PASSWORD'] = ''  # Kein Passwort für Server ohne Auth
+                app.config['MAIL_DEFAULT_SENDER'] = config['mail_username']
+            
+            # Zusätzliche Flask-Mail Konfiguration für bessere Kompatibilität
+            app.config['MAIL_ASCII_ATTACHMENTS'] = False
+            app.config['MAIL_SUPPRESS_SEND'] = False
+            
+            try:
+                mail = Mail(app)
+                app.logger.info("E-Mail-System mit Datenbank-Konfiguration initialisiert")
+                app.logger.info(f"SMTP-Server: {config['mail_server']}:{config['mail_port']}")
+                app.logger.info(f"TLS: {config['mail_use_tls']}, SSL: {app.config['MAIL_USE_SSL']}")
+                return mail
+            except Exception as e:
+                app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
+                mail = None
+                return None
+        else:
+            # Keine E-Mail-Konfiguration verfügbar
+            app.logger.warning("Keine E-Mail-Konfiguration verfügbar - E-Mail-System wird nicht initialisiert")
             mail = None
-    else:
-        # Keine E-Mail-Konfiguration verfügbar
-        app.logger.warning("Keine E-Mail-Konfiguration verfügbar - E-Mail-System wird nicht initialisiert")
+            return None
+    except Exception as e:
+        app.logger.error(f"Fehler bei E-Mail-Initialisierung: {e}")
         mail = None
+        return None
 
 
 def _check_auth_required(server, port, use_tls):
@@ -613,6 +635,13 @@ def ensure_app_context(func):
 def send_email(to_email, subject, html_content=None, text_content=None, from_name=None):
     """Sendet E-Mails mit HTML- und Text-Inhalten über _send_email_direct"""
     try:
+        # Prüfe ob E-Mail-Konfiguration verfügbar ist
+        config = get_email_config()
+        if not config:
+            logger.warning(f"[MAIL][auftrag] E-Mail-Konfiguration nicht verfügbar - E-Mail wird nicht versendet")
+            logger.info(f"[MAIL][auftrag] Empfänger: {to_email}, Betreff: {subject}")
+            return False
+        
         # Verwende direkte SMTP-Verbindung mit detailliertem Logging
         # Sende als HTML-E-Mail mit beiden Inhalten
         success = _send_email_direct_html(to_email, subject, html_content, text_content, mail_type="auftrag")

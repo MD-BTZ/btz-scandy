@@ -4,25 +4,23 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Linke Spalte: (leer oder Info) -->
-        <div class="lg:col-span-1">
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title mb-4">Arbeitsaufträge Übersicht</h2>
-                    <p class="text-base-content/70">Hier sehen Sie alle offenen, zugewiesenen und eigenen Arbeitsaufträge. Neue Aufträge können über die zentrale Auftragserstellung hinzugefügt werden.</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Rechte Spalte: Tabbed Table für alle {{ app_labels.tickets.name }} -->
-        <div class="lg:col-span-2">
+    <div class="w-full">
+        <!-- Vollständige Breite: Tabbed Table für alle {{ app_labels.tickets.name }} -->
+        <div class="w-full">
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <div class="tabs tabs-boxed mb-4">
                         <a role="tab" class="tab tab-active" id="tab-open" onclick="showTab('open')">Offene {{ app_labels.tickets.name }}</a>
-                        <a role="tab" class="tab" id="tab-assigned" onclick="showTab('assigned')">Zugewiesene {{ app_labels.tickets.name }}</a>
-                        <a role="tab" class="tab" id="tab-mine" onclick="showTab('mine')">Meine {{ app_labels.tickets.name }}</a>
+                        <a role="tab" class="tab" id="tab-assigned" onclick="showTab('assigned')">
+                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
+                            Meine & Abgeschlossene {{ app_labels.tickets.name }}
+                            {% else %}
+                            Zugewiesene {{ app_labels.tickets.name }}
+                            {% endif %}
+                        </a>
+                        {% if show_all_tickets %}
+                        <a role="tab" class="tab" id="tab-all" onclick="showTab('all')">Alle Arbeitsaufträge</a>
+                        {% endif %}
                     </div>
                     <div id="table-open">
                         {% include 'tickets/_ticket_table_open.html' with context %}
@@ -30,9 +28,11 @@
                     <div id="table-assigned" style="display:none;">
                         {% include 'tickets/_ticket_table_assigned.html' with context %}
                     </div>
-                    <div id="table-mine" style="display:none;">
-                        {% include 'tickets/_ticket_table.html' with context %}
+                    {% if show_all_tickets %}
+                    <div id="table-all" style="display:none;">
+                        {% include 'tickets/_ticket_table_all_create.html' with context %}
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -44,12 +44,34 @@
 {{ super() }}
 <script>
 function showTab(tab) {
-    document.getElementById('table-open').style.display = (tab === 'open') ? '' : 'none';
-    document.getElementById('table-assigned').style.display = (tab === 'assigned') ? '' : 'none';
-    document.getElementById('table-mine').style.display = (tab === 'mine') ? '' : 'none';
-    document.getElementById('tab-open').classList.toggle('tab-active', tab === 'open');
-    document.getElementById('tab-assigned').classList.toggle('tab-active', tab === 'assigned');
-    document.getElementById('tab-mine').classList.toggle('tab-active', tab === 'mine');
+    // Alle Tabellen ausblenden
+    document.getElementById('table-open').style.display = 'none';
+    document.getElementById('table-assigned').style.display = 'none';
+    
+    // Alle Tabs inaktiv machen
+    document.getElementById('tab-open').classList.remove('tab-active');
+    document.getElementById('tab-assigned').classList.remove('tab-active');
+    
+    // Gewählten Tab aktivieren
+    if (tab === 'open') {
+        document.getElementById('table-open').style.display = '';
+        document.getElementById('tab-open').classList.add('tab-active');
+    } else if (tab === 'assigned') {
+        document.getElementById('table-assigned').style.display = '';
+        document.getElementById('tab-assigned').classList.add('tab-active');
+    } else if (tab === 'all') {
+        const tableAll = document.getElementById('table-all');
+        const tabAll = document.getElementById('tab-all');
+        if (tableAll && tabAll) {
+            tableAll.style.display = '';
+            tabAll.classList.add('tab-active');
+        }
+    }
+    
+    // URL-Parameter entfernen, um Filter-Probleme zu vermeiden
+    if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
 }
 </script>
 {% endblock %} 

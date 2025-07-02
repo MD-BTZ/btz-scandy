@@ -1,4 +1,4 @@
-<!-- Filter für zugewiesene Tickets -->
+<!-- Filter für eigene Tickets -->
 <div class="flex flex-wrap gap-2 mb-4">
     <select class="select select-bordered w-full max-w-xs" name="status" onchange="this.form.submit()">
         <option value="alle" {% if not request.args.get('status') %}selected{% endif %}>Status: Alle</option>
@@ -14,9 +14,8 @@
     </select>
 </div>
 
-<!-- Tabelle für zugewiesene Tickets -->
+<!-- Tabelle für eigene Tickets -->
 <div class="overflow-x-auto">
-    {% if assigned_tickets %}
     <table class="table w-full">
         <thead>
             <tr>
@@ -24,8 +23,7 @@
                 <th>Titel</th>
                 <th>Status</th>
                 <th>Priorität</th>
-                <th>Erstellt von</th>
-                <th>Kontakt</th>
+                <th>Zugewiesen an</th>
                 <th>Erstellt am</th>
                 <th>Fällig am</th>
                 <th>Geschätzte Zeit</th>
@@ -34,8 +32,8 @@
             </tr>
         </thead>
         <tbody>
-            {% for ticket in assigned_tickets %}
-            <tr class="hover {% if ticket.status in ['gelöst', 'geschlossen'] %}opacity-60{% endif %}">
+            {% for ticket in tickets %}
+            <tr class="hover">
                 <td>#{{ ticket.ticket_number or ticket.id }}</td>
                 <td>
                     <a href="{{ url_for('tickets.view', ticket_id=ticket.id) }}" class="link link-hover font-medium">
@@ -69,21 +67,14 @@
                         {% else %}{{ ticket.priority|capitalize }}{% endif %}
                     </span>
                 </td>
-                <td>{{ ticket.created_by }}</td>
-                <td>
-                    {% if ticket.auftrag_details and ticket.auftrag_details.kontakt %}
-                        <span class="text-sm text-base-content/70">{{ ticket.auftrag_details.kontakt }}</span>
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-                <td>{{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else '-' }}</td>
+                <td>{{ ticket.assigned_to or '-' }}</td>
+                <td>{{ ticket.created_at }}</td>
                 <td>
                     {% if ticket.due_date %}
                         {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
-                            <span class="text-danger">{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                            <span class="text-danger">{{ ticket.due_date }}</span>
                         {% else %}
-                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                            {{ ticket.due_date }}
                         {% endif %}
                     {% else %}
                         -
@@ -97,7 +88,7 @@
                             <i class="fas fa-eye"></i>
                         </a>
                         {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                        <button type="button" class="btn btn-sm btn-ghost btn-error" title="Löschen" onclick="deleteTicket('{{ ticket.id }}')">
+                        <button type="button" class="btn btn-sm btn-ghost btn-error" title="Löschen" onclick="deleteTicket({{ ticket.id }})">
                             <i class="fas fa-trash"></i>
                         </button>
                         {% endif %}
@@ -107,7 +98,4 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p class="text-base-content/60">Es sind keine {{ app_labels.tickets.name }} an Sie zugewiesen.</p>
-    {% endif %}
 </div> 

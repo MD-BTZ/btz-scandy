@@ -1668,13 +1668,13 @@ def export_ticket(id):
         except Exception as e:
             logging.error(f"Ungültige Ticket-ID: {id}")
             flash('Ungültige Ticket-ID.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
         
         ticket = mongodb.find_one('tickets', {'_id': ticket_id})
         if not ticket:
             logging.error(f"Ticket nicht gefunden: {id}")
             flash('Ticket nicht gefunden.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
         
         auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
         material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []
@@ -1862,6 +1862,34 @@ def update_ticket_details(ticket_id):
             'updated_at': datetime.now()
         }
         
+        # Verarbeite estimated_time (wird in Minuten gespeichert)
+        if 'estimated_time' in data:
+            estimated_time = data['estimated_time']
+            if estimated_time is not None and estimated_time != '':
+                ticket_update['estimated_time'] = float(estimated_time)
+            else:
+                ticket_update['estimated_time'] = None
+        
+        # Verarbeite category
+        if 'category' in data:
+            ticket_update['category'] = data['category']
+        
+        # Verarbeite due_date
+        if 'due_date' in data:
+            due_date = data['due_date']
+            if due_date:
+                try:
+                    # Versuche verschiedene Datumsformate zu parsen
+                    if 'T' in due_date:
+                        due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
+                    else:
+                        due_date = datetime.strptime(due_date, '%Y-%m-%d')
+                    ticket_update['due_date'] = due_date
+                except ValueError:
+                    return jsonify({'success': False, 'message': 'Ungültiges Datumsformat'}), 400
+            else:
+                ticket_update['due_date'] = None
+        
         if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': ticket_update}):
             return jsonify({
                 'success': False,
@@ -1899,20 +1927,7 @@ def create_mongodb_backup():
         logger.error(f"Fehler beim Erstellen des MongoDB-Backups: {str(e)}")
         return False, f"Fehler beim Erstellen des Backups: {str(e)}"
 
-@bp.route('/tickets')
-@login_required
-@mitarbeiter_required
-def tickets():
-    """Zeigt die Ticket-Übersicht für Admins."""
-    # Hole alle Tickets (nur nicht gelöschte)
-    all_tickets = mongodb.find('tickets', {'deleted': {'$ne': True}})
-    all_tickets = list(all_tickets)
-    
-    # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
-    for ticket in all_tickets:
-        ticket['id'] = str(ticket['_id'])
-    
-    return render_template('admin/tickets.html', tickets=all_tickets)
+
 
 @bp.route('/manage_users')
 @mitarbeiter_required
@@ -2186,13 +2201,13 @@ def add_ticket_category():
         name = request.form.get('category')
         if not name:
             flash('Bitte geben Sie einen Namen ein.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Prüfen ob Ticket-Kategorie bereits existiert
         settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
         if settings and name in settings.get('value', []):
             flash('Diese Ticket-Kategorie existiert bereits.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
@@ -2208,11 +2223,11 @@ def add_ticket_category():
             })
 
         flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
@@ -2223,7 +2238,7 @@ def delete_ticket_category(category):
         tickets_with_category = mongodb.db.tickets.find_one({'category': category})
         if tickets_with_category:
             flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.update_one_array(
@@ -2233,11 +2248,11 @@ def delete_ticket_category(category):
         )
         
         flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/system', methods=['GET', 'POST'])
 @admin_required
@@ -2898,13 +2913,13 @@ def add_ticket_category_legacy():
         name = request.form.get('category')
         if not name:
             flash('Bitte geben Sie einen Namen ein.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Prüfen ob Ticket-Kategorie bereits existiert
         settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
         if settings and name in settings.get('value', []):
             flash('Diese Ticket-Kategorie existiert bereits.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
@@ -2920,11 +2935,11 @@ def add_ticket_category_legacy():
             })
 
         flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
@@ -2935,7 +2950,7 @@ def delete_ticket_category_legacy(category):
         tickets_with_category = mongodb.db.tickets.find_one({'category': category})
         if tickets_with_category:
             flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
-            return redirect(url_for('admin.tickets'))
+            return redirect(url_for('tickets.index'))
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.update_one_array(
@@ -2945,11 +2960,11 @@ def delete_ticket_category_legacy(category):
         )
         
         flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('admin.tickets'))
+        return redirect(url_for('tickets.index'))
 
 @bp.route('/backup/list')
 @mitarbeiter_required
@@ -3382,6 +3397,48 @@ def clean_barcodes():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@bp.route('/debug/clean-settings', methods=['POST'])
+@mitarbeiter_required
+def clean_settings():
+    """Bereinigt doppelte Settings-Einträge in der Datenbank"""
+    try:
+        cleaned_count = 0
+        
+        # Hole alle Settings
+        all_settings = list(mongodb.find('settings', {}))
+        
+        # Gruppiere nach key
+        settings_by_key = {}
+        for setting in all_settings:
+            key = setting.get('key')
+            if key:
+                if key not in settings_by_key:
+                    settings_by_key[key] = []
+                settings_by_key[key].append(setting)
+        
+        # Entferne Duplikate (behalte den neuesten)
+        for key, settings_list in settings_by_key.items():
+            if len(settings_list) > 1:
+                # Sortiere nach updated_at oder created_at
+                settings_list.sort(key=lambda x: x.get('updated_at', x.get('created_at', datetime.min)), reverse=True)
+                
+                # Behalte nur den ersten (neuesten) Eintrag
+                keep_setting = settings_list[0]
+                settings_to_delete = settings_list[1:]
+                
+                # Lösche die Duplikate
+                for setting_to_delete in settings_to_delete:
+                    mongodb.delete_one('settings', {'_id': setting_to_delete['_id']})
+                    cleaned_count += 1
+        
+        return jsonify({
+            'success': True,
+            'message': f'{cleaned_count} doppelte Settings-Einträge wurden bereinigt'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @bp.route('/debug')
 @mitarbeiter_required
 def debug_page():
@@ -3448,13 +3505,15 @@ def export_all_data():
         workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
         consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
         lendings = list(mongodb.find('lendings', {}))
+        settings = list(mongodb.find('settings', {}))
         
         # Erstelle Excel-Datei mit mehreren Arbeitsblättern
         data_dict = {
             'Werkzeuge': tools,
             'Mitarbeiter': workers,
             'Verbrauchsmaterial': consumables,
-            'Ausleihverlauf': lendings
+            'Ausleihverlauf': lendings,
+            'Settings': settings
         }
         
         # Erstelle Excel-Datei
@@ -3542,6 +3601,31 @@ def import_all_data():
                     if not existing:
                         mongodb.insert_one('consumables', consumable_data)
                         imported_count += 1
+            
+            # Importiere Settings (Kategorien, Standorte, Abteilungen)
+            if 'Settings' in excel_file.sheet_names:
+                df_settings = pd.read_excel(excel_file, sheet_name='Settings')
+                for _, row in df_settings.iterrows():
+                    setting_data = row.to_dict()
+                    setting_data = {k: v for k, v in setting_data.items() if pd.notna(v)}
+                    
+                    # Stelle sicher, dass nur gültige Settings importiert werden
+                    valid_settings = ['categories', 'locations', 'departments', 'ticket_categories', 
+                                    'label_tools_name', 'label_tools_icon', 'label_consumables_name', 
+                                    'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']
+                    
+                    if setting_data.get('key') in valid_settings:
+                        # Prüfe ob Setting bereits existiert
+                        existing = mongodb.find_one('settings', {'key': setting_data.get('key')})
+                        if not existing:
+                            mongodb.insert_one('settings', setting_data)
+                            imported_count += 1
+                        else:
+                            # Update existierendes Setting
+                            mongodb.update_one('settings', 
+                                             {'key': setting_data.get('key')}, 
+                                             {'$set': setting_data})
+                            imported_count += 1
             
             flash(f'{imported_count} Datensätze erfolgreich importiert', 'success')
             
