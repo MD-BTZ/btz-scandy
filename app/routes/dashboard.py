@@ -20,6 +20,10 @@ def index():
     # Bestandsprognose laden
     consumables_forecast = MongoDBTool.get_consumables_forecast()
     
+    # Duplikat-Barcodes prüfen
+    duplicate_barcodes = MongoDBTool.get_duplicate_barcodes()
+    
     return render_template('dashboard/index.html',
                          stats=stats,
-                         consumables_forecast=consumables_forecast) 
+                         consumables_forecast=consumables_forecast,
+                         duplicate_barcodes=duplicate_barcodes) 

@@ -585,14 +585,7 @@ def dashboard():
     consumables_forecast = get_consumables_forecast()
     
     # Prüfung auf doppelte Barcodes
-    tool_barcodes = list(mongodb.db.tools.find({'deleted': {'$ne': True}}, {'barcode': 1}))
-    consumable_barcodes = list(mongodb.db.consumables.find({'deleted': {'$ne': True}}, {'barcode': 1}))
-    barcode_count = {}
-    for entry in tool_barcodes + consumable_barcodes:
-        bc = entry.get('barcode')
-        if bc:
-            barcode_count[bc] = barcode_count.get(bc, 0) + 1
-    duplicate_barcodes = [bc for bc, count in barcode_count.items() if count > 1]
+    duplicate_barcodes = MongoDBTool.get_duplicate_barcodes()
 
     return render_template('admin/dashboard.html',
                          tool_stats=tool_stats,
