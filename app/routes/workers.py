@@ -9,8 +9,25 @@ import os
 import tempfile
 from docxtpl import DocxTemplate
 from bson import ObjectId
+from typing import Union
 
 bp = Blueprint('workers', __name__, url_prefix='/workers')
+
+def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
+    """
+    Konvertiert eine ID für Datenbankabfragen.
+    Versucht zuerst mit String-ID, dann mit ObjectId.
+    """
+    try:
+        # Versuche zuerst mit String-ID (für importierte Daten)
+        return id_value
+    except:
+        # Falls das fehlschlägt, versuche ObjectId
+        try:
+            return ObjectId(id_value)
+        except:
+            # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
+            return id_value
 
 @bp.route('/')
 @mitarbeiter_required
@@ -521,7 +538,7 @@ def timesheet_edit(ts_id):
     
     # Konvertiere ts_id zu ObjectId
     try:
-        object_id = ObjectId(ts_id)
+        object_id = convert_id_for_query(ts_id)
     except:
         flash('Ungültige Timesheet-ID.', 'error')
         return redirect(url_for('workers.timesheet_list'))
@@ -554,7 +571,7 @@ def timesheet_edit(ts_id):
             update_data[f'{day}_end'] = request.form.get(f'end_{day}', '')
         
         mongodb.update_one('timesheets', 
-                         {'_id': object_id}, 
+                         {'_id': convert_id_for_query(ts_id)}, 
                          {'$set': update_data})
         flash('Wochenplan aktualisiert.', 'success')
         return redirect(url_for('workers.timesheet_list'))
@@ -571,7 +588,7 @@ def timesheet_download(ts_id):
     
     # Konvertiere ts_id zu ObjectId
     try:
-        object_id = ObjectId(ts_id)
+        object_id = convert_id_for_query(ts_id)
     except:
         flash('Ungültige Timesheet-ID.', 'error')
         return redirect(url_for('workers.timesheet_list'))

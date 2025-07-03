@@ -9,6 +9,7 @@ class User(UserMixin):
     def __init__(self, user_data=None):
         if user_data:
             # Verwende normale Attribut-Zuweisung
+            # WICHTIG: Speichere die ID immer als String für Konsistenz
             self.id = str(user_data.get('_id'))
             self.username = user_data.get('username')
             self.role = user_data.get('role', 'anwender')

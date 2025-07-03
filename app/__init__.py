@@ -160,7 +160,7 @@ def create_app(test_config=None):
         Lädt einen Benutzer aus der Datenbank für Flask-Login.
         
         Args:
-            user_id: ID des zu ladenden Benutzers
+            user_id: ID des zu ladenden Benutzers (immer ein String)
             
         Returns:
             User-Objekt oder None falls nicht gefunden
@@ -168,11 +168,47 @@ def create_app(test_config=None):
         try:
             from app.models.mongodb_models import MongoDBUser
             from app.models.user import User
+            from app.models.mongodb_database import mongodb
             
+            print(f"load_user aufgerufen für ID: {user_id}")
+            
+            # Debug: Zeige alle verfügbaren User-IDs
+            all_users = MongoDBUser.get_all()
+            print(f"Verfügbare User-IDs: {[str(user.get('_id', 'No ID')) for user in all_users]}")
+            
+            # WICHTIG: user_id ist immer ein String (von Flask-Login)
+            # Suche direkt in der Datenbank mit verschiedenen Methoden
+            
+            # Methode 1: Direkte String-Suche
+            user_data = mongodb.find_one('users', {'_id': user_id})
+            if user_data:
+                print(f"DEBUG: User mit String-ID gefunden: {user_data.get('username')}")
+                user = User(user_data)
+                print(f"User geladen: {user.username}, ID: {user.id}")
+                return user
+            
+            # Methode 2: ObjectId-Suche
+            try:
+                from bson import ObjectId
+                obj_id = ObjectId(user_id)
+                user_data = mongodb.find_one('users', {'_id': obj_id})
+                if user_data:
+                    print(f"DEBUG: User mit ObjectId gefunden: {user_data.get('username')}")
+                    user = User(user_data)
+                    print(f"User geladen: {user.username}, ID: {user.id}")
+                    return user
+            except Exception as e:
+                print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+            
+            # Methode 3: Fallback mit MongoDBUser.get_by_id
             user_data = MongoDBUser.get_by_id(user_id)
             if user_data:
+                print(f"DEBUG: User mit MongoDBUser.get_by_id gefunden: {user_data.get('username')}")
                 user = User(user_data)
+                print(f"User geladen: {user.username}, ID: {user.id}")
                 return user
+            
+            print(f"Kein User gefunden für ID: {user_id}")
             return None
         except Exception as e:
             logging.error(f"Fehler beim Laden des Benutzers {user_id}: {e}")

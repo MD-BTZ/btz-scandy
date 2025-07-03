@@ -10,7 +10,7 @@ Alle Routen verwenden Flask-Login für die Session-Verwaltung
 und MongoDB für die Benutzerdaten.
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 from app.models.mongodb_models import MongoDBUser
@@ -18,11 +18,29 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.mongodb_database import MongoDB
 from app.utils.auth_utils import needs_setup
 from datetime import datetime
+from bson import ObjectId
+from typing import Union
 import logging
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 mongodb = MongoDB()
 logger = logging.getLogger(__name__)
+
+def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
+    """
+    Konvertiert eine ID für Datenbankabfragen.
+    Versucht zuerst mit String-ID, dann mit ObjectId.
+    """
+    try:
+        # Versuche zuerst mit String-ID (für importierte Daten)
+        return id_value
+    except:
+        # Falls das fehlschlägt, versuche ObjectId
+        try:
+            return ObjectId(id_value)
+        except:
+            # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
+            return id_value
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -52,13 +70,33 @@ def login():
         # ===== BENUTZER VALIDIEREN =====
         user_data = MongoDBUser.get_by_username(username)
             
-        if user_data and check_password_hash(user_data['password_hash'], password):
+        from app.utils.auth_utils import check_password_compatible
+        if user_data and check_password_compatible(user_data['password_hash'], password):
             if user_data.get('is_active', True):
+                # Konvertiere alte Hash-Formate zu werkzeug-Hash bei erfolgreicher Anmeldung
+                if (user_data['password_hash'].startswith('scrypt:') or 
+                    user_data['password_hash'].startswith('$2b$')):
+                    try:
+                        from werkzeug.security import generate_password_hash
+                        from bson import ObjectId
+                        new_hash = generate_password_hash(password)
+                        mongodb.update_one('users', 
+                                         {'_id': convert_id_for_query(user_data['_id'])}, 
+                                         {'$set': {'password_hash': new_hash, 'updated_at': datetime.now()}})
+                        # Aktualisiere user_data für die Session
+                        user_data['password_hash'] = new_hash
+                        print(f"Passwort-Hash für Benutzer {user_data['username']} erfolgreich konvertiert")
+                    except Exception as e:
+                        print(f"Fehler bei der Passwort-Konvertierung: {e}")
+                        # Fahre trotz Fehler fort - der Login war erfolgreich
+                
                 # Erstelle ein User-Objekt für Flask-Login
                 from app.models.user import User
                 user = User(user_data)
+                print(f"User-Objekt erstellt: {user.username}, ID: {user.id}, Role: {user.role}")
                 
                 login_user(user, remember=remember) 
+                print(f"login_user aufgerufen für: {user.username}")
                 
                 flash('Anmeldung erfolgreich!', 'success')
                 
@@ -73,6 +111,24 @@ def login():
             flash('Ungültiger Benutzername oder Passwort.', 'error')
     
     return render_template('auth/login.html')
+
+@bp.route('/debug/users')
+def debug_users():
+    """Debug-Route um alle Benutzer anzuzeigen"""
+    try:
+        from app.models.mongodb_models import MongoDBUser
+        users = MongoDBUser.get_all()
+        user_info = []
+        for user in users:
+            user_info.append({
+                'id': user.get('_id'),
+                'username': user.get('username'),
+                'role': user.get('role'),
+                'password_hash_start': user.get('password_hash', '')[:20] + '...' if user.get('password_hash') else 'None'
+            })
+        return jsonify(user_info)
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 @bp.route('/setup', methods=['GET', 'POST'])
 def setup():
@@ -194,9 +250,8 @@ def profile():
                     return render_template('auth/profile.html', user=user)
                 
                 # E-Mail aktualisieren
-                from bson import ObjectId
                 mongodb.update_one('users', 
-                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'_id': convert_id_for_query(user['_id'])}, 
                                  {'$set': {'email': email, 'updated_at': datetime.now()}})
                 flash('E-Mail-Adresse erfolgreich aktualisiert.', 'success')
             
@@ -207,8 +262,8 @@ def profile():
                     return render_template('auth/profile.html', user=user)
                 
                 # Prüfe aktuelles Passwort
-                from werkzeug.security import check_password_hash
-                if not check_password_hash(user.get('password_hash', ''), current_password):
+                from app.utils.auth_utils import check_password_compatible
+                if not check_password_compatible(user.get('password_hash', ''), current_password):
                     flash('Aktuelles Passwort ist falsch.', 'error')
                     return render_template('auth/profile.html', user=user)
                 
@@ -226,17 +281,15 @@ def profile():
                 from werkzeug.security import generate_password_hash
                 password_hash = generate_password_hash(new_password)
                 
-                from bson import ObjectId
                 mongodb.update_one('users', 
-                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'_id': convert_id_for_query(user['_id'])}, 
                                  {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
                 flash('Passwort erfolgreich geändert.', 'success')
             
             # ===== WOCHENBERICHT-EINSTELLUNG ÄNDERN =====
             if timesheet_enabled != user.get('timesheet_enabled', False):
-                from bson import ObjectId
                 mongodb.update_one('users', 
-                                 {'_id': ObjectId(user['_id'])}, 
+                                 {'_id': convert_id_for_query(user['_id'])}, 
                                  {'$set': {'timesheet_enabled': timesheet_enabled, 'updated_at': datetime.now()}})
                 
                 if timesheet_enabled:

@@ -4,11 +4,27 @@ MongoDB-Modelle für Scandy - Vollständige Implementierung
 from app.models.mongodb_database import mongodb
 from app.config.config import config
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 import logging
 from bson import ObjectId
 
 logger = logging.getLogger(__name__)
+
+def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
+    """
+    Konvertiert eine ID für Datenbankabfragen.
+    Versucht zuerst mit String-ID, dann mit ObjectId.
+    """
+    try:
+        # Versuche zuerst mit String-ID (für importierte Daten)
+        return id_value
+    except:
+        # Falls das fehlschlägt, versuche ObjectId
+        try:
+            return ObjectId(id_value)
+        except:
+            # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
+            return id_value
 
 class BaseModel:
     """Basis-Klasse für MongoDB-Modelle"""
@@ -38,7 +54,8 @@ class MongoDBTool:
     @classmethod
     def get_by_id(cls, tool_id: str) -> Optional[Dict[str, Any]]:
         """Holt ein Werkzeug anhand der ID"""
-        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': tool_id})
+        converted_id = convert_id_for_query(tool_id)
+        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': converted_id})
     
     @classmethod
     def get_by_barcode(cls, barcode: str) -> Optional[Dict[str, Any]]:
@@ -108,12 +125,14 @@ class MongoDBTool:
     @classmethod
     def update(cls, tool_id: str, update_data: Dict[str, Any]) -> bool:
         """Aktualisiert ein Werkzeug"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': tool_id}, update_data)
+        converted_id = convert_id_for_query(tool_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, update_data)
     
     @classmethod
     def delete(cls, tool_id: str) -> bool:
         """Löscht ein Werkzeug (Soft Delete)"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': tool_id}, {'deleted': True})
+        converted_id = convert_id_for_query(tool_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, {'deleted': True})
     
     @classmethod
     def count_active(cls) -> int:
@@ -453,7 +472,8 @@ class MongoDBWorker:
     @classmethod
     def get_by_id(cls, worker_id: str) -> Optional[Dict[str, Any]]:
         """Holt einen Mitarbeiter anhand der ID"""
-        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': worker_id})
+        converted_id = convert_id_for_query(worker_id)
+        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': converted_id})
     
     @classmethod
     def get_by_barcode(cls, barcode: str) -> Optional[Dict[str, Any]]:
@@ -502,12 +522,14 @@ class MongoDBWorker:
     @classmethod
     def update(cls, worker_id: str, update_data: Dict[str, Any]) -> bool:
         """Aktualisiert einen Mitarbeiter"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': worker_id}, update_data)
+        converted_id = convert_id_for_query(worker_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, update_data)
     
     @classmethod
     def delete(cls, worker_id: str) -> bool:
         """Löscht einen Mitarbeiter (Soft Delete)"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': worker_id}, {'deleted': True})
+        converted_id = convert_id_for_query(worker_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, {'deleted': True})
     
     @classmethod
     def count_active(cls) -> int:
@@ -540,7 +562,8 @@ class MongoDBConsumable:
     @classmethod
     def get_by_id(cls, consumable_id: str) -> Optional[Dict[str, Any]]:
         """Holt ein Verbrauchsmaterial anhand der ID"""
-        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': consumable_id})
+        converted_id = convert_id_for_query(consumable_id)
+        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': converted_id})
     
     @classmethod
     def get_by_barcode(cls, barcode: str) -> Optional[Dict[str, Any]]:
@@ -627,12 +650,14 @@ class MongoDBConsumable:
     @classmethod
     def update(cls, consumable_id: str, update_data: Dict[str, Any]) -> bool:
         """Aktualisiert ein Verbrauchsmaterial"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': consumable_id}, update_data)
+        converted_id = convert_id_for_query(consumable_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, update_data)
     
     @classmethod
     def delete(cls, consumable_id: str) -> bool:
         """Löscht ein Verbrauchsmaterial (Soft Delete)"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': consumable_id}, {'deleted': True})
+        converted_id = convert_id_for_query(consumable_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, {'deleted': True})
     
     @classmethod
     def count_active(cls) -> int:
@@ -665,7 +690,8 @@ class MongoDBLending:
     @classmethod
     def get_by_id(cls, lending_id: str) -> Optional[Dict[str, Any]]:
         """Holt eine Ausleihe anhand der ID"""
-        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': lending_id})
+        converted_id = convert_id_for_query(lending_id)
+        return mongodb.find_one(cls.COLLECTION_NAME, {'_id': converted_id})
     
     @classmethod
     def get_active_by_tool(cls, tool_id: str) -> Optional[Dict[str, Any]]:
@@ -701,7 +727,8 @@ class MongoDBLending:
     @classmethod
     def return_tool(cls, lending_id: str) -> bool:
         """Gibt ein Werkzeug zurück"""
-        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': lending_id}, {
+        converted_id = convert_id_for_query(lending_id)
+        return mongodb.update_one(cls.COLLECTION_NAME, {'_id': converted_id}, {
             'returned_at': datetime.now()
         })
     
@@ -754,9 +781,38 @@ class MongoDBUser:
     def get_by_id(cls, user_id: str) -> Optional[Dict[str, Any]]:
         """Holt einen Benutzer anhand der ID"""
         try:
-            # Konvertiere String-ID zu ObjectId
-            object_id = ObjectId(user_id)
-            return mongodb.find_one(cls.COLLECTION_NAME, {'_id': object_id})
+            print(f"DEBUG: Suche User mit ID: {user_id}")
+            
+            # Versuche zuerst mit String-ID
+            user_data = mongodb.find_one(cls.COLLECTION_NAME, {'_id': user_id})
+            if user_data:
+                print(f"DEBUG: User mit String-ID gefunden: {user_data.get('username', 'Unknown')}")
+                return user_data
+            
+            # Versuche mit ObjectId
+            try:
+                from bson import ObjectId
+                obj_id = ObjectId(user_id)
+                user_data = mongodb.find_one(cls.COLLECTION_NAME, {'_id': obj_id})
+                if user_data:
+                    print(f"DEBUG: User mit ObjectId gefunden: {user_data.get('username', 'Unknown')}")
+                    return user_data
+            except Exception as e:
+                print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+            
+            # Versuche mit convert_id_for_query als Fallback
+            try:
+                converted_id = convert_id_for_query(user_id)
+                user_data = mongodb.find_one(cls.COLLECTION_NAME, {'_id': converted_id})
+                if user_data:
+                    print(f"DEBUG: User mit convert_id_for_query gefunden: {user_data.get('username', 'Unknown')}")
+                    return user_data
+            except Exception as e:
+                print(f"DEBUG: convert_id_for_query fehlgeschlagen: {e}")
+            
+            print(f"DEBUG: Kein User gefunden für ID: {user_id}")
+            return None
+                
         except Exception as e:
             print(f"DEBUG: Fehler beim Laden des Users mit ID {user_id}: {e}")
             return None

@@ -4,6 +4,7 @@ import shutil
 import json
 from pathlib import Path
 from datetime import datetime
+from bson import ObjectId
 from app.models.mongodb_database import mongodb
 
 class BackupManager:
@@ -12,6 +13,47 @@ class BackupManager:
     def __init__(self):
         self.backup_dir = Path(__file__).parent.parent.parent / 'backups'
         self.backup_dir.mkdir(exist_ok=True)
+    
+    def _fix_id_for_restore(self, doc):
+        """
+        Wandelt das _id-Feld in einen echten ObjectId um, wenn möglich.
+        Wichtig für Backup-Wiederherstellung, da JSON-Export IDs als String speichert.
+        """
+        if '_id' in doc:
+            # Falls _id ein String ist und wie eine ObjectId aussieht
+            if isinstance(doc['_id'], str) and len(doc['_id']) == 24:
+                try:
+                    doc['_id'] = ObjectId(doc['_id'])
+                except Exception:
+                    # Falls es keine gültige ObjectId ist, entferne das Feld
+                    # MongoDB wird automatisch eine neue ObjectId generieren
+                    del doc['_id']
+            # Falls _id bereits eine ObjectId ist, belasse es
+            elif isinstance(doc['_id'], ObjectId):
+                pass
+            # Falls _id ein anderer Typ ist, entferne es
+            else:
+                del doc['_id']
+        return doc
+    
+    def _validate_backup_data(self, backup_data):
+        """
+        Validiert Backup-Daten vor der Wiederherstellung
+        """
+        if not isinstance(backup_data, dict):
+            return False, "Backup-Daten sind kein gültiges Dictionary"
+        
+        required_collections = ['tools', 'workers', 'consumables', 'settings']
+        missing_collections = [coll for coll in required_collections if coll not in backup_data]
+        
+        if missing_collections:
+            return False, f"Fehlende Collections im Backup: {missing_collections}"
+        
+        total_docs = sum(len(docs) for docs in backup_data.values())
+        if total_docs == 0:
+            return False, "Backup enthält keine Dokumente"
+        
+        return True, f"Backup ist gültig mit {total_docs} Dokumenten in {len(backup_data)} Collections"
         
     def create_backup(self):
         """Erstellt ein Backup aller Collections"""
@@ -40,6 +82,8 @@ class BackupManager:
             with open(backup_path, 'w', encoding='utf-8') as f:
                 json.dump(backup_data, f, ensure_ascii=False, indent=2, default=str)
             
+            print(f"Backup erstellt: {backup_filename} mit {sum(len(docs) for docs in backup_data.values())} Dokumenten")
+            
             # Alte Backups aufräumen
             self._cleanup_old_backups()
             
@@ -56,6 +100,20 @@ class BackupManager:
             temp_path = self.backup_dir / f"temp_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             file.save(temp_path)
             
+            # Prüfe ob die Datei erfolgreich gespeichert wurde
+            if not temp_path.exists():
+                print("Fehler: Temporäre Datei konnte nicht gespeichert werden")
+                return False
+            
+            # Prüfe Dateigröße
+            file_size = temp_path.stat().st_size
+            if file_size == 0:
+                print("Fehler: Hochgeladene Datei ist leer")
+                temp_path.unlink()
+                return False
+            
+            print(f"Temporäre Datei gespeichert: {temp_path}, Größe: {file_size} bytes")
+            
             # Backup wiederherstellen
             success = self._restore_from_file(temp_path)
             
@@ -67,6 +125,12 @@ class BackupManager:
             
         except Exception as e:
             print(f"Fehler beim Wiederherstellen des Backups: {e}")
+            # Versuche temporäre Datei zu löschen
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except:
+                pass
             return False
     
     def restore_backup_by_filename(self, filename):
@@ -89,18 +153,40 @@ class BackupManager:
             with open(backup_path, 'r', encoding='utf-8') as f:
                 backup_data = json.load(f)
             
+            # Backup-Daten validieren
+            is_valid, validation_message = self._validate_backup_data(backup_data)
+            if not is_valid:
+                print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
+                return False
+            
+            print(f"Backup-Validierung erfolgreich: {validation_message}")
+            
             # Collections wiederherstellen
             for collection, documents in backup_data.items():
                 try:
                     # Collection leeren
                     mongodb.db[collection].delete_many({})
                     
-                    # Dokumente wiederherstellen
+                    # Dokumente wiederherstellen mit ID-Korrektur
                     if documents:
-                        mongodb.db[collection].insert_many(documents)
+                        # IDs für alle Dokumente korrigieren
+                        fixed_documents = []
+                        for doc in documents:
+                            fixed_doc = self._fix_id_for_restore(doc)
+                            fixed_documents.append(fixed_doc)
+                        
+                        # Dokumente in die Datenbank einfügen
+                        mongodb.db[collection].insert_many(fixed_documents)
+                        print(f"Collection {collection}: {len(fixed_documents)} Dokumente wiederhergestellt")
                         
                 except Exception as e:
                     print(f"Fehler beim Wiederherstellen von {collection}: {e}")
+                    # Bei Fehler: Versuche ohne ID-Korrektur
+                    try:
+                        mongodb.db[collection].insert_many(documents)
+                        print(f"Collection {collection}: {len(documents)} Dokumente ohne ID-Korrektur wiederhergestellt")
+                    except Exception as e2:
+                        print(f"Kritischer Fehler bei {collection}: {e2}")
             
             # Nach der Wiederherstellung: Kategorien-Inkonsistenz beheben
             self._fix_category_inconsistency()
@@ -199,6 +285,43 @@ class BackupManager:
         except Exception as e:
             print(f"Fehler beim Löschen des Backups: {e}")
             return False
+    
+    def test_backup(self, filename):
+        """
+        Testet ein Backup ohne es wiederherzustellen.
+        Gibt Informationen über das Backup zurück.
+        """
+        try:
+            backup_path = self.backup_dir / filename
+            if not backup_path.exists():
+                return False, "Backup-Datei nicht gefunden"
+            
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            # Backup validieren
+            is_valid, validation_message = self._validate_backup_data(backup_data)
+            
+            if not is_valid:
+                return False, validation_message
+            
+            # Detaillierte Informationen sammeln
+            collection_info = {}
+            for collection, documents in backup_data.items():
+                collection_info[collection] = {
+                    'count': len(documents),
+                    'sample_ids': [str(doc.get('_id', 'N/A'))[:10] + '...' for doc in documents[:3]]
+                }
+            
+            return True, {
+                'validation_message': validation_message,
+                'collections': collection_info,
+                'file_size': backup_path.stat().st_size,
+                'file_modified': datetime.fromtimestamp(backup_path.stat().st_mtime)
+            }
+            
+        except Exception as e:
+            return False, f"Fehler beim Testen des Backups: {str(e)}"
     
     def _cleanup_old_backups(self, keep=10):
         """Löscht alte Backups, behält nur die letzten 'keep'"""

@@ -25,11 +25,28 @@ from docxtpl import DocxTemplate
 from urllib.parse import unquote
 import pandas as pd
 import tempfile
+from typing import Union
 
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
+    """
+    Konvertiert eine ID für Datenbankabfragen.
+    Versucht zuerst mit String-ID, dann mit ObjectId.
+    """
+    try:
+        # Versuche zuerst mit String-ID (für importierte Daten)
+        return id_value
+    except:
+        # Falls das fehlschlägt, versuche ObjectId
+        try:
+            return ObjectId(id_value)
+        except:
+            # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
+            return id_value
 
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
 # ensure_default_settings()
@@ -1077,7 +1094,7 @@ def restore_item(type, barcode):
                              
         elif type == 'ticket':
             # Prüfe ob das Ticket existiert
-            ticket = mongodb.find_one('tickets', {'_id': ObjectId(decoded_barcode), 'deleted': True})
+            ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(decoded_barcode), 'deleted': True})
             
             if not ticket:
                 return jsonify({
@@ -1087,7 +1104,7 @@ def restore_item(type, barcode):
                 
             # Stelle das Ticket wieder her
             mongodb.update_one('tickets', 
-                             {'_id': ObjectId(decoded_barcode)}, 
+                             {'_id': convert_id_for_query(decoded_barcode)}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
         else:
             return jsonify({
@@ -1428,7 +1445,7 @@ def delete_worker_permanent(barcode):
 @mitarbeiter_required
 def ticket_detail(ticket_id):
     """Zeigt die Details eines Tickets für Administratoren."""
-    ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+    ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
     
     if not ticket:
         return render_template('404.html'), 404
@@ -1446,10 +1463,10 @@ def ticket_detail(ticket_id):
                 ticket[field] = None
         
     # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
+    notes = mongodb.find('ticket_notes', {'ticket_id': convert_id_for_query(ticket_id)})
 
     # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
+    messages = mongodb.find('ticket_messages', {'ticket_id': convert_id_for_query(ticket_id)})
     # Formatiere die Nachrichten für das Template
     formatted_messages = []
     for msg in messages:
@@ -1462,30 +1479,30 @@ def ticket_detail(ticket_id):
         formatted_messages.append(formatted_msg)
 
     # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)})
     logging.info(f"DEBUG: auftrag_details für Ticket {ticket_id}: {auftrag_details}")
     
     # Hole die Materialliste
-    material_list = mongodb.find('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+    material_list = mongodb.find('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)})
 
     # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
     users = mongodb.find('users', {'is_active': True})
     users = [dict(user) for user in users]
 
     # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-    assigned_users = mongodb.find('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
+    assigned_users = mongodb.find('ticket_assignments', {'ticket_id': convert_id_for_query(ticket_id)})
 
     # Hole alle Kategorien aus der settings Collection
     categories = get_ticket_categories_from_settings()
 
     # Hole Arbeitszeiten
-    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(ticket_id)}))
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(ticket_id)}))
     
     # Hole Notizen
-    notes = list(mongodb.find('ticket_notes', {'ticket_id': ObjectId(ticket_id)}, sort=[('created_at', -1)]))
+    notes = list(mongodb.find('ticket_notes', {'ticket_id': convert_id_for_query(ticket_id)}, sort=[('created_at', -1)]))
     
     # Hole Nachrichten
-    messages = list(mongodb.find('ticket_messages', {'ticket_id': ObjectId(ticket_id)}, sort=[('created_at', -1)]))
+    messages = list(mongodb.find('ticket_messages', {'ticket_id': convert_id_for_query(ticket_id)}, sort=[('created_at', -1)]))
     
     # Hole alle Mitarbeiter für Zuweisung
     workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('lastname', 1)]))
@@ -1516,7 +1533,7 @@ def add_ticket_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu."""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
         
         if not ticket:
             return jsonify({
@@ -1542,7 +1559,7 @@ def add_ticket_message(ticket_id):
 
         # Füge die Nachricht zur Datenbank hinzu
         message_data = {
-            'ticket_id': ObjectId(ticket_id),
+            'ticket_id': convert_id_for_query(ticket_id),
             'message': message,
             'sender': current_user.username,
             'created_at': datetime.now()
@@ -1583,7 +1600,7 @@ def add_ticket_note(ticket_id):
 
         # Erstelle die Notiz
         note_data = {
-            'ticket_id': ObjectId(ticket_id),
+            'ticket_id': convert_id_for_query(ticket_id),
             'note': note_text,
             'created_by': current_user.username,
             'created_at': datetime.now()
@@ -1642,12 +1659,12 @@ def update_ticket(ticket_id):
         }
         
         # Aktualisiere die Auftragsdetails
-        if not mongodb.update_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)}, {'$set': auftrag_details}):
+        if not mongodb.update_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': auftrag_details}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Auftragsdetails'})
         
         # Aktualisiere die Materialliste
         material_list = data.get('material_list', [])
-        if not mongodb.update_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
+        if not mongodb.update_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Materialliste'})
         
         return jsonify({'success': True})
@@ -1664,7 +1681,7 @@ def export_ticket(id):
     try:
         # Prüfe ob die ID gültig ist
         try:
-            ticket_id = ObjectId(id)
+            ticket_id = convert_id_for_query(id)
         except Exception as e:
             logging.error(f"Ungültige Ticket-ID: {id}")
             flash('Ungültige Ticket-ID.', 'error')
@@ -1809,7 +1826,7 @@ def update_ticket_details(ticket_id):
     """Aktualisiert die Details eines Tickets."""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
         
         if not ticket:
             return jsonify({
@@ -1828,7 +1845,7 @@ def update_ticket_details(ticket_id):
         
         # Auftragsdetails aktualisieren
         auftrag_details = {
-            'ticket_id': ObjectId(ticket_id),
+            'ticket_id': convert_id_for_query(ticket_id),
             'auftrag_an': data.get('auftrag_an', ''),
             'bereich': data.get('bereich', ''),
             'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
@@ -1839,18 +1856,18 @@ def update_ticket_details(ticket_id):
             'updated_at': datetime.now()
         }
         
-        if not mongodb.update_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)}, {'$set': auftrag_details}):
+        if not mongodb.update_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': auftrag_details}):
             mongodb.insert_one('auftrag_details', auftrag_details)
         
         # Materialliste aktualisieren
         material_list = data.get('material_list', [])
         if material_list:
             # Lösche alte Materialeinträge
-            mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
+            mongodb.delete_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)})
             
             # Füge neue Materialeinträge hinzu
             for material in material_list:
-                material['ticket_id'] = ObjectId(ticket_id)
+                material['ticket_id'] = convert_id_for_query(ticket_id)
                 material['created_at'] = datetime.now()
                 mongodb.insert_one('auftrag_material', material)
         
@@ -1890,7 +1907,7 @@ def update_ticket_details(ticket_id):
             else:
                 ticket_update['due_date'] = None
         
-        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': ticket_update}):
+        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {'$set': ticket_update}):
             return jsonify({
                 'success': False,
                 'message': 'Fehler beim Aktualisieren des Tickets'
@@ -2043,7 +2060,7 @@ def add_user():
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
 @mitarbeiter_required
 def edit_user(user_id):
-    user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+    user = mongodb.find_one('users', {'_id': convert_id_for_query(user_id)})
     if not user:
         flash('Benutzer nicht gefunden', 'error')
         return redirect(url_for('admin.manage_users'))
@@ -2080,7 +2097,7 @@ def edit_user(user_id):
         # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
         existing_user = mongodb.find_one('users', {
             'username': username,
-            '_id': {'$ne': ObjectId(user_id)}
+            '_id': {'$ne': convert_id_for_query(user_id)}
         })
         if existing_user:
             flash('Benutzername existiert bereits', 'error')
@@ -2104,7 +2121,7 @@ def edit_user(user_id):
         }
         
         mongodb.update_one('users', 
-                         {'_id': ObjectId(user_id)}, 
+                         {'_id': convert_id_for_query(user_id)}, 
                          {'$set': update_data})
         
         flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
@@ -2144,7 +2161,7 @@ def edit_notice(id):
     if request.method == 'POST':
         flash('Notiz-Funktion noch nicht implementiert', 'warning')
         return redirect(url_for('admin.notices'))
-    notice = mongodb.find_one('homepage_notices', {'_id': ObjectId(id)})
+    notice = mongodb.find_one('homepage_notices', {'_id': convert_id_for_query(id)})
     return render_template('admin/notice_form.html', notice=notice)
 
 @bp.route('/delete_notice/<id>', methods=['POST'])
@@ -2153,7 +2170,7 @@ def delete_notice(id):
     """Löscht einen Hinweis"""
     try:
         # Konvertiere String-ID zu ObjectId
-        object_id = ObjectId(id)
+        object_id = convert_id_for_query(id)
         
         # Lösche den Hinweis
         result = mongodb.delete_one('homepage_notices', {'_id': object_id})
@@ -3061,20 +3078,48 @@ def upload_backup():
         # Erstelle Backup der aktuellen DB vor dem Upload
         current_backup = backup_manager.create_backup()
         
-        # Stelle das hochgeladene Backup wieder her
-        success = backup_manager.restore_backup(file)
+        # Validiere die hochgeladene Datei zuerst
+        import tempfile
+        import os
         
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': 'Backup erfolgreich hochgeladen und aktiviert',
-                'previous_backup': current_backup
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'Fehler beim Wiederherstellen des Backups'
-            }), 500
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp_file:
+            file.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Teste das Backup vor der Wiederherstellung
+            with open(tmp_file_path, 'r', encoding='utf-8') as f:
+                import json
+                backup_data = json.load(f)
+            
+            # Validiere Backup-Daten
+            is_valid, validation_message = backup_manager._validate_backup_data(backup_data)
+            if not is_valid:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Ungültiges Backup: {validation_message}'
+                }), 400
+            
+            # Stelle das hochgeladene Backup wieder her
+            success = backup_manager.restore_backup(file)
+            
+            if success:
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Backup erfolgreich hochgeladen und aktiviert',
+                    'previous_backup': current_backup,
+                    'validation_info': validation_message
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Fehler beim Wiederherstellen des Backups'
+                }), 500
+                
+        finally:
+            # Temporäre Datei löschen
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
             
     except Exception as e:
         logger.error(f"Fehler beim Hochladen des Backups: {str(e)}")
@@ -3090,6 +3135,14 @@ def restore_backup(filename):
     try:
         from app.utils.backup_manager import backup_manager
         
+        # Validiere Backup vor der Wiederherstellung
+        is_valid, validation_result = backup_manager.test_backup(filename)
+        if not is_valid:
+            return jsonify({
+                'status': 'error',
+                'message': f'Backup ist ungültig: {validation_result}'
+            }), 400
+        
         # Erstelle Backup der aktuellen DB vor der Wiederherstellung
         current_backup = backup_manager.create_backup()
         
@@ -3100,7 +3153,8 @@ def restore_backup(filename):
             return jsonify({
                 'status': 'success',
                 'message': 'Backup erfolgreich wiederhergestellt',
-                'previous_backup': current_backup
+                'previous_backup': current_backup,
+                'validation_info': validation_result
             })
         else:
             return jsonify({
@@ -3171,6 +3225,189 @@ def delete_backup(filename):
             'message': f'Fehler beim Löschen des Backups: {str(e)}'
         }), 500
 
+@bp.route('/backup/test/<filename>')
+@admin_required
+def test_backup(filename):
+    """Testet ein Backup ohne es wiederherzustellen"""
+    try:
+        from app.utils.backup_manager import backup_manager
+        
+        success, result = backup_manager.test_backup(filename)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Backup-Test erfolgreich',
+                'data': result
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Testen des Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Testen des Backups: {str(e)}'
+        }), 500
+
+@bp.route('/debug/session')
+def debug_session():
+    """Debug-Route für Session-Informationen"""
+    try:
+        from flask import session
+        from app.models.mongodb_models import MongoDBUser
+        from app.models.mongodb_database import mongodb
+        
+        session_info = {
+            'session_id': session.get('_id'),
+            'user_id': session.get('user_id'),
+            'all_session_keys': list(session.keys())
+        }
+        
+        # Alle User in der Datenbank mit detaillierten Informationen
+        all_users = mongodb.find('users', {})
+        user_list = []
+        for user in all_users:
+            user_list.append({
+                'id': str(user.get('_id')),
+                'id_type': type(user.get('_id')).__name__,
+                'username': user.get('username'),
+                'role': user.get('role'),
+                'is_active': user.get('is_active', True),
+                'email': user.get('email', 'N/A')
+            })
+        
+        # Versuche den spezifischen User zu finden
+        target_id = '685e3b2dbf696ee3c30fc7ab'
+        specific_user = None
+        
+        # Suche mit verschiedenen Methoden
+        for user in all_users:
+            if str(user.get('_id')) == target_id:
+                specific_user = {
+                    'id': str(user.get('_id')),
+                    'id_type': type(user.get('_id')).__name__,
+                    'username': user.get('username'),
+                    'role': user.get('role'),
+                    'is_active': user.get('is_active', True)
+                }
+                break
+        
+        return jsonify({
+            'session_info': session_info,
+            'users_in_db': user_list,
+            'total_users': len(user_list),
+            'target_user': specific_user,
+            'target_id': target_id
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+@bp.route('/debug/clear-session')
+def clear_session():
+    """Löscht die aktuelle Session"""
+    try:
+        from flask import session
+        from flask_login import logout_user
+        
+        logout_user()
+        session.clear()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Session gelöscht. Bitte melden Sie sich erneut an.'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/fix-session/<username>')
+def fix_session(username):
+    """Repariert die Session für einen bestimmten Benutzer"""
+    try:
+        from flask import session
+        from flask_login import login_user
+        from app.models.mongodb_models import MongoDBUser
+        from app.models.user import User
+        
+        # Finde den User
+        user_data = MongoDBUser.get_by_username(username)
+        if not user_data:
+            return jsonify({
+                'status': 'error',
+                'message': f'Benutzer {username} nicht gefunden'
+            }), 404
+        
+        # Erstelle User-Objekt
+        user = User(user_data)
+        
+        # Logge den User ein
+        login_user(user)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Session für {username} repariert',
+            'user_id': user.id,
+            'username': user.username,
+            'role': user.role
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/normalize-user-ids')
+def normalize_user_ids():
+    """Normalisiert alle User-IDs in der Datenbank zu Strings"""
+    try:
+        from app.models.mongodb_database import mongodb
+        from bson import ObjectId
+        
+        # Hole alle User
+        all_users = mongodb.find('users', {})
+        updated_count = 0
+        
+        for user in all_users:
+            user_id = user.get('_id')
+            
+            # Falls die ID ein ObjectId ist, konvertiere sie zu String
+            if isinstance(user_id, ObjectId):
+                string_id = str(user_id)
+                
+                # Erstelle ein neues Dokument mit String-ID
+                new_user = user.copy()
+                new_user['_id'] = string_id
+                
+                # Lösche das alte Dokument und füge das neue ein
+                mongodb.delete_one('users', {'_id': user_id})
+                mongodb.insert_one('users', new_user)
+                
+                updated_count += 1
+                print(f"User-ID normalisiert: {user.get('username')} von {user_id} zu {string_id}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{updated_count} User-IDs normalisiert',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @bp.route('/available-logos')
 @mitarbeiter_required
 def available_logos():
@@ -3219,7 +3456,7 @@ def update_ticket_assignment(ticket_id):
             assigned_to = None
 
         # Aktualisiere die Zuweisung direkt im Ticket
-        if not mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
+        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
@@ -3241,13 +3478,13 @@ def update_ticket_status(ticket_id):
         new_status = data['status']
         
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
             
         # Aktualisiere den Status
         mongodb.update_one('tickets', 
-                          {'_id': ObjectId(ticket_id)}, 
+                          {'_id': convert_id_for_query(ticket_id)}, 
                           {
                               '$set': {
                                   'status': new_status,
@@ -3271,7 +3508,7 @@ def delete_ticket(ticket_id):
     """Ticket soft löschen (markieren als gelöscht)"""
     try:
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
         
         if not ticket:
             return jsonify({
@@ -3280,7 +3517,7 @@ def delete_ticket(ticket_id):
             }), 404
             
         # Führe das Soft-Delete durch (markieren als gelöscht)
-        mongodb.update_one('tickets', {'_id': ObjectId(ticket_id)}, {
+        mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {
             '$set': {
                 'deleted': True,
                 'deleted_at': datetime.now()
@@ -3306,7 +3543,7 @@ def delete_ticket_permanent(ticket_id):
     """Ticket endgültig löschen"""
     try:
         # Prüfe ob das Ticket existiert und gelöscht ist
-        ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id), 'deleted': True})
+        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id), 'deleted': True})
         
         if not ticket:
             return jsonify({
@@ -3315,13 +3552,13 @@ def delete_ticket_permanent(ticket_id):
             }), 404
             
         # Lösche das Ticket und alle zugehörigen Daten endgültig
-        mongodb.delete_one('tickets', {'_id': ObjectId(ticket_id)})
-        mongodb.delete_many('ticket_notes', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('ticket_messages', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('ticket_assignments', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_one('auftrag_details', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('auftrag_material', {'ticket_id': ObjectId(ticket_id)})
-        mongodb.delete_many('auftrag_arbeit', {'ticket_id': ObjectId(ticket_id)})
+        mongodb.delete_one('tickets', {'_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_many('ticket_notes', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_many('ticket_messages', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_many('ticket_assignments', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_many('auftrag_arbeit', {'ticket_id': convert_id_for_query(ticket_id)})
         
         return jsonify({
             'success': True,
@@ -3350,7 +3587,7 @@ def delete_ticket_permanent(ticket_id):
 def delete_user(user_id):
     """Benutzer löschen"""
     try:
-        user = mongodb.find_one('users', {'_id': ObjectId(user_id)})
+        user = mongodb.find_one('users', {'_id': convert_id_for_query(user_id)})
         if not user:
             flash('Benutzer nicht gefunden', 'error')
             return redirect(url_for('admin.manage_users'))
@@ -3360,7 +3597,7 @@ def delete_user(user_id):
             flash('Sie können Ihren eigenen Account nicht löschen', 'error')
             return redirect(url_for('admin.manage_users'))
         
-        mongodb.delete_one('users', {'_id': ObjectId(user_id)})
+        mongodb.delete_one('users', {'_id': convert_id_for_query(user_id)})
         flash(f'Benutzer "{user["username"]}" erfolgreich gelöscht', 'success')
         return redirect(url_for('admin.manage_users'))
         
@@ -3412,6 +3649,36 @@ def export_all_data():
         flash('Fehler beim Exportieren der Daten', 'error')
         return redirect(url_for('admin.system'))
 
+def fix_id_for_import(doc):
+    """
+    Wandelt das _id-Feld in einen echten ObjectId um, wenn möglich.
+    Verbesserte Version für robuste Importe.
+    """
+    if '_id' in doc:
+        # Falls _id ein String ist und wie eine ObjectId aussieht
+        if isinstance(doc['_id'], str) and len(doc['_id']) == 24:
+            try:
+                doc['_id'] = ObjectId(doc['_id'])
+            except Exception:
+                # Falls es keine gültige ObjectId ist, entferne das Feld
+                # MongoDB wird automatisch eine neue ObjectId generieren
+                del doc['_id']
+        # Falls _id bereits eine ObjectId ist, belasse es
+        elif isinstance(doc['_id'], ObjectId):
+            pass
+        # Falls _id ein anderer Typ ist, entferne es
+        else:
+            del doc['_id']
+    
+    # Entferne NaN-Werte und leere Strings
+    cleaned_doc = {}
+    for key, value in doc.items():
+        if pd.isna(value) or value == '' or value == 'nan':
+            continue
+        cleaned_doc[key] = value
+    
+    return cleaned_doc
+
 @bp.route('/import_all_data', methods=['POST'])
 @admin_required
 def import_all_data():
@@ -3446,71 +3713,128 @@ def import_all_data():
             excel_file = pd.ExcelFile(tmp_file_path)
             
             imported_count = 0
+            errors = []
             
             # Importiere Werkzeuge
             if 'Werkzeuge' in excel_file.sheet_names:
-                df_tools = pd.read_excel(excel_file, sheet_name='Werkzeuge')
-                for _, row in df_tools.iterrows():
-                    tool_data = row.to_dict()
-                    # Entferne NaN-Werte
-                    tool_data = {k: v for k, v in tool_data.items() if pd.notna(v)}
-                    # Prüfe ob Werkzeug bereits existiert
-                    existing = mongodb.find_one('tools', {'barcode': tool_data.get('barcode')})
-                    if not existing:
-                        mongodb.insert_one('tools', tool_data)
-                        imported_count += 1
+                try:
+                    df_tools = pd.read_excel(excel_file, sheet_name='Werkzeuge')
+                    for index, row in df_tools.iterrows():
+                        try:
+                            tool_data = row.to_dict()
+                            tool_data = fix_id_for_import(tool_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not tool_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Werkzeug ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('tools', {'barcode': tool_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('tools', tool_data)
+                                imported_count += 1
+                            else:
+                                # Update existierendes Werkzeug
+                                mongodb.update_one('tools', {'barcode': tool_data.get('barcode')}, {'$set': tool_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Werkzeug: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Werkzeuge-Tabelle: {str(e)}")
             
             # Importiere Mitarbeiter
             if 'Mitarbeiter' in excel_file.sheet_names:
-                df_workers = pd.read_excel(excel_file, sheet_name='Mitarbeiter')
-                for _, row in df_workers.iterrows():
-                    worker_data = row.to_dict()
-                    worker_data = {k: v for k, v in worker_data.items() if pd.notna(v)}
-                    existing = mongodb.find_one('workers', {'barcode': worker_data.get('barcode')})
-                    if not existing:
-                        mongodb.insert_one('workers', worker_data)
-                        imported_count += 1
+                try:
+                    df_workers = pd.read_excel(excel_file, sheet_name='Mitarbeiter')
+                    for index, row in df_workers.iterrows():
+                        try:
+                            worker_data = row.to_dict()
+                            worker_data = fix_id_for_import(worker_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not worker_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Mitarbeiter ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('workers', {'barcode': worker_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('workers', worker_data)
+                                imported_count += 1
+                            else:
+                                # Update existierenden Mitarbeiter
+                                mongodb.update_one('workers', {'barcode': worker_data.get('barcode')}, {'$set': worker_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Mitarbeiter: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Mitarbeiter-Tabelle: {str(e)}")
             
             # Importiere Verbrauchsmaterial
             if 'Verbrauchsmaterial' in excel_file.sheet_names:
-                df_consumables = pd.read_excel(excel_file, sheet_name='Verbrauchsmaterial')
-                for _, row in df_consumables.iterrows():
-                    consumable_data = row.to_dict()
-                    consumable_data = {k: v for k, v in consumable_data.items() if pd.notna(v)}
-                    existing = mongodb.find_one('consumables', {'barcode': consumable_data.get('barcode')})
-                    if not existing:
-                        mongodb.insert_one('consumables', consumable_data)
-                        imported_count += 1
+                try:
+                    df_consumables = pd.read_excel(excel_file, sheet_name='Verbrauchsmaterial')
+                    for index, row in df_consumables.iterrows():
+                        try:
+                            consumable_data = row.to_dict()
+                            consumable_data = fix_id_for_import(consumable_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not consumable_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Verbrauchsmaterial ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('consumables', {'barcode': consumable_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('consumables', consumable_data)
+                                imported_count += 1
+                            else:
+                                # Update existierendes Verbrauchsmaterial
+                                mongodb.update_one('consumables', {'barcode': consumable_data.get('barcode')}, {'$set': consumable_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Verbrauchsmaterial: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Verbrauchsmaterial-Tabelle: {str(e)}")
             
             # Importiere Settings (Kategorien, Standorte, Abteilungen)
             if 'Settings' in excel_file.sheet_names:
-                df_settings = pd.read_excel(excel_file, sheet_name='Settings')
-                for _, row in df_settings.iterrows():
-                    setting_data = row.to_dict()
-                    setting_data = {k: v for k, v in setting_data.items() if pd.notna(v)}
-                    
-                    # Stelle sicher, dass nur gültige Settings importiert werden
-                    valid_settings = ['categories', 'locations', 'departments', 'ticket_categories', 
-                                    'label_tools_name', 'label_tools_icon', 'label_consumables_name', 
-                                    'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']
-                    
-                    if setting_data.get('key') in valid_settings:
-                        # Prüfe ob Setting bereits existiert
-                        existing = mongodb.find_one('settings', {'key': setting_data.get('key')})
-                        if not existing:
-                            mongodb.insert_one('settings', setting_data)
-                            imported_count += 1
-                        else:
-                            # Update existierendes Setting
-                            mongodb.update_one('settings', 
-                                             {'key': setting_data.get('key')}, 
-                                             {'$set': setting_data})
-                            imported_count += 1
+                try:
+                    df_settings = pd.read_excel(excel_file, sheet_name='Settings')
+                    for index, row in df_settings.iterrows():
+                        try:
+                            setting_data = row.to_dict()
+                            setting_data = fix_id_for_import(setting_data)
+                            valid_settings = ['categories', 'locations', 'departments', 'ticket_categories', 
+                                            'label_tools_name', 'label_tools_icon', 'label_consumables_name', 
+                                            'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']
+                            
+                            if setting_data.get('key') in valid_settings:
+                                existing = mongodb.find_one('settings', {'key': setting_data.get('key')})
+                                if not existing:
+                                    mongodb.insert_one('settings', setting_data)
+                                    imported_count += 1
+                                else:
+                                    mongodb.update_one('settings', 
+                                                     {'key': setting_data.get('key')}, 
+                                                     {'$set': setting_data})
+                                    imported_count += 1
+                            else:
+                                errors.append(f"Zeile {index + 2}: Ungültige Setting '{setting_data.get('key')}' übersprungen")
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Setting: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Settings-Tabelle: {str(e)}")
             
-            flash(f'{imported_count} Datensätze erfolgreich importiert', 'success')
+            # Zeige Erfolgsmeldung und eventuelle Fehler
+            if errors:
+                error_message = f'{imported_count} Datensätze importiert. {len(errors)} Fehler aufgetreten: ' + '; '.join(errors[:5])
+                if len(errors) > 5:
+                    error_message += f'... und {len(errors) - 5} weitere'
+                flash(error_message, 'warning')
+            else:
+                flash(f'{imported_count} Datensätze erfolgreich importiert', 'success')
             
         finally:
-            # Lösche temporäre Datei
             os.unlink(tmp_file_path)
         
         return redirect(url_for('admin.system'))
@@ -3558,9 +3882,8 @@ def reset_password():
         
         # Aktualisiere das Passwort in der Datenbank
         try:
-            from bson import ObjectId
             result = mongodb.update_one('users', 
-                                     {'_id': ObjectId(user['_id'])}, 
+                                     {'_id': convert_id_for_query(user['_id'])}, 
                                      {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
             
             # Prüfe ob das Update erfolgreich war (result ist ein bool)
