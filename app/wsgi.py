@@ -16,4 +16,18 @@ from app import create_app
 application = create_app()
 
 if __name__ == '__main__':
-    application.run() 
+    # Für Entwicklung: Flask-Entwicklungsserver
+    # Für Produktion: Verwende Gunicorn oder Waitress
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == '--dev':
+        # Entwicklungsserver
+        application.run(host='0.0.0.0', port=5000, debug=False)
+    else:
+        # Produktionsserver (Waitress als Fallback)
+        try:
+            from waitress import serve
+            print("Starting with Waitress production server...")
+            serve(application, host='0.0.0.0', port=5000, threads=4)
+        except ImportError:
+            print("Waitress not available, falling back to Flask development server...")
+            application.run(host='0.0.0.0', port=5000, debug=False) 

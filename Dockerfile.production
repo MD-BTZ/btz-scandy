@@ -1,4 +1,4 @@
-# Einfaches Dockerfile für Scandy
+# Produktions-Dockerfile für Scandy
 FROM python:3.11-slim
 
 # Installiere System-Abhängigkeiten
@@ -38,6 +38,7 @@ RUN mkdir -p /app/app/uploads /app/app/backups /app/app/logs /app/app/static /ap
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV FLASK_APP=app/wsgi.py
+ENV FLASK_ENV=production
 
 # Exponiere Port
 EXPOSE 5000
@@ -46,5 +47,11 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Starte die Anwendung mit Gunicorn (Produktions-WSGI-Server)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--max-requests", "1000", "--max-requests-jitter", "100", "app.wsgi:application"] 
+# Option 1: Gunicorn (empfohlen für Linux)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--max-requests", "1000", "--max-requests-jitter", "100", "--preload", "app.wsgi:application"]
+
+# Option 2: Waitress (empfohlen für Windows, Fallback)
+# CMD ["python", "app/wsgi.py"]
+
+# Option 3: Uvicorn (für ASGI, falls benötigt)
+# CMD ["uvicorn", "app.wsgi:application", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"] 

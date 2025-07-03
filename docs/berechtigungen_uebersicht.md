@@ -1,39 +1,39 @@
 # Scandy - Vollständige Berechtigungsübersicht
 
-## 👥 Benutzerrollen & Berechtigungen
+## Benutzerrollen & Berechtigungen
 
-### 🔧 Admin
-- **Vollzugriff** auf alle Funktionen
+### Admin
+- Vollzugriff auf alle Funktionen
 - Kann alle Tickets sehen und bearbeiten
 - Kann alle Benutzer verwalten
 - Kann System-Einstellungen ändern
 - Kann Backups erstellen/wiederherstellen
 
-### 👷 Mitarbeiter
+### Mitarbeiter
 - Kann Werkzeuge und Verbrauchsgüter verwalten
 - Kann Mitarbeiter verwalten
 - Kann manuelle Ausleihe durchführen
 - Kann alle Tickets sehen und bearbeiten
 - Kann Wochenberichte erstellen (wenn aktiviert)
-- **Kein Zugriff** auf Admin-Funktionen (System, Benutzerverwaltung, etc.)
+- Kein Zugriff auf Admin-Funktionen (System, Benutzerverwaltung, etc.)
 
-### 👤 Anwender
+### Anwender
 - Kann Werkzeuge und Verbrauchsgüter ansehen
 - Kann Werkzeuge und Verbrauchsgüter hinzufügen/bearbeiten
 - Kann manuelle Ausleihe durchführen
-- Kann **eigene Tickets** erstellen, ansehen und bearbeiten
-- Kann **zugewiesene Tickets** ansehen und bearbeiten
-- Kann **offene Tickets** (noch niemandem zugewiesen) ansehen und bearbeiten
+- Kann eigene Tickets erstellen, ansehen und bearbeiten
+- Kann zugewiesene Tickets ansehen und bearbeiten
+- Kann offene Tickets (noch niemandem zugewiesen) ansehen und bearbeiten
 - Kann Wochenberichte erstellen (wenn aktiviert)
-- **Kein Zugriff** auf Mitarbeiter-Verwaltung oder Admin-Funktionen
+- Kein Zugriff auf Mitarbeiter-Verwaltung oder Admin-Funktionen
 
-### 🧑‍🎓 Teilnehmer (NEU)
+### Teilnehmer
 - Kann eigene Wochenberichte erstellen und verwalten
 - Kann eigene Aufträge erstellen
 - Sieht eine eigene Startseite und Navigation
-- **Kein Zugriff** auf Verwaltung, Tools, Consumables, QuickScan, Admin, API-Änderungen, Ticket-Listen
+- Kein Zugriff auf Verwaltung, Tools, Consumables, QuickScan, Admin, API-Änderungen, Ticket-Listen
 
-## 📋 Legende
+## Legende
 - `@login_required` = Alle eingeloggten Benutzer (admin, mitarbeiter, anwender, teilnehmer)
 - `@mitarbeiter_required` = Nur admin und mitarbeiter
 - `@admin_required` = Nur admin
@@ -43,7 +43,7 @@
 
 ---
 
-## 🔐 Authentifizierung (`/auth`)
+## Authentifizierung (`/auth`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/auth/login` | GET, POST | Öffentlich | Login-Formular |
@@ -51,13 +51,13 @@
 | `/auth/logout` | GET | `@login_required` | Logout |
 | `/auth/profile` | GET, POST | `@login_required` | Benutzerprofil |
 
-## 🏠 Hauptseiten
+## Hauptseiten
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/` | GET | `@login_required` | Dashboard/Startseite (Teilnehmer sehen eigene Startseite) |
 | `/about` | GET | Öffentlich | Über-Seite |
 
-## 🛠️ Werkzeuge (`/tools`)
+## Werkzeuge (`/tools`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/tools/` | GET | `@login_required` | Werkzeug-Übersicht |
@@ -66,7 +66,7 @@
 | `/tools/<barcode>/edit` | GET, POST | `@not_teilnehmer_required` | Werkzeug bearbeiten |
 | `/tools/<barcode>/status` | POST | `@not_teilnehmer_required` | Status ändern |
 
-## 📦 Verbrauchsgüter (`/consumables`)
+## Verbrauchsgüter (`/consumables`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/consumables/` | GET | `@login_required` | Verbrauchsgüter-Übersicht |
@@ -76,7 +76,7 @@
 | `/consumables/<barcode>/delete` | DELETE | `@mitarbeiter_required` | Verbrauchsgut löschen |
 | `/consumables/<barcode>/forecast` | GET | `@login_required` | Bestandsprognose |
 
-## 👥 Mitarbeiter (`/workers`)
+## Mitarbeiter (`/workers`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/workers/` | GET | `@mitarbeiter_required` | Mitarbeiter-Übersicht |
@@ -91,23 +91,23 @@
 | `/workers/timesheet/<id>/download` | GET | `@login_required` | Wochenbericht downloaden |
 | `/workers/teilnehmer/timesheets` | GET | `@teilnehmer_required` | Wochenberichte für Teilnehmer (eigene Ansicht) |
 
-## 📊 Dashboard
+## Dashboard
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/dashboard/` | GET | `@login_required` | Dashboard (Teilnehmer werden zu Wochenberichten weitergeleitet) |
 
-## 📈 Historie
+## Historie
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/history` | GET | `@login_required` | Ausleih-Historie |
 
-## 🔄 Quick Scan
+## Quick Scan
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/quick_scan/` | GET | `@not_teilnehmer_required` | Quick-Scan-Interface |
 | `/quick_scan/process` | POST | `@not_teilnehmer_required` | Quick-Scan verarbeiten |
 
-## 🎫 Tickets (`/tickets`)
+## Tickets (`/tickets`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/tickets/` | GET | `@not_teilnehmer_required` | Ticket-Übersicht (nur eigene) |
@@ -125,7 +125,7 @@
 | `/tickets/auftrag-neu` | GET, POST | `@login_required` | Neuer Auftrag (auch für Teilnehmer) |
 | `/tickets/<id>/auftrag-details` | GET | `@not_teilnehmer_required` | Auftrag-Details |
 
-## 🔌 API (`/api`)
+## API (`/api`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/api/workers` | GET | `@mitarbeiter_required` | Mitarbeiter-Liste |
@@ -140,7 +140,7 @@
 | `/api/notices/<id>` | GET, PUT, DELETE | `@login_required` | Notiz verwalten |
 | `/api/quickscan/process_lending` | POST | `@not_teilnehmer_required` | Quick-Scan Ausleihe |
 
-## ⚙️ Admin (`/admin`)
+## Admin (`/admin`)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/` | GET | `@mitarbeiter_required` | Admin-Startseite |
@@ -149,7 +149,7 @@
 | `/admin/trash` | GET | `@mitarbeiter_required` | Papierkorb |
 | `/admin/trash/restore/<type>/<barcode>` | POST | `@mitarbeiter_required` | Wiederherstellen |
 
-### 🗑️ Lösch-Routen (Admin)
+### Lösch-Routen (Admin)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/tools/delete` | DELETE | `@mitarbeiter_required` | Werkzeug löschen |
@@ -161,7 +161,7 @@
 | `/admin/workers/<barcode>/delete` | DELETE | `@mitarbeiter_required` | Mitarbeiter löschen |
 | `/admin/workers/<barcode>/delete-permanent` | DELETE | `@mitarbeiter_required` | Mitarbeiter permanent löschen |
 
-### 🎫 Ticket-Verwaltung (Admin)
+### Ticket-Verwaltung (Admin)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/tickets/<id>` | GET | `@login_required` + `@mitarbeiter_required` | Ticket-Details |
@@ -176,7 +176,7 @@
 | `/admin/tickets/<id>/delete` | POST | `@login_required` + `@admin_required` | Ticket löschen |
 | `/admin/tickets/<id>/delete-permanent` | DELETE | `@login_required` + `@admin_required` | Ticket permanent löschen |
 
-### 👤 Benutzer-Verwaltung (Admin)
+### Benutzer-Verwaltung (Admin)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/manage_users` | GET | `@mitarbeiter_required` | Benutzer verwalten |
@@ -187,7 +187,7 @@
 | `/admin/reset_password` | GET, POST | Öffentlich | Passwort zurücksetzen |
 | `/admin/debug/password/<username>` | GET | `@admin_required` | Passwort debuggen |
 
-### 📢 Notizen & System (Admin)
+### Notizen & System (Admin)
 | Route | Methode | Berechtigung | Beschreibung |
 |-------|---------|--------------|--------------|
 | `/admin/notices` | GET | `@admin_required` | Notizen verwalten |
@@ -198,59 +198,6 @@
 | `/admin/delete-logo/<filename>` | POST | `@admin_required` | Logo löschen |
 | `/admin/add_ticket_category` | POST | `@admin_required` | Ticket-Kategorie hinzufügen |
 | `/admin/delete_ticket_category/<category>` | POST | `@admin_required` | Ticket-Kategorie löschen |
-| `/admin/system` | GET, POST | `@admin_required` | System-Einstellungen |
-
-### 🏢 Verwaltung (Admin)
-| Route | Methode | Berechtigung | Beschreibung |
-|-------|---------|--------------|--------------|
-| `/admin/departments` | GET | `@mitarbeiter_required` | Abteilungen verwalten |
-| `/admin/departments/add` | POST | `@mitarbeiter_required` | Abteilung hinzufügen |
-| `/admin/departments/delete/<name>` | POST | `@mitarbeiter_required` | Abteilung löschen |
-| `/admin/categories` | GET | `@mitarbeiter_required` | Kategorien verwalten |
-| `/admin/categories/add` | POST | `@mitarbeiter_required` | Kategorie hinzufügen |
-| `/admin/categories/delete/<name>` | POST | `@mitarbeiter_required` | Kategorie löschen |
-| `/admin/locations` | GET | `@mitarbeiter_required` | Standorte verwalten |
-| `/admin/locations/add` | POST | `@mitarbeiter_required` | Standort hinzufügen |
-| `/admin/locations/delete/<name>` | POST | `@mitarbeiter_required` | Standort löschen |
-
-### 💾 Backup & Updates (Admin)
-| Route | Methode | Berechtigung | Beschreibung |
-|-------|---------|--------------|--------------|
-| `/admin/backup/list` | GET | `@mitarbeiter_required` | Backup-Liste |
-| `/admin/backup/create` | POST | `@admin_required` | Backup erstellen |
-| `/admin/backup/upload` | POST | `@admin_required` | Backup hochladen |
-| `/admin/backup/restore/<filename>` | POST | `@admin_required` | Backup wiederherstellen |
-| `/admin/backup/download/<filename>` | GET | `@admin_required` | Backup downloaden |
-| `/admin/backup/delete/<filename>` | DELETE | `@admin_required` | Backup löschen |
-| `/admin/backup/auto/status` | GET | `@login_required` + `@admin_required` | Auto-Backup Status |
-| `/admin/backup/auto/start` | POST | `@login_required` + `@admin_required` | Auto-Backup starten |
-| `/admin/backup/auto/stop` | POST | `@login_required` + `@admin_required` | Auto-Backup stoppen |
-| `/admin/backup/auto/logs` | GET | `@login_required` + `@admin_required` | Auto-Backup Logs |
-| `/admin/auto-backup` | GET, POST | `@login_required` + `@admin_required` | Auto-Backup verwalten |
-| `/admin/backup/weekly/test` | POST | `@login_required` + `@admin_required` | Wochen-Backup testen |
-| `/admin/updates` | GET | `@admin_required` | Updates verwalten |
-| `/admin/updates/check` | POST | `@admin_required` | Updates prüfen |
-| `/admin/updates/apply` | POST | `@admin_required` | Updates anwenden |
-| `/admin/updates/status` | GET | `@admin_required` | Update-Status |
-| `/admin/updates/history` | GET | `@admin_required` | Update-Historie |
-
-### 📧 E-Mail (Admin)
-| Route | Methode | Berechtigung | Beschreibung |
-|-------|---------|--------------|--------------|
-| `/admin/email_settings` | GET, POST | `@admin_required` | E-Mail-Einstellungen |
-| `/admin/admin/email/diagnose` | POST | `@login_required` + `@admin_required` | E-Mail diagnostizieren |
-| `/admin/admin/email/test-simple` | POST | `@login_required` + `@admin_required` | E-Mail testen |
-
-### 🔧 Debug & Import/Export (Admin)
-| Route | Methode | Berechtigung | Beschreibung |
-|-------|---------|--------------|--------------|
-| `/admin/debug/barcodes` | GET | `@mitarbeiter_required` | Barcodes debuggen |
-| `/admin/debug/clean-barcodes` | POST | `@mitarbeiter_required` | Barcodes bereinigen |
-| `/admin/debug` | GET | `@mitarbeiter_required` | Debug-Seite |
-| `/admin/debug/test-barcodes` | GET | `@mitarbeiter_required` | Barcodes testen |
-| `/admin/available-logos` | GET | `@mitarbeiter_required` | Verfügbare Logos |
-| `/admin/export_all_data` | GET | `@admin_required` | Alle Daten exportieren |
-| `/admin/import_all_data` | POST | `@admin_required` | Alle Daten importieren |
 
 ## ⚙️ Setup (`/setup`)
 | Route | Methode | Berechtigung | Beschreibung |

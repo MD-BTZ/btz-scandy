@@ -66,6 +66,18 @@ if exist "docker-compose.yml" (
             exit /b 0
         )
         echo 🔄 Komplett neu installieren...
+        
+        REM Sichere Backups vor dem Löschen
+        if exist "backups" (
+            echo 💾 Sichere bestehende Backups...
+            if not exist "backups_backup" (
+                xcopy "backups" "backups_backup" /E /I /H /Y >nul 2>&1
+                echo ✅ Backups gesichert in: backups_backup\
+            ) else (
+                echo ⚠️  Backup-Ordner existiert bereits: backups_backup\
+            )
+        )
+        
         docker-compose down -v
         docker system prune -f
         docker volume prune -f

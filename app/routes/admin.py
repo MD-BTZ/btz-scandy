@@ -260,34 +260,49 @@ def get_backup_info():
     backups = []
     backup_dir = Path(__file__).parent.parent.parent / 'backups'
     
-    if backup_dir.exists():
+    try:
+        if not backup_dir.exists():
+            logger.warning(f"Backup-Verzeichnis existiert nicht: {backup_dir}")
+            return backups
+        
         for backup_file in sorted(backup_dir.glob('*.json'), reverse=True):
-            # Backup-Statistiken aus der Datei lesen
-            stats = None
             try:
-                with open(backup_file, 'r', encoding='utf-8') as f:
-                    import json
-                    data = json.load(f)
-                    stats = {
-                        'tools': len(data.get('tools', [])),
-                        'consumables': len(data.get('consumables', [])),
-                        'workers': len(data.get('workers', [])),
-                        'active_lendings': len([l for l in data.get('lendings', []) if not l.get('returned_at')])
-                    }
-            except:
+                # Backup-Statistiken aus der Datei lesen
                 stats = None
-            
-            # Unix-Timestamp verwenden
-            created_timestamp = backup_file.stat().st_mtime
-            
-            backups.append({
-                'name': backup_file.name,
-                'size': backup_file.stat().st_size,
-                'created': created_timestamp,
-                'stats': stats
-            })
-    
-    return backups
+                try:
+                    with open(backup_file, 'r', encoding='utf-8') as f:
+                        import json
+                        data = json.load(f)
+                        stats = {
+                            'tools': len(data.get('tools', [])),
+                            'consumables': len(data.get('consumables', [])),
+                            'workers': len(data.get('workers', [])),
+                            'active_lendings': len([l for l in data.get('lendings', []) if not l.get('returned_at')])
+                        }
+                except Exception as e:
+                    logger.warning(f"Fehler beim Lesen der Backup-Statistiken für {backup_file.name}: {e}")
+                    stats = None
+                
+                # Unix-Timestamp verwenden
+                created_timestamp = backup_file.stat().st_mtime
+                
+                backups.append({
+                    'name': backup_file.name,
+                    'size': backup_file.stat().st_size,
+                    'created': created_timestamp,
+                    'stats': stats
+                })
+                
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten der Backup-Datei {backup_file.name}: {e}")
+                continue
+        
+        logger.info(f"Backup-Liste erfolgreich geladen: {len(backups)} Backups gefunden")
+        return backups
+        
+    except Exception as e:
+        logger.error(f"Kritischer Fehler beim Laden der Backup-Informationen: {e}", exc_info=True)
+        return []
 
 def get_consumables_forecast():
     """Berechnet die Bestandsprognose für Verbrauchsmaterialien"""
@@ -3024,10 +3039,10 @@ def backup_list():
             'backups': backups
         })
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Backups: {str(e)}")
+        logger.error(f"Fehler beim Laden der Backups: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
-            'message': 'Fehler beim Laden der Backups'
+            'message': f'Fehler beim Laden der Backups: {str(e)}'
         }), 500
 
 @bp.route('/backup/create', methods=['POST'])
@@ -3084,6 +3099,7 @@ def upload_backup():
     """Lädt ein Backup hoch und stellt es wieder her"""
     try:
         if 'backup_file' not in request.files:
+            logger.warning("Backup-Upload: Keine Datei in request.files gefunden")
             return jsonify({
                 'status': 'error',
                 'message': 'Keine Datei ausgewählt'
@@ -3091,6 +3107,7 @@ def upload_backup():
             
         file = request.files['backup_file']
         if file.filename == '':
+            logger.warning("Backup-Upload: Leerer Dateiname")
             return jsonify({
                 'status': 'error',
                 'message': 'Keine Datei ausgewählt'
@@ -3098,61 +3115,51 @@ def upload_backup():
             
         # Prüfe Dateityp
         if not file.filename.endswith('.json'):
+            logger.warning(f"Backup-Upload: Ungültiger Dateityp: {file.filename}")
             return jsonify({
                 'status': 'error',
                 'message': 'Ungültiger Dateityp. Bitte eine .json-Datei hochladen.'
+            }), 400
+        
+        # Prüfe Dateigröße
+        file.seek(0, 2)  # Gehe zum Ende der Datei
+        file_size = file.tell()
+        file.seek(0)  # Zurück zum Anfang
+        
+        logger.info(f"Backup-Upload: Datei {file.filename}, Größe: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.warning("Backup-Upload: Datei ist leer")
+            return jsonify({
+                'status': 'error',
+                'message': 'Die hochgeladene Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.'
             }), 400
             
         from app.utils.backup_manager import backup_manager
         
         # Erstelle Backup der aktuellen DB vor dem Upload
         current_backup = backup_manager.create_backup()
+        logger.info(f"Backup-Upload: Aktuelles Backup erstellt: {current_backup}")
         
-        # Validiere die hochgeladene Datei zuerst
-        import tempfile
-        import os
+        # Stelle das hochgeladene Backup wieder her
+        success = backup_manager.restore_backup(file)
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp_file:
-            file.save(tmp_file.name)
-            tmp_file_path = tmp_file.name
-        
-        try:
-            # Teste das Backup vor der Wiederherstellung
-            with open(tmp_file_path, 'r', encoding='utf-8') as f:
-                import json
-                backup_data = json.load(f)
-            
-            # Validiere Backup-Daten
-            is_valid, validation_message = backup_manager._validate_backup_data(backup_data)
-            if not is_valid:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'Ungültiges Backup: {validation_message}'
-                }), 400
-            
-            # Stelle das hochgeladene Backup wieder her
-            success = backup_manager.restore_backup(file)
-            
-            if success:
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Backup erfolgreich hochgeladen und aktiviert',
-                    'previous_backup': current_backup,
-                    'validation_info': validation_message
-                })
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Fehler beim Wiederherstellen des Backups'
-                }), 500
-                
-        finally:
-            # Temporäre Datei löschen
-            if os.path.exists(tmp_file_path):
-                os.unlink(tmp_file_path)
+        if success:
+            logger.info("Backup-Upload: Backup erfolgreich wiederhergestellt")
+            return jsonify({
+                'status': 'success',
+                'message': 'Backup erfolgreich hochgeladen und aktiviert',
+                'previous_backup': current_backup
+            })
+        else:
+            logger.error("Backup-Upload: Fehler beim Wiederherstellen des Backups")
+            return jsonify({
+                'status': 'error',
+                'message': 'Fehler beim Wiederherstellen des Backups. Bitte überprüfen Sie die Datei.'
+            }), 500
             
     except Exception as e:
-        logger.error(f"Fehler beim Hochladen des Backups: {str(e)}")
+        logger.error(f"Fehler beim Hochladen des Backups: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': f'Fehler beim Hochladen des Backups: {str(e)}'
@@ -3337,6 +3344,41 @@ def debug_session():
     except Exception as e:
         return jsonify({
             'error': str(e)
+        }), 500
+
+@bp.route('/debug/backup-info')
+@login_required
+def debug_backup_info():
+    """Debug-Route für Backup-Informationen"""
+    try:
+        backup_dir = Path(__file__).parent.parent.parent / 'backups'
+        backup_info = {
+            'backup_dir_exists': backup_dir.exists(),
+            'backup_dir_path': str(backup_dir),
+            'backup_dir_absolute': str(backup_dir.absolute()),
+            'backup_files': []
+        }
+        
+        if backup_dir.exists():
+            for backup_file in backup_dir.glob('*.json'):
+                try:
+                    backup_info['backup_files'].append({
+                        'name': backup_file.name,
+                        'size': backup_file.stat().st_size,
+                        'exists': backup_file.exists(),
+                        'readable': backup_file.is_file()
+                    })
+                except Exception as e:
+                    backup_info['backup_files'].append({
+                        'name': backup_file.name,
+                        'error': str(e)
+                    })
+        
+        return jsonify(backup_info)
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'traceback': str(e.__traceback__)
         }), 500
 
 @bp.route('/debug/clear-session')

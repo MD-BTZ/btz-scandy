@@ -95,7 +95,17 @@ class BackupManager:
     
     def restore_backup(self, file):
         """Stellt ein Backup aus einer hochgeladenen Datei wieder her"""
+        temp_path = None
         try:
+            # Prüfe ob die Datei leer ist
+            file.seek(0, 2)  # Gehe zum Ende der Datei
+            file_size = file.tell()
+            file.seek(0)  # Zurück zum Anfang
+            
+            if file_size == 0:
+                print("Fehler: Hochgeladene Datei ist leer")
+                return False
+            
             # Temporäre Datei speichern
             temp_path = self.backup_dir / f"temp_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             file.save(temp_path)
@@ -105,33 +115,30 @@ class BackupManager:
                 print("Fehler: Temporäre Datei konnte nicht gespeichert werden")
                 return False
             
-            # Prüfe Dateigröße
-            file_size = temp_path.stat().st_size
-            if file_size == 0:
-                print("Fehler: Hochgeladene Datei ist leer")
+            # Prüfe Dateigröße nochmal
+            actual_file_size = temp_path.stat().st_size
+            if actual_file_size == 0:
+                print("Fehler: Gespeicherte Datei ist leer")
                 temp_path.unlink()
                 return False
             
-            print(f"Temporäre Datei gespeichert: {temp_path}, Größe: {file_size} bytes")
+            print(f"Temporäre Datei gespeichert: {temp_path}, Größe: {actual_file_size} bytes")
             
             # Backup wiederherstellen
             success = self._restore_from_file(temp_path)
-            
-            # Temporäre Datei löschen
-            if temp_path.exists():
-                temp_path.unlink()
             
             return success
             
         except Exception as e:
             print(f"Fehler beim Wiederherstellen des Backups: {e}")
-            # Versuche temporäre Datei zu löschen
-            try:
-                if temp_path.exists():
-                    temp_path.unlink()
-            except:
-                pass
             return False
+        finally:
+            # Temporäre Datei löschen
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception as e:
+                    print(f"Fehler beim Löschen der temporären Datei: {e}")
     
     def restore_backup_by_filename(self, filename):
         """Stellt ein Backup anhand des Dateinamens wieder her"""
@@ -150,6 +157,12 @@ class BackupManager:
     def _restore_from_file(self, backup_path):
         """Stellt ein Backup aus einer Datei wieder her"""
         try:
+            # Prüfe Dateigröße
+            file_size = backup_path.stat().st_size
+            if file_size == 0:
+                print("Fehler: Backup-Datei ist leer")
+                return False
+            
             with open(backup_path, 'r', encoding='utf-8') as f:
                 backup_data = json.load(f)
             

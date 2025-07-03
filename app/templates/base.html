@@ -208,11 +208,6 @@
                         </li>
                         {% if current_user.is_admin %}
                         <li>
-                            <a href="{{ url_for('tickets.create') }}" class="{% if request.endpoint and 'tickets.create' in request.endpoint %}active{% endif %}">
-                                <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}
-                            </a>
-                        </li>
-                        <li>
                             <a href="{{ url_for('admin.system') }}" class="{% if request.endpoint and 'admin.system' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-cogs mr-2"></i>Systemverwaltung
                             </a>

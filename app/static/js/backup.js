@@ -43,6 +43,18 @@ function showToast(type, message) {
 async function loadBackups() {
     try {
         const response = await fetch('/admin/backup/list');
+        
+        // Prüfe ob die Antwort erfolgreich ist
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Prüfe Content-Type
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server hat keine JSON-Antwort gesendet. Möglicherweise ist eine Fehlerseite zurückgegeben worden.');
+        }
+        
         const data = await response.json();
         const backupsList = document.getElementById('backupsList');
         
@@ -89,7 +101,31 @@ async function loadBackups() {
             showToast('error', 'Fehler beim Laden der Backups: ' + (data.message || 'Unbekannter Fehler'));
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Laden der Backups: ' + error.message);
+        console.error('Fehler beim Laden der Backups:', error);
+        
+        // Spezifische Fehlerbehandlung
+        if (error.name === 'TypeError' && error.message.includes('JSON')) {
+            showToast('error', 'Server hat eine ungültige Antwort gesendet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.');
+        } else if (error.message.includes('HTTP 500')) {
+            showToast('error', 'Server-Fehler beim Laden der Backups. Bitte kontaktieren Sie den Administrator.');
+        } else if (error.message.includes('HTTP 403')) {
+            showToast('error', 'Keine Berechtigung zum Laden der Backups.');
+        } else {
+            showToast('error', 'Fehler beim Laden der Backups: ' + error.message);
+        }
+        
+        // Zeige Fehlermeldung in der Tabelle
+        const backupsList = document.getElementById('backupsList');
+        if (backupsList) {
+            backupsList.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center text-error">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        Fehler beim Laden der Backups
+                    </td>
+                </tr>
+            `;
+        }
     }
 }
 
@@ -260,6 +296,17 @@ function setupBackupHandlers() {
                 return;
             }
             
+            // Prüfe Dateigröße
+            if (fileInput.files[0].size === 0) {
+                showToast('error', 'Die ausgewählte Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                return;
+            }
+            
+            if (fileInput.files[0].size < 100) {
+                showToast('error', 'Die ausgewählte Datei ist zu klein für ein gültiges Backup. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                return;
+            }
+            
             try {
                 const response = await fetch('/admin/backup/upload', {
                     method: 'POST',
@@ -277,7 +324,11 @@ function setupBackupHandlers() {
                 }
             } catch (error) {
                 console.error('Fehler beim Hochladen des Backups:', error);
-                showToast('error', 'Fehler beim Hochladen des Backups: ' + error.message);
+                if (error.name === 'TypeError' && error.message.includes('JSON')) {
+                    showToast('error', 'Die hochgeladene Datei ist ungültig oder leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                } else {
+                    showToast('error', 'Fehler beim Hochladen des Backups: ' + error.message);
+                }
             }
         });
     }
