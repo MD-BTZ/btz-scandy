@@ -81,7 +81,7 @@ def login():
                         from bson import ObjectId
                         new_hash = generate_password_hash(password)
                         mongodb.update_one('users', 
-                                         {'_id': convert_id_for_query(user_data['_id'])}, 
+                                         {'_id': user_data['_id']}, 
                                          {'$set': {'password_hash': new_hash, 'updated_at': datetime.now()}})
                         # Aktualisiere user_data für die Session
                         user_data['password_hash'] = new_hash

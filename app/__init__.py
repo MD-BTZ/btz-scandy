@@ -41,6 +41,61 @@ logger = logging.getLogger(__name__)
 backup_dir = Path(__file__).parent.parent / 'backups'
 backup_dir.mkdir(exist_ok=True)
 
+def normalize_database_ids():
+    """
+    Normalisiert alle IDs in der Datenbank zu Strings beim Systemstart.
+    Dies verhindert Probleme mit gemischten ID-Typen nach Imports.
+    """
+    try:
+        from app.models.mongodb_database import mongodb
+        from bson import ObjectId
+        
+        collections_to_normalize = [
+            'tickets', 'users', 'tools', 'consumables', 'workers',
+            'ticket_messages', 'ticket_notes', 'auftrag_details',
+            'auftrag_material', 'auftrag_arbeit'
+        ]
+        
+        total_updated = 0
+        
+        for collection_name in collections_to_normalize:
+            try:
+                documents = mongodb.find(collection_name, {})
+                updated_count = 0
+                
+                for doc in documents:
+                    doc_id = doc.get('_id')
+                    
+                    # Falls die ID ein ObjectId ist, konvertiere sie zu String
+                    if isinstance(doc_id, ObjectId):
+                        string_id = str(doc_id)
+                        
+                        # Erstelle ein neues Dokument mit String-ID
+                        new_doc = doc.copy()
+                        new_doc['_id'] = string_id
+                        
+                        # Lösche das alte Dokument und füge das neue ein
+                        mongodb.delete_one(collection_name, {'_id': doc_id})
+                        mongodb.insert_one(collection_name, new_doc)
+                        
+                        updated_count += 1
+                
+                if updated_count > 0:
+                    logging.info(f"Collection {collection_name}: {updated_count} IDs normalisiert")
+                total_updated += updated_count
+                
+            except Exception as e:
+                logging.warning(f"Fehler bei ID-Normalisierung in Collection {collection_name}: {e}")
+        
+        if total_updated > 0:
+            logging.info(f"ID-Normalisierung abgeschlossen: {total_updated} IDs in allen Collections normalisiert")
+        else:
+            logging.info("ID-Normalisierung: Alle IDs sind bereits normalisiert")
+            
+    except Exception as e:
+        logging.error(f"Fehler bei ID-Normalisierung: {e}")
+        # Nicht die Anwendung stoppen, nur loggen
+
 # Flask-Login Manager konfigurieren
 login_manager = LoginManager()
 login_manager.session_protection = "strong"
@@ -147,6 +202,18 @@ def create_app(test_config=None):
             logging.info("MongoDB-Indizes erstellt")
     except Exception as e:
         logging.error(f"Fehler bei MongoDB-Initialisierung: {e}")
+    
+    # ===== ID-NORMALISIERUNG BEIM START =====
+    # Nur ausführen, wenn nicht explizit deaktiviert
+    if not os.environ.get('DISABLE_ID_NORMALIZATION', 'false').lower() == 'true':
+        try:
+            with app.app_context():
+                normalize_database_ids()
+                logging.info("Datenbank-IDs normalisiert")
+        except Exception as e:
+            logging.error(f"Fehler bei ID-Normalisierung: {e}")
+    else:
+        logging.info("ID-Normalisierung beim Start deaktiviert")
     
     # ===== FLASK-LOGIN INITIALISIEREN =====
     login_manager.init_app(app)

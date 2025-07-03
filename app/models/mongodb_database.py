@@ -145,8 +145,26 @@ class MongoDBDatabase:
             # Erstelle $set Modifier falls nicht vorhanden
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
-        result = collection.update_one(filter_dict, update_dict, upsert=upsert)
-        return result.modified_count > 0 or result.upserted_id is not None
+        try:
+            result = collection.update_one(filter_dict, update_dict, upsert=upsert)
+            
+            # Debug-Logs für bessere Fehlerdiagnose
+            logger.info(f"DEBUG: update_one Ergebnis - matched_count: {result.matched_count}, modified_count: {result.modified_count}, upserted_id: {result.upserted_id}")
+            
+            # Betrachte die Operation als erfolgreich, wenn:
+            # 1. Ein Dokument modifiziert wurde, ODER
+            # 2. Ein neues Dokument erstellt wurde (upsert), ODER
+            # 3. Ein Dokument gefunden wurde (matched_count > 0) - auch wenn sich nichts geändert hat
+            success = (result.modified_count > 0 or 
+                      result.upserted_id is not None or 
+                      result.matched_count > 0)
+            
+            logger.info(f"DEBUG: update_one Erfolg: {success}")
+            return success
+            
+        except Exception as e:
+            logger.error(f"Fehler bei update_one: {e}")
+            return False
     
     def update_one_array(self, collection_name: str, filter_dict: Dict[str, Any], 
                         update_dict: Dict[str, Any], upsert: bool = False) -> bool:

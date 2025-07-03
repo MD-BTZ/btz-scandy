@@ -92,20 +92,45 @@ function createTicket() {
 
 // Event Listener für DOMContentLoaded, der das Modal und seine Formulare behandelt
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('ticket_details_form');
+    console.log('DOMContentLoaded - Initialisiere Ticket-Funktionen');
+    
+    // Event-Listener für "Material hinzufügen" - EXAKT wie Arbeit hinzufügen
+    const addMaterialBtn = document.getElementById('addMaterialBtn');
+    console.log('addMaterialBtn gefunden:', addMaterialBtn);
+    if (addMaterialBtn) {
+        addMaterialBtn.addEventListener('click', addMaterialRow);
+    } else {
+        console.log('addMaterialBtn NICHT gefunden!');
+    }
 
-    if (form) {
-            
-        // Event-Listener für das Absenden des Formulars (nur für AJAX-Requests)
-        if (form.getAttribute('data-ajax') === 'true') {
-            form.addEventListener('submit', function(e) {
+    // Event-Listener für "Arbeit hinzufügen" - funktioniert bereits
+    const addArbeitBtn = document.getElementById('addArbeitBtn');
+    console.log('addArbeitBtn gefunden:', addArbeitBtn);
+    if (addArbeitBtn) {
+        addArbeitBtn.addEventListener('click', addArbeitRow);
+    } else {
+        console.log('addArbeitBtn NICHT gefunden!');
+    }
+
+    // Event-Listener für bestehende Zeilen initialisieren
+    initializeExistingRows();
+    
+    // Initiale Berechnungen durchführen
+    updateSummeMaterial();
+    updateSummeArbeit();
+    updateGesamtsumme();
+    
+    // Formular-Event-Listener (nur für AJAX-Requests)
+    const form = document.getElementById('ticket_details_form');
+    if (form && form.getAttribute('data-ajax') === 'true') {
+        form.addEventListener('submit', function(e) {
             e.preventDefault();
             
-                const data = collectAuftragDetails();
-                const ticketId = form.closest('.modal')?.dataset.ticketId || 
-                                window.location.pathname.split('/')[2];
-            
-                fetch(`/tickets/${ticketId}/update-details`, {
+            const data = collectAuftragDetails();
+            const ticketId = form.closest('.modal')?.dataset.ticketId || 
+                            window.location.pathname.split('/')[2];
+        
+            fetch(`/tickets/${ticketId}/update-details`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -115,44 +140,23 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                        showToast('success', 'Auftragsdetails erfolgreich gespeichert');
-                        const modal = document.querySelector('.modal');
-                        if (modal) {
-                            modal.close();
-                            setTimeout(() => window.location.reload(), 1000);
-                        } else {
-                            window.location.reload();
-                        }
+                    showToast('success', 'Auftragsdetails erfolgreich gespeichert');
+                    const modal = document.querySelector('.modal');
+                    if (modal) {
+                        modal.close();
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        window.location.reload();
+                    }
                 } else {
-                        showToast('error', data.message || 'Fehler beim Speichern');
+                    showToast('error', data.message || 'Fehler beim Speichern');
                 }
             })
             .catch(error => {
                 console.error('Fehler:', error);
-                    showToast('error', 'Ein Fehler ist aufgetreten');
-                });
+                showToast('error', 'Ein Fehler ist aufgetreten');
             });
-        }
-
-        // Event-Listener für "Material hinzufügen"
-        const addMaterialBtn = document.getElementById('addMaterialBtn');
-        if (addMaterialBtn) {
-            addMaterialBtn.addEventListener('click', addMaterialRow);
-    }
-
-        // Event-Listener für "Arbeit hinzufügen"
-        const addArbeitBtn = document.getElementById('addArbeitBtn');
-        if (addArbeitBtn) {
-            addArbeitBtn.addEventListener('click', addArbeitRow);
-        }
-
-        // Event-Listener für bestehende Zeilen initialisieren
-        initializeExistingRows();
-        
-        // Initiale Berechnungen durchführen
-        updateSummeMaterial();
-        updateSummeArbeit();
-        updateGesamtsumme();
+        });
     }
 });
 
@@ -170,9 +174,13 @@ function initializeExistingRows() {
 });
 }
 
-// Funktion zum Hinzufügen einer neuen Materialzeile
+// Funktion zum Hinzufügen einer neuen Materialzeile - EXAKT wie addArbeitRow
 function addMaterialRow() {
+    console.log('addMaterialRow aufgerufen');
+    
     const tbody = document.getElementById('materialRows');
+    console.log('materialRows tbody gefunden:', tbody);
+    
     const newRow = document.createElement('tr');
     newRow.className = 'material-row';
     newRow.innerHTML = `
@@ -183,6 +191,7 @@ function addMaterialRow() {
         <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(newRow);
+    console.log('Neue Materialzeile hinzugefügt');
     initializeMaterialRowEvents(newRow);
 }
 

@@ -29,6 +29,35 @@ def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
             # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
             return id_value
 
+def find_document_by_id(collection: str, id_value: str):
+    """
+    Findet ein Dokument in einer Collection mit robuster ID-Behandlung.
+    Unterstützt sowohl String-IDs als auch ObjectIds.
+    """
+    try:
+        # Versuche zuerst mit String-ID
+        doc = mongodb.find_one(collection, {'_id': id_value})
+        if doc:
+            return doc
+        
+        # Falls nicht gefunden, versuche mit ObjectId
+        try:
+            obj_id = ObjectId(id_value)
+            doc = mongodb.find_one(collection, {'_id': obj_id})
+            if doc:
+                return doc
+        except:
+            pass
+        
+        # Falls auch das fehlschlägt, versuche mit convert_id_for_query
+        converted_id = convert_id_for_query(id_value)
+        doc = mongodb.find_one(collection, {'_id': converted_id})
+        return doc
+        
+    except Exception as e:
+        print(f"Fehler beim Suchen von Dokument {id_value} in {collection}: {e}")
+        return None
+
 @bp.route('/')
 @mitarbeiter_required
 def index():
@@ -635,7 +664,8 @@ def timesheet_download(ts_id):
 @bp.route('/timesheet/<ts_id>/delete', methods=['POST'])
 @login_required
 def timesheet_delete(ts_id):
-    ts = mongodb.find_one('timesheets', {'_id': ObjectId(ts_id)})
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    ts = find_document_by_id('timesheets', ts_id)
     if not ts:
         flash('Wochenbericht nicht gefunden.', 'error')
         return redirect(url_for('workers.timesheet_list'))
@@ -643,6 +673,9 @@ def timesheet_delete(ts_id):
     if ts.get('user_id') != current_user.username and not current_user.is_admin:
         flash('Sie dürfen nur Ihre eigenen Wochenberichte löschen.', 'error')
         return redirect(url_for('workers.timesheet_list'))
-    mongodb.delete_one('timesheets', {'_id': ObjectId(ts_id)})
+    
+    # Verwende die ID für alle Abfragen
+    ts_id_for_query = convert_id_for_query(ts_id)
+    mongodb.delete_one('timesheets', {'_id': ts_id_for_query})
     flash('Wochenbericht wurde gelöscht.', 'success')
     return redirect(url_for('workers.timesheet_list'))

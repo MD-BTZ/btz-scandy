@@ -185,57 +185,59 @@
 
     // Material-Verbrauch Event-Listener
     function initializeMaterialConsumption() {
-        // Material-Zeile hinzufügen
-        window.addMaterialRow = function() {
-            log('Füge neue Materialzeile hinzu');
-            const materialContainer = document.getElementById('materialContainer');
-            if (!materialContainer) return;
+        // Material-Zeile hinzufügen - nur wenn materialContainer existiert (für Lending)
+        const materialContainer = document.getElementById('materialContainer');
+        if (materialContainer) {
+            window.addMaterialRow = function() {
+                log('Füge neue Materialzeile hinzu (Lending)');
+                const materialRow = document.createElement('div');
+                materialRow.className = 'material-row flex gap-2 mb-2';
+                materialRow.innerHTML = `
+                    <input type="text" name="material_barcode[]" placeholder="Material-Barcode" class="input input-bordered flex-1" required>
+                    <input type="number" name="material_quantity[]" placeholder="Menge" class="input input-bordered w-24" min="1" value="1" required>
+                    <button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                materialContainer.appendChild(materialRow);
+            };
+        }
 
-            const materialRow = document.createElement('div');
-            materialRow.className = 'material-row flex gap-2 mb-2';
-            materialRow.innerHTML = `
-                <input type="text" name="material_barcode[]" placeholder="Material-Barcode" class="input input-bordered flex-1" required>
-                <input type="number" name="material_quantity[]" placeholder="Menge" class="input input-bordered w-24" min="1" value="1" required>
-                <button type="button" class="btn btn-error btn-sm" onclick="removeMaterialRow(this)">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-            materialContainer.appendChild(materialRow);
-        };
-
-        // Material-Zeile entfernen
-        window.removeMaterialRow = function(button) {
-            log('Entferne Materialzeile');
-            button.closest('.material-row').remove();
-        };
+        // Material-Zeile entfernen - nur wenn materialContainer existiert (für Lending)
+        if (materialContainer) {
+            window.removeMaterialRow = function(button) {
+                log('Entferne Materialzeile (Lending)');
+                button.closest('.material-row').remove();
+            };
+        }
     }
 
     // Arbeitszeiten Event-Listener
     function initializeWorkTimeTracking() {
-        // Arbeitszeit-Zeile hinzufügen
-        window.addWorkTimeRow = function() {
-            log('Füge neue Arbeitszeile hinzu');
-            const workTimeContainer = document.getElementById('workTimeContainer');
-            if (!workTimeContainer) return;
+        // Arbeitszeit-Zeile hinzufügen - nur wenn workTimeContainer existiert
+        const workTimeContainer = document.getElementById('workTimeContainer');
+        if (workTimeContainer) {
+            window.addWorkTimeRow = function() {
+                log('Füge neue Arbeitszeile hinzu');
+                const workTimeRow = document.createElement('div');
+                workTimeRow.className = 'work-time-row flex gap-2 mb-2';
+                workTimeRow.innerHTML = `
+                    <input type="date" name="work_date[]" class="input input-bordered" required>
+                    <input type="number" name="work_hours[]" placeholder="Stunden" class="input input-bordered w-24" min="0.5" step="0.5" value="8" required>
+                    <input type="text" name="work_description[]" placeholder="Beschreibung" class="input input-bordered flex-1" required>
+                    <button type="button" class="btn btn-error btn-sm" onclick="removeWorkTimeRow(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                workTimeContainer.appendChild(workTimeRow);
+            };
 
-            const workTimeRow = document.createElement('div');
-            workTimeRow.className = 'work-time-row flex gap-2 mb-2';
-            workTimeRow.innerHTML = `
-                <input type="date" name="work_date[]" class="input input-bordered" required>
-                <input type="number" name="work_hours[]" placeholder="Stunden" class="input input-bordered w-24" min="0.5" step="0.5" value="8" required>
-                <input type="text" name="work_description[]" placeholder="Beschreibung" class="input input-bordered flex-1" required>
-                <button type="button" class="btn btn-error btn-sm" onclick="removeWorkTimeRow(this)">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-            workTimeContainer.appendChild(workTimeRow);
-        };
-
-        // Arbeitszeit-Zeile entfernen
-        window.removeWorkTimeRow = function(button) {
-            log('Entferne Arbeitszeile');
-            button.closest('.work-time-row').remove();
-        };
+            // Arbeitszeit-Zeile entfernen
+            window.removeWorkTimeRow = function(button) {
+                log('Entferne Arbeitszeile');
+                button.closest('.work-time-row').remove();
+            };
+        }
     }
 
     // Auftragsdetails speichern
@@ -370,11 +372,216 @@
         }
     };
 
+    // Auftragsdetails-Funktionen (für Ticket-Details-Seite)
+    function initializeAuftragDetails() {
+        log('Initialisiere Auftragsdetails-Funktionen');
+        
+        // Material-Zeile hinzufügen für Auftragsdetails (Tabelle)
+        const materialRows = document.getElementById('materialRows');
+        if (materialRows) {
+            window.addMaterialRow = function() {
+                log('Füge neue Materialzeile hinzu (Auftragsdetails)');
+                const newRow = document.createElement('tr');
+                newRow.className = 'material-row';
+                newRow.innerHTML = `
+                    <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+                    <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+                    <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+                    <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+                    <td><button type="button" class="btn btn-error btn-sm delete-material-btn"><i class="fas fa-trash"></i></button></td>
+                `;
+                materialRows.appendChild(newRow);
+                initializeMaterialRowEvents(newRow);
+            };
+        }
+
+        // Arbeit-Zeile hinzufügen für Auftragsdetails
+        const arbeitenRows = document.getElementById('arbeitenRows');
+        if (arbeitenRows) {
+            window.addArbeitRow = function() {
+                log('Füge neue Arbeitszeile hinzu (Auftragsdetails)');
+                const newRow = document.createElement('tr');
+                newRow.className = 'arbeit-row';
+                newRow.innerHTML = `
+                    <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+                    <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
+                    <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+                    <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn"><i class="fas fa-trash"></i></button></td>
+                `;
+                arbeitenRows.appendChild(newRow);
+                initializeArbeitRowEvents(newRow);
+            };
+        }
+
+        // Event-Listener für bestehende Zeilen initialisieren
+        initializeExistingRows();
+        
+        // Initiale Berechnungen durchführen
+        updateSummeMaterial();
+        updateSummeArbeit();
+        updateGesamtsumme();
+    }
+
+    // Hilfsfunktionen für Auftragsdetails
+    function initializeMaterialRowEvents(row) {
+        // Event-Listener für Menge und Einzelpreis
+        const mengeInput = row.querySelector('.menge-input');
+        const einzelpreisInput = row.querySelector('.einzelpreis-input');
+        
+        if (mengeInput) {
+            mengeInput.addEventListener('input', () => {
+                updateRowSum(row);
+            });
+        }
+        
+        if (einzelpreisInput) {
+            einzelpreisInput.addEventListener('input', () => {
+                updateRowSum(row);
+            });
+        }
+        
+        // Event-Listener für Löschen-Button
+        const deleteBtn = row.querySelector('.delete-material-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                row.remove();
+                updateSummeMaterial();
+                updateGesamtsumme();
+            });
+        }
+        
+        // Initiale Berechnung
+        updateRowSum(row);
+    }
+
+    function initializeArbeitRowEvents(row) {
+        // Event-Listener für Arbeitsstunden
+        const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+        if (arbeitsstundenInput) {
+            arbeitsstundenInput.addEventListener('input', () => {
+                updateSummeArbeit();
+                updateGesamtsumme();
+            });
+        }
+        
+        // Event-Listener für Löschen-Button
+        const deleteBtn = row.querySelector('.delete-arbeit-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                row.remove();
+                updateSummeArbeit();
+                updateGesamtsumme();
+            });
+        }
+    }
+
+    function initializeExistingRows() {
+        // Materialzeilen
+        document.querySelectorAll('#materialRows .material-row').forEach(row => {
+            initializeMaterialRowEvents(row);
+        });
+        
+        // Arbeitszeilen
+        document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+            initializeArbeitRowEvents(row);
+        });
+    }
+
+    function updateRowSum(row) {
+        const mengeInput = row.querySelector('.menge-input');
+        const einzelpreisInput = row.querySelector('.einzelpreis-input');
+        const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+        
+        if (!mengeInput || !einzelpreisInput || !gesamtpreisInput) {
+            return;
+        }
+        
+        const menge = parseFloat(mengeInput.value) || 0;
+        const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
+        const gesamtpreis = menge * einzelpreis;
+        
+        gesamtpreisInput.value = gesamtpreis.toFixed(2);
+        
+        updateSummeMaterial();
+        updateGesamtsumme();
+    }
+
+    function updateSummeMaterial() {
+        let summe = 0;
+        
+        document.querySelectorAll('#materialRows .material-row').forEach(row => {
+            const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+            if (gesamtpreisInput) {
+                const gesamtpreis = parseFloat(gesamtpreisInput.value) || 0;
+                summe += gesamtpreis;
+            }
+        });
+        
+        const summeElement = document.getElementById('summeMaterial');
+        if (summeElement) {
+            summeElement.textContent = summe.toFixed(2) + ' €';
+            log('Materialsumme gesetzt auf:', summe.toFixed(2));
+        }
+        
+        updateGesamtsumme();
+    }
+
+    function updateSummeArbeit() {
+        let summe = 0;
+        
+        document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+            const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+            if (arbeitsstundenInput) {
+                const stunden = parseFloat(arbeitsstundenInput.value) || 0;
+                summe += stunden;
+            }
+        });
+        
+        const summeElement = document.getElementById('summeArbeit');
+        if (summeElement) {
+            summeElement.textContent = summe.toFixed(2) + ' h';
+            log('Arbeitssumme gesetzt auf:', summe.toFixed(2));
+        }
+        
+        updateGesamtsumme();
+    }
+
+    function updateGesamtsumme() {
+        const summeMaterialElement = document.getElementById('summeMaterial');
+        const gesamtsummeElement = document.getElementById('gesamtsumme');
+        
+        if (!summeMaterialElement || !gesamtsummeElement) {
+            return;
+        }
+        
+        const summeMaterialText = summeMaterialElement.textContent;
+        const summeMaterial = parseFloat(summeMaterialText.replace(' €', '')) || 0;
+        
+        gesamtsummeElement.textContent = summeMaterial.toFixed(2) + ' €';
+        log('Gesamtsumme gesetzt auf:', summeMaterial.toFixed(2));
+    }
+
     // Service starten wenn DOM geladen ist
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeLendingService);
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded - Lending Service wird initialisiert');
+            try {
+                initializeLendingService();
+                initializeAuftragDetails();
+                console.log('Lending Service erfolgreich initialisiert');
+            } catch (error) {
+                console.error('Fehler beim Initialisieren des Lending Service:', error);
+            }
+        });
     } else {
-        initializeLendingService();
+        console.log('DOM bereits geladen - Lending Service wird initialisiert');
+        try {
+            initializeLendingService();
+            initializeAuftragDetails();
+            console.log('Lending Service erfolgreich initialisiert');
+        } catch (error) {
+            console.error('Fehler beim Initialisieren des Lending Service:', error);
+        }
     }
 
 })();

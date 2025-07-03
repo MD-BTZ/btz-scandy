@@ -48,6 +48,40 @@ def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
             # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
             return id_value
 
+def find_document_by_id(collection: str, id_value: str):
+    """
+    Findet ein Dokument in einer Collection mit robuster ID-Behandlung.
+    Unterstützt String-IDs und ObjectIds.
+    """
+    try:
+        # Versuche zuerst mit String-ID
+        doc = mongodb.find_one(collection, {'_id': id_value})
+        if doc:
+            return doc
+        
+        # Falls nicht gefunden, versuche mit ObjectId
+        try:
+            object_id = ObjectId(id_value)
+            doc = mongodb.find_one(collection, {'_id': object_id})
+            if doc:
+                return doc
+        except:
+            pass
+        
+        # Falls immer noch nicht gefunden, versuche mit convert_id_for_query
+        try:
+            converted_id = convert_id_for_query(id_value)
+            doc = mongodb.find_one(collection, {'_id': converted_id})
+            if doc:
+                return doc
+        except:
+            pass
+        
+        return None
+    except Exception as e:
+        logging.error(f"Fehler beim Suchen von Dokument {id_value} in Collection {collection}: {str(e)}")
+        return None
+
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
 # ensure_default_settings()
 
@@ -1679,22 +1713,18 @@ def update_ticket(ticket_id):
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
     try:
-        # Prüfe ob die ID gültig ist
-        try:
-            ticket_id = convert_id_for_query(id)
-        except Exception as e:
-            logging.error(f"Ungültige Ticket-ID: {id}")
-            flash('Ungültige Ticket-ID.', 'error')
-            return redirect(url_for('tickets.create'))
-        
-        ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         if not ticket:
             logging.error(f"Ticket nicht gefunden: {id}")
             flash('Ticket nicht gefunden.', 'error')
             return redirect(url_for('tickets.create'))
         
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
-        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+        
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query}) or {}
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query})) or []
 
         # --- Auftragnehmer (Vorname Nachname) ---
         auftragnehmer_user = None
@@ -3400,6 +3430,65 @@ def normalize_user_ids():
             'status': 'success',
             'message': f'{updated_count} User-IDs normalisiert',
             'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/normalize-all-ids')
+def normalize_all_ids():
+    """Normalisiert alle IDs in allen Collections zu Strings"""
+    try:
+        from app.models.mongodb_database import mongodb
+        from bson import ObjectId
+        
+        collections_to_normalize = [
+            'users', 'tickets', 'tools', 'workers', 'consumables', 
+            'lendings', 'ticket_messages', 'ticket_notes', 'auftrag_details',
+            'auftrag_material', 'auftrag_arbeit', 'timesheets'
+        ]
+        
+        total_updated = 0
+        collection_results = {}
+        
+        for collection in collections_to_normalize:
+            try:
+                all_docs = mongodb.find(collection, {})
+                updated_count = 0
+                
+                for doc in all_docs:
+                    doc_id = doc.get('_id')
+                    
+                    # Falls die ID ein ObjectId ist, konvertiere sie zu String
+                    if isinstance(doc_id, ObjectId):
+                        string_id = str(doc_id)
+                        
+                        # Erstelle ein neues Dokument mit String-ID
+                        new_doc = doc.copy()
+                        new_doc['_id'] = string_id
+                        
+                        # Lösche das alte Dokument und füge das neue ein
+                        mongodb.delete_one(collection, {'_id': doc_id})
+                        mongodb.insert_one(collection, new_doc)
+                        
+                        updated_count += 1
+                
+                collection_results[collection] = updated_count
+                total_updated += updated_count
+                print(f"Collection {collection}: {updated_count} IDs normalisiert")
+                
+            except Exception as e:
+                collection_results[collection] = f"Fehler: {str(e)}"
+                print(f"Fehler bei Collection {collection}: {e}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{total_updated} IDs in allen Collections normalisiert',
+            'total_updated': total_updated,
+            'collection_results': collection_results
         })
         
     except Exception as e:

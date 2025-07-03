@@ -126,13 +126,26 @@ class Tool(BaseModel):
         db = get_database()
         tools_collection = db['tools']
         
-        if isinstance(tool_id, str):
-            tool_id = ObjectId(tool_id)
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        try:
+            # Versuche zuerst mit String-ID
+            tool_data = tools_collection.find_one({'_id': tool_id, 'deleted': False})
+            if tool_data:
+                return Tool(**tool_data)
             
-        tool_data = tools_collection.find_one({'_id': tool_id, 'deleted': False})
-        if tool_data:
-            return Tool(**tool_data)
-        return None
+            # Falls nicht gefunden, versuche mit ObjectId
+            try:
+                obj_id = ObjectId(tool_id)
+                tool_data = tools_collection.find_one({'_id': obj_id, 'deleted': False})
+                if tool_data:
+                    return Tool(**tool_data)
+            except:
+                pass
+            
+            return None
+        except Exception as e:
+            print(f"Fehler beim Suchen von Tool {tool_id}: {e}")
+            return None
 
     def save(self):
         """Speichert das Werkzeug in der Datenbank"""

@@ -20,7 +20,7 @@
                 Auftragsdetails bearbeiten - Ticket #{{ ticket.ticket_number or ticket.id }}
             </h2>
             
-            <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form">
+            <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form" data-ajax="true">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="label"><span class="label-text">Bereich</span></label>
@@ -105,7 +105,7 @@
                             </tr>
                         </tbody>
                     </table>
-                    <button type="button" class="btn btn-secondary mt-2" id="addMaterialBtn"><i class="fas fa-plus"></i> Material hinzufügen</button>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addMaterialRow()"><i class="fas fa-plus"></i> Material hinzufügen</button>
                 </div>
                 <div class="flex justify-end mt-4">
                     <div class="font-bold mr-4">Summe Material:</div>
@@ -142,7 +142,7 @@
                             </tr>
                         </tbody>
                     </table>
-                    <button type="button" class="btn btn-secondary mt-2" id="addArbeitBtn"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
+                    <button type="button" class="btn btn-secondary mt-2" onclick="addArbeitRow()"><i class="fas fa-plus"></i> Arbeit hinzufügen</button>
                 </div>
                 <div class="flex justify-end mt-4">
                     <div class="font-bold mr-4">Summe Arbeit:</div>
@@ -169,5 +169,165 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+<script>
+// Einfache JavaScript-Funktionen für Auftragsdetails
+function addMaterialRow() {
+    console.log('addMaterialRow aufgerufen');
+    const tbody = document.getElementById('materialRows');
+    if (!tbody) {
+        console.error('materialRows nicht gefunden');
+        return;
+    }
+    
+    const newRow = document.createElement('tr');
+    newRow.className = 'material-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="material" class="material-input input input-bordered w-full"></td>
+        <td><input type="number" name="menge" class="menge-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="number" name="einzelpreis" class="einzelpreis-input input input-bordered w-24" min="0" step="any"></td>
+        <td><input type="text" name="gesamtpreis" class="input input-bordered w-32" readonly></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-material-btn" onclick="removeMaterialRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(newRow);
+    initializeMaterialRowEvents(newRow);
+    console.log('Neue Materialzeile hinzugefügt');
+}
+
+function addArbeitRow() {
+    console.log('addArbeitRow aufgerufen');
+    const tbody = document.getElementById('arbeitenRows');
+    if (!tbody) {
+        console.error('arbeitenRows nicht gefunden');
+        return;
+    }
+    
+    const newRow = document.createElement('tr');
+    newRow.className = 'arbeit-row';
+    newRow.innerHTML = `
+        <td><input type="text" name="arbeit" class="arbeit-input input input-bordered w-full"></td>
+        <td><input type="number" name="arbeitsstunden" class="arbeitsstunden-input input input-bordered w-full" min="0" step="0.5"></td>
+        <td><input type="text" name="leistungskategorie" class="leistungskategorie-input input input-bordered w-full"></td>
+        <td><button type="button" class="btn btn-error btn-sm delete-arbeit-btn" onclick="removeArbeitRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(newRow);
+    initializeArbeitRowEvents(newRow);
+    console.log('Neue Arbeitszeile hinzugefügt');
+}
+
+function removeMaterialRow(button) {
+    button.closest('.material-row').remove();
+    updateSummeMaterial();
+    updateGesamtsumme();
+}
+
+function removeArbeitRow(button) {
+    button.closest('.arbeit-row').remove();
+    updateSummeArbeit();
+    updateGesamtsumme();
+}
+
+function initializeMaterialRowEvents(row) {
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    
+    if (mengeInput) {
+        mengeInput.addEventListener('input', () => updateRowSum(row));
+    }
+    if (einzelpreisInput) {
+        einzelpreisInput.addEventListener('input', () => updateRowSum(row));
+    }
+    
+    updateRowSum(row);
+}
+
+function initializeArbeitRowEvents(row) {
+    const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+    if (arbeitsstundenInput) {
+        arbeitsstundenInput.addEventListener('input', () => {
+            updateSummeArbeit();
+            updateGesamtsumme();
+        });
+    }
+}
+
+function updateRowSum(row) {
+    const mengeInput = row.querySelector('.menge-input');
+    const einzelpreisInput = row.querySelector('.einzelpreis-input');
+    const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+    
+    if (!mengeInput || !einzelpreisInput || !gesamtpreisInput) return;
+    
+    const menge = parseFloat(mengeInput.value) || 0;
+    const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
+    const gesamtpreis = menge * einzelpreis;
+    
+    gesamtpreisInput.value = gesamtpreis.toFixed(2);
+    updateSummeMaterial();
+    updateGesamtsumme();
+}
+
+function updateSummeMaterial() {
+    let summe = 0;
+    document.querySelectorAll('#materialRows .material-row').forEach(row => {
+        const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
+        if (gesamtpreisInput) {
+            summe += parseFloat(gesamtpreisInput.value) || 0;
+        }
+    });
+    
+    const summeElement = document.getElementById('summeMaterial');
+    if (summeElement) {
+        summeElement.textContent = summe.toFixed(2) + ' €';
+    }
+}
+
+function updateSummeArbeit() {
+    let summe = 0;
+    document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+        const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
+        if (arbeitsstundenInput) {
+            summe += parseFloat(arbeitsstundenInput.value) || 0;
+        }
+    });
+    
+    const summeElement = document.getElementById('summeArbeit');
+    if (summeElement) {
+        summeElement.textContent = summe.toFixed(2) + ' h';
+    }
+}
+
+function updateGesamtsumme() {
+    const summeMaterialElement = document.getElementById('summeMaterial');
+    const gesamtsummeElement = document.getElementById('gesamtsumme');
+    
+    if (!summeMaterialElement || !gesamtsummeElement) return;
+    
+    const summeMaterialText = summeMaterialElement.textContent;
+    const summeMaterial = parseFloat(summeMaterialText.replace(' €', '')) || 0;
+    
+    gesamtsummeElement.textContent = summeMaterial.toFixed(2) + ' €';
+}
+
+// Initialisiere bestehende Zeilen beim Laden
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded - Initialisiere Auftragsdetails');
+    
+    // Event-Listener für bestehende Materialzeilen
+    document.querySelectorAll('#materialRows .material-row').forEach(row => {
+        initializeMaterialRowEvents(row);
+    });
+    
+    // Event-Listener für bestehende Arbeitszeilen
+    document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
+        initializeArbeitRowEvents(row);
+    });
+    
+    // Initiale Berechnungen
+    updateSummeMaterial();
+    updateSummeArbeit();
+    updateGesamtsumme();
+    
+    console.log('Auftragsdetails erfolgreich initialisiert');
+});
+</script>
 {% endblock %} 

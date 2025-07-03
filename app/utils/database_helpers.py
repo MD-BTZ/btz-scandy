@@ -14,6 +14,8 @@ Hauptfunktionen:
 from app.models.mongodb_database import mongodb
 import logging
 from datetime import datetime
+from bson import ObjectId
+from app.models.mongodb_database import mongodb
 
 logger = logging.getLogger(__name__)
 
@@ -301,4 +303,76 @@ def get_next_ticket_number():
     # Nächste Nummer
     next_number = max_number + 1
     
-    return f"{base_number}-{next_number:03d}" 
+    return f"{base_number}-{next_number:03d}"
+
+def normalize_id_for_database(id_value):
+    """
+    Normalisiert eine ID für die Datenbank - konvertiert alles zu String.
+    Diese Funktion kann in allen Teilen der Anwendung verwendet werden.
+    
+    Args:
+        id_value: ID-Wert (kann String, ObjectId oder andere Typen sein)
+        
+    Returns:
+        str: Normalisierte String-ID
+    """
+    if isinstance(id_value, ObjectId):
+        return str(id_value)
+    elif isinstance(id_value, str):
+        return id_value
+    else:
+        return str(id_value)
+
+def ensure_consistent_ids():
+    """
+    Stellt sicher, dass alle IDs in der Datenbank konsistent sind.
+    Kann manuell aufgerufen werden, um ID-Probleme zu beheben.
+    """
+    try:
+        collections_to_normalize = [
+            'tickets', 'users', 'tools', 'consumables', 'workers',
+            'ticket_messages', 'ticket_notes', 'auftrag_details',
+            'auftrag_material', 'auftrag_arbeit'
+        ]
+        
+        total_updated = 0
+        
+        for collection_name in collections_to_normalize:
+            try:
+                documents = mongodb.find(collection_name, {})
+                updated_count = 0
+                
+                for doc in documents:
+                    doc_id = doc.get('_id')
+                    
+                    # Falls die ID ein ObjectId ist, konvertiere sie zu String
+                    if isinstance(doc_id, ObjectId):
+                        string_id = str(doc_id)
+                        
+                        # Erstelle ein neues Dokument mit String-ID
+                        new_doc = doc.copy()
+                        new_doc['_id'] = string_id
+                        
+                        # Lösche das alte Dokument und füge das neue ein
+                        mongodb.delete_one(collection_name, {'_id': doc_id})
+                        mongodb.insert_one(collection_name, new_doc)
+                        
+                        updated_count += 1
+                
+                if updated_count > 0:
+                    print(f"Collection {collection_name}: {updated_count} IDs normalisiert")
+                total_updated += updated_count
+                
+            except Exception as e:
+                print(f"Fehler bei ID-Normalisierung in Collection {collection_name}: {e}")
+        
+        if total_updated > 0:
+            print(f"ID-Normalisierung abgeschlossen: {total_updated} IDs in allen Collections normalisiert")
+        else:
+            print("ID-Normalisierung: Alle IDs sind bereits normalisiert")
+            
+        return total_updated
+            
+    except Exception as e:
+        print(f"Fehler bei ID-Normalisierung: {e}")
+        return 0 

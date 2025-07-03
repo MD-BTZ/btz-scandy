@@ -30,6 +30,342 @@ def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
             # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
             return id_value
 
+def normalize_id_for_database(id_value):
+    """
+    Normalisiert eine ID für die Datenbank - konvertiert alles zu String
+    """
+    if isinstance(id_value, ObjectId):
+        return str(id_value)
+    elif isinstance(id_value, str):
+        return id_value
+    else:
+        return str(id_value)
+
+def find_document_by_id(collection: str, id_value: str):
+    """
+    Findet ein Dokument in einer Collection mit robuster ID-Behandlung.
+    Versucht verschiedene ID-Formate: String, ObjectId, convert_id_for_query
+    """
+    print(f"DEBUG: Suche Dokument in Collection '{collection}' mit ID: {id_value}")
+    
+    # Versuche zuerst mit String-ID
+    doc = mongodb.find_one(collection, {'_id': id_value})
+    if doc:
+        print(f"DEBUG: Dokument mit String-ID gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
+        return doc
+    
+    # Falls nicht gefunden, versuche mit ObjectId
+    try:
+        from bson import ObjectId
+        obj_id = ObjectId(id_value)
+        doc = mongodb.find_one(collection, {'_id': obj_id})
+        if doc:
+            print(f"DEBUG: Dokument mit ObjectId gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
+            return doc
+    except Exception as e:
+        print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+    
+    # Falls immer noch nicht gefunden, versuche mit convert_id_for_query
+    doc = mongodb.find_one(collection, {'_id': convert_id_for_query(id_value)})
+    if doc:
+        print(f"DEBUG: Dokument mit convert_id_for_query gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
+    else:
+        print(f"DEBUG: Kein Dokument gefunden für ID: {id_value}")
+    
+    return doc
+
+@bp.route('/debug/tickets')
+@login_required
+def debug_tickets():
+    """Debug-Route um alle Tickets anzuzeigen"""
+    try:
+        all_tickets = mongodb.find('tickets', {})
+        ticket_info = []
+        
+        for ticket in all_tickets:
+            ticket_info.append({
+                'id': str(ticket.get('_id')),
+                'id_type': type(ticket.get('_id')).__name__,
+                'title': ticket.get('title', 'No Title'),
+                'status': ticket.get('status', 'Unknown'),
+                'created_by': ticket.get('created_by', 'Unknown'),
+                'ticket_number': ticket.get('ticket_number', 'No Number')
+            })
+        
+        return jsonify({
+            'total_tickets': len(ticket_info),
+            'tickets': ticket_info
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/debug/test-ticket/<ticket_id>')
+@login_required
+def test_ticket(ticket_id):
+    """Testet das Finden eines spezifischen Tickets"""
+    try:
+        print(f"DEBUG: Teste Ticket-ID: {ticket_id}")
+        
+        # Teste verschiedene Suchmethoden
+        results = {}
+        
+        # Methode 1: Direkte String-Suche
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+        results['string_search'] = {
+            'found': ticket is not None,
+            'title': ticket.get('title') if ticket else None
+        }
+        
+        # Methode 2: ObjectId-Suche
+        try:
+            from bson import ObjectId
+            obj_id = ObjectId(ticket_id)
+            ticket = mongodb.find_one('tickets', {'_id': obj_id})
+            results['objectid_search'] = {
+                'found': ticket is not None,
+                'title': ticket.get('title') if ticket else None
+            }
+        except Exception as e:
+            results['objectid_search'] = {
+                'found': False,
+                'error': str(e)
+            }
+        
+        # Methode 3: find_document_by_id
+        ticket = find_document_by_id('tickets', ticket_id)
+        results['find_document_by_id'] = {
+            'found': ticket is not None,
+            'title': ticket.get('title') if ticket else None
+        }
+        
+        return jsonify({
+            'ticket_id': ticket_id,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/debug/normalize-ticket-ids')
+@login_required
+def normalize_ticket_ids():
+    """Normalisiert alle Ticket-IDs zu Strings"""
+    try:
+        from bson import ObjectId
+        
+        all_tickets = mongodb.find('tickets', {})
+        updated_count = 0
+        
+        for ticket in all_tickets:
+            ticket_id = ticket.get('_id')
+            
+            # Falls die ID ein ObjectId ist, konvertiere sie zu String
+            if isinstance(ticket_id, ObjectId):
+                string_id = str(ticket_id)
+                
+                # Erstelle ein neues Dokument mit String-ID
+                new_ticket = ticket.copy()
+                new_ticket['_id'] = string_id
+                
+                # Lösche das alte Dokument und füge das neue ein
+                mongodb.delete_one('tickets', {'_id': ticket_id})
+                mongodb.insert_one('tickets', new_ticket)
+                
+                updated_count += 1
+                print(f"Ticket-ID normalisiert: {ticket.get('title', 'Unknown')} von {ticket_id} zu {string_id}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{updated_count} Ticket-IDs normalisiert',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/normalize-all-ids')
+@login_required
+def normalize_all_ids():
+    """Normalisiert alle IDs in allen Collections zu Strings"""
+    try:
+        from bson import ObjectId
+        
+        collections_to_normalize = [
+            'tickets', 'users', 'tools', 'consumables', 'workers',
+            'ticket_messages', 'ticket_notes', 'auftrag_details',
+            'auftrag_material', 'auftrag_arbeit'
+        ]
+        
+        total_updated = 0
+        results = {}
+        
+        for collection_name in collections_to_normalize:
+            try:
+                documents = mongodb.find(collection_name, {})
+                updated_count = 0
+                
+                for doc in documents:
+                    doc_id = doc.get('_id')
+                    
+                    # Falls die ID ein ObjectId ist, konvertiere sie zu String
+                    if isinstance(doc_id, ObjectId):
+                        string_id = str(doc_id)
+                        
+                        # Erstelle ein neues Dokument mit String-ID
+                        new_doc = doc.copy()
+                        new_doc['_id'] = string_id
+                        
+                        # Lösche das alte Dokument und füge das neue ein
+                        mongodb.delete_one(collection_name, {'_id': doc_id})
+                        mongodb.insert_one(collection_name, new_doc)
+                        
+                        updated_count += 1
+                
+                results[collection_name] = updated_count
+                total_updated += updated_count
+                print(f"Collection {collection_name}: {updated_count} IDs normalisiert")
+                
+            except Exception as e:
+                results[collection_name] = f"Fehler: {str(e)}"
+                print(f"Fehler bei Collection {collection_name}: {e}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{total_updated} IDs in allen Collections normalisiert',
+            'total_updated': total_updated,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/test-update-ticket/<ticket_id>')
+@login_required
+def test_update_ticket(ticket_id):
+    """Testet die update_ticket-Route mit einer spezifischen Ticket-ID"""
+    try:
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', ticket_id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(ticket_id)
+        
+        # Teste ein einfaches Update
+        test_data = {'priority': 'normal', 'updated_at': datetime.now()}
+        result = mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': test_data})
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test-Update erfolgreich',
+            'ticket_id': ticket_id,
+            'ticket_id_for_query': str(ticket_id_for_query),
+            'ticket_id_type': type(ticket_id_for_query).__name__,
+            'update_result': str(result)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'message': str(e),
+            'ticket_id': ticket_id
+        })
+
+@bp.route('/debug/test-mongodb')
+@login_required
+def test_mongodb():
+    """Testet die MongoDB-Verbindung und -Operationen"""
+    try:
+        # Teste einfache Abfrage
+        count = mongodb.count_documents('tickets', {})
+        
+        # Teste einfaches Update
+        test_ticket = mongodb.find_one('tickets', {})
+        if test_ticket:
+            test_id = test_ticket['_id']
+            result = mongodb.update_one('tickets', {'_id': test_id}, {'$set': {'test_field': 'test_value'}})
+            
+            # Entferne das Test-Feld wieder
+            mongodb.update_one('tickets', {'_id': test_id}, {'$unset': {'test_field': ''}})
+            
+            return jsonify({
+                'success': True,
+                'message': 'MongoDB-Verbindung funktioniert',
+                'ticket_count': count,
+                'test_update_result': str(result)
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Keine Tickets in der Datenbank gefunden'
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'MongoDB-Fehler: {str(e)}'
+        })
+
+@bp.route('/debug/test-specific-ticket/<ticket_id>')
+@login_required
+def test_specific_ticket(ticket_id):
+    """Testet eine spezifische Ticket-ID mit allen Methoden"""
+    try:
+        results = {}
+        
+        # Teste find_document_by_id
+        ticket = find_document_by_id('tickets', ticket_id)
+        results['find_document_by_id'] = {
+            'found': ticket is not None,
+            'title': ticket.get('title') if ticket else None,
+            'id': str(ticket.get('_id')) if ticket else None
+        }
+        
+        # Teste convert_id_for_query
+        converted_id = convert_id_for_query(ticket_id)
+        results['convert_id_for_query'] = {
+            'converted_id': str(converted_id),
+            'type': type(converted_id).__name__
+        }
+        
+        # Teste direkte MongoDB-Abfrage
+        direct_result = mongodb.find_one('tickets', {'_id': converted_id})
+        results['direct_mongodb_query'] = {
+            'found': direct_result is not None,
+            'title': direct_result.get('title') if direct_result else None
+        }
+        
+        # Teste einfaches Update
+        if ticket:
+            test_data = {'test_update': datetime.now()}
+            update_result = mongodb.update_one('tickets', {'_id': converted_id}, {'$set': test_data})
+            
+            # Entferne das Test-Feld wieder
+            mongodb.update_one('tickets', {'_id': converted_id}, {'$unset': {'test_update': ''}})
+            
+            results['test_update'] = {
+                'success': bool(update_result),
+                'result': str(update_result)
+            }
+        
+        return jsonify({
+            'success': True,
+            'ticket_id': ticket_id,
+            'results': results
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e),
+            'ticket_id': ticket_id
+        })
+
 
 
 @bp.route('/create', methods=['GET', 'POST'])
@@ -303,14 +639,8 @@ def view(ticket_id):
     """Zeigt die Details eines Tickets für den Benutzer."""
     logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
     
-    # Konvertiere ticket_id zu ObjectId
-    try:
-        object_id = convert_id_for_query(ticket_id)
-    except:
-        flash('Ungültige Ticket-ID.', 'error')
-        return redirect(url_for('tickets.create'))
-    
-    ticket = mongodb.find_one('tickets', {'_id': object_id})
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    ticket = find_document_by_id('tickets', ticket_id)
     
     if not ticket:
         logging.error(f"Ticket {ticket_id} nicht gefunden")
@@ -331,7 +661,10 @@ def view(ticket_id):
     logging.info(f"Hole Nachrichten für Ticket {ticket_id}")
     
     try:
-        messages = mongodb.find('ticket_messages', {'ticket_id': object_id})
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(ticket_id)
+        
+        messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
         messages = list(messages)
         
         # Sortiere Nachrichten nach Datum (älteste zuerst)
@@ -350,13 +683,13 @@ def view(ticket_id):
         ticket['id'] = str(ticket['_id'])
         
         # Hole die Auftragsdetails
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': object_id})
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
         
         # Hole Materialliste
-        material_list = list(mongodb.find('auftrag_material', {'ticket_id': object_id}))
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
         
         # Hole Arbeitsliste
-        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': object_id}))
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ticket_id_for_query}))
         
         # Hole alle Kategorien aus der settings Collection
         categories = get_ticket_categories_from_settings()
@@ -389,11 +722,14 @@ def view(ticket_id):
 def add_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu"""
     try:
-        # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', ticket_id)
         if not ticket:
             logging.error(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(ticket_id)
         
         # Hole die Nachricht aus dem Request
         if not request.is_json:
@@ -410,7 +746,7 @@ def add_message(ticket_id):
 
         # Verwende mongodb.insert_one für die Nachrichtenspeicherung
         message_data = {
-            'ticket_id': convert_id_for_query(ticket_id),
+            'ticket_id': ticket_id_for_query,
             'message': message,
             'sender': current_user.username,
             'created_at': datetime.now()
@@ -441,9 +777,13 @@ def add_message(ticket_id):
 @login_required
 def detail(id):
     """Zeigt die Details eines Tickets."""
-    ticket = mongodb.find_one('tickets', {'_id': ObjectId(id)})
+    print(f"DEBUG: Ticket-Detail aufgerufen für ID: {id}")
+    
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    ticket = find_document_by_id('tickets', id)
     
     if not ticket:
+        print(f"DEBUG: Ticket nicht gefunden für ID: {id}")
         return render_template('404.html'), 404
     
     # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
@@ -514,8 +854,8 @@ def detail(id):
 def delete(id):
     """Löscht ein Ticket."""
     try:
-        # Prüfe ob Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         
         if not ticket:
             return jsonify({
@@ -529,9 +869,12 @@ def delete(id):
                 'success': False,
                 'message': 'Sie haben keine Berechtigung, Tickets zu löschen'
             }), 403
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
             
         # Lösche das Ticket
-        if not mongodb.delete_one('tickets', {'_id': convert_id_for_query(id)}):
+        if not mongodb.delete_one('tickets', {'_id': ticket_id_for_query}):
             return jsonify({
                 'success': False,
                 'message': 'Fehler beim Löschen des Tickets'
@@ -552,10 +895,14 @@ def delete(id):
 @bp.route('/<id>/auftrag-details-modal')
 @login_required
 def auftrag_details_modal(id):
-    ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    ticket = find_document_by_id('tickets', id)
     
     if not ticket:
         return render_template('404.html'), 404
+    
+    # Verwende die Ticket-ID für alle Abfragen
+    ticket_id_for_query = convert_id_for_query(id)
     
     # Füge id-Feld hinzu (für Template-Kompatibilität)
     ticket['id'] = str(ticket['_id'])
@@ -570,16 +917,16 @@ def auftrag_details_modal(id):
                 ticket[field] = None
         
     # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': convert_id_for_query(id)})
+    notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
 
     # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': convert_id_for_query(id)})
+    messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
 
     # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': convert_id_for_query(id)})
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
     
     # Hole Materialliste
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': convert_id_for_query(id)}))
+    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
     
     # Hole Arbeitsliste
     arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)}))
@@ -605,9 +952,13 @@ def update_status(id):
         if not new_status:
             return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
 
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
 
         update_fields = {'status': new_status, 'updated_at': datetime.now()}
 
@@ -618,7 +969,7 @@ def update_status(id):
         elif new_status == 'offen':
             update_fields['assigned_to'] = None
 
-        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(id)}, {'$set': update_fields}):
+        if not mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': update_fields}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
 
         # Spezielle Nachricht bei automatischer Zuweisung
@@ -654,8 +1005,16 @@ def update_assignment(id):
         if not assigned_to or assigned_to == "":
             assigned_to = None
 
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+
         # Aktualisiere die Zuweisung direkt im Ticket
-        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
+        if not mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
@@ -669,14 +1028,17 @@ def update_assignment(id):
 def update_details(id):
     """Aktualisiert die Auftragsdetails eines Tickets"""
     try:
-        # Prüfe ob Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         if not ticket:
             if request.is_json:
                 return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
             else:
                 flash('Ticket nicht gefunden', 'error')
                 return redirect(url_for('tickets.create'))
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
         
         # Verarbeite die Daten je nach Request-Typ
         if request.is_json:
@@ -752,7 +1114,7 @@ def update_details(id):
         
         # Bereite die Auftragsdetails vor
         auftrag_details_daten = {
-            'ticket_id': convert_id_for_query(id),
+            'ticket_id': ticket_id_for_query,
             'bereich': data.get('bereich', ''),
             'auftraggeber_intern': data.get('auftraggeber_intern', False),
             'auftraggeber_extern': data.get('auftraggeber_extern', False),
@@ -765,15 +1127,15 @@ def update_details(id):
         }
         
         # Speichere oder aktualisiere die Auftragsdetails
-        existing_details = mongodb.find_one('auftrag_details', {'ticket_id': convert_id_for_query(id)})
+        existing_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
         if existing_details:
-            mongodb.update_one('auftrag_details', {'ticket_id': convert_id_for_query(id)}, {'$set': auftrag_details_daten})
+            mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_query}, {'$set': auftrag_details_daten})
         else:
             mongodb.insert_one('auftrag_details', auftrag_details_daten)
         
         # Verarbeite die Materialliste
         material_list = data.get('material_list', [])
-        mongodb.delete_many('auftrag_material', {'ticket_id': convert_id_for_query(id)})
+        mongodb.delete_many('auftrag_material', {'ticket_id': ticket_id_for_query})
         
         if material_list:
             # Filtere nur wirklich leere Zeilen heraus (alle Felder leer)
@@ -786,7 +1148,7 @@ def update_details(id):
                 # Nur hinzufügen wenn mindestens ein Feld ausgefüllt ist
                 if material or menge > 0 or einzelpreis > 0:
                     filtered_material_list.append({
-                        'ticket_id': convert_id_for_query(id),
+                        'ticket_id': ticket_id_for_query,
                         'material': material,
                         'menge': menge,
                         'einzelpreis': einzelpreis
@@ -796,11 +1158,11 @@ def update_details(id):
                 mongodb.insert_many('auftrag_material', filtered_material_list)
         
         # Verarbeite die Arbeitsliste
-        mongodb.delete_many('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)})
+        mongodb.delete_many('auftrag_arbeit', {'ticket_id': ticket_id_for_query})
         
         if filtered_arbeit_list:
             arbeit_daten = [{
-                'ticket_id': convert_id_for_query(id),
+                'ticket_id': ticket_id_for_query,
                 'arbeit': arbeit.get('arbeit', ''),
                 'arbeitsstunden': arbeit.get('arbeitsstunden', 0),
                 'leistungskategorie': arbeit.get('leistungskategorie', '')
@@ -808,7 +1170,7 @@ def update_details(id):
             mongodb.insert_many('auftrag_arbeit', arbeit_daten)
         
         # Setze das 'updated_at' Feld am Ticket selbst
-        mongodb.update_one('tickets', {'_id': convert_id_for_query(id)}, {'$set': {'updated_at': datetime.now()}})
+        mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': {'updated_at': datetime.now()}})
 
         # Rückgabe je nach Request-Typ
         if request.is_json:
@@ -831,22 +1193,18 @@ def update_details(id):
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
     try:
-        # Prüfe ob die ID gültig ist
-        try:
-            ticket_id = convert_id_for_query(id)
-        except Exception as e:
-            logging.error(f"Ungültige Ticket-ID: {id}")
-            flash('Ungültige Ticket-ID.', 'error')
-            return redirect(url_for('tickets.create'))
-        
-        ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         if not ticket:
             logging.error(f"Ticket nicht gefunden: {id}")
             flash('Ticket nicht gefunden.', 'error')
             return redirect(url_for('tickets.create'))
         
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
-        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+        
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query}) or {}
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query})) or []
 
         # --- Auftragnehmer (Vorname Nachname) ---
         auftragnehmer_user = None
@@ -988,9 +1346,17 @@ def add_note(id):
         if not note_text:
             return jsonify({'success': False, 'message': 'Notiz darf nicht leer sein'}), 400
 
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+
         # Erstelle die Notiz
         note_data = {
-            'ticket_id': convert_id_for_query(id),
+            'ticket_id': ticket_id_for_query,
             'note': note_text,
             'created_by': current_user.username,
             'created_at': datetime.now()
@@ -1117,7 +1483,7 @@ def _handle_auftrag_creation(external=False):
             
             # Erstelle auch die Auftragsdetails mit dem Namen des Auftraggebers
             auftrag_details_data = {
-                'ticket_id': convert_id_for_query(ticket_id),
+                'ticket_id': ticket_id,  # Verwende die String-ID direkt
                 'bereich': bereich or category,  # Verwende bereich oder category als Fallback
                 'auftraggeber_intern': auftraggeber_typ == 'intern',
                 'auftraggeber_extern': auftraggeber_typ == 'extern',
@@ -1183,7 +1549,8 @@ def _handle_auftrag_creation(external=False):
 @bp.route('/<id>/auftrag-details')
 @login_required
 def auftrag_details_page(id):
-    ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    ticket = find_document_by_id('tickets', id)
     
     if not ticket:
         return render_template('404.html'), 404
@@ -1204,21 +1571,24 @@ def auftrag_details_page(id):
                 ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
             except (ValueError, TypeError):
                 ticket[field] = None
+    
+    # Verwende die Ticket-ID für alle Abfragen
+    ticket_id_for_query = convert_id_for_query(id)
         
     # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': ObjectId(id)})
+    notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
 
     # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': ObjectId(id)})
+    messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
 
     # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ObjectId(id)})
+    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
     
     # Hole Materialliste
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ObjectId(id)}))
+    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
     
     # Hole Arbeitsliste
-    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ObjectId(id)}))
+    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ticket_id_for_query}))
     
     # Verarbeite die ausgeführten Arbeiten aus den Auftragsdetails
     arbeit_list = []
@@ -1264,37 +1634,64 @@ def auftrag_details_page(id):
 def update_ticket(id):
     """Aktualisiert die grundlegenden Ticket-Details wie estimated_time, category, due_date"""
     try:
-        # Prüfe ob Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(id)})
+        logging.info(f"DEBUG: update_ticket aufgerufen für ID: {id}")
+        
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         if not ticket:
+            logging.error(f"DEBUG: Ticket nicht gefunden für ID: {id}")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        logging.info(f"DEBUG: Ticket gefunden: {ticket.get('title', 'No Title')}")
+        
+        # Verwende die ursprüngliche ID und versuche sie als ObjectId zu konvertieren
+        # Das ist wichtig, da das Update die gleiche ID-Form benötigt wie in der Datenbank
+        try:
+            from bson import ObjectId
+            ticket_id_for_query = ObjectId(id)
+            logging.info(f"DEBUG: ticket_id_for_query als ObjectId: {ticket_id_for_query}")
+        except:
+            # Falls die Konvertierung fehlschlägt, verwende die ursprüngliche ID
+            ticket_id_for_query = id
+            logging.info(f"DEBUG: ticket_id_for_query als String: {ticket_id_for_query}")
+        
+        logging.info(f"DEBUG: ticket_id_for_query Typ: {type(ticket_id_for_query).__name__}")
         
         # Prüfe Berechtigungen: Normale User können nur ihre eigenen oder zugewiesenen Tickets bearbeiten
         if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+            logging.error(f"DEBUG: Keine Berechtigung für User {current_user.username}")
             return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+        
+        logging.info(f"DEBUG: Berechtigung OK")
         
         # Hole die Daten aus dem Request
         if not request.is_json:
+            logging.error(f"DEBUG: Request ist kein JSON")
             return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat. JSON erwartet.'}), 400
         
         data = request.get_json()
+        logging.info(f"DEBUG: Request-Daten: {data}")
         
         # Bereite die Update-Daten vor
         update_data = {
             'updated_at': datetime.now()
         }
+        logging.info(f"DEBUG: Basis-Update-Daten: {update_data}")
         
         # Verarbeite estimated_time (wird in Minuten gespeichert)
         if 'estimated_time' in data:
             estimated_time = data['estimated_time']
             if estimated_time is not None and estimated_time != '':
                 update_data['estimated_time'] = float(estimated_time)
+                logging.info(f"DEBUG: estimated_time gesetzt: {update_data['estimated_time']}")
             else:
                 update_data['estimated_time'] = None
+                logging.info(f"DEBUG: estimated_time auf None gesetzt")
         
         # Verarbeite category
         if 'category' in data:
             update_data['category'] = data['category']
+            logging.info(f"DEBUG: category gesetzt: {update_data['category']}")
         
         # Verarbeite due_date
         if 'due_date' in data:
@@ -1307,22 +1704,46 @@ def update_ticket(id):
                     else:
                         due_date = datetime.strptime(due_date, '%Y-%m-%d')
                     update_data['due_date'] = due_date
-                except ValueError:
+                    logging.info(f"DEBUG: due_date gesetzt: {update_data['due_date']}")
+                except ValueError as e:
+                    logging.error(f"DEBUG: Fehler beim Parsen von due_date: {e}")
                     return jsonify({'success': False, 'message': 'Ungültiges Datumsformat'}), 400
             else:
                 update_data['due_date'] = None
+                logging.info(f"DEBUG: due_date auf None gesetzt")
         
         # Verarbeite priority
         if 'priority' in data:
             update_data['priority'] = data['priority']
+            logging.info(f"DEBUG: priority gesetzt: {update_data['priority']}")
         
-        # Aktualisiere das Ticket
-        result = mongodb.update_one('tickets', {'_id': ObjectId(id)}, {'$set': update_data})
+        logging.info(f"DEBUG: Finale Update-Daten: {update_data}")
         
-        if result:
-            return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
-        else:
-            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Tickets'}), 500
+        # Debug-Logs hinzufügen
+        logging.info(f"DEBUG: Aktualisiere Ticket {id} mit ticket_id_for_query: {ticket_id_for_query}")
+        logging.info(f"DEBUG: Update-Daten: {update_data}")
+        logging.info(f"DEBUG: ticket_id_for_query Typ: {type(ticket_id_for_query).__name__}")
+        logging.info(f"DEBUG: ticket_id_for_query Wert: {ticket_id_for_query}")
+        
+        try:
+            # Verwende die bewährte mongodb-Wrapper-Klasse
+            logging.info(f"DEBUG: Führe Update aus mit Filter: {{'_id': {ticket_id_for_query}}}")
+            logging.info(f"DEBUG: Update-Daten: {update_data}")
+            
+            result = mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': update_data})
+            logging.info(f"DEBUG: Update-Ergebnis: {result}")
+            
+            # Betrachte als erfolgreich, wenn ein Dokument gefunden wurde (auch wenn sich nichts geändert hat)
+            if result:
+                logging.info(f"DEBUG: Update erfolgreich")
+                return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
+            else:
+                logging.error(f"DEBUG: Update fehlgeschlagen - Kein Dokument gefunden")
+                return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+                
+        except Exception as db_error:
+            logging.error(f"DEBUG: Datenbankfehler beim Update: {db_error}")
+            return jsonify({'success': False, 'message': f'Datenbankfehler: {str(db_error)}'}), 500
             
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren des Tickets {id}: {e}", exc_info=True)
