@@ -68,13 +68,13 @@
                     </span>
                 </td>
                 <td>{{ ticket.assigned_to or '-' }}</td>
-                <td>{{ ticket.created_at }}</td>
+                <td>{{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else '-' }}</td>
                 <td>
                     {% if ticket.due_date %}
                         {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
-                            <span class="text-danger">{{ ticket.due_date }}</span>
+                            <span class="text-danger">{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}</span>
                         {% else %}
-                            {{ ticket.due_date }}
+                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
                         {% endif %}
                     {% else %}
                         -

@@ -162,8 +162,7 @@ def create():
             if auftrag_details:
                 ticket['auftrag_details'] = auftrag_details
         
-        # Sortiere nach Erstellungsdatum (neueste zuerst)
-        all_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+        # Sortiere nach Erstellungsdatum (neueste zuerst) - wird nach datetime-Konvertierung gemacht
         
         # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
         for ticket in all_tickets:
@@ -183,9 +182,75 @@ def create():
         if auftrag_details:
             ticket['auftrag_details'] = auftrag_details
     
+    # Hilfsfunktion zur Konvertierung von datetime-Strings zu datetime-Objekten
+    def convert_datetime_fields(ticket):
+        date_fields = ['created_at', 'updated_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                if isinstance(ticket[field], str):
+                    try:
+                        # Versuche verschiedene Datumsformate zu parsen
+                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d']:
+                            try:
+                                ticket[field] = datetime.strptime(ticket[field], fmt)
+                                break
+                            except ValueError:
+                                continue
+                    except:
+                        # Wenn alle Formate fehlschlagen, setze auf None
+                        ticket[field] = None
+                elif isinstance(ticket[field], datetime):
+                    # Bereits ein datetime-Objekt, nichts zu tun
+                    pass
+                else:
+                    # Versuche es als datetime zu konvertieren
+                    try:
+                        ticket[field] = datetime.fromisoformat(str(ticket[field]))
+                    except:
+                        # Wenn Konvertierung fehlschlägt, setze auf None
+                        ticket[field] = None
+            else:
+                # Feld ist None oder nicht vorhanden, setze auf None
+                ticket[field] = None
+        return ticket
+    
+    # Konvertiere datetime-Felder für alle Tickets
+    for ticket in assigned_tickets:
+        convert_datetime_fields(ticket)
+    for ticket in open_tickets:
+        convert_datetime_fields(ticket)
+    if all_tickets:  # Nur wenn all_tickets existiert und nicht leer ist
+        for ticket in all_tickets:
+            convert_datetime_fields(ticket)
+    
+    # Zusätzliche Sicherheitsmaßnahme: Stelle sicher, dass alle datetime-Felder korrekt sind
+    def ensure_datetime_fields(ticket):
+        for field in ['created_at', 'updated_at', 'due_date']:
+            if field in ticket and not isinstance(ticket[field], (datetime, type(None))):
+                ticket[field] = None
+        return ticket
+    
+    # Wende die Sicherheitsmaßnahme auf alle Tickets an
+    for ticket in assigned_tickets:
+        ensure_datetime_fields(ticket)
+    for ticket in open_tickets:
+        ensure_datetime_fields(ticket)
+    if all_tickets:
+        for ticket in all_tickets:
+            ensure_datetime_fields(ticket)
+    
     # Sortiere alle Listen nach Erstellungsdatum (neueste zuerst)
-    assigned_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
-    open_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    # Sichere Sortierung mit None-Behandlung
+    def safe_sort_key(ticket):
+        created_at = ticket.get('created_at')
+        if created_at is None:
+            return datetime.min
+        return created_at
+    
+    assigned_tickets.sort(key=safe_sort_key, reverse=True)
+    open_tickets.sort(key=safe_sort_key, reverse=True)
+    if all_tickets:  # Sortiere all_tickets nur wenn es existiert
+        all_tickets.sort(key=safe_sort_key, reverse=True)
     
     # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
     for ticket in assigned_tickets:
