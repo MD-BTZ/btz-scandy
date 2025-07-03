@@ -24,6 +24,15 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Prüfe ob .env existiert, falls nicht erstelle sie
+if [ ! -f ".env" ]; then
+    echo "📝 Erstelle .env-Datei aus env.example..."
+    cp env.example .env
+    echo "✅ .env-Datei erstellt!"
+    echo "⚠️  Bitte passe die Werte in .env an deine Umgebung an!"
+    echo
+fi
+
 # Prüfe ob docker-compose.yml existiert
 if [ ! -f "docker-compose.yml" ]; then
     echo "❌ ERROR: docker-compose.yml nicht gefunden!"

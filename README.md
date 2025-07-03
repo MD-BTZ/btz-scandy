@@ -29,7 +29,12 @@ Eine moderne Web-Anwendung zur Verwaltung von Werkzeugen, Verbrauchsgütern und 
    ./install.sh
    ```
 
-3. **Anwendung öffnen:**
+3. **Konfiguration anpassen:**
+   - Die `.env`-Datei wird automatisch erstellt
+   - Passe die Werte in `.env` an deine Umgebung an
+   - **Wichtig:** Ändere die Passwörter!
+
+4. **Anwendung öffnen:**
    - Web-App: http://localhost:5000
    - Mongo Express: http://localhost:8081
 

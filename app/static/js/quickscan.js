@@ -582,9 +582,6 @@ const QuickScan = {
     },
 
     async executeStoredProcess() {
-        console.log("Aktueller Prozess:", this.currentProcess);
-        console.log("Gescanntes Item:", this.scannedItem);
-        console.log("Gescannte Worker:", this.scannedWorker);
 
         if (!this.currentProcess || !this.scannedItem || !this.scannedWorker) {
             console.error("Prozess nicht vollständig:", {
@@ -612,7 +609,6 @@ const QuickScan = {
             });
 
             const data = await response.json();
-            console.log("Server-Antwort:", data);
 
             if (data.success) {
                 showToast('success', data.message || 'Vorgang erfolgreich!');
@@ -640,7 +636,6 @@ const QuickScan = {
     },
 
     reset() {
-        console.log("QuickScan.reset() aufgerufen");
         this.scannedItem = null;
         this.scannedWorker = null;
         this.activeInputType = null;
@@ -754,7 +749,6 @@ const QuickScan = {
             return;
         }
         if (input === 'AIIO') {
-            console.log("[DEBUG] Easter Egg: AIIO detected!");
             const overlay = document.createElement('div');
             overlay.className = 'zebra-overlay';
             document.body.appendChild(overlay);
@@ -831,7 +825,6 @@ const QuickScan = {
     },
 
     showDancingEmojis() {
-        console.log("Showing dancing emojis");
         // Vorhandene Zebras entfernen, falls welche da sind
         document.querySelectorAll('.dancing-zebra').forEach(el => el.remove());
         
@@ -932,7 +925,6 @@ const QuickScan = {
     },
 
     activateInput(type) {
-        console.log("activateInput aufgerufen:", type);
         // Zeige das sichtbare Eingabefeld an und setze Typ
         this.activeInputType = type;
         const inputContainer = document.getElementById('quickScanActiveInputContainer');
@@ -961,12 +953,10 @@ const QuickScan = {
 
     // Bestätigen-Button
     async confirm() {
-        console.log("confirm() aufgerufen");
         
         // Prüfe zuerst, ob manuelle Eingabe vorhanden ist
         const input = document.getElementById('quickScanActiveInput');
         if (input && input.value.trim()) {
-            console.log("Manuelle Eingabe gefunden, verarbeite:", input.value);
             await this.handleManualInput(input.value);
             return;
         }
@@ -1009,7 +999,6 @@ const QuickScan = {
                 this.showError('Fehler bei der Verarbeitung');
             }
         } else {
-            console.log("Keine gescannten Items oder manuelle Eingabe vorhanden");
             showToast('error', 'Bitte geben Sie einen Barcode ein oder scannen Sie Items');
         }
     },
@@ -1017,11 +1006,8 @@ const QuickScan = {
     // Neue Funktion für manuelle Eingaben
     async handleManualInput(inputValue) {
         if (!inputValue || !this.activeInputType) {
-            console.log("Keine Eingabe oder kein aktiver Typ");
             return;
         }
-        
-        console.log("Verarbeite manuelle Eingabe:", inputValue, "Typ:", this.activeInputType);
         
         try {
             if (this.activeInputType === 'item') {
@@ -1121,13 +1107,7 @@ function updateQuickScanButton() {
     const hasWorker = !!(QuickScan.scannedWorker && QuickScan.scannedWorker.barcode);
     const shouldEnable = hasItem && hasWorker;
     
-    console.log("updateQuickScanButton:", {
-        hasItem: hasItem,
-        hasWorker: hasWorker,
-        shouldEnable: shouldEnable,
-        itemBarcode: QuickScan.scannedItem?.barcode,
-        workerBarcode: QuickScan.scannedWorker?.barcode
-    });
+
     
     btn.disabled = !shouldEnable;
     
@@ -1148,11 +1128,7 @@ function checkManualInput() {
     const inputValue = input.value.trim();
     const hasInput = inputValue.length > 0;
     
-    console.log("checkManualInput:", {
-        inputValue: inputValue,
-        hasInput: hasInput,
-        activeInputType: QuickScan.activeInputType
-    });
+
     
     // Wenn Eingabe vorhanden ist, Button aktivieren
     if (hasInput) {
@@ -1161,7 +1137,7 @@ function checkManualInput() {
             btn.disabled = false;
             btn.classList.remove('btn-disabled');
             btn.classList.add('btn-primary');
-            console.log("Button für manuelle Eingabe aktiviert");
+
         }
     } else {
         // Wenn keine Eingabe, normale Logik verwenden

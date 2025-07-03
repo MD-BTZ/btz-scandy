@@ -306,8 +306,11 @@ function initAutoBackup() {
     // Status laden
     loadAutoBackupStatus();
     
-    // Status alle 30 Sekunden aktualisieren
-    setInterval(loadAutoBackupStatus, 30000);
+    // Nur auf Admin-Seiten regelmäßig aktualisieren
+    if (window.location.pathname.includes('/admin/') || window.location.pathname.includes('/auto-backup')) {
+        // Status alle 5 Minuten aktualisieren (statt 30 Sekunden)
+        setInterval(loadAutoBackupStatus, 300000);
+    }
 }
 
 async function loadAutoBackupStatus() {

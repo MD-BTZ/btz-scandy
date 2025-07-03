@@ -27,6 +27,15 @@ fi
 echo "✅ Docker gefunden. Starte komplette Installation..."
 echo
 
+# Prüfe ob .env existiert, falls nicht erstelle sie
+if [ ! -f ".env" ]; then
+    echo "📝 Erstelle .env-Datei aus env.example..."
+    cp env.example .env
+    echo "✅ .env-Datei erstellt!"
+    echo "⚠️  Bitte passe die Werte in .env an deine Umgebung an!"
+    echo
+fi
+
 # Prüfe ob bereits eine Installation existiert
 if [ -f "docker-compose.yml" ]; then
     echo "⚠️  Bestehende Installation gefunden!"
@@ -152,7 +161,7 @@ echo "- Teilnehmer: teilnehmer / admin123"
 echo
 echo "📊 Datenbank-Zugang (Mongo Express):"
 echo "- Benutzer: admin"
-echo "- Passwort: scandy123"
+echo "- Passwort: [aus Umgebungsvariable MONGO_INITDB_ROOT_PASSWORD]"
 echo
 echo "📁 Datenverzeichnisse:"
 echo "- Backups: ./backups/"

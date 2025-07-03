@@ -102,7 +102,7 @@
             {# Ticketsystem für alle eingeloggten Benutzer außer Teilnehmer #}
             {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
             <a href="{{ url_for('tickets.create') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and request.endpoint == 'tickets.create' %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 group-hover:pl-2 {% if request.endpoint and 'tickets.create' in request.endpoint %}bg-primary text-primary-content{% else %}hover:bg-base-100{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
                      <i class="{{ app_labels.tickets.icon }} text-xl"></i>
                      {% if unread_tickets_count and unread_tickets_count > 0 %}
@@ -208,7 +208,7 @@
                         </li>
                         {% if current_user.is_admin %}
                         <li>
-                            <a href="{{ url_for('tickets.index') }}" class="{% if request.endpoint and 'tickets.index' in request.endpoint %}active{% endif %}">
+                            <a href="{{ url_for('tickets.create') }}" class="{% if request.endpoint and 'tickets.create' in request.endpoint %}active{% endif %}">
                                 <i class="{{ app_labels.tickets.icon }} mr-2"></i>{{ app_labels.tickets.name }}
                             </a>
                         </li>

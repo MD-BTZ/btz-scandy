@@ -13,109 +13,7 @@ from bson import ObjectId
 
 bp = Blueprint('tickets', __name__, url_prefix='/tickets')
 
-@bp.route('/')
-@login_required
-@not_teilnehmer_required
-def index():
-    """Zeigt die Ticket-Übersicht für den Benutzer."""
-    
-    # Hole alle Tickets für Admins und Mitarbeiter, sonst nur eigene
-    if current_user.role in ['admin', 'mitarbeiter']:
-        # Für Admins und Mitarbeiter: Hole alle Tickets (nur nicht gelöschte)
-        all_tickets = mongodb.find('tickets', {
-            'deleted': {'$ne': True}
-        })
-        all_tickets = list(all_tickets)
-        
-        # Hole die eigenen Tickets
-        my_tickets = mongodb.find('tickets', {
-            'created_by': current_user.username,
-            'deleted': {'$ne': True}
-        })
-        my_tickets = list(my_tickets)
-        
-        # Hole die zugewiesenen Tickets
-        assigned_tickets = mongodb.find('tickets', {
-            'assigned_to': current_user.username,
-            'deleted': {'$ne': True}
-        })
-        assigned_tickets = list(assigned_tickets)
-        
-        # Füge Nachrichtenanzahl hinzu
-        for ticket in all_tickets:
-            message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-            ticket['message_count'] = message_count
-        for ticket in my_tickets:
-            message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-            ticket['message_count'] = message_count
-        for ticket in assigned_tickets:
-            message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-            ticket['message_count'] = message_count
-        
-        # Hole Auftragsdetails für alle Tickets
-        for ticket in all_tickets:
-            auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-            if auftrag_details:
-                ticket['auftrag_details'] = auftrag_details
-        for ticket in my_tickets:
-            auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-            if auftrag_details:
-                ticket['auftrag_details'] = auftrag_details
-        for ticket in assigned_tickets:
-            auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-            if auftrag_details:
-                ticket['auftrag_details'] = auftrag_details
-        
-        # Sortiere nach Erstellungsdatum (neueste zuerst)
-        all_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
-        my_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
-        assigned_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
-        
-        # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
-        for ticket in all_tickets:
-            ticket['id'] = str(ticket['_id'])
-        for ticket in my_tickets:
-            ticket['id'] = str(ticket['_id'])
-        for ticket in assigned_tickets:
-            ticket['id'] = str(ticket['_id'])
-        
-        # Hole alle Mitarbeiter für die Filter
-        workers = list(mongodb.find('users', {'role': {'$in': ['admin', 'mitarbeiter']}}))
-        
-        return render_template('tickets/index.html', 
-                             tickets=my_tickets,  # Standard: eigene Tickets
-                             all_tickets=all_tickets,
-                             assigned_tickets=assigned_tickets,
-                             workers=workers,
-                             show_all_tickets=True)
-    else:
-        # Für normale User: Nur eigene Tickets
-        my_tickets = mongodb.find('tickets', {
-            'created_by': current_user.username,
-            'status': {'$ne': 'geschlossen'},
-            'deleted': {'$ne': True}
-        })
-        my_tickets = list(my_tickets)
-        
-        # Füge Nachrichtenanzahl hinzu
-        for ticket in my_tickets:
-            message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-            ticket['message_count'] = message_count
-        
-        # Hole Auftragsdetails für eigene Tickets
-        for ticket in my_tickets:
-            auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-            if auftrag_details:
-                ticket['auftrag_details'] = auftrag_details
-        
-        # Sortiere nach Erstellungsdatum (neueste zuerst)
-        my_tickets.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
-                
-        # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
-        for ticket in my_tickets:
-            ticket['id'] = str(ticket['_id'])
-        
-        return render_template('tickets/index.html', tickets=my_tickets, show_all_tickets=False)
+
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -696,7 +594,7 @@ def update_details(id):
                 return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
             else:
                 flash('Ticket nicht gefunden', 'error')
-                return redirect(url_for('tickets.index'))
+                return redirect(url_for('tickets.create'))
         
         # Verarbeite die Daten je nach Request-Typ
         if request.is_json:
@@ -857,13 +755,13 @@ def export_ticket(id):
         except Exception as e:
             logging.error(f"Ungültige Ticket-ID: {id}")
             flash('Ungültige Ticket-ID.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         ticket = mongodb.find_one('tickets', {'_id': ticket_id})
         if not ticket:
             logging.error(f"Ticket nicht gefunden: {id}")
             flash('Ticket nicht gefunden.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
         material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []

@@ -12,7 +12,7 @@ class Config:
     BASE_DIR = Path(__file__).parent.parent.parent
     
     # MongoDB Konfiguration
-    MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://admin:scandy123@localhost:27017/')
+    MONGODB_URI = os.environ.get('MONGODB_URI')
     MONGODB_DB = os.environ.get('MONGODB_DB', 'scandy')
     MONGODB_COLLECTION_PREFIX = os.environ.get('MONGODB_COLLECTION_PREFIX', '')
     
@@ -29,7 +29,7 @@ class Config:
     PERMANENT_SESSION_LIFETIME = 86400  # 24 Stunden
     
     # Sicherheit
-    SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+    SECRET_KEY = os.environ.get('SECRET_KEY')
     
     # Server-Einstellungen
     HOST = '0.0.0.0'

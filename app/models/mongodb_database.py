@@ -2,13 +2,15 @@
 MongoDB-Datenbankmodul für Scandy
 """
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, OperationFailure
 from datetime import datetime
 import logging
 from bson import ObjectId
 from app.config.config import config
 import json
 from typing import Dict, List, Any, Optional, Union
+import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,34 +32,28 @@ class MongoDBDatabase:
             self._connect()
     
     def _connect(self):
-        """Stellt die Verbindung zur MongoDB her"""
-        try:
-            current_config = config['default']()
-            
-            # MongoDB-Client mit Authentifizierung erstellen
-            # Verwende die MONGODB_URI direkt, da sie bereits die Authentifizierung enthält
-            self._client = MongoClient(
-                current_config.MONGODB_URI,
-                serverSelectionTimeoutMS=10000,  # Erhöhe Timeout für Docker
-                connectTimeoutMS=10000,
-                retryWrites=True,
-                w='majority'
-            )
-            
-            # Teste die Verbindung
-            self._client.admin.command('ping')
-            
-            self._db = self._client[current_config.MONGODB_DB]
-            logger.info(f"MongoDB-Verbindung erfolgreich mit '{current_config.MONGODB_DB}' hergestellt.")
-            
-        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-            logger.error(f"MongoDB-Verbindungsfehler: {str(e)}")
-            logger.error(f"Verwendete URI: {current_config.MONGODB_URI}")
-            logger.error("Bitte stellen Sie sicher, dass:")
-            logger.error("1. MongoDB läuft und erreichbar ist")
-            logger.error("2. Die Authentifizierungsdaten korrekt sind")
-            logger.error("3. Der Container-Name in der MONGODB_URI korrekt ist")
-            raise
+        """Stellt die Verbindung zur MongoDB her (robust mit Retry)"""
+        uri = os.environ.get("MONGODB_URI")
+        db_name = os.environ.get("MONGO_INITDB_DATABASE", "scandy")
+        if uri and 'authSource' not in uri:
+            # Füge authSource=admin hinzu, falls nicht vorhanden
+            if '?' in uri:
+                uri += '&authSource=admin'
+            else:
+                uri += '?authSource=admin'
+        for attempt in range(10):
+            try:
+                safe_uri = uri.replace(os.environ.get("MONGO_INITDB_ROOT_PASSWORD", ""), "***")
+                print(f"[MongoDB] Verbindungsversuch {attempt+1}/10 zu {safe_uri}")
+                self._client = MongoClient(uri, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000, retryWrites=True, w='majority')
+                self._client.admin.command('ping')
+                self._db = self._client[db_name]
+                print(f"[MongoDB] Verbindung erfolgreich zu {safe_uri}")
+                return
+            except (ServerSelectionTimeoutError, OperationFailure) as e:
+                print(f"[MongoDB] Nicht erreichbar (Versuch {attempt+1}/10): {e}")
+                time.sleep(3)
+        raise Exception("MongoDB-Verbindung nach 10 Versuchen fehlgeschlagen!")
     
     @property
     def db(self):

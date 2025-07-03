@@ -34,6 +34,15 @@ if %errorlevel% neq 0 (
 echo ✅ Docker gefunden. Starte komplette Installation...
 echo.
 
+REM Prüfe ob .env existiert, falls nicht erstelle sie
+if not exist ".env" (
+    echo 📝 Erstelle .env-Datei aus env.example...
+    copy env.example .env >nul
+    echo ✅ .env-Datei erstellt!
+    echo ⚠️  Bitte passe die Werte in .env an deine Umgebung an!
+    echo.
+)
+
 REM Prüfe ob bereits eine Installation existiert
 if exist "docker-compose.yml" (
     echo ⚠️  Bestehende Installation gefunden!
@@ -111,25 +120,49 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ⏳ Warte auf Start aller Services...
-REM Warte 30 Sekunden, dann prüfe Health Status
+REM Warte auf MongoDB Health Status
 set /a retries=0
 :wait_for_mongo
-REM Prüfe Health Status von MongoDB
-for /f "delims=" %%H in ('docker inspect -f "{{.State.Health.Status}}" scandy-mongodb 2^>nul') do set HEALTH=%%H
-if not "!HEALTH!"=="healthy" (
+REM Prüfe ob MongoDB Container läuft
+docker ps | findstr scandy-mongodb >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ⏳ MongoDB Container startet noch...
+    timeout /t 5 >nul
     set /a retries+=1
-    if !retries! geq 20 (
-        echo MongoDB wird nicht healthy!
-        docker-compose logs --tail=50 scandy-mongodb
-        pause
-        exit /b 1
+    if !retries! geq 12 (
+        echo ❌ MongoDB Container startet nicht!
+        echo Container Status:
+        docker-compose ps
+        echo.
+        echo MongoDB Logs:
+        docker-compose logs --tail=20 scandy-mongodb
+        echo.
+        echo ⚠️  Installation trotzdem fortgesetzt - MongoDB startet möglicherweise später...
+        goto continue_installation
     )
-    echo Warte auf MongoDB... (!retries!/20)
-    timeout /t 6 >nul
     goto wait_for_mongo
 )
-echo MongoDB ist healthy!
 
+REM Prüfe Health Status von MongoDB
+set health_retries=0
+:wait_for_health
+for /f "delims=" %%H in ('docker inspect -f "{{.State.Health.Status}}" scandy-mongodb 2^>nul') do set HEALTH=%%H
+if not "!HEALTH!"=="healthy" (
+    set /a health_retries+=1
+    if !health_retries! geq 15 (
+        echo ⚠️  MongoDB wird nicht healthy - fahre trotzdem fort...
+        echo Letzte MongoDB Logs:
+        docker-compose logs --tail=10 scandy-mongodb
+        echo.
+        goto continue_installation
+    )
+    echo ⏳ Warte auf MongoDB Health... (!health_retries!/15)
+    timeout /t 6 >nul
+    goto wait_for_health
+)
+echo ✅ MongoDB ist healthy und bereit!
+
+:continue_installation
 echo 🔍 Prüfe Container-Status...
 docker-compose ps
 
@@ -166,7 +199,7 @@ echo - Teilnehmer: teilnehmer / admin123
 echo.
 echo 📊 Datenbank-Zugang (Mongo Express):
 echo - Benutzer: admin
-echo - Passwort: scandy123
+echo - Passwort: [aus Umgebungsvariable MONGO_INITDB_ROOT_PASSWORD]
 echo.
 echo 📁 Datenverzeichnisse:
 echo - Backups: .\backups\

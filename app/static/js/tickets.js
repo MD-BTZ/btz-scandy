@@ -1,4 +1,4 @@
-console.log('tickets.js wird geladen');
+
 
 // Prüfe ob wir uns auf einer Ticket-Seite befinden
 function isTicketPage() {
@@ -95,13 +95,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('ticket_details_form');
 
     if (form) {
-        console.log("Auftragsdetails-Formular gefunden. Initialisiere Event-Listener.");
             
         // Event-Listener für das Absenden des Formulars (nur für AJAX-Requests)
         if (form.getAttribute('data-ajax') === 'true') {
             form.addEventListener('submit', function(e) {
             e.preventDefault();
-                console.log('Formular wird abgeschickt...');
             
                 const data = collectAuftragDetails();
                 const ticketId = form.closest('.modal')?.dataset.ticketId || 
@@ -160,24 +158,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Funktion zum Initialisieren bestehender Zeilen
 function initializeExistingRows() {
-    console.log('Initialisiere bestehende Zeilen...');
     
     // Materialzeilen
     document.querySelectorAll('#materialRows .material-row').forEach(row => {
-        console.log('Initialisiere Materialzeile:', row);
         initializeMaterialRowEvents(row);
     });
     
     // Arbeitszeilen
     document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
-        console.log('Initialisiere Arbeitszeile:', row);
         initializeArbeitRowEvents(row);
 });
 }
 
 // Funktion zum Hinzufügen einer neuen Materialzeile
 function addMaterialRow() {
-    console.log('Materialzeile hinzufügen');
     const tbody = document.getElementById('materialRows');
     const newRow = document.createElement('tr');
     newRow.className = 'material-row';
@@ -196,7 +190,6 @@ function addMaterialRow() {
 window.addMaterialRow = addMaterialRow;
 
 function initializeMaterialRowEvents(row) {
-    console.log('Initialisiere Materialzeile Events:', row);
     
     // Event-Listener für Menge und Einzelpreis
     const mengeInput = row.querySelector('.menge-input');
@@ -204,14 +197,14 @@ function initializeMaterialRowEvents(row) {
     
     if (mengeInput) {
         mengeInput.addEventListener('input', () => {
-            console.log('Menge geändert');
+            
             updateRowSum(row);
         });
     }
     
     if (einzelpreisInput) {
         einzelpreisInput.addEventListener('input', () => {
-            console.log('Einzelpreis geändert');
+            
             updateRowSum(row);
         });
     }
@@ -220,7 +213,7 @@ function initializeMaterialRowEvents(row) {
     const deleteBtn = row.querySelector('.delete-material-btn');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
-            console.log('Materialzeile löschen');
+            
             row.remove();
             updateSummeMaterial();
             updateGesamtsumme();
@@ -233,7 +226,7 @@ function initializeMaterialRowEvents(row) {
 
 // Funktion zum Hinzufügen einer neuen Arbeitszeile
 function addArbeitRow() {
-    console.log('Arbeitszeile hinzufügen');
+    
     const tbody = document.getElementById('arbeitenRows');
     const newRow = document.createElement('tr');
     newRow.className = 'arbeit-row';
@@ -248,13 +241,13 @@ function addArbeitRow() {
 }
 
 function initializeArbeitRowEvents(row) {
-    console.log('Initialisiere Arbeitszeile Events:', row);
+    
     
     // Event-Listener für Arbeitsstunden
     const arbeitsstundenInput = row.querySelector('.arbeitsstunden-input');
     if (arbeitsstundenInput) {
         arbeitsstundenInput.addEventListener('input', () => {
-            console.log('Arbeitsstunden geändert');
+            
             updateSummeArbeit();
             updateGesamtsumme();
         });
@@ -264,7 +257,7 @@ function initializeArbeitRowEvents(row) {
     const deleteBtn = row.querySelector('.delete-arbeit-btn');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
-            console.log('Arbeitszeile löschen');
+            
         row.remove();
             updateSummeArbeit();
             updateGesamtsumme();
@@ -273,14 +266,14 @@ function initializeArbeitRowEvents(row) {
 }
 
 function updateRowSum(row) {
-    console.log('Berechne Zeilensumme für:', row);
+    
     
     const mengeInput = row.querySelector('.menge-input');
     const einzelpreisInput = row.querySelector('.einzelpreis-input');
     const gesamtpreisInput = row.querySelector('input[name="gesamtpreis"]');
     
     if (!mengeInput || !einzelpreisInput || !gesamtpreisInput) {
-        console.log('Fehlende Input-Felder in Zeile');
+        
         return;
     }
     
@@ -288,7 +281,7 @@ function updateRowSum(row) {
     const einzelpreis = parseFloat(einzelpreisInput.value) || 0;
     const gesamtpreis = menge * einzelpreis;
     
-    console.log(`Menge: ${menge}, Einzelpreis: ${einzelpreis}, Gesamtpreis: ${gesamtpreis}`);
+    
     
     gesamtpreisInput.value = gesamtpreis.toFixed(2);
     
@@ -297,7 +290,7 @@ function updateRowSum(row) {
 }
 
 function updateSummeMaterial() {
-    console.log('Berechne Materialsumme...');
+    
     let summe = 0;
     
     document.querySelectorAll('#materialRows .material-row').forEach(row => {
@@ -305,7 +298,7 @@ function updateSummeMaterial() {
         if (gesamtpreisInput) {
             const gesamtpreis = parseFloat(gesamtpreisInput.value) || 0;
             summe += gesamtpreis;
-            console.log('Zeile Gesamtpreis:', gesamtpreis);
+            
         }
     });
     
@@ -319,7 +312,7 @@ function updateSummeMaterial() {
 }
 
 function updateSummeArbeit() {
-    console.log('Berechne Arbeitssumme...');
+    
     let summe = 0;
     
     document.querySelectorAll('#arbeitenRows .arbeit-row').forEach(row => {
@@ -327,7 +320,7 @@ function updateSummeArbeit() {
         if (arbeitsstundenInput) {
             const stunden = parseFloat(arbeitsstundenInput.value) || 0;
             summe += stunden;
-            console.log('Zeile Arbeitsstunden:', stunden);
+            
         }
     });
     
@@ -341,20 +334,20 @@ function updateSummeArbeit() {
 }
 
 function updateGesamtsumme() {
-    console.log('Berechne Gesamtsumme...');
+    
     
     const summeMaterialElement = document.getElementById('summeMaterial');
     const gesamtsummeElement = document.getElementById('gesamtsumme');
     
     if (!summeMaterialElement || !gesamtsummeElement) {
-        console.log('Summen-Elemente nicht gefunden');
+        
         return;
     }
     
     const summeMaterialText = summeMaterialElement.textContent;
     const summeMaterial = parseFloat(summeMaterialText.replace(' €', '')) || 0;
     
-    console.log('Materialsumme für Gesamtsumme:', summeMaterial);
+    
     
     gesamtsummeElement.textContent = summeMaterial.toFixed(2) + ' €';
     console.log('Gesamtsumme gesetzt auf:', summeMaterial.toFixed(2));

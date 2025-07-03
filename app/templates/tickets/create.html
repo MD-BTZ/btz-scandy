@@ -47,12 +47,20 @@ function showTab(tab) {
     // Alle Tabellen ausblenden
     document.getElementById('table-open').style.display = 'none';
     document.getElementById('table-assigned').style.display = 'none';
-    
+    {% if show_all_tickets %}
+    var tableAll = document.getElementById('table-all');
+    if (tableAll) tableAll.style.display = 'none';
+    {% endif %}
+
     // Alle Tabs inaktiv machen
     document.getElementById('tab-open').classList.remove('tab-active');
     document.getElementById('tab-assigned').classList.remove('tab-active');
-    
-    // Gewählten Tab aktivieren
+    {% if show_all_tickets %}
+    var tabAll = document.getElementById('tab-all');
+    if (tabAll) tabAll.classList.remove('tab-active');
+    {% endif %}
+
+    // Nur den gewählten Tab aktivieren
     if (tab === 'open') {
         document.getElementById('table-open').style.display = '';
         document.getElementById('tab-open').classList.add('tab-active');
@@ -60,14 +68,11 @@ function showTab(tab) {
         document.getElementById('table-assigned').style.display = '';
         document.getElementById('tab-assigned').classList.add('tab-active');
     } else if (tab === 'all') {
-        const tableAll = document.getElementById('table-all');
-        const tabAll = document.getElementById('tab-all');
         if (tableAll && tabAll) {
             tableAll.style.display = '';
             tabAll.classList.add('tab-active');
         }
     }
-    
     // URL-Parameter entfernen, um Filter-Probleme zu vermeiden
     if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);

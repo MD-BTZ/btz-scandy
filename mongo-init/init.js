@@ -1,13 +1,17 @@
 // MongoDB Initialisierung für Scandy
 // Datenbank: scandy
 
+// Hole Benutzer und Passwort aus den offiziellen MongoDB-Umgebungsvariablen
+var mongoUser = process.env.MONGO_INITDB_ROOT_USERNAME || 'admin';
+var mongoPassword = process.env.MONGO_INITDB_ROOT_PASSWORD || 'scandy123';
+
 // Erstelle MongoDB-Authentifizierungsbenutzer in der admin-Datenbank
 db = db.getSiblingDB('admin');
 
 // Erstelle den MongoDB-Authentifizierungsbenutzer
 db.createUser({
-    user: 'admin',
-    pwd: 'scandy123',
+    user: mongoUser,
+    pwd: mongoPassword,
     roles: [
         { role: 'readWrite', db: 'scandy' },
         { role: 'dbAdmin', db: 'scandy' }
@@ -109,5 +113,5 @@ db.settings.insertOne({
 
 print('MongoDB für Scandy initialisiert!');
 print('Datenbank: scandy');
-print('MongoDB-Authentifizierungsbenutzer: admin / scandy123');
+print('MongoDB-Authentifizierungsbenutzer: admin / [aus Umgebungsvariable]');
 print('App-Admin-Benutzer: admin / admin123');

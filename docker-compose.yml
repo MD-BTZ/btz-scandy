@@ -1,12 +1,12 @@
 services:
   scandy-mongodb:
-    image: mongo:7.0
+    image: mongo:7
     container_name: scandy-mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: scandy123
-      MONGO_INITDB_DATABASE: scandy
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     ports:
       - "27017:27017"
     volumes:
@@ -14,29 +14,36 @@ services:
       - ./mongo-init:/docker-entrypoint-initdb.d
     networks:
       - scandy-network
-    command: mongod --auth --bind_ip_all
+    command: mongod --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 15
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    ulimits:
+      nproc: 64000
+      nofile:
+        soft: 65536
+        hard: 65536
+    env_file:
+      - .env
 
   scandy-mongo-express:
     image: mongo-express:1.0.0
     container_name: scandy-mongo-express
     restart: unless-stopped
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: scandy123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:scandy123@scandy-mongodb:27017/
-      ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: scandy123
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD}@scandy-mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     ports:
       - "8081:8081"
     depends_on:
@@ -59,23 +66,16 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_MODE=mongodb
-      - MONGODB_URI=mongodb://admin:scandy123@scandy-mongodb:27017/admin
-      - MONGODB_DB=scandy
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD}@scandy-mongodb:27017/${MONGODB_DB:-scandy}
+      - MONGODB_DB=${MONGODB_DB:-scandy}
       - FLASK_ENV=production
-      - SECRET_KEY=scandy-secret-key-production
-      - SYSTEM_NAME=Scandy
-      - TICKET_SYSTEM_NAME=Aufgaben
-      - TOOL_SYSTEM_NAME=Werkzeuge
-      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter
+      - SECRET_KEY=${SECRET_KEY}
+      - SYSTEM_NAME=${SYSTEM_NAME:-Scandy}
+      - TICKET_SYSTEM_NAME=${TICKET_SYSTEM_NAME:-Aufgaben}
+      - TOOL_SYSTEM_NAME=${TOOL_SYSTEM_NAME:-Werkzeuge}
+      - CONSUMABLE_SYSTEM_NAME=${CONSUMABLE_SYSTEM_NAME:-Verbrauchsgüter}
       - CONTAINER_NAME=scandy
       - TZ=Europe/Berlin
-      # Gmail SMTP Konfiguration - ERsetzen Sie diese Werte mit Ihren echten Daten
-      - MAIL_SERVER=smtp.gmail.com
-      - MAIL_PORT=587
-      - MAIL_USE_TLS=true
-      - MAIL_USERNAME=scandy.post@gmail.com
-      - MAIL_PASSWORD=dpic ojfs prpa uurs
-      - MAIL_DEFAULT_SENDER=scandy.post@gmail.com
     ports:
       - "5000:5000"
     volumes:
@@ -115,6 +115,8 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    env_file:
+      - .env
 
 volumes:
   mongodb_data:

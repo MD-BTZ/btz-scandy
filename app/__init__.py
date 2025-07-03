@@ -29,6 +29,10 @@ from flask_login import LoginManager, current_user
 from app.utils.context_processors import register_context_processors
 from app.config import Config
 from app.routes import init_app
+from dotenv import load_dotenv
+
+# .env-Datei laden
+load_dotenv()
 
 # Logger für dieses Modul einrichten
 logger = logging.getLogger(__name__)
@@ -243,9 +247,13 @@ def create_app(test_config=None):
     # ===== KOMPRIMIERUNG AKTIVIEREN =====
     Compress(app)
     
-    # ===== E-MAIL-SYSTEM INITIALISIEREN (verzögert) =====
-    # E-Mail-System wird erst bei Bedarf initialisiert, nicht beim App-Start
-    app.logger.info("E-Mail-System wird bei Bedarf initialisiert")
+    # ===== E-MAIL-SYSTEM INITIALISIEREN =====
+    try:
+        from app.utils.email_utils import init_mail
+        init_mail(app)
+        app.logger.info("E-Mail-System initialisiert")
+    except Exception as e:
+        app.logger.warning(f"E-Mail-System konnte nicht initialisiert werden: {e}")
     
     # ===== CONTEXT PROCESSOR FÜR TEMPLATE-VARIABLEN =====
     @app.context_processor

@@ -29,6 +29,15 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM Prüfe ob .env existiert, falls nicht erstelle sie
+if not exist ".env" (
+    echo 📝 Erstelle .env-Datei aus env.example...
+    copy env.example .env >nul
+    echo ✅ .env-Datei erstellt!
+    echo ⚠️  Bitte passe die Werte in .env an deine Umgebung an!
+    echo.
+)
+
 REM Prüfe ob docker-compose.yml existiert
 if not exist "docker-compose.yml" (
     echo ❌ ERROR: docker-compose.yml nicht gefunden!

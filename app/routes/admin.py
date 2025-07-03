@@ -1668,13 +1668,13 @@ def export_ticket(id):
         except Exception as e:
             logging.error(f"Ungültige Ticket-ID: {id}")
             flash('Ungültige Ticket-ID.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         ticket = mongodb.find_one('tickets', {'_id': ticket_id})
         if not ticket:
             logging.error(f"Ticket nicht gefunden: {id}")
             flash('Ticket nicht gefunden.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id}) or {}
         material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id})) or []
@@ -2201,13 +2201,13 @@ def add_ticket_category():
         name = request.form.get('category')
         if not name:
             flash('Bitte geben Sie einen Namen ein.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Prüfen ob Ticket-Kategorie bereits existiert
         settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
         if settings and name in settings.get('value', []):
             flash('Diese Ticket-Kategorie existiert bereits.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
@@ -2223,11 +2223,11 @@ def add_ticket_category():
             })
 
         flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
@@ -2238,7 +2238,7 @@ def delete_ticket_category(category):
         tickets_with_category = mongodb.db.tickets.find_one({'category': category})
         if tickets_with_category:
             flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.update_one_array(
@@ -2248,11 +2248,11 @@ def delete_ticket_category(category):
         )
         
         flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/system', methods=['GET', 'POST'])
 @admin_required
@@ -2913,13 +2913,13 @@ def add_ticket_category_legacy():
         name = request.form.get('category')
         if not name:
             flash('Bitte geben Sie einen Namen ein.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Prüfen ob Ticket-Kategorie bereits existiert
         settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
         if settings and name in settings.get('value', []):
             flash('Diese Ticket-Kategorie existiert bereits.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Ticket-Kategorie zur Liste hinzufügen
         if settings:
@@ -2935,11 +2935,11 @@ def add_ticket_category_legacy():
             })
 
         flash('Ticket-Kategorie erfolgreich hinzugefügt.', 'success')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/delete_ticket_category/<category>', methods=['POST'])
 @admin_required
@@ -2950,7 +2950,7 @@ def delete_ticket_category_legacy(category):
         tickets_with_category = mongodb.db.tickets.find_one({'category': category})
         if tickets_with_category:
             flash('Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
 
         # Ticket-Kategorie aus der Liste entfernen
         mongodb.update_one_array(
@@ -2960,11 +2960,11 @@ def delete_ticket_category_legacy(category):
         )
         
         flash('Ticket-Kategorie erfolgreich gelöscht.', 'success')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Ticket-Kategorie: {str(e)}")
         flash('Ein Fehler ist aufgetreten.', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/backup/list')
 @mitarbeiter_required
@@ -3335,135 +3335,15 @@ def delete_ticket_permanent(ticket_id):
             'message': f'Fehler beim Löschen: {str(e)}'
         }), 500
 
-@bp.route('/debug/barcodes')
-@mitarbeiter_required
-def debug_barcodes():
-    """Debug-Route zum Überprüfen der Barcodes in der Datenbank"""
-    try:
-        tools = list(mongodb.find('tools', {}, limit=5))
-        workers = list(mongodb.find('workers', {}, limit=5))
-        consumables = list(mongodb.find('consumables', {}, limit=5))
-        
-        return jsonify({
-            'tools': [{'barcode': t.get('barcode'), 'name': t.get('name')} for t in tools],
-            'workers': [{'barcode': w.get('barcode'), 'name': f"{w.get('firstname', '')} {w.get('lastname', '')}"} for w in workers],
-            'consumables': [{'barcode': c.get('barcode'), 'name': c.get('name')} for c in consumables]
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@bp.route('/debug/clean-barcodes', methods=['POST'])
-@mitarbeiter_required
-def clean_barcodes():
-    """Bereinigt verunreinigte Barcodes in der Datenbank"""
-    try:
-        cleaned_count = 0
-        
-        # Werkzeuge bereinigen
-        tools = mongodb.find('tools', {})
-        for tool in tools:
-            old_barcode = tool.get('barcode', '')
-            if old_barcode and ' - IP:' in str(old_barcode):
-                # Entferne IP-Informationen
-                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
-                mongodb.update_one('tools', {'_id': tool['_id']}, {'$set': {'barcode': clean_barcode}})
-                cleaned_count += 1
-        
-        # Mitarbeiter bereinigen
-        workers = mongodb.find('workers', {})
-        for worker in workers:
-            old_barcode = worker.get('barcode', '')
-            if old_barcode and ' - IP:' in str(old_barcode):
-                # Entferne IP-Informationen
-                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
-                mongodb.update_one('workers', {'_id': worker['_id']}, {'$set': {'barcode': clean_barcode}})
-                cleaned_count += 1
-        
-        # Verbrauchsmaterialien bereinigen
-        consumables = mongodb.find('consumables', {})
-        for consumable in consumables:
-            old_barcode = consumable.get('barcode', '')
-            if old_barcode and ' - IP:' in str(old_barcode):
-                # Entferne IP-Informationen
-                clean_barcode = str(old_barcode).split(' - IP:')[0].strip()
-                mongodb.update_one('consumables', {'_id': consumable['_id']}, {'$set': {'barcode': clean_barcode}})
-                cleaned_count += 1
-        
-        return jsonify({
-            'success': True,
-            'message': f'{cleaned_count} Barcodes wurden bereinigt'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@bp.route('/debug/clean-settings', methods=['POST'])
-@mitarbeiter_required
-def clean_settings():
-    """Bereinigt doppelte Settings-Einträge in der Datenbank"""
-    try:
-        cleaned_count = 0
-        
-        # Hole alle Settings
-        all_settings = list(mongodb.find('settings', {}))
-        
-        # Gruppiere nach key
-        settings_by_key = {}
-        for setting in all_settings:
-            key = setting.get('key')
-            if key:
-                if key not in settings_by_key:
-                    settings_by_key[key] = []
-                settings_by_key[key].append(setting)
-        
-        # Entferne Duplikate (behalte den neuesten)
-        for key, settings_list in settings_by_key.items():
-            if len(settings_list) > 1:
-                # Sortiere nach updated_at oder created_at
-                settings_list.sort(key=lambda x: x.get('updated_at', x.get('created_at', datetime.min)), reverse=True)
-                
-                # Behalte nur den ersten (neuesten) Eintrag
-                keep_setting = settings_list[0]
-                settings_to_delete = settings_list[1:]
-                
-                # Lösche die Duplikate
-                for setting_to_delete in settings_to_delete:
-                    mongodb.delete_one('settings', {'_id': setting_to_delete['_id']})
-                    cleaned_count += 1
-        
-        return jsonify({
-            'success': True,
-            'message': f'{cleaned_count} doppelte Settings-Einträge wurden bereinigt'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@bp.route('/debug')
-@mitarbeiter_required
-def debug_page():
-    """Debug-Seite für Barcode-Bereinigung"""
-    return render_template('admin/debug.html')
 
-@bp.route('/debug/test-barcodes')
-@mitarbeiter_required
-def test_barcodes():
-    """Test-Route zum Überprüfen der Barcodes"""
-    try:
-        # Hole ein paar Beispiele aus jeder Kategorie
-        tools = list(mongodb.find('tools', {}, limit=3))
-        workers = list(mongodb.find('workers', {}, limit=3))
-        consumables = list(mongodb.find('consumables', {}, limit=3))
-        
-        result = {
-            'tools': [{'barcode': str(t.get('barcode', '')), 'name': t.get('name', '')} for t in tools],
-            'workers': [{'barcode': str(w.get('barcode', '')), 'name': f"{w.get('firstname', '')} {w.get('lastname', '')}"} for w in workers],
-            'consumables': [{'barcode': str(c.get('barcode', '')), 'name': c.get('name', '')} for c in consumables]
-        }
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+
+
+
+
+
 
 @bp.route('/delete_user/<user_id>', methods=['POST'])
 @mitarbeiter_required
@@ -3714,26 +3594,7 @@ def reset_password():
     
     return render_template('auth/reset_password.html')
 
-@bp.route('/debug/password/<username>')
-@admin_required
-def debug_password(username):
-    """Debug-Route zum Überprüfen des Passwort-Hashes eines Benutzers"""
-    try:
-        user = mongodb.find_one('users', {'username': username})
-        if not user:
-            return jsonify({'error': 'Benutzer nicht gefunden'}), 404
-        
-        return jsonify({
-            'username': user['username'],
-            'email': user.get('email'),
-            'has_password_hash': 'password_hash' in user,
-            'password_hash_length': len(user.get('password_hash', '')),
-            'password_hash_preview': user.get('password_hash', '')[:20] + '...' if user.get('password_hash') else None,
-            'updated_at': user.get('updated_at'),
-            'created_at': user.get('created_at')
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+
 
 @bp.route('/backup/auto/status')
 @login_required
