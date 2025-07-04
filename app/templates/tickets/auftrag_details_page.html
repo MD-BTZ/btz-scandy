@@ -17,7 +17,7 @@
         <div class="card-body">
             <h2 class="card-title mb-6">
                 <i class="fas fa-clipboard-list text-primary mr-2"></i>
-                Auftragsdetails bearbeiten - Ticket #{{ ticket.ticket_number or ticket.id }}
+                Auftragsdetails bearbeiten - Ticket #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}
             </h2>
             
             <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form" data-ajax="true">

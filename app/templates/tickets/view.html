@@ -30,7 +30,7 @@
                             <p>{{ ticket.created_at|datetime if ticket.created_at else '-' }}</p>
                             <p class="text-sm opacity-70 mt-2">Priorität</p>
                             {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                                <select id="prioritySelect" class="select select-bordered w-full" onchange="updateTicketPriority(this.value)">
+                                <select id="prioritySelect" class="select select-bordered w-full">
                                     <option value="niedrig" {% if ticket.priority == 'niedrig' %}selected{% endif %}>Niedrig</option>
                                     <option value="normal" {% if ticket.priority == 'normal' %}selected{% endif %}>Normal</option>
                                     <option value="hoch" {% if ticket.priority == 'hoch' %}selected{% endif %}>Hoch</option>
@@ -42,7 +42,7 @@
                         </div>
                         <div>
                             <p class="text-sm opacity-70">Kategorie</p>
-                            <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
+                            <select id="categoryInput" class="select select-bordered w-full">
                                 <option value="">Keine Kategorie</option>
                                 {% for category in categories %}
                                 <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
@@ -53,8 +53,7 @@
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
                             {% if current_user.role in ['admin', 'mitarbeiter'] %}
                                 <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                       value="{{ ticket.due_date | datetime if ticket.due_date else '' }}"
-                                       onchange="updateTicketDueDate(this.value)">
+                                       value="{{ ticket.due_date | datetime if ticket.due_date else '' }}">
                             {% else %}
                                 <p>{{ ticket.due_date | datetime if ticket.due_date else 'Nicht gesetzt' }}</p>
                             {% endif %}
@@ -64,7 +63,6 @@
                                     {% if current_user.role in ['admin', 'mitarbeiter'] or ticket.assigned_to == current_user.username %}
                                         <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
                                                value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
-                                               onchange="updateTicketEstimatedTime(this.value)"
                                                min="0" step="1">
                                         <span class="text-sm opacity-70">Minuten</span>
                                         <button type="button" class="btn btn-primary btn-sm" onclick="saveTicketChanges()">
@@ -318,55 +316,9 @@ function updateTicketStatus(newStatus) {
     });
 }
 
-function updateTicketCategory(newCategory) {
-    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            category: newCategory
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
-            alert('Fehler beim Aktualisieren der Kategorie: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie.');
-    });
-}
 
-function updateTicketDueDate(newDueDate) {
-    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            due_date: newDueDate
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
-            alert('Fehler beim Aktualisieren des Fälligkeitsdatums: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Fälligkeitsdatums.');
-    });
-}
+
+
 
 function updateTicketAssignment(newAssignment) {
     fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
@@ -392,35 +344,22 @@ function updateTicketAssignment(newAssignment) {
     });
 }
 
-function updateTicketEstimatedTime(newEstimatedTime) {
-    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            estimated_time: parseFloat(newEstimatedTime)
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Geschätzte Zeit wurde aktualisiert');
-        } else {
-            showToast('error', 'Fehler beim Aktualisieren der geschätzten Zeit: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der geschätzten Zeit.');
-    });
-}
+
 
 function saveTicketChanges() {
+    console.log('saveTicketChanges aufgerufen');
+    
     const estimatedTime = document.getElementById('estimatedTimeInput').value;
     const category = document.getElementById('categoryInput').value;
     const dueDate = document.getElementById('dueDateInput') ? document.getElementById('dueDateInput').value : null;
     const priority = document.getElementById('prioritySelect') ? document.getElementById('prioritySelect').value : null;
+    
+    console.log('Gefundene Werte:', {
+        estimatedTime,
+        category,
+        dueDate,
+        priority
+    });
     
     const updateData = {
         estimated_time: parseFloat(estimatedTime),
@@ -435,6 +374,8 @@ function saveTicketChanges() {
         updateData.priority = priority;
     }
     
+    console.log('Update-Daten:', updateData);
+    
     fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
         method: 'POST',
         headers: {
@@ -442,12 +383,18 @@ function saveTicketChanges() {
         },
         body: JSON.stringify(updateData)
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response Status:', response.status);
+        return response.json();
+    })
     .then(data => {
+        console.log('Response Data:', data);
         if (data.success) {
             showToast('success', 'Änderungen wurden gespeichert');
+            console.log('Update erfolgreich');
         } else {
             showToast('error', 'Fehler beim Speichern: ' + data.message);
+            console.error('Update fehlgeschlagen:', data.message);
         }
     })
     .catch(error => {
@@ -456,29 +403,7 @@ function saveTicketChanges() {
     });
 }
 
-function updateTicketPriority(newPriority) {
-    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            priority: newPriority
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Priorität erfolgreich aktualisiert');
-        } else {
-            showToast('error', 'Fehler beim Aktualisieren der Priorität: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der Priorität.');
-    });
-}
+
 
 function showToast(type, message) {
     const toast = document.createElement('div');
