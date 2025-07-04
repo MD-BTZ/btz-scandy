@@ -35,18 +35,22 @@ bp = Blueprint('admin', __name__, url_prefix='/admin')
 def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
     """
     Konvertiert eine ID für Datenbankabfragen.
-    Versucht zuerst mit String-ID, dann mit ObjectId.
+    Wenn die ID ein String ist, der wie eine ObjectId aussieht, konvertiert sie zu ObjectId.
     """
     try:
-        # Versuche zuerst mit String-ID (für importierte Daten)
-        return id_value
-    except:
-        # Falls das fehlschlägt, versuche ObjectId
-        try:
-            return ObjectId(id_value)
-        except:
-            # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
+        # Wenn die ID ein String ist und 24 Zeichen lang (wie eine ObjectId)
+        if isinstance(id_value, str) and len(id_value) == 24:
+            try:
+                return ObjectId(id_value)
+            except:
+                # Falls die Konvertierung fehlschlägt, gib die ursprüngliche ID zurück
+                return id_value
+        else:
+            # Für andere IDs (z.B. Barcodes) gib die ursprüngliche ID zurück
             return id_value
+    except:
+        # Falls etwas schiefgeht, gib die ursprüngliche ID zurück
+        return id_value
 
 def find_document_by_id(collection: str, id_value: str):
     """
@@ -80,6 +84,29 @@ def find_document_by_id(collection: str, id_value: str):
         return None
     except Exception as e:
         logging.error(f"Fehler beim Suchen von Dokument {id_value} in Collection {collection}: {str(e)}")
+        return None
+
+def find_user_by_id(user_id: str):
+    """
+    Spezielle Funktion zum Finden von Benutzern mit robuster ID-Behandlung.
+    Unterstützt String-IDs und ObjectIds.
+    """
+    try:
+        logging.info(f"DEBUG: Suche User mit ID: {user_id}")
+        
+        # Verwende convert_id_for_query für robuste ID-Konvertierung
+        converted_id = convert_id_for_query(user_id)
+        user = mongodb.find_one('users', {'_id': converted_id})
+        
+        if user:
+            logging.info(f"DEBUG: User gefunden: {user.get('username', 'Unknown')}")
+            return user
+        
+        logging.info(f"DEBUG: Kein User gefunden für ID: {user_id}")
+        return None
+                
+    except Exception as e:
+        logging.error(f"DEBUG: Fehler beim Laden des Users mit ID {user_id}: {e}")
         return None
 
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
@@ -2105,7 +2132,7 @@ def add_user():
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
 @mitarbeiter_required
 def edit_user(user_id):
-    user = mongodb.find_one('users', {'_id': convert_id_for_query(user_id)})
+    user = find_user_by_id(user_id)
     if not user:
         flash('Benutzer nicht gefunden', 'error')
         return redirect(url_for('admin.manage_users'))
@@ -2140,9 +2167,11 @@ def edit_user(user_id):
             password_hash = user.get('password_hash')
         
         # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
+        # Verwende die ursprüngliche User-ID für die Abfrage
+        user_id_for_query = convert_id_for_query(user_id)
         existing_user = mongodb.find_one('users', {
             'username': username,
-            '_id': {'$ne': convert_id_for_query(user_id)}
+            '_id': {'$ne': user_id_for_query}
         })
         if existing_user:
             flash('Benutzername existiert bereits', 'error')
@@ -2166,7 +2195,7 @@ def edit_user(user_id):
         }
         
         mongodb.update_one('users', 
-                         {'_id': convert_id_for_query(user_id)}, 
+                         {'_id': user_id_for_query}, 
                          {'$set': update_data})
         
         flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
@@ -3539,6 +3568,183 @@ def normalize_all_ids():
             'message': str(e)
         }), 500
 
+@bp.route('/debug/user-management')
+@login_required
+@admin_required
+def debug_user_management():
+    """Debug-Route für User-Management-Probleme"""
+    try:
+        from app.models.mongodb_models import MongoDBUser
+        from app.models.mongodb_database import mongodb
+        
+        # Hole alle User mit detaillierten Informationen
+        all_users = mongodb.find('users', {})
+        user_list = []
+        
+        for user in all_users:
+            user_id = user.get('_id')
+            user_list.append({
+                'id': str(user_id),
+                'id_type': type(user_id).__name__,
+                'username': user.get('username'),
+                'role': user.get('role'),
+                'is_active': user.get('is_active', True),
+                'email': user.get('email', 'N/A'),
+                'firstname': user.get('firstname', 'N/A'),
+                'lastname': user.get('lastname', 'N/A'),
+                'created_at': str(user.get('created_at', 'N/A')),
+                'updated_at': str(user.get('updated_at', 'N/A'))
+            })
+        
+        # Teste verschiedene Suchmethoden
+        test_results = []
+        if user_list:
+            test_user = user_list[0]
+            test_id = test_user['id']
+            
+            # Test 1: Direkte String-Suche
+            try:
+                direct_result = mongodb.find_one('users', {'_id': test_id})
+                test_results.append({
+                    'method': 'Direkte String-Suche',
+                    'success': direct_result is not None,
+                    'result': str(direct_result.get('username') if direct_result else 'Nicht gefunden')
+                })
+            except Exception as e:
+                test_results.append({
+                    'method': 'Direkte String-Suche',
+                    'success': False,
+                    'result': f'Fehler: {str(e)}'
+                })
+            
+            # Test 2: ObjectId-Suche
+            try:
+                from bson import ObjectId
+                obj_id = ObjectId(test_id)
+                obj_result = mongodb.find_one('users', {'_id': obj_id})
+                test_results.append({
+                    'method': 'ObjectId-Suche',
+                    'success': obj_result is not None,
+                    'result': str(obj_result.get('username') if obj_result else 'Nicht gefunden')
+                })
+            except Exception as e:
+                test_results.append({
+                    'method': 'ObjectId-Suche',
+                    'success': False,
+                    'result': f'Fehler: {str(e)}'
+                })
+            
+            # Test 3: find_user_by_id
+            try:
+                user_result = find_user_by_id(test_id)
+                test_results.append({
+                    'method': 'find_user_by_id',
+                    'success': user_result is not None,
+                    'result': str(user_result.get('username') if user_result else 'Nicht gefunden')
+                })
+            except Exception as e:
+                test_results.append({
+                    'method': 'find_user_by_id',
+                    'success': False,
+                    'result': f'Fehler: {str(e)}'
+                })
+            
+            # Test 4: MongoDBUser.get_by_id
+            try:
+                mongo_user_result = MongoDBUser.get_by_id(test_id)
+                test_results.append({
+                    'method': 'MongoDBUser.get_by_id',
+                    'success': mongo_user_result is not None,
+                    'result': str(mongo_user_result.get('username') if mongo_user_result else 'Nicht gefunden')
+                })
+            except Exception as e:
+                test_results.append({
+                    'method': 'MongoDBUser.get_by_id',
+                    'success': False,
+                    'result': f'Fehler: {str(e)}'
+                })
+        
+        return jsonify({
+            'status': 'success',
+            'total_users': len(user_list),
+            'users': user_list,
+            'test_results': test_results,
+            'test_id_used': test_user['id'] if user_list else 'Keine User vorhanden'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@bp.route('/debug/test-user-id/<user_id>')
+@login_required
+@admin_required
+def debug_test_user_id(user_id):
+    """Testet eine spezifische User-ID"""
+    try:
+        logging.info(f"DEBUG: Teste User-ID: {user_id}")
+        
+        # Teste verschiedene Suchmethoden
+        results = {}
+        
+        # 1. Direkte Suche mit String
+        user1 = mongodb.find_one('users', {'_id': user_id})
+        results['direct_string'] = {
+            'found': user1 is not None,
+            'username': user1.get('username') if user1 else None
+        }
+        
+        # 2. Suche mit ObjectId
+        try:
+            object_id = ObjectId(user_id)
+            user2 = mongodb.find_one('users', {'_id': object_id})
+            results['objectid'] = {
+                'found': user2 is not None,
+                'username': user2.get('username') if user2 else None
+            }
+        except Exception as e:
+            results['objectid'] = {
+                'found': False,
+                'error': str(e)
+            }
+        
+        # 3. Suche mit find_user_by_id
+        user3 = find_user_by_id(user_id)
+        results['find_user_by_id'] = {
+            'found': user3 is not None,
+            'username': user3.get('username') if user3 else None
+        }
+        
+        # 4. Suche mit convert_id_for_query
+        try:
+            converted_id = convert_id_for_query(user_id)
+            user4 = mongodb.find_one('users', {'_id': converted_id})
+            results['convert_id_for_query'] = {
+                'found': user4 is not None,
+                'username': user4.get('username') if user4 else None,
+                'converted_id_type': type(converted_id).__name__
+            }
+        except Exception as e:
+            results['convert_id_for_query'] = {
+                'found': False,
+                'error': str(e)
+            }
+        
+        return jsonify({
+            'success': True,
+            'tested_id': user_id,
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Testen der User-ID {user_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 @bp.route('/available-logos')
 @mitarbeiter_required
 def available_logos():
@@ -3718,7 +3924,7 @@ def delete_ticket_permanent(ticket_id):
 def delete_user(user_id):
     """Benutzer löschen"""
     try:
-        user = mongodb.find_one('users', {'_id': convert_id_for_query(user_id)})
+        user = find_user_by_id(user_id)
         if not user:
             flash('Benutzer nicht gefunden', 'error')
             return redirect(url_for('admin.manage_users'))
@@ -3728,7 +3934,9 @@ def delete_user(user_id):
             flash('Sie können Ihren eigenen Account nicht löschen', 'error')
             return redirect(url_for('admin.manage_users'))
         
-        mongodb.delete_one('users', {'_id': convert_id_for_query(user_id)})
+        # Verwende die ursprüngliche User-ID für das Löschen
+        user_id_for_query = convert_id_for_query(user_id)
+        mongodb.delete_one('users', {'_id': user_id_for_query})
         flash(f'Benutzer "{user["username"]}" erfolgreich gelöscht', 'success')
         return redirect(url_for('admin.manage_users'))
         

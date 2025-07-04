@@ -41,6 +41,51 @@ if not exist ".env" (
     echo ✅ .env-Datei erstellt!
     echo ⚠️  Bitte passe die Werte in .env an deine Umgebung an!
     echo.
+) else (
+    echo 📝 .env-Datei existiert bereits.
+    echo ⚠️  Stelle sicher, dass alle MongoDB-Variablen korrekt gesetzt sind!
+    echo.
+)
+
+REM Validiere wichtige .env-Variablen
+echo 🔍 Validiere .env-Konfiguration...
+if exist ".env" (
+    REM Lade .env-Datei und prüfe wichtige Variablen
+    set missing_vars=
+    
+    REM Prüfe MONGO_INITDB_ROOT_USERNAME
+    findstr /C:"MONGO_INITDB_ROOT_USERNAME=" .env >nul 2>&1
+    if %errorlevel% neq 0 (
+        set missing_vars=!missing_vars! MONGO_INITDB_ROOT_USERNAME
+    )
+    
+    REM Prüfe MONGO_INITDB_ROOT_PASSWORD
+    findstr /C:"MONGO_INITDB_ROOT_PASSWORD=" .env >nul 2>&1
+    if %errorlevel% neq 0 (
+        set missing_vars=!missing_vars! MONGO_INITDB_ROOT_PASSWORD
+    )
+    
+    REM Prüfe MONGO_INITDB_DATABASE
+    findstr /C:"MONGO_INITDB_DATABASE=" .env >nul 2>&1
+    if %errorlevel% neq 0 (
+        set missing_vars=!missing_vars! MONGO_INITDB_DATABASE
+    )
+    
+    REM Prüfe MONGODB_URI
+    findstr /C:"MONGODB_URI=" .env >nul 2>&1
+    if %errorlevel% neq 0 (
+        set missing_vars=!missing_vars! MONGODB_URI
+    )
+    
+    if not "!missing_vars!"=="" (
+        echo ❌ Fehlende wichtige Umgebungsvariablen:!missing_vars!
+        echo.
+        echo ⚠️  Bitte passe die .env-Datei an und starte die Installation erneut!
+        pause
+        exit /b 1
+    ) else (
+        echo ✅ Alle wichtigen Umgebungsvariablen sind gesetzt!
+    )
 )
 
 REM Prüfe ob bereits eine Installation existiert
@@ -78,7 +123,7 @@ if exist "docker-compose.yml" (
             )
         )
         
-        docker-compose down -v
+        docker compose down -v
         docker system prune -f
         docker volume prune -f
         if exist "data" rmdir /s /q data
@@ -108,7 +153,7 @@ if not exist "logs" mkdir logs
 
 REM Stoppe laufende Container falls vorhanden
 echo 🛑 Stoppe laufende Container...
-docker-compose down -v >nul 2>&1
+docker compose down -v >nul 2>&1
 
 REM Entferne alte Images
 echo 🗑️  Entferne alte Images...
@@ -117,12 +162,12 @@ docker images | findstr mongo >nul 2>&1 && for /f "tokens=3" %%i in ('docker ima
 
 REM Baue und starte alle Container
 echo 🔨 Baue und starte alle Container...
-docker-compose up -d --build
+docker compose up -d --build
 if %errorlevel% neq 0 (
     echo ❌ ERROR: Fehler beim Bauen der Container!
     echo Versuche es mit einfachem Build...
-    docker-compose build --no-cache
-    docker-compose up -d
+    docker compose build --no-cache
+    docker compose up -d
 )
 if %errorlevel% neq 0 (
     echo ❌ ERROR: Installation fehlgeschlagen!
@@ -144,10 +189,10 @@ if %errorlevel% neq 0 (
     if !retries! geq 12 (
         echo ❌ MongoDB Container startet nicht!
         echo Container Status:
-        docker-compose ps
+        docker compose ps
         echo.
         echo MongoDB Logs:
-        docker-compose logs --tail=20 scandy-mongodb
+        docker compose logs --tail=20 scandy-mongodb
         echo.
         echo ⚠️  Installation trotzdem fortgesetzt - MongoDB startet möglicherweise später...
         goto continue_installation
@@ -164,7 +209,7 @@ if not "!HEALTH!"=="healthy" (
     if !health_retries! geq 15 (
         echo ⚠️  MongoDB wird nicht healthy - fahre trotzdem fort...
         echo Letzte MongoDB Logs:
-        docker-compose logs --tail=10 scandy-mongodb
+        docker compose logs --tail=10 scandy-mongodb
         echo.
         goto continue_installation
     )
@@ -176,7 +221,7 @@ echo ✅ MongoDB ist healthy und bereit!
 
 :continue_installation
 echo 🔍 Prüfe Container-Status...
-docker-compose ps
+docker compose ps
 
 echo 🔍 Prüfe Service-Verfügbarkeit...
 REM Prüfe Mongo Express
@@ -219,10 +264,10 @@ echo - Logs:    .\logs\
 echo - Uploads: .\data\uploads\
 echo.
 echo 🔧 Nützliche Befehle:
-echo - Status aller Container: docker-compose ps
-echo - Logs anzeigen:         docker-compose logs -f
-echo - Stoppen:               docker-compose down
-echo - Neustart:              docker-compose restart
+echo - Status aller Container: docker compose ps
+echo - Logs anzeigen:         docker compose logs -f
+echo - Stoppen:               docker compose down
+echo - Neustart:              docker compose restart
 echo - Nur App updaten:       update.bat
 echo.
 echo ⚠️  WICHTIG: Für Updates verwenden Sie update.bat

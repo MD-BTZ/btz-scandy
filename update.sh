@@ -15,6 +15,7 @@ echo "- ✅ Scandy App wird aktualisiert"
 echo "- 🔒 MongoDB bleibt unverändert"
 echo "- 🔒 Mongo Express bleibt unverändert"
 echo "- 💾 Alle Daten bleiben erhalten"
+echo "- 🔐 .env-Einstellungen bleiben erhalten"
 echo "========================================"
 echo
 
@@ -41,6 +42,13 @@ if [ ! -f ".env" ]; then
     echo
 fi
 
+# Sichere .env-Datei vor dem Update
+if [ -f ".env" ]; then
+    echo -e "${BLUE}💾 Sichere .env-Datei...${NC}"
+    cp .env .env.backup
+    echo -e "${GREEN}✅ .env gesichert als .env.backup${NC}"
+fi
+
 # Prüfe ob docker-compose.yml existiert
 if [ ! -f "docker-compose.yml" ]; then
     echo -e "${RED}❌ ERROR: docker-compose.yml nicht gefunden!${NC}"
@@ -50,12 +58,13 @@ if [ ! -f "docker-compose.yml" ]; then
 fi
 
 echo -e "${BLUE}🔍 Prüfe bestehende Installation...${NC}"
-docker-compose ps
+docker compose ps
 
 echo
 echo -e "${YELLOW}⚠️  WARNUNG: Dieses Update betrifft NUR die Scandy-App!${NC}"
 echo "   MongoDB und Mongo Express bleiben unverändert."
 echo "   Alle Daten bleiben erhalten."
+echo "   .env-Einstellungen bleiben erhalten."
 echo
 
 read -p "Möchten Sie fortfahren? (j/N): " confirm
@@ -70,11 +79,11 @@ echo -e "${BLUE}🔄 Starte App-Update...${NC}"
 
 # Stoppe nur die App-Container
 echo -e "${BLUE}🛑 Stoppe App-Container...${NC}"
-docker-compose stop scandy-app &> /dev/null
+docker compose stop scandy-app &> /dev/null
 
 # Entferne nur die App-Container
 echo -e "${BLUE}🗑️  Entferne alte App-Container...${NC}"
-docker-compose rm -f scandy-app &> /dev/null
+docker compose rm -f scandy-app &> /dev/null
 
 # Entferne alte App-Images
 echo -e "${BLUE}🗑️  Entferne alte App-Images...${NC}"
@@ -82,11 +91,11 @@ docker images | grep scandy-local | awk '{print $3}' | xargs -r docker rmi -f &>
 
 # Baue nur die App neu
 echo -e "${BLUE}🔨 Baue neue App-Version...${NC}"
-docker-compose build --no-cache scandy-app
+docker compose build --no-cache scandy-app
 
 if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️  Versuche es mit einfachem Build...${NC}"
-    docker-compose build scandy-app
+    docker compose build scandy-app
 fi
 
 if [ $? -ne 0 ]; then
@@ -97,7 +106,7 @@ fi
 
 # Starte nur die App
 echo -e "${BLUE}🚀 Starte neue App-Version...${NC}"
-docker-compose up -d scandy-app
+docker compose up -d scandy-app
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}❌ Fehler beim Starten der App!${NC}"
@@ -111,12 +120,12 @@ sleep 10
 
 # Prüfe App-Status
 echo -e "${BLUE}🔍 Prüfe App-Status...${NC}"
-docker-compose ps scandy-app
+docker compose ps scandy-app
 
 # Prüfe App-Logs
 echo
 echo -e "${BLUE}📋 Letzte App-Logs:${NC}"
-docker-compose logs --tail=10 scandy-app
+docker compose logs --tail=10 scandy-app
 
 # Prüfe ob App läuft
 echo
@@ -128,7 +137,7 @@ if curl -s http://localhost:5000 &> /dev/null; then
 else
     echo -e "${YELLOW}⚠️  Scandy App startet noch...${NC}"
     echo "   Bitte warten Sie einen Moment und prüfen Sie:"
-    echo "   docker-compose logs scandy-app"
+    echo "   docker compose logs scandy-app"
 fi
 
 echo
@@ -146,11 +155,15 @@ echo -e "${BLUE}💾 Datenbank-Status:${NC}"
 echo "- MongoDB:        🔒 Unverändert (Daten erhalten)"
 echo "- Mongo Express:  🔒 Unverändert (Daten erhalten)"
 echo
+echo -e "${BLUE}🔐 Konfiguration:${NC}"
+echo "- .env-Datei:     🔒 Unverändert (Einstellungen erhalten)"
+echo "- Backup:         .env.backup (falls benötigt)"
+echo
 echo -e "${BLUE}🔧 Nützliche Befehle:${NC}"
-echo "- App-Logs:       docker-compose logs -f scandy-app"
-echo "- App-Status:     docker-compose ps scandy-app"
-echo "- App-Neustart:   docker-compose restart scandy-app"
-echo "- Alle Container: docker-compose ps"
+echo "- App-Logs:       docker compose logs -f scandy-app"
+echo "- App-Status:     docker compose ps scandy-app"
+echo "- App-Neustart:   docker compose restart scandy-app"
+echo "- Alle Container: docker compose ps"
 echo
 echo -e "${BLUE}📁 Datenverzeichnisse (unverändert):${NC}"
 echo "- Backups: ./backups/"
