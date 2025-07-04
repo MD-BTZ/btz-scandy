@@ -2139,6 +2139,14 @@ def edit_user(user_id):
     if current_user.role != 'admin' and user.get('role') == 'admin':
         flash('Sie dürfen keine Admin-Benutzer bearbeiten.', 'error')
         return redirect(url_for('admin.manage_users'))
+    
+    # GET-Request: Zeige das Formular mit den aktuellen Daten
+    if request.method == 'GET':
+        return render_template('admin/user_form.html', 
+                             user=user,
+                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+    
+    # POST-Request: Verarbeite die Formulardaten
     try:
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
@@ -2148,7 +2156,7 @@ def edit_user(user_id):
         lastname = request.form.get('lastname', '').strip()
         role = request.form.get('role', '').strip()
         
-        # Validierung
+        # Validierung nur beim POST-Request
         if not username or not firstname or not lastname or not role:
             flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
             return render_template('admin/user_form.html', 
