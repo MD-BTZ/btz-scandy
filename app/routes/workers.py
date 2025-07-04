@@ -396,6 +396,225 @@ def search():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@bp.route('/admin/migrate-timesheets', methods=['POST'])
+@admin_required
+def admin_migrate_timesheets():
+    """Admin-Route zur manuellen Migration von Timesheet-Datumsfeldern"""
+    try:
+        migrated_count = migrate_timesheet_dates()
+        flash(f'Migration abgeschlossen. {migrated_count} Timesheet-Einträge wurden migriert.', 'success')
+    except Exception as e:
+        flash(f'Fehler bei der Migration: {str(e)}', 'error')
+    
+    return redirect(url_for('workers.timesheet_list'))
+
+@bp.route('/admin/migrate-all-dates', methods=['POST'])
+@admin_required
+def admin_migrate_all_dates():
+    """Admin-Route zur Migration aller Datumsfelder in allen Collections"""
+    try:
+        collections = ['tickets', 'users', 'tools', 'consumables', 'workers', 'timesheets']
+        total_migrated = 0
+        results = {}
+        
+        for collection in collections:
+            try:
+                # Finde alle Dokumente mit String-Datumsfeldern
+                documents = list(mongodb.db[collection].find({
+                    '$or': [
+                        {'created_at': {'$type': 'string'}},
+                        {'updated_at': {'$type': 'string'}},
+                        {'due_date': {'$type': 'string'}},
+                        {'resolved_at': {'$type': 'string'}}
+                    ]
+                }))
+                
+                migrated_count = 0
+                for doc in documents:
+                    update_data = {}
+                    
+                    # Konvertiere alle Datumsfelder
+                    for field in ['created_at', 'updated_at', 'due_date', 'resolved_at']:
+                        if isinstance(doc.get(field), str):
+                            try:
+                                for fmt in ['%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                                    try:
+                                        update_data[field] = datetime.strptime(doc[field], fmt)
+                                        break
+                                    except ValueError:
+                                        continue
+                                # Wenn kein Format passt, verwende aktuelles Datum
+                                if field not in update_data:
+                                    update_data[field] = datetime.now()
+                            except:
+                                update_data[field] = datetime.now()
+                    
+                    # Update nur wenn Änderungen vorhanden
+                    if update_data:
+                        result = mongodb.db[collection].update_one(
+                            {'_id': doc['_id']},
+                            {'$set': update_data}
+                        )
+                        if result.modified_count > 0:
+                            migrated_count += 1
+                
+                results[collection] = migrated_count
+                total_migrated += migrated_count
+                
+            except Exception as e:
+                results[collection] = {'error': str(e)}
+        
+        flash(f'Migration abgeschlossen. {total_migrated} Dokumente wurden migriert.', 'success')
+        return jsonify({
+            'success': True,
+            'total_migrated': total_migrated,
+            'results': results
+        })
+        
+    except Exception as e:
+        flash(f'Fehler bei der Migration: {str(e)}', 'error')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/admin/check-timesheet-dates')
+@admin_required
+def check_timesheet_dates():
+    """Admin-Route zur Überprüfung der Timesheet-Datumsfelder"""
+    try:
+        # Zähle Timesheets mit String-Datumsfeldern
+        string_dates = mongodb.db.timesheets.count_documents({
+            '$or': [
+                {'created_at': {'$type': 'string'}},
+                {'updated_at': {'$type': 'string'}}
+            ]
+        })
+        
+        # Zähle Timesheets mit Date-Datumsfeldern
+        date_dates = mongodb.db.timesheets.count_documents({
+            '$and': [
+                {'created_at': {'$type': 'date'}},
+                {'updated_at': {'$type': 'date'}}
+            ]
+        })
+        
+        total = mongodb.db.timesheets.count_documents({})
+        
+        return jsonify({
+            'total_timesheets': total,
+            'string_dates': string_dates,
+            'date_dates': date_dates,
+            'needs_migration': string_dates > 0
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/admin/check-database-status')
+@admin_required
+def check_database_status():
+    """Admin-Route zur Überprüfung des Datenbankstatus nach Backup-Restore"""
+    try:
+        collections = ['tickets', 'users', 'tools', 'consumables', 'workers', 'timesheets']
+        status = {}
+        
+        for collection in collections:
+            try:
+                # Zähle Dokumente
+                total = mongodb.db[collection].count_documents({})
+                
+                # Prüfe ID-Typen
+                sample_docs = list(mongodb.db[collection].find().limit(5))
+                id_types = {}
+                for doc in sample_docs:
+                    doc_id = doc.get('_id')
+                    if doc_id:
+                        id_type = type(doc_id).__name__
+                        id_types[id_type] = id_types.get(id_type, 0) + 1
+                
+                # Prüfe Datumsfelder (falls vorhanden)
+                date_fields = {}
+                if sample_docs:
+                    sample_doc = sample_docs[0]
+                    for field in ['created_at', 'updated_at', 'due_date', 'resolved_at']:
+                        if field in sample_doc:
+                            field_value = sample_doc[field]
+                            if field_value:
+                                date_fields[field] = type(field_value).__name__
+                
+                status[collection] = {
+                    'total_documents': total,
+                    'id_types': id_types,
+                    'date_fields': date_fields,
+                    'sample_ids': [str(doc.get('_id')) for doc in sample_docs[:3]]
+                }
+                
+            except Exception as e:
+                status[collection] = {
+                    'error': str(e)
+                }
+        
+        return jsonify(status)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def migrate_timesheet_dates():
+    """Migriert Timesheet-Datumsfelder von String zu Date-Objekten"""
+    try:
+        # Finde alle Timesheets mit String-Datumsfeldern
+        timesheets = list(mongodb.db.timesheets.find({
+            '$or': [
+                {'created_at': {'$type': 'string'}},
+                {'updated_at': {'$type': 'string'}}
+            ]
+        }))
+        
+        migrated_count = 0
+        for ts in timesheets:
+            update_data = {}
+            
+            # Konvertiere created_at
+            if isinstance(ts.get('created_at'), str):
+                try:
+                    for fmt in ['%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            update_data['created_at'] = datetime.strptime(ts['created_at'], fmt)
+                            break
+                        except ValueError:
+                            continue
+                    # Wenn kein Format passt, verwende aktuelles Datum
+                    if 'created_at' not in update_data:
+                        update_data['created_at'] = datetime.now()
+                except:
+                    update_data['created_at'] = datetime.now()
+            
+            # Konvertiere updated_at
+            if isinstance(ts.get('updated_at'), str):
+                try:
+                    for fmt in ['%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            update_data['updated_at'] = datetime.strptime(ts['updated_at'], fmt)
+                            break
+                        except ValueError:
+                            continue
+                    # Wenn kein Format passt, verwende aktuelles Datum
+                    if 'updated_at' not in update_data:
+                        update_data['updated_at'] = datetime.now()
+                except:
+                    update_data['updated_at'] = datetime.now()
+            
+            # Update nur wenn Änderungen vorhanden
+            if update_data:
+                result = mongodb.db.timesheets.update_one(
+                    {'_id': ts['_id']},
+                    {'$set': update_data}
+                )
+                if result.modified_count > 0:
+                    migrated_count += 1
+        
+        return migrated_count
+    except Exception as e:
+        print(f"Fehler bei Timesheet-Migration: {e}")
+        return 0
+
 @bp.route('/timesheets')
 @login_required
 def timesheet_list():
@@ -404,6 +623,13 @@ def timesheet_list():
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
         return redirect(url_for('main.index'))
+    
+    # Führe Migration aus, falls noch nicht geschehen
+    try:
+        migrate_timesheet_dates()
+    except Exception as e:
+        # Migration-Fehler nicht blockieren, nur loggen
+        print(f"Migration-Fehler (nicht kritisch): {e}")
     
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
@@ -445,15 +671,39 @@ def timesheet_list():
                     ]
                 },
                 'created_at_de': {
-                    '$dateToString': {
-                        'format': '%d.%m.%Y',
-                        'date': '$created_at'
+                    '$cond': {
+                        'if': {'$type': '$created_at'},
+                        'then': {
+                            '$cond': {
+                                'if': {'$eq': [{'$type': '$created_at'}, 'date']},
+                                'then': {
+                                    '$dateToString': {
+                                        'format': '%d.%m.%Y',
+                                        'date': '$created_at'
+                                    }
+                                },
+                                'else': '$created_at'
+                            }
+                        },
+                        'else': '$created_at'
                     }
                 },
                 'updated_at_de': {
-                    '$dateToString': {
-                        'format': '%d.%m.%Y',
-                        'date': '$updated_at'
+                    '$cond': {
+                        'if': {'$type': '$updated_at'},
+                        'then': {
+                            '$cond': {
+                                'if': {'$eq': [{'$type': '$updated_at'}, 'date']},
+                                'then': {
+                                    '$dateToString': {
+                                        'format': '%d.%m.%Y',
+                                        'date': '$updated_at'
+                                    }
+                                },
+                                'else': '$updated_at'
+                            }
+                        },
+                        'else': '$updated_at'
                     }
                 }
             }
@@ -474,20 +724,44 @@ def timesheet_list():
         sort_stage = {'filled_days': -1, 'year': -1, 'kw': -1}
     elif sort == 'filled_asc':
         sort_stage = {'filled_days': 1, 'year': -1, 'kw': -1}
-    elif sort == 'created_desc':
-        sort_stage = {'created_at': -1}
-    elif sort == 'created_asc':
-        sort_stage = {'created_at': 1}
-    elif sort == 'updated_desc':
-        sort_stage = {'updated_at': -1}
-    elif sort == 'updated_asc':
-        sort_stage = {'updated_at': 1}
+    # Für Date-Sortierung verwenden wir Python-Sortierung statt MongoDB-Sortierung
+    # da die Felder möglicherweise als Strings gespeichert sind
+    elif sort in ['created_desc', 'created_asc', 'updated_desc', 'updated_asc']:
+        # Keine MongoDB-Sortierung für Date-Felder, wird später in Python gemacht
+        pass
     
     if sort_stage:
         pipeline.append({'$sort': sort_stage})
     
     # MongoDB Aggregation ausführen
     timesheets = list(mongodb.db.timesheets.aggregate(pipeline))
+    
+    # Python-Sortierung für Date-Felder (falls MongoDB-Sortierung nicht möglich war)
+    if sort in ['created_desc', 'created_asc', 'updated_desc', 'updated_asc']:
+        def parse_date(date_value):
+            """Sichere Datum-Parsing-Funktion"""
+            if isinstance(date_value, datetime):
+                return date_value
+            elif isinstance(date_value, str):
+                try:
+                    # Versuche verschiedene Datum-Formate
+                    for fmt in ['%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            return datetime.strptime(date_value, fmt)
+                        except ValueError:
+                            continue
+                    # Fallback: aktuelles Datum
+                    return datetime.now()
+                except:
+                    return datetime.now()
+            else:
+                return datetime.now()
+        
+        reverse = sort.endswith('_desc')
+        if sort.startswith('created'):
+            timesheets.sort(key=lambda x: parse_date(x.get('created_at', datetime.now())), reverse=reverse)
+        elif sort.startswith('updated'):
+            timesheets.sort(key=lambda x: parse_date(x.get('updated_at', datetime.now())), reverse=reverse)
     
     # Berechne unausgefüllte Tage für alle Wochen
     unfilled_days = 0

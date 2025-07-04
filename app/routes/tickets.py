@@ -366,7 +366,192 @@ def test_specific_ticket(ticket_id):
             'ticket_id': ticket_id
         })
 
+@bp.route('/debug/test-update-operation/<ticket_id>')
+@login_required
+def test_update_operation(ticket_id):
+    """Testet die Update-Operation für ein spezifisches Ticket"""
+    try:
+        print(f"DEBUG: Teste Update-Operation für Ticket-ID: {ticket_id}")
+        
+        # Finde das Ticket
+        ticket = find_document_by_id('tickets', ticket_id)
+        if not ticket:
+            return jsonify({'error': 'Ticket nicht gefunden'}), 404
+        
+        actual_ticket_id = ticket.get('_id')
+        print(f"DEBUG: Gefundene Ticket-ID: {actual_ticket_id}")
+        print(f"DEBUG: Ticket-ID Typ: {type(actual_ticket_id).__name__}")
+        
+        # Teste verschiedene Update-Methoden
+        results = {}
+        
+        # Methode 1: Direkte MongoDB-Operation
+        try:
+            result = mongodb.db.tickets.update_one(
+                {'_id': actual_ticket_id},
+                {'$set': {'test_field': 'test_value', 'updated_at': datetime.now()}}
+            )
+            results['direct_mongodb'] = {
+                'matched_count': result.matched_count,
+                'modified_count': result.modified_count,
+                'success': result.modified_count > 0
+            }
+        except Exception as e:
+            results['direct_mongodb'] = {'error': str(e)}
+        
+        # Methode 2: Wrapper-Methode
+        try:
+            result = mongodb.update_one('tickets', {'_id': actual_ticket_id}, {'$set': {'test_field2': 'test_value2'}})
+            results['wrapper_method'] = {
+                'result': result,
+                'result_type': type(result).__name__
+            }
+        except Exception as e:
+            results['wrapper_method'] = {'error': str(e)}
+        
+        # Methode 3: Mit verschiedenen ID-Formaten
+        try:
+            # Versuche mit String-ID
+            string_result = mongodb.update_one('tickets', {'_id': str(actual_ticket_id)}, {'$set': {'test_field3': 'test_value3'}})
+            results['string_id'] = {
+                'result': string_result,
+                'result_type': type(string_result).__name__
+            }
+        except Exception as e:
+            results['string_id'] = {'error': str(e)}
+        
+        return jsonify({
+            'ticket_id': ticket_id,
+            'actual_ticket_id': str(actual_ticket_id),
+            'actual_ticket_id_type': type(actual_ticket_id).__name__,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+@bp.route('/debug/analyze-ticket/<ticket_id>')
+def analyze_ticket(ticket_id):
+    """Analysiert ein Ticket ohne Authentifizierung (nur für Debugging)"""
+    try:
+        print(f"DEBUG: Analysiere Ticket-ID: {ticket_id}")
+        
+        # Teste verschiedene Suchmethoden
+        results = {}
+        
+        # Methode 1: Direkte String-Suche
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+        results['string_search'] = {
+            'found': ticket is not None,
+            'title': ticket.get('title') if ticket else None,
+            'id': str(ticket.get('_id')) if ticket else None,
+            'id_type': type(ticket.get('_id')).__name__ if ticket else None
+        }
+        
+        # Methode 2: ObjectId-Suche
+        try:
+            from bson import ObjectId
+            obj_id = ObjectId(ticket_id)
+            ticket = mongodb.find_one('tickets', {'_id': obj_id})
+            results['objectid_search'] = {
+                'found': ticket is not None,
+                'title': ticket.get('title') if ticket else None,
+                'id': str(ticket.get('_id')) if ticket else None,
+                'id_type': type(ticket.get('_id')).__name__ if ticket else None
+            }
+        except Exception as e:
+            results['objectid_search'] = {
+                'found': False,
+                'error': str(e)
+            }
+        
+        # Methode 3: Direkte MongoDB-Abfrage
+        try:
+            direct_ticket = mongodb.db.tickets.find_one({'_id': ticket_id})
+            results['direct_mongodb_string'] = {
+                'found': direct_ticket is not None,
+                'title': direct_ticket.get('title') if direct_ticket else None,
+                'id': str(direct_ticket.get('_id')) if direct_ticket else None,
+                'id_type': type(direct_ticket.get('_id')).__name__ if direct_ticket else None
+            }
+        except Exception as e:
+            results['direct_mongodb_string'] = {'error': str(e)}
+        
+        # Methode 4: Direkte MongoDB-Abfrage mit ObjectId
+        try:
+            from bson import ObjectId
+            obj_id = ObjectId(ticket_id)
+            direct_ticket = mongodb.db.tickets.find_one({'_id': obj_id})
+            results['direct_mongodb_objectid'] = {
+                'found': direct_ticket is not None,
+                'title': direct_ticket.get('title') if direct_ticket else None,
+                'id': str(direct_ticket.get('_id')) if direct_ticket else None,
+                'id_type': type(direct_ticket.get('_id')).__name__ if direct_ticket else None
+            }
+        except Exception as e:
+            results['direct_mongodb_objectid'] = {'error': str(e)}
+        
+        # Teste Update-Operationen
+        update_results = {}
+        
+        # Finde das Ticket für Updates
+        found_ticket = None
+        found_id = None
+        
+        if results['string_search']['found']:
+            found_ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+            found_id = ticket_id
+        elif results['objectid_search']['found']:
+            found_ticket = mongodb.find_one('tickets', {'_id': ObjectId(ticket_id)})
+            found_id = ObjectId(ticket_id)
+        
+        if found_ticket:
+            # Teste Update mit String-ID
+            try:
+                result = mongodb.db.tickets.update_one(
+                    {'_id': ticket_id},
+                    {'$set': {'debug_test': 'string_update'}}
+                )
+                update_results['string_update'] = {
+                    'matched_count': result.matched_count,
+                    'modified_count': result.modified_count,
+                    'success': result.modified_count > 0
+                }
+                # Entferne das Test-Feld
+                mongodb.db.tickets.update_one(
+                    {'_id': ticket_id},
+                    {'$unset': {'debug_test': ''}}
+                )
+            except Exception as e:
+                update_results['string_update'] = {'error': str(e)}
+            
+            # Teste Update mit ObjectId
+            try:
+                result = mongodb.db.tickets.update_one(
+                    {'_id': ObjectId(ticket_id)},
+                    {'$set': {'debug_test': 'objectid_update'}}
+                )
+                update_results['objectid_update'] = {
+                    'matched_count': result.matched_count,
+                    'modified_count': result.modified_count,
+                    'success': result.modified_count > 0
+                }
+                # Entferne das Test-Feld
+                mongodb.db.tickets.update_one(
+                    {'_id': ObjectId(ticket_id)},
+                    {'$unset': {'debug_test': ''}}
+                )
+            except Exception as e:
+                update_results['objectid_update'] = {'error': str(e)}
+        
+        return jsonify({
+            'ticket_id': ticket_id,
+            'search_results': results,
+            'update_results': update_results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -952,13 +1137,19 @@ def update_status(id):
         if not new_status:
             return jsonify({'success': False, 'message': 'Status ist erforderlich'}), 400
 
-        # Robuste ID-Behandlung für verschiedene ID-Typen
-        ticket = find_document_by_id('tickets', id)
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = id
+
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
-
-        # Verwende die Ticket-ID für alle Abfragen
-        ticket_id_for_query = convert_id_for_query(id)
 
         update_fields = {'status': new_status, 'updated_at': datetime.now()}
 
@@ -969,7 +1160,11 @@ def update_status(id):
         elif new_status == 'offen':
             update_fields['assigned_to'] = None
 
-        if not mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': update_fields}):
+        # Verwende die gleiche ID für das Update
+        result = mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': update_fields})
+        print(f"DEBUG: update_one Erfolg: {result}")
+
+        if not result:
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
 
         # Spezielle Nachricht bei automatischer Zuweisung
@@ -1005,22 +1200,82 @@ def update_assignment(id):
         if not assigned_to or assigned_to == "":
             assigned_to = None
 
-        # Robuste ID-Behandlung für verschiedene ID-Typen
-        ticket = find_document_by_id('tickets', id)
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = id
+
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
-        # Verwende die Ticket-ID für alle Abfragen
-        ticket_id_for_query = convert_id_for_query(id)
-
         # Aktualisiere die Zuweisung direkt im Ticket
-        if not mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
+        result = mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}})
+        
+        if not result:
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
 
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/<id>/update-due-date', methods=['POST'])
+@login_required
+def update_due_date(id):
+    """Aktualisiert das Fälligkeitsdatum eines Tickets"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
+
+        data = request.get_json()
+        due_date = data.get('due_date')
+        
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = id
+
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+
+        # Verarbeite due_date
+        update_data = {'updated_at': datetime.now()}
+        if due_date:
+            try:
+                # Versuche verschiedene Datumsformate zu parsen
+                if 'T' in due_date:
+                    due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
+                else:
+                    due_date = datetime.strptime(due_date, '%Y-%m-%d')
+                update_data['due_date'] = due_date
+            except ValueError as e:
+                return jsonify({'success': False, 'message': 'Ungültiges Datumsformat'}), 400
+        else:
+            update_data['due_date'] = None
+
+        # Führe das Update aus
+        result = mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': update_data})
+        
+        if not result:
+            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Fälligkeitsdatums'})
+
+        return jsonify({'success': True, 'message': 'Fälligkeitsdatum erfolgreich aktualisiert'})
+
+    except Exception as e:
+        logging.error(f"Fehler beim Aktualisieren des Fälligkeitsdatums: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<id>/update-details', methods=['POST'])
@@ -1636,26 +1891,22 @@ def update_ticket(id):
     try:
         logging.info(f"DEBUG: update_ticket aufgerufen für ID: {id}")
         
-        # Robuste ID-Behandlung für verschiedene ID-Typen
-        ticket = find_document_by_id('tickets', id)
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = id
+
+        # Prüfe ob das Ticket existiert
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         if not ticket:
             logging.error(f"DEBUG: Ticket nicht gefunden für ID: {id}")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
         
         logging.info(f"DEBUG: Ticket gefunden: {ticket.get('title', 'No Title')}")
-        
-        # Verwende die ursprüngliche ID und versuche sie als ObjectId zu konvertieren
-        # Das ist wichtig, da das Update die gleiche ID-Form benötigt wie in der Datenbank
-        try:
-            from bson import ObjectId
-            ticket_id_for_query = ObjectId(id)
-            logging.info(f"DEBUG: ticket_id_for_query als ObjectId: {ticket_id_for_query}")
-        except:
-            # Falls die Konvertierung fehlschlägt, verwende die ursprüngliche ID
-            ticket_id_for_query = id
-            logging.info(f"DEBUG: ticket_id_for_query als String: {ticket_id_for_query}")
-        
-        logging.info(f"DEBUG: ticket_id_for_query Typ: {type(ticket_id_for_query).__name__}")
         
         # Prüfe Berechtigungen: Normale User können nur ihre eigenen oder zugewiesenen Tickets bearbeiten
         if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
@@ -1720,20 +1971,20 @@ def update_ticket(id):
         logging.info(f"DEBUG: Finale Update-Daten: {update_data}")
         
         # Debug-Logs hinzufügen
-        logging.info(f"DEBUG: Aktualisiere Ticket {id} mit ticket_id_for_query: {ticket_id_for_query}")
+        logging.info(f"DEBUG: Aktualisiere Ticket {id} mit ticket_id_for_update: {ticket_id_for_update}")
         logging.info(f"DEBUG: Update-Daten: {update_data}")
-        logging.info(f"DEBUG: ticket_id_for_query Typ: {type(ticket_id_for_query).__name__}")
-        logging.info(f"DEBUG: ticket_id_for_query Wert: {ticket_id_for_query}")
+        logging.info(f"DEBUG: ticket_id_for_update Typ: {type(ticket_id_for_update).__name__}")
+        logging.info(f"DEBUG: ticket_id_for_update Wert: {ticket_id_for_update}")
         
         try:
             # Verwende die bewährte mongodb-Wrapper-Klasse
-            logging.info(f"DEBUG: Führe Update aus mit Filter: {{'_id': {ticket_id_for_query}}}")
+            logging.info(f"DEBUG: Führe Update aus mit Filter: {{'_id': {ticket_id_for_update}}}")
             logging.info(f"DEBUG: Update-Daten: {update_data}")
             
-            result = mongodb.update_one('tickets', {'_id': ticket_id_for_query}, {'$set': update_data})
+            result = mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': update_data})
             logging.info(f"DEBUG: Update-Ergebnis: {result}")
             
-            # Betrachte als erfolgreich, wenn ein Dokument gefunden wurde (auch wenn sich nichts geändert hat)
+            # Betrachte als erfolgreich, wenn die Operation erfolgreich war
             if result:
                 logging.info(f"DEBUG: Update erfolgreich")
                 return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
