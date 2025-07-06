@@ -1999,3 +1999,48 @@ def update_ticket(id):
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren des Tickets {id}: {e}", exc_info=True)
         return jsonify({'success': False, 'message': f'Interner Fehler: {str(e)}'}), 500 
+
+@bp.route('/debug/unassigned-tickets')
+@login_required
+def debug_unassigned_tickets():
+    """Debug-Route um nicht zugewiesene Tickets anzuzeigen"""
+    try:
+        # Hole alle nicht zugewiesenen Tickets
+        unassigned_tickets = mongodb.find('tickets', {
+            '$and': [
+                {
+                    '$or': [
+                        {'assigned_to': {'$exists': False}},
+                        {'assigned_to': None},
+                        {'assigned_to': ''}
+                    ]
+                },
+                {'status': {'$ne': 'geschlossen'}},
+                {'deleted': {'$ne': True}}
+            ]
+        })
+        
+        # Konvertiere zu Liste für bessere Darstellung
+        tickets_list = list(unassigned_tickets)
+        
+        # Debug-Informationen
+        debug_info = {
+            'total_unassigned': len(tickets_list),
+            'tickets': []
+        }
+        
+        for ticket in tickets_list:
+            debug_info['tickets'].append({
+                'id': str(ticket.get('_id')),
+                'title': ticket.get('title', 'No Title'),
+                'status': ticket.get('status', 'No Status'),
+                'assigned_to': ticket.get('assigned_to', 'None'),
+                'created_by': ticket.get('created_by', 'Unknown'),
+                'created_at': ticket.get('created_at', 'Unknown'),
+                'deleted': ticket.get('deleted', False)
+            })
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

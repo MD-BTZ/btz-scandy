@@ -938,8 +938,17 @@ def timesheet_download(ts_id):
 @bp.route('/timesheet/<ts_id>/delete', methods=['POST'])
 @login_required
 def timesheet_delete(ts_id):
-    # Robuste ID-Behandlung für verschiedene ID-Typen
-    ts = find_document_by_id('timesheets', ts_id)
+    # Verwende die ursprüngliche ID direkt für das Update
+    from bson import ObjectId
+    try:
+        # Versuche zuerst mit ObjectId
+        ts_id_for_update = ObjectId(ts_id)
+    except:
+        # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+        ts_id_for_update = ts_id
+    
+    # Prüfe ob das Timesheet existiert
+    ts = mongodb.find_one('timesheets', {'_id': ts_id_for_update})
     if not ts:
         flash('Wochenbericht nicht gefunden.', 'error')
         return redirect(url_for('workers.timesheet_list'))
@@ -949,7 +958,6 @@ def timesheet_delete(ts_id):
         return redirect(url_for('workers.timesheet_list'))
     
     # Verwende die ID für alle Abfragen
-    ts_id_for_query = convert_id_for_query(ts_id)
-    mongodb.delete_one('timesheets', {'_id': ts_id_for_query})
+    mongodb.delete_one('timesheets', {'_id': ts_id_for_update})
     flash('Wochenbericht wurde gelöscht.', 'success')
     return redirect(url_for('workers.timesheet_list'))

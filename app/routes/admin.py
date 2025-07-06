@@ -1734,13 +1734,22 @@ def update_ticket(ticket_id):
             'gesamtsumme': data.get('gesamtsumme', 0)
         }
         
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
         # Aktualisiere die Auftragsdetails
-        if not mongodb.update_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': auftrag_details}):
+        if not mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_update}, {'$set': auftrag_details}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Auftragsdetails'})
         
         # Aktualisiere die Materialliste
         material_list = data.get('material_list', [])
-        if not mongodb.update_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
+        if not mongodb.update_many('auftrag_material', {'ticket_id': ticket_id_for_update}, {'$set': {'menge': m['menge'], 'einzelpreis': m['einzelpreis']} for m in material_list}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Materialliste'})
         
         return jsonify({'success': True})
@@ -1897,8 +1906,17 @@ def export_ticket(id):
 def update_ticket_details(ticket_id):
     """Aktualisiert die Details eines Tickets."""
     try:
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         
         if not ticket:
             return jsonify({
@@ -1917,7 +1935,7 @@ def update_ticket_details(ticket_id):
         
         # Auftragsdetails aktualisieren
         auftrag_details = {
-            'ticket_id': convert_id_for_query(ticket_id),
+            'ticket_id': ticket_id_for_update,
             'auftrag_an': data.get('auftrag_an', ''),
             'bereich': data.get('bereich', ''),
             'auftraggeber_intern': data.get('auftraggeber_typ') == 'intern',
@@ -1928,18 +1946,27 @@ def update_ticket_details(ticket_id):
             'updated_at': datetime.now()
         }
         
-        if not mongodb.update_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)}, {'$set': auftrag_details}):
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
+        if not mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_update}, {'$set': auftrag_details}):
             mongodb.insert_one('auftrag_details', auftrag_details)
         
         # Materialliste aktualisieren
         material_list = data.get('material_list', [])
         if material_list:
             # Lösche alte Materialeinträge
-            mongodb.delete_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)})
+            mongodb.delete_many('auftrag_material', {'ticket_id': ticket_id_for_update})
             
             # Füge neue Materialeinträge hinzu
             for material in material_list:
-                material['ticket_id'] = convert_id_for_query(ticket_id)
+                material['ticket_id'] = ticket_id_for_update
                 material['created_at'] = datetime.now()
                 mongodb.insert_one('auftrag_material', material)
         
@@ -1979,7 +2006,7 @@ def update_ticket_details(ticket_id):
             else:
                 ticket_update['due_date'] = None
         
-        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {'$set': ticket_update}):
+        if not mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': ticket_update}):
             return jsonify({
                 'success': False,
                 'message': 'Fehler beim Aktualisieren des Tickets'
@@ -3800,8 +3827,17 @@ def update_ticket_assignment(ticket_id):
         if not assigned_to or assigned_to == "":
             assigned_to = None
 
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+
         # Aktualisiere die Zuweisung direkt im Ticket
-        if not mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
+        if not mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}}):
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
 
         return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
@@ -3822,14 +3858,23 @@ def update_ticket_status(ticket_id):
             
         new_status = data['status']
         
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
             
         # Aktualisiere den Status
         mongodb.update_one('tickets', 
-                          {'_id': convert_id_for_query(ticket_id)}, 
+                          {'_id': ticket_id_for_update}, 
                           {
                               '$set': {
                                   'status': new_status,
@@ -3852,8 +3897,17 @@ def update_ticket_status(ticket_id):
 def delete_ticket(ticket_id):
     """Ticket soft löschen (markieren als gelöscht)"""
     try:
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
         # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         
         if not ticket:
             return jsonify({
@@ -3862,7 +3916,7 @@ def delete_ticket(ticket_id):
             }), 404
             
         # Führe das Soft-Delete durch (markieren als gelöscht)
-        mongodb.update_one('tickets', {'_id': convert_id_for_query(ticket_id)}, {
+        mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {
             '$set': {
                 'deleted': True,
                 'deleted_at': datetime.now()
@@ -3887,8 +3941,17 @@ def delete_ticket(ticket_id):
 def delete_ticket_permanent(ticket_id):
     """Ticket endgültig löschen"""
     try:
+        # Verwende die ursprüngliche ID direkt für das Update
+        from bson import ObjectId
+        try:
+            # Versuche zuerst mit ObjectId
+            ticket_id_for_update = ObjectId(ticket_id)
+        except:
+            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
+            ticket_id_for_update = ticket_id
+        
         # Prüfe ob das Ticket existiert und gelöscht ist
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id), 'deleted': True})
+        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update, 'deleted': True})
         
         if not ticket:
             return jsonify({
@@ -3897,13 +3960,13 @@ def delete_ticket_permanent(ticket_id):
             }), 404
             
         # Lösche das Ticket und alle zugehörigen Daten endgültig
-        mongodb.delete_one('tickets', {'_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_many('ticket_notes', {'ticket_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_many('ticket_messages', {'ticket_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_many('ticket_assignments', {'ticket_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_one('auftrag_details', {'ticket_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_many('auftrag_material', {'ticket_id': convert_id_for_query(ticket_id)})
-        mongodb.delete_many('auftrag_arbeit', {'ticket_id': convert_id_for_query(ticket_id)})
+        mongodb.delete_one('tickets', {'_id': ticket_id_for_update})
+        mongodb.delete_many('ticket_notes', {'ticket_id': ticket_id_for_update})
+        mongodb.delete_many('ticket_messages', {'ticket_id': ticket_id_for_update})
+        mongodb.delete_many('ticket_assignments', {'ticket_id': ticket_id_for_update})
+        mongodb.delete_one('auftrag_details', {'ticket_id': ticket_id_for_update})
+        mongodb.delete_many('auftrag_material', {'ticket_id': ticket_id_for_update})
+        mongodb.delete_many('auftrag_arbeit', {'ticket_id': ticket_id_for_update})
         
         return jsonify({
             'success': True,
