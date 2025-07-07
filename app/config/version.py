@@ -6,7 +6,7 @@ Versionsverwaltung für Scandy
 # MAJOR: Inkompatible API-Änderungen
 # MINOR: Neue Funktionalität, abwärtskompatibel
 # PATCH: Fehlerbehebungen, abwärtskompatibel
-VERSION = "beta 0.3.0"
+VERSION = "beta 0.3.2"
 
 # Autor
 AUTHOR = "Andreas Klann"
