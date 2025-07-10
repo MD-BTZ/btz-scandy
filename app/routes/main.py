@@ -46,12 +46,16 @@ def index():
                                duplicate_barcodes=[],
                                notices=[])
         
-        # Verwende die zentrale get_statistics Methode
+        # Verwende den zentralen Statistics Service
         try:
-            stats = MongoDBTool.get_statistics()
+            from app.services.statistics_service import StatisticsService
+            stats = StatisticsService.get_all_statistics()
             tool_stats = stats['tool_stats']
             consumable_stats = stats['consumable_stats']
             worker_stats = stats['worker_stats']
+            ticket_stats = stats['ticket_stats']
+            duplicate_barcodes = stats['duplicate_barcodes']
+            notices = StatisticsService.get_notices()
         except Exception as e:
             current_app.logger.error(f"Fehler beim Laden der Statistiken: {str(e)}")
             import traceback
@@ -59,56 +63,8 @@ def index():
             tool_stats = {'total': 0, 'available': 0, 'lent': 0, 'defect': 0}
             consumable_stats = {'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0}
             worker_stats = {'total': 0, 'by_department': []}
-        
-        # Consumable- und Worker-Statistiken kommen jetzt von der zentralen get_statistics Methode
-
-        # Ticket-Statistiken
-        ticket_pipeline = [
-            {'$match': {'deleted': {'$ne': True}}},
-            {
-                '$group': {
-                    '_id': None,
-                    'total': {'$sum': 1},
-                    'open': {
-                        '$sum': {
-                            '$cond': [{'$eq': ['$status', 'offen']}, 1, 0]
-                        }
-                    },
-                    'in_progress': {
-                        '$sum': {
-                            '$cond': [{'$eq': ['$status', 'in_bearbeitung']}, 1, 0]
-                        }
-                    },
-                    'closed': {
-                        '$sum': {
-                            '$cond': [{'$eq': ['$status', 'geschlossen']}, 1, 0]
-                        }
-                    }
-                }
-            }
-        ]
-        
-        try:
-            ticket_stats_result = list(mongodb.db.tickets.aggregate(ticket_pipeline))
-            ticket_stats = ticket_stats_result[0] if ticket_stats_result else {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0}
-        except Exception as e:
-            current_app.logger.error(f"Fehler beim Laden der Ticket-Statistiken: {str(e)}")
             ticket_stats = {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0}
-
-        # Prüfung auf doppelte Barcodes
-        try:
-            duplicate_barcodes = MongoDBTool.get_duplicate_barcodes()
-        except Exception as e:
-            current_app.logger.error(f"Fehler beim Laden der doppelten Barcodes: {str(e)}")
             duplicate_barcodes = []
-
-        # Lade aktive Hinweise aus der Datenbank
-        try:
-            notices = mongodb.find('homepage_notices', {'is_active': True})
-            # Sortiere die Hinweise nach Priorität und Erstellungsdatum
-            notices.sort(key=lambda x: (x.get('priority', 0), x.get('created_at', datetime.min)), reverse=True)
-        except Exception as e:
-            current_app.logger.error(f"Fehler beim Laden der Hinweise: {str(e)}")
             notices = []
         
         # Wähle das Template basierend auf der Benutzerrolle

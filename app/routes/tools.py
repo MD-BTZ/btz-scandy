@@ -1,7 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from flask_login import current_user
-from app.models.mongodb_models import MongoDBTool
-from app.models.mongodb_database import mongodb
+from app.services.tool_service import ToolService
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime
@@ -11,14 +10,25 @@ import logging
 bp = Blueprint('tools', __name__, url_prefix='/tools')
 logger = logging.getLogger(__name__) # Logger für dieses Modul
 
+# ToolService wird bei Bedarf initialisiert
+tool_service = None
+
+def get_tool_service():
+    """Lazy initialization des ToolService"""
+    global tool_service
+    if tool_service is None:
+        tool_service = ToolService()
+    return tool_service
+
 @bp.route('/')
 @login_required
 @not_teilnehmer_required
 def index():
     """Zeigt alle Werkzeuge an"""
     try:
-        # Hole alle aktiven Werkzeuge
-        tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+        # Hole alle Werkzeuge über den Service
+        tool_service = get_tool_service()
+        tools = tool_service.get_all_tools()
         
         # Hole Kategorien und Standorte aus den Settings
         categories = get_categories_from_settings()
@@ -44,22 +54,25 @@ def add():
     """Fügt ein neues Werkzeug hinzu"""
     if request.method == 'POST':
         try:
-            name = request.form.get('name')
-            barcode = request.form.get('barcode')
-            description = request.form.get('description')
-            category = request.form.get('category')
-            location = request.form.get('location')
-            status = request.form.get('status', 'verfügbar')
+            # Formulardaten sammeln
+            tool_data = {
+                'name': request.form.get('name'),
+                'barcode': request.form.get('barcode'),
+                'description': request.form.get('description'),
+                'category': request.form.get('category'),
+                'location': request.form.get('location'),
+                'status': request.form.get('status', 'verfügbar')
+            }
             
-            if not name or not barcode:
-                flash('Name und Barcode sind erforderlich', 'error')
-                return redirect(url_for('tools.add'))
+            # Werkzeug über Service erstellen
+            tool_service = get_tool_service()
+            success, message, barcode = tool_service.create_tool(tool_data)
             
-            # Prüfe ob der Barcode bereits existiert
-            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-            
-            if existing_tool:
-                flash('Dieser Barcode existiert bereits', 'error')
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('tools.index'))
+            else:
+                flash(message, 'error')
                 # Hole Kategorien und Standorte für das Template
                 categories = get_categories_from_settings()
                 locations = get_locations_from_settings()
@@ -68,35 +81,10 @@ def add():
                 return render_template('tools/add.html',
                                    categories=categories,
                                    locations=locations,
-                                   form_data={
-                                       'name': name,
-                                       'barcode': barcode,
-                                       'description': description,
-                                       'category': category,
-                                       'location': location,
-                                       'status': status
-                                   })
-            
-            # Wenn Barcode eindeutig ist, füge das Werkzeug hinzu
-            tool_data = {
-                'name': name,
-                'barcode': barcode,
-                'description': description,
-                'category': category,
-                'location': location,
-                'status': status,
-                'created_at': datetime.now(),
-                'modified_at': datetime.now(),
-                'deleted': False
-            }
-            
-            mongodb.insert_one('tools', tool_data)
-            
-            flash('Werkzeug erfolgreich hinzugefügt', 'success')
-            return redirect(url_for('tools.index'))
+                                   form_data=tool_data)
             
         except Exception as e:
-            print(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}")
+            logger.error(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}", exc_info=True)
             flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
             # Hole Kategorien und Standorte für das Template
             categories = get_categories_from_settings()
@@ -106,14 +94,7 @@ def add():
             return render_template('tools/add.html',
                                categories=categories,
                                locations=locations,
-                               form_data={
-                                   'name': name,
-                                   'barcode': barcode,
-                                   'description': description,
-                                   'category': category,
-                                   'location': location,
-                                   'status': status
-                               })
+                               form_data=request.form.to_dict())
             
     else:
         # GET: Zeige Formular
@@ -128,81 +109,29 @@ def add():
 @login_required
 def detail(barcode):
     """Zeigt die Details eines Werkzeugs"""
-    tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-    
-    if not tool:
-        flash('Werkzeug nicht gefunden', 'error')
+    try:
+        # Hole detaillierte Werkzeug-Informationen über den Service
+        tool_service = get_tool_service()
+        tool = tool_service.get_tool_details(barcode)
+        
+        if not tool:
+            flash('Werkzeug nicht gefunden', 'error')
+            return redirect(url_for('tools.index'))
+        
+        # Hole Kategorien und Standorte
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
+        
+        return render_template('tools/detail.html',
+                             tool=tool,
+                             categories=categories,
+                             locations=locations,
+                             lending_history=tool.get('lending_history', []))
+                             
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Werkzeug-Details: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Werkzeug-Details', 'error')
         return redirect(url_for('tools.index'))
-    
-    # Hole aktuelle Ausleihe
-    current_lending = mongodb.find_one('lendings', {
-        'tool_barcode': barcode,
-        'returned_at': None
-    })
-    
-    if current_lending:
-        worker = mongodb.find_one('workers', {'barcode': current_lending['worker_barcode']})
-        if worker:
-            tool['current_borrower'] = f"{worker['firstname']} {worker['lastname']}"
-            # Stelle sicher, dass das Datum korrekt formatiert wird
-            lending_date = current_lending['lent_at']
-            if isinstance(lending_date, str):
-                try:
-                    lending_date = datetime.strptime(lending_date, '%Y-%m-%d %H:%M:%S')
-                except (ValueError, TypeError):
-                    lending_date = datetime.now()
-            tool['lending_date'] = lending_date
-    
-    # Hole Kategorien und Standorte
-    categories = get_categories_from_settings()
-    locations = get_locations_from_settings()
-    
-    # Hole Verlauf aus Ausleihen
-    lendings = mongodb.find('lendings', {'tool_barcode': barcode})
-    lendings = list(lendings)
-    
-    # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
-    def safe_date_key(lending):
-        lent_at = lending.get('lent_at')
-        if isinstance(lent_at, str):
-            try:
-                return datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                return datetime.min
-        elif isinstance(lent_at, datetime):
-            return lent_at
-        else:
-            return datetime.min
-    
-    lendings.sort(key=safe_date_key, reverse=True)
-    
-    # Erstelle Verlaufsliste
-    history = []
-    for lending in lendings:
-        worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-        worker_name = f"{worker['firstname']} {worker['lastname']}" if worker else "Unbekannt"
-        
-        # Stelle sicher, dass das Datum korrekt formatiert wird
-        action_date = lending['lent_at']
-        if isinstance(action_date, str):
-            try:
-                action_date = datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                action_date = datetime.now()
-        
-        history.append({
-            'lent_at': action_date,
-            'worker_name': worker_name,
-            'worker_barcode': lending['worker_barcode'],
-            'returned_at': lending.get('returned_at'),
-            'status': 'Zurückgegeben' if lending.get('returned_at') else 'Ausgeliehen'
-        })
-    
-    return render_template('tools/detail.html',
-                         tool=tool,
-                         categories=categories,
-                         locations=locations,
-                         lending_history=history)
 
 @bp.route('/<barcode>/edit', methods=['GET', 'POST'])
 @login_required
@@ -210,65 +139,31 @@ def edit(barcode):
     """Bearbeitet ein Werkzeug"""
     try:
         if request.method == 'POST':
-            name = request.form.get('name')
-            description = request.form.get('description')
-            category = request.form.get('category')
-            location = request.form.get('location')
-            new_barcode = request.form.get('barcode')
-            new_status = request.form.get('status')
-            
-            if not name:
-                flash('Name ist erforderlich', 'error')
-                return redirect(url_for('tools.edit', barcode=barcode))
-            
-            # Validiere den Status
-            if new_status not in ['verfügbar', 'defekt']:
-                flash('Ungültiger Status', 'error')
-                return redirect(url_for('tools.edit', barcode=barcode))
-            
-            # Hole den aktuellen Status des Werkzeugs
-            current_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-            
-            if not current_tool:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-            
-            # Prüfe ob das Werkzeug ausgeliehen ist
-            current_lending = mongodb.find_one('lendings', {
-                'tool_barcode': barcode,
-                'returned_at': None
-            })
-            
-            if current_lending and new_status == 'defekt':
-                flash('Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden', 'error')
-                return redirect(url_for('tools.edit', barcode=barcode))
-            
-            # Aktualisiere das Werkzeug
-            update_data = {
-                'name': name,
-                'description': description,
-                'category': category,
-                'location': location,
-                'status': new_status,
-                'modified_at': datetime.now()
+            # Formulardaten sammeln
+            tool_data = {
+                'name': request.form.get('name'),
+                'description': request.form.get('description'),
+                'category': request.form.get('category'),
+                'location': request.form.get('location'),
+                'barcode': request.form.get('barcode'),
+                'status': request.form.get('status')
             }
             
-            # Wenn der Barcode geändert wurde, prüfe ob der neue Barcode bereits existiert
-            if new_barcode and new_barcode != barcode:
-                existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
-                if existing_tool:
-                    flash('Dieser Barcode existiert bereits', 'error')
-                    return redirect(url_for('tools.edit', barcode=barcode))
-                update_data['barcode'] = new_barcode
+            # Werkzeug über Service aktualisieren
+            tool_service = get_tool_service()
+            success, message, new_barcode = tool_service.update_tool(barcode, tool_data)
             
-            mongodb.update_one('tools', {'barcode': barcode}, {'$set': update_data})
-            
-            flash('Werkzeug erfolgreich aktualisiert', 'success')
-            return redirect(url_for('tools.detail', barcode=new_barcode if new_barcode else barcode))
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('tools.detail', barcode=new_barcode))
+            else:
+                flash(message, 'error')
+                return redirect(url_for('tools.edit', barcode=barcode))
             
         else:
             # GET: Zeige Bearbeitungsformular
-            tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
+            tool_service = get_tool_service()
+            tool = tool_service.get_tool_by_barcode(barcode)
             
             if not tool:
                 flash('Werkzeug nicht gefunden', 'error')
@@ -295,30 +190,190 @@ def change_status(barcode):
     try:
         new_status = request.form.get('status')
         
-        if new_status not in ['verfügbar', 'defekt']:
-            return jsonify({'success': False, 'message': 'Ungültiger Status'}), 400
+        # Status über Service ändern
+        tool_service = get_tool_service()
+        success, message = tool_service.change_tool_status(barcode, new_status)
         
-        # Prüfe ob das Werkzeug ausgeliehen ist
-        current_lending = mongodb.find_one('lendings', {
-            'tool_barcode': barcode,
-            'returned_at': None
-        })
-        
-        if current_lending and new_status == 'defekt':
-            return jsonify({
-                'success': False, 
-                'message': 'Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden'
-            }), 400
-        
-        # Aktualisiere den Status
-        mongodb.update_one('tools', 
-                          {'barcode': barcode}, 
-                          {'$set': {'status': new_status, 'modified_at': datetime.now()}})
-        
-        return jsonify({'success': True, 'message': 'Status erfolgreich geändert'})
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
         
     except Exception as e:
         logger.error(f"Fehler beim Ändern des Status: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': 'Fehler beim Ändern des Status'}), 500
 
-# Weitere Tool-Routen...
+@bp.route('/<string:barcode>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete(barcode):
+    """Löscht ein Werkzeug"""
+    try:
+        permanent = request.form.get('permanent', 'false').lower() == 'true'
+        
+        # Werkzeug über Service löschen
+        tool_service = get_tool_service()
+        success, message = tool_service.delete_tool(barcode, permanent)
+        
+        if success:
+            flash(message, 'success')
+        else:
+            flash(message, 'error')
+            
+        return redirect(url_for('tools.index'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Löschen des Werkzeugs: {str(e)}", exc_info=True)
+        flash('Fehler beim Löschen des Werkzeugs', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/search')
+@login_required
+def search():
+    """Sucht nach Werkzeugen"""
+    try:
+        query = request.args.get('q', '')
+        
+        if not query:
+            return redirect(url_for('tools.index'))
+        
+        # Suche über Service
+        tool_service = get_tool_service()
+        tools = tool_service.search_tools(query)
+        
+        # Hole Kategorien und Standorte
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
+        
+        return render_template('tools/index.html',
+                           tools=tools,
+                           categories=categories,
+                           locations=locations,
+                           search_query=query,
+                           is_admin=current_user.is_admin)
+                           
+    except Exception as e:
+        logger.error(f"Fehler bei der Werkzeug-Suche: {str(e)}", exc_info=True)
+        flash('Fehler bei der Suche', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/category/<category>')
+@login_required
+def by_category(category):
+    """Zeigt Werkzeuge nach Kategorie"""
+    try:
+        # Werkzeuge nach Kategorie über Service
+        tool_service = get_tool_service()
+        tools = tool_service.get_tools_by_category(category)
+        
+        # Hole Kategorien und Standorte
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
+        
+        return render_template('tools/index.html',
+                           tools=tools,
+                           categories=categories,
+                           locations=locations,
+                           selected_category=category,
+                           is_admin=current_user.is_admin)
+                           
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Werkzeuge nach Kategorie: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Werkzeuge', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/location/<location>')
+@login_required
+def by_location(location):
+    """Zeigt Werkzeuge nach Standort"""
+    try:
+        # Werkzeuge nach Standort über Service
+        tool_service = get_tool_service()
+        tools = tool_service.get_tools_by_location(location)
+        
+        # Hole Kategorien und Standorte
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
+        
+        return render_template('tools/index.html',
+                           tools=tools,
+                           categories=categories,
+                           locations=locations,
+                           selected_location=location,
+                           is_admin=current_user.is_admin)
+                           
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Werkzeuge nach Standort: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Werkzeuge', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/status/<status>')
+@login_required
+def by_status(status):
+    """Zeigt Werkzeuge nach Status"""
+    try:
+        # Werkzeuge nach Status über Service
+        tool_service = get_tool_service()
+        tools = tool_service.get_tools_by_status(status)
+        
+        # Hole Kategorien und Standorte
+        categories = get_categories_from_settings()
+        locations = get_locations_from_settings()
+        
+        return render_template('tools/index.html',
+                           tools=tools,
+                           categories=categories,
+                           locations=locations,
+                           selected_status=status,
+                           is_admin=current_user.is_admin)
+                           
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Werkzeuge nach Status: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Werkzeuge', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/statistics')
+@login_required
+@admin_required
+def statistics():
+    """Zeigt Werkzeug-Statistiken"""
+    try:
+        # Statistiken über Service
+        tool_service = get_tool_service()
+        stats = tool_service.get_tool_statistics()
+        
+        return render_template('tools/statistics.html',
+                           stats=stats,
+                           is_admin=current_user.is_admin)
+                           
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Werkzeug-Statistiken: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Statistiken', 'error')
+        return redirect(url_for('tools.index'))
+
+@bp.route('/export')
+@login_required
+@admin_required
+def export():
+    """Exportiert Werkzeuge als CSV"""
+    try:
+        from flask import Response
+        
+        # CSV über Service exportieren
+        tool_service = get_tool_service()
+        csv_data = tool_service.export_tools()
+        
+        if not csv_data:
+            flash('Fehler beim Export', 'error')
+            return redirect(url_for('tools.index'))
+        
+        # CSV-Datei zum Download anbieten
+        response = Response(csv_data, mimetype='text/csv')
+        response.headers['Content-Disposition'] = f'attachment; filename=werkzeuge_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Export der Werkzeuge: {str(e)}", exc_info=True)
+        flash('Fehler beim Export', 'error')
+        return redirect(url_for('tools.index'))

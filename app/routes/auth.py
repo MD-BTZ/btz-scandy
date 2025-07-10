@@ -231,12 +231,18 @@ def profile():
                 flash('Benutzer nicht gefunden', 'error')
                 return redirect(url_for('auth.profile'))
             
-            # ===== FORMULARDATEN HOLEN =====
-            email = request.form.get('email', '').strip()
-            current_password = request.form.get('current_password', '').strip()
-            new_password = request.form.get('new_password', '').strip()
-            new_password_confirm = request.form.get('new_password_confirm', '').strip()
-            timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
+            # ===== FORMULARDATEN HOLEN UND VALIDIEREN =====
+            from app.services.validation_service import ValidationService
+            from app.services.utility_service import UtilityService
+            
+            form_data = UtilityService.get_form_data_dict(request.form)
+            
+            # Validierung für Profil-Update
+            email = form_data.get('email', '').strip()
+            current_password = form_data.get('current_password', '').strip()
+            new_password = form_data.get('new_password', '').strip()
+            new_password_confirm = form_data.get('new_password_confirm', '').strip()
+            timesheet_enabled = form_data.get('timesheet_enabled') == 'on'
             
             # ===== E-MAIL ÄNDERN =====
             if email and email != user.get('email', ''):
@@ -247,6 +253,11 @@ def profile():
                 })
                 if existing_user:
                     flash('Diese E-Mail-Adresse wird bereits von einem anderen Benutzer verwendet.', 'error')
+                    return render_template('auth/profile.html', user=user)
+                
+                # E-Mail validieren
+                if not ValidationService._is_valid_email(email):
+                    flash('Ungültige E-Mail-Adresse.', 'error')
                     return render_template('auth/profile.html', user=user)
                 
                 # E-Mail aktualisieren
@@ -263,18 +274,20 @@ def profile():
                 
                 # Prüfe aktuelles Passwort
                 from app.utils.auth_utils import check_password_compatible
-                if not check_password_compatible(user.get('password_hash', ''), current_password):
+                if not check_password_compatible(current_password, user.get('password_hash', '')):
                     flash('Aktuelles Passwort ist falsch.', 'error')
                     return render_template('auth/profile.html', user=user)
                 
-                # Prüfe ob neue Passwörter übereinstimmen
-                if new_password != new_password_confirm:
-                    flash('Neue Passwörter stimmen nicht überein.', 'error')
-                    return render_template('auth/profile.html', user=user)
+                # Validierung mit ValidationService
+                validation_data = {
+                    'password': new_password,
+                    'password_confirm': new_password_confirm
+                }
+                is_valid, errors = ValidationService.validate_user_form(validation_data, is_edit=True)
                 
-                # Prüfe Passwort-Stärke (mindestens 8 Zeichen)
-                if len(new_password) < 8:
-                    flash('Das neue Passwort muss mindestens 8 Zeichen lang sein.', 'error')
+                if not is_valid:
+                    for error in errors:
+                        flash(error, 'error')
                     return render_template('auth/profile.html', user=user)
                 
                 # Passwort aktualisieren

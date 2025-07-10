@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Werkzeug-Statistiken{% endblock %}
+
+{% block page_content %}
+<div class="mb-4">
+    <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+        <i class="fas fa-arrow-left mr-2"></i>
+        Zurück zur Übersicht
+    </a>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Werkzeug-Statistiken</h1>
+            <div class="flex gap-2">
+                <a href="{{ url_for('tools.export') }}" class="btn btn-primary">
+                    <i class="fas fa-download mr-2"></i>
+                    Export CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- Übersichtskarten -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Gesamtanzahl -->
+            <div class="stat bg-base-100 shadow-xl rounded-lg">
+                <div class="stat-figure text-primary">
+                    <i class="fas fa-tools text-3xl"></i>
+                </div>
+                <div class="stat-title">Gesamtanzahl</div>
+                <div class="stat-value text-primary">{{ stats.total_tools }}</div>
+                <div class="stat-desc">Alle Werkzeuge</div>
+            </div>
+
+            <!-- Verfügbar -->
+            <div class="stat bg-base-100 shadow-xl rounded-lg">
+                <div class="stat-figure text-success">
+                    <i class="fas fa-check-circle text-3xl"></i>
+                </div>
+                <div class="stat-title">Verfügbar</div>
+                <div class="stat-value text-success">{{ stats.available_tools }}</div>
+                <div class="stat-desc">Bereit zur Ausleihe</div>
+            </div>
+
+            <!-- Ausgeliehen -->
+            <div class="stat bg-base-100 shadow-xl rounded-lg">
+                <div class="stat-figure text-warning">
+                    <i class="fas fa-handshake text-3xl"></i>
+                </div>
+                <div class="stat-title">Ausgeliehen</div>
+                <div class="stat-value text-warning">{{ stats.borrowed_tools }}</div>
+                <div class="stat-desc">Aktuell verliehen</div>
+            </div>
+
+            <!-- Defekt -->
+            <div class="stat bg-base-100 shadow-xl rounded-lg">
+                <div class="stat-figure text-error">
+                    <i class="fas fa-exclamation-triangle text-3xl"></i>
+                </div>
+                <div class="stat-title">Defekt</div>
+                <div class="stat-value text-error">{{ stats.defect_tools }}</div>
+                <div class="stat-desc">Nicht verfügbar</div>
+            </div>
+        </div>
+
+        <!-- Detaillierte Statistiken -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Kategorien -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">
+                        <i class="fas fa-tags mr-2"></i>
+                        Nach Kategorien
+                    </h2>
+                    {% if stats.categories %}
+                    <div class="space-y-3">
+                        {% for category, count in stats.categories.items() %}
+                        <div class="flex justify-between items-center">
+                            <span class="font-medium">{{ category }}</span>
+                            <div class="flex items-center gap-2">
+                                <div class="w-32 bg-base-300 rounded-full h-2">
+                                    <div class="bg-primary h-2 rounded-full" 
+                                         style="width: {{ (count / stats.total_tools * 100) if stats.total_tools > 0 else 0 }}%"></div>
+                                </div>
+                                <span class="text-sm font-mono">{{ count }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-base-content/60">Keine Kategorien verfügbar</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Standorte -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">
+                        <i class="fas fa-map-marker-alt mr-2"></i>
+                        Nach Standorten
+                    </h2>
+                    {% if stats.locations %}
+                    <div class="space-y-3">
+                        {% for location, count in stats.locations.items() %}
+                        <div class="flex justify-between items-center">
+                            <span class="font-medium">{{ location }}</span>
+                            <div class="flex items-center gap-2">
+                                <div class="w-32 bg-base-300 rounded-full h-2">
+                                    <div class="bg-secondary h-2 rounded-full" 
+                                         style="width: {{ (count / stats.total_tools * 100) if stats.total_tools > 0 else 0 }}%"></div>
+                                </div>
+                                <span class="text-sm font-mono">{{ count }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-base-content/60">Keine Standorte verfügbar</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Zusätzliche Informationen -->
+        <div class="mt-8">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Weitere Informationen
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-primary">
+                                {{ "%.1f"|format((stats.available_tools / stats.total_tools * 100) if stats.total_tools > 0 else 0) }}%
+                            </div>
+                            <div class="text-sm text-base-content/60">Verfügbarkeitsrate</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-warning">
+                                {{ "%.1f"|format((stats.borrowed_tools / stats.total_tools * 100) if stats.total_tools > 0 else 0) }}%
+                            </div>
+                            <div class="text-sm text-base-content/60">Ausleihrate</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-error">
+                                {{ "%.1f"|format((stats.defect_tools / stats.total_tools * 100) if stats.total_tools > 0 else 0) }}%
+                            </div>
+                            <div class="text-sm text-base-content/60">Defekt-Rate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

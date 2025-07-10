@@ -2,13 +2,16 @@ from functools import wraps
 from flask import session, redirect, url_for, flash, request, g
 import logging
 from werkzeug.security import check_password_hash
-from app.models.mongodb_database import MongoDB
+from app.models.mongodb_database import get_mongodb
 import hashlib
 import base64
 import os
 
 logger = logging.getLogger(__name__)
-mongodb = MongoDB()
+
+def get_mongodb_instance():
+    """Lazy initialization der MongoDB-Instanz"""
+    return get_mongodb()
 
 def needs_setup():
     """Überprüft, ob ein Admin-Benutzer in der MongoDB existiert.
@@ -19,6 +22,7 @@ def needs_setup():
     """
     try:
         # Prüfe, ob mindestens ein Admin existiert
+        mongodb = get_mongodb_instance()
         admin_count = mongodb.count_documents('users', {'role': 'admin'})
         return admin_count == 0  # True wenn kein Admin gefunden wurde
     except Exception as e:
@@ -28,6 +32,7 @@ def needs_setup():
 
 def is_admin_user_present():
     try:
+        mongodb = get_mongodb_instance()
         admin_count = mongodb.count_documents('users', {'role': 'admin'})
         return admin_count > 0
     except Exception as e:
