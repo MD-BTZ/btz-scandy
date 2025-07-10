@@ -1,4 +1,5 @@
 <div class="overflow-x-auto">
+    <!-- DEBUG: Anzahl offener Tickets: {{ open_tickets|length }} -->
     {% if open_tickets %}
     <table class="table w-full">
         <thead>
@@ -16,6 +17,7 @@
         </thead>
         <tbody>
             {% for ticket in open_tickets %}
+            <!-- DEBUG: Ticket: {{ ticket.title }} (ID: {{ ticket.id }}) -->
             <tr>
                 <td>{{ ticket.ticket_number or ticket.id }}</td>
                 <td>
@@ -34,7 +36,17 @@
                     </span>
                 </td>
                 <td>{{ ticket.category or '-' }}</td>
-                <td>{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') if ticket.due_date else '-' }}</td>
+                <td>
+                    {% if ticket.due_date %}
+                        {% if ticket.due_date is string %}
+                            {{ ticket.due_date }}
+                        {% else %}
+                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</td>
                 <td>
                     {% if ticket.message_count > 0 %}

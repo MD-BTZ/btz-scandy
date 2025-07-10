@@ -77,13 +77,27 @@
                         -
                     {% endif %}
                 </td>
-                <td>{{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else '-' }}</td>
+                <td>
+                    {% if ticket.created_at %}
+                        {% if ticket.created_at is string %}
+                            {{ ticket.created_at }}
+                        {% else %}
+                            {{ ticket.created_at.strftime('%d.%m.%Y %H:%M') }}
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td>
                     {% if ticket.due_date %}
-                        {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
-                            <span class="text-danger">{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                        {% if ticket.due_date is string %}
+                            {{ ticket.due_date }}
                         {% else %}
-                            {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                            {% if ticket.due_date < now and ticket.status not in ['erledigt', 'gelöst'] %}
+                                <span class="text-danger">{{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                            {% else %}
+                                {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+                            {% endif %}
                         {% endif %}
                     {% else %}
                         -

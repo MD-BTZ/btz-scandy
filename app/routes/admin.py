@@ -27,91 +27,22 @@ import pandas as pd
 import tempfile
 from typing import Union
 
+# Import der neuen Services
+from app.services.admin_dashboard_service import AdminDashboardService
+from app.services.admin_user_service import AdminUserService
+from app.services.admin_backup_service import AdminBackupService
+from app.services.admin_system_service import AdminSystemService
+from app.services.admin_email_service import AdminEmailService
+from app.services.admin_notification_service import AdminNotificationService
+from app.services.admin_ticket_service import AdminTicketService
+from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
+
 # Logger einrichten
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
-    """
-    Konvertiert eine ID für Datenbankabfragen.
-    Wenn die ID ein String ist, der wie eine ObjectId aussieht, konvertiert sie zu ObjectId.
-    """
-    try:
-        # Wenn die ID ein String ist und 24 Zeichen lang (wie eine ObjectId)
-        if isinstance(id_value, str) and len(id_value) == 24:
-            try:
-                return ObjectId(id_value)
-            except:
-                # Falls die Konvertierung fehlschlägt, gib die ursprüngliche ID zurück
-                return id_value
-        else:
-            # Für andere IDs (z.B. Barcodes) gib die ursprüngliche ID zurück
-            return id_value
-    except:
-        # Falls etwas schiefgeht, gib die ursprüngliche ID zurück
-        return id_value
-
-def find_document_by_id(collection: str, id_value: str):
-    """
-    Findet ein Dokument in einer Collection mit robuster ID-Behandlung.
-    Unterstützt String-IDs und ObjectIds.
-    """
-    try:
-        # Versuche zuerst mit String-ID
-        doc = mongodb.find_one(collection, {'_id': id_value})
-        if doc:
-            return doc
-        
-        # Falls nicht gefunden, versuche mit ObjectId
-        try:
-            object_id = ObjectId(id_value)
-            doc = mongodb.find_one(collection, {'_id': object_id})
-            if doc:
-                return doc
-        except:
-            pass
-        
-        # Falls immer noch nicht gefunden, versuche mit convert_id_for_query
-        try:
-            converted_id = convert_id_for_query(id_value)
-            doc = mongodb.find_one(collection, {'_id': converted_id})
-            if doc:
-                return doc
-        except:
-            pass
-        
-        return None
-    except Exception as e:
-        logging.error(f"Fehler beim Suchen von Dokument {id_value} in Collection {collection}: {str(e)}")
-        return None
-
-def find_user_by_id(user_id: str):
-    """
-    Spezielle Funktion zum Finden von Benutzern mit robuster ID-Behandlung.
-    Unterstützt String-IDs und ObjectIds.
-    """
-    try:
-        logging.info(f"DEBUG: Suche User mit ID: {user_id}")
-        
-        # Verwende convert_id_for_query für robuste ID-Konvertierung
-        converted_id = convert_id_for_query(user_id)
-        user = mongodb.find_one('users', {'_id': converted_id})
-        
-        if user:
-            logging.info(f"DEBUG: User gefunden: {user.get('username', 'Unknown')}")
-            return user
-        
-        logging.info(f"DEBUG: Kein User gefunden für ID: {user_id}")
-        return None
-                
-    except Exception as e:
-        logging.error(f"DEBUG: Fehler beim Laden des Users mit ID {user_id}: {e}")
-        return None
-
 # Stelle sicher, dass die Standard-Einstellungen beim Start der App vorhanden sind
-# ensure_default_settings()
-
 def ensure_default_settings():
     """Stellt sicher, dass die Standard-Label-Einstellungen vorhanden sind"""
     default_settings = [
@@ -129,676 +60,210 @@ def ensure_default_settings():
                          {'$setOnInsert': setting}, 
                          upsert=True)
 
-def get_recent_activity():
-    """Hole die letzten Aktivitäten"""
-    try:
-        # Hole die letzten 10 Ausleihen
-        recent_lendings = list(mongodb.find('lendings', {}, sort=[('lent_at', -1)], limit=10))
-        
-        # Hole die letzten 10 Verbrauchsmaterial-Ausgaben
-        recent_usages = list(mongodb.find('consumable_usages', {}, sort=[('used_at', -1)], limit=10))
-        
-        activities = []
-        
-        # Ausleihen verarbeiten
-        for lending in recent_lendings:
-            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-            
-            if tool and worker:
-                activities.append({
-                    'type': 'lending',
-                    'timestamp': lending['lent_at'],
-                    'description': f'Werkzeug "{tool["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgeliehen',
-                    'icon': 'fas fa-tools'
-                })
-        
-        # Verbrauchsmaterial verarbeiten
-        for usage in recent_usages:
-            consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
-            
-            if consumable and worker:
-                activities.append({
-                    'type': 'usage',
-                    'timestamp': usage['used_at'],
-                    'description': f'{usage["quantity"]}x "{consumable["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgegeben',
-                    'icon': 'fas fa-box-open'
-                })
-        
-        # Nach Zeitstempel sortieren und die letzten 10 zurückgeben
-        activities.sort(key=lambda x: x['timestamp'], reverse=True)
-        return activities[:10]
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der letzten Aktivitäten: {str(e)}")
-        return []
-
-def get_material_usage():
-    """Hole die Materialnutzung"""
-    try:
-        # Hole Verbrauchsmaterial-Ausgaben der letzten 30 Tage
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        
-        pipeline = [
-            {
-                '$match': {
-                    'used_at': {'$gte': thirty_days_ago}
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'consumables',
-                    'localField': 'consumable_barcode',
-                    'foreignField': 'barcode',
-                    'as': 'consumable'
-                }
-            },
-            {
-                '$unwind': '$consumable'
-            },
-            {
-                '$group': {
-                    '_id': '$consumable_barcode',
-                    'name': {'$first': '$consumable.name'},
-                    'total_quantity': {'$sum': '$quantity'},
-                    'usage_count': {'$sum': 1}
-                }
-            },
-            {
-                '$sort': {'total_quantity': -1}
-            },
-            {
-                '$limit': 5
-            }
-        ]
-        
-        usage_stats = list(mongodb.db.consumable_usages.aggregate(pipeline))
-        
-        return usage_stats
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Materialnutzung: {str(e)}")
-        return []
-
-def get_warnings():
-    """Hole aktuelle Warnungen"""
-    try:
-        warnings = []
-        
-        # Warnung für niedrige Verbrauchsmaterial-Bestände
-        low_stock_consumables = list(mongodb.find('consumables', {
-            'deleted': {'$ne': True},
-            '$expr': {
-                '$lte': ['$quantity', '$min_quantity']
-            }
-        }))
-        
-        for consumable in low_stock_consumables:
-            warnings.append({
-                'type': 'low_stock',
-                'severity': 'warning',
-                'message': f'Verbrauchsmaterial "{consumable["name"]}" hat niedrigen Bestand: {consumable["quantity"]}',
-                'icon': 'fas fa-exclamation-triangle'
-            })
-        
-        # Warnung für überfällige Ausleihen (mehr als 30 Tage)
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        overdue_lendings = list(mongodb.find('lendings', {
-            'returned_at': None,
-            'lent_at': {'$lt': thirty_days_ago}
-        }))
-        
-        for lending in overdue_lendings:
-            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-            
-            if tool and worker:
-                days_overdue = (datetime.now() - lending['lent_at']).days
-                warnings.append({
-                    'type': 'overdue',
-                    'severity': 'danger',
-                    'message': f'Werkzeug "{tool["name"]}" ist seit {days_overdue} Tagen an {worker["firstname"]} {worker["lastname"]} ausgeliehen',
-                    'icon': 'fas fa-clock'
-                })
-        
-        # Warnung für defekte Werkzeuge
-        defective_tools = list(mongodb.find('tools', {
-            'deleted': {'$ne': True},
-            'status': 'defekt'
-        }))
-        
-        for tool in defective_tools:
-            warnings.append({
-                'type': 'defective',
-                'severity': 'info',
-                'message': f'Werkzeug "{tool["name"]}" ist als defekt markiert',
-                'icon': 'fas fa-tools'
-            })
-        
-        return warnings
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Warnungen: {str(e)}")
-        return []
-
-def get_backup_info():
-    """Hole Informationen über vorhandene Backups"""
-    backups = []
-    backup_dir = Path(__file__).parent.parent.parent / 'backups'
-    
-    try:
-        if not backup_dir.exists():
-            logger.warning(f"Backup-Verzeichnis existiert nicht: {backup_dir}")
-            return backups
-        
-        for backup_file in sorted(backup_dir.glob('*.json'), reverse=True):
-            try:
-                # Backup-Statistiken aus der Datei lesen
-                stats = None
-                try:
-                    with open(backup_file, 'r', encoding='utf-8') as f:
-                        import json
-                        data = json.load(f)
-                        stats = {
-                            'tools': len(data.get('tools', [])),
-                            'consumables': len(data.get('consumables', [])),
-                            'workers': len(data.get('workers', [])),
-                            'active_lendings': len([l for l in data.get('lendings', []) if not l.get('returned_at')])
-                        }
-                except Exception as e:
-                    logger.warning(f"Fehler beim Lesen der Backup-Statistiken für {backup_file.name}: {e}")
-                    stats = None
-                
-                # Unix-Timestamp verwenden
-                created_timestamp = backup_file.stat().st_mtime
-                
-                backups.append({
-                    'name': backup_file.name,
-                    'size': backup_file.stat().st_size,
-                    'created': created_timestamp,
-                    'stats': stats
-                })
-                
-            except Exception as e:
-                logger.error(f"Fehler beim Verarbeiten der Backup-Datei {backup_file.name}: {e}")
-                continue
-        
-        logger.info(f"Backup-Liste erfolgreich geladen: {len(backups)} Backups gefunden")
-        return backups
-        
-    except Exception as e:
-        logger.error(f"Kritischer Fehler beim Laden der Backup-Informationen: {e}", exc_info=True)
-        return []
-
-def get_consumables_forecast():
-    """Berechnet die Bestandsprognose für Verbrauchsmaterialien"""
-    # MongoDB-Version der Prognose
-    pipeline = [
-        {
-            '$lookup': {
-                'from': 'consumable_usages',
-                'localField': 'barcode',
-                'foreignField': 'consumable_barcode',
-                'as': 'usages'
-            }
-        },
-        {
-            '$addFields': {
-                'recent_usages': {
-                    '$filter': {
-                        'input': '$usages',
-                        'cond': {
-                            '$gte': [
-                                '$$this.used_at',
-                                datetime.now() - timedelta(days=30)
-                            ]
-                        }
-                    }
-                }
-            }
-        },
-        {
-            '$addFields': {
-                'avg_daily_usage': {
-                    '$cond': {
-                        'if': {'$gt': [{'$size': '$recent_usages'}, 0]},
-                        'then': {
-                            '$divide': [
-                                {'$sum': '$recent_usages.quantity'},
-                                30
-                            ]
-                        },
-                        'else': 0
-                    }
-                }
-            }
-        },
-        {
-            '$addFields': {
-                'days_remaining': {
-                    '$cond': {
-                        'if': {'$gt': ['$avg_daily_usage', 0]},
-                        'then': {'$divide': ['$quantity', '$avg_daily_usage']},
-                        'else': 999
-                    }
-                }
-            }
-        },
-        {
-            '$match': {
-                'deleted': {'$ne': True},
-                'quantity': {'$gt': 0}
-            }
-        },
-        {
-            '$sort': {'days_remaining': 1}
-        },
-        {
-            '$limit': 6
-        },
-        {
-            '$project': {
-                'name': 1,
-                'current_amount': '$quantity',
-                'avg_daily_usage': {'$round': ['$avg_daily_usage', 2]},
-                'days_remaining': {'$round': ['$days_remaining']}
-            }
-        }
-    ]
-    
-    return list(mongodb.db.consumables.aggregate(pipeline))
-
 def create_excel(data, columns):
-    """Erstellt eine Excel-Datei aus den gegebenen Daten"""
+    """Erstellt eine Excel-Datei aus Daten"""
     wb = openpyxl.Workbook()
     ws = wb.active
     
-    # Headers hinzufügen
+    # Header
     for col, header in enumerate(columns, 1):
         ws.cell(row=1, column=col, value=header)
     
-    # Daten einfügen
+    # Daten
     for row, item in enumerate(data, 2):
-        for col, key in enumerate(columns, 1):
-            ws.cell(row=row, column=col, value=item.get(key, ''))
+        for col, key in enumerate(columns.keys(), 1):
+            value = item.get(key, '')
+            ws.cell(row=row, column=col, value=value)
     
-    # Excel-Datei in BytesIO speichern
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    
-    return excel_file
+    # Speichern
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
-# Angepasste Excel-Funktion für mehrere Sheets
 def create_multi_sheet_excel(data_dict):
     """Erstellt eine Excel-Datei mit mehreren Arbeitsblättern"""
-    import pandas as pd
-    import tempfile
-    import os
+    wb = openpyxl.Workbook()
     
-    # Erstelle temporäre Datei
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-        tmp_file_path = tmp_file.name
+    # Entferne das Standard-Arbeitsblatt
+    wb.remove(wb.active)
     
-    try:
-        # Erstelle Excel-Writer
-        with pd.ExcelWriter(tmp_file_path, engine='openpyxl') as writer:
-            for sheet_name, data_list in data_dict.items():
-                if data_list:
-                    # Konvertiere MongoDB-Dokumente zu DataFrame
-                    df = pd.DataFrame(data_list)
-                    
-                    # Entferne MongoDB-spezifische Felder
-                    if '_id' in df.columns:
-                        df = df.drop('_id', axis=1)
-                    
-                    # Schreibe Arbeitsblatt
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                else:
-                    # Leeres Arbeitsblatt erstellen
-                    pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
+    for sheet_name, data in data_dict.items():
+        ws = wb.create_sheet(title=sheet_name)
         
-        return tmp_file_path
-        
-    except Exception as e:
-        # Bei Fehler temporäre Datei löschen
-        if os.path.exists(tmp_file_path):
-            os.unlink(tmp_file_path)
-        raise e
+        if data and len(data) > 0:
+            # Header aus den ersten Datenzeilen
+            headers = list(data[0].keys())
+            
+            # Header schreiben
+            for col, header in enumerate(headers, 1):
+                ws.cell(row=1, column=col, value=header)
+            
+            # Daten schreiben
+            for row, item in enumerate(data, 2):
+                for col, key in enumerate(headers, 1):
+                    value = item.get(key, '')
+                    ws.cell(row=row, column=col, value=value)
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
 @bp.route('/')
 @mitarbeiter_required
 def index():
-    """Admin-Startseite - Weiterleitung zum Dashboard"""
+    """Admin-Startseite"""
     return redirect(url_for('admin.dashboard'))
 
 @bp.route('/dashboard')
 @mitarbeiter_required
 def dashboard():
-    """Admin Dashboard"""
-    # Werkzeug-Statistiken mit MongoDB-Aggregation
-    tool_pipeline = [
-        {'$match': {'deleted': {'$ne': True}}},
-        {
-            '$lookup': {
-                'from': 'lendings',
-                'localField': 'barcode',
-                'foreignField': 'tool_barcode',
-                'as': 'active_lendings'
-            }
-        },
-        {
-            '$addFields': {
-                'has_active_lending': {
-                    '$gt': [
-                        {'$size': {'$filter': {'input': '$active_lendings', 'cond': {'$eq': ['$$this.returned_at', None]}}}},
-                        0
-                    ]
-                }
-            }
-        },
-        {
-            '$group': {
-                '_id': None,
-                'total': {'$sum': 1},
-                'available': {
-                    '$sum': {
-                        '$cond': [
-                            {'$and': [{'$eq': ['$status', 'verfügbar']}, {'$not': '$has_active_lending'}]},
-                            1,
-                            0
-                        ]
-                    }
-                },
-                'lent': {
-                    '$sum': {
-                        '$cond': ['$has_active_lending', 1, 0]
-                    }
-                },
-                'defect': {
-                    '$sum': {
-                        '$cond': [{'$eq': ['$status', 'defekt']}, 1, 0]
-                    }
-                }
-            }
+    """Admin-Dashboard"""
+    try:
+        # Verwende den AdminDashboardService für alle Dashboard-Daten
+        recent_activity = AdminDashboardService.get_recent_activity()
+        material_usage = AdminDashboardService.get_material_usage()
+        warnings = AdminDashboardService.get_warnings()
+        backup_info = AdminDashboardService.get_backup_info()
+        consumables_forecast = AdminDashboardService.get_consumables_forecast()
+        consumable_trend = AdminDashboardService.get_consumable_trend()
+        
+        # Hole zusätzliche Statistiken
+        total_tools = mongodb.count_documents('tools', {'deleted': {'$ne': True}})
+        total_consumables = mongodb.count_documents('consumables', {'deleted': {'$ne': True}})
+        total_workers = mongodb.count_documents('workers', {'deleted': {'$ne': True}})
+        total_tickets = mongodb.count_documents('tickets', {})
+        
+        # Tool-Statistiken
+        tool_stats = {
+            'total': total_tools,
+            'available': mongodb.count_documents('tools', {'status': 'verfügbar', 'deleted': {'$ne': True}}),
+            'lent': mongodb.count_documents('tools', {'status': 'ausgeliehen', 'deleted': {'$ne': True}}),
+            'defect': mongodb.count_documents('tools', {'status': 'defekt', 'deleted': {'$ne': True}})
         }
-    ]
-    
-    tool_stats_result = list(mongodb.db.tools.aggregate(tool_pipeline))
-    tool_stats = tool_stats_result[0] if tool_stats_result else {'total': 0, 'available': 0, 'lent': 0, 'defect': 0}
-    
-    # Verbrauchsmaterial-Statistiken
-    consumable_pipeline = [
-        {'$match': {'deleted': {'$ne': True}}},
-        {
-            '$group': {
-                '_id': None,
-                'total': {'$sum': 1},
-                'sufficient': {
-                    '$sum': {
-                        '$cond': [{'$gt': ['$quantity', '$min_quantity']}, 1, 0]
-                    }
-                },
-                'critical': {
-                    '$sum': {
-                        '$cond': [{'$lte': ['$quantity', '$min_quantity']}, 1, 0]
-                    }
-                }
-            }
+        
+        # Consumable-Statistiken
+        consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+        sufficient = 0
+        warning = 0
+        critical = 0
+        
+        for consumable in consumables:
+            if consumable['quantity'] >= consumable.get('warning_threshold', 10):
+                sufficient += 1
+            elif consumable['quantity'] >= consumable.get('critical_threshold', 5):
+                warning += 1
+            else:
+                critical += 1
+        
+        consumable_stats = {
+            'total': total_consumables,
+            'sufficient': sufficient,
+            'warning': warning,
+            'critical': critical
         }
-    ]
-    
-    consumable_stats_result = list(mongodb.db.consumables.aggregate(consumable_pipeline))
-    consumable_stats = consumable_stats_result[0] if consumable_stats_result else {'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0}
-    
-    # Mitarbeiter-Statistiken
-    worker_pipeline = [
-        {'$match': {'deleted': {'$ne': True}}},
-        {
-            '$group': {
-                '_id': '$department',
-                'count': {'$sum': 1}
-            }
-        },
-        {'$match': {'_id': {'$ne': None}}},
-        {'$sort': {'_id': 1}},
-        {
-            '$project': {
-                'name': '$_id',
-                'count': 1,
-                '_id': 0
-            }
+        
+        # Worker-Statistiken
+        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
+        worker_stats = {
+            'total': total_workers,
+            'by_department': []
         }
-    ]
-    
-    worker_by_department = list(mongodb.db.workers.aggregate(worker_pipeline))
-    worker_total = mongodb.db.workers.count_documents({'deleted': {'$ne': True}})
-    
-    worker_stats = {
-        'total': worker_total,
-        'by_department': worker_by_department
-    }
-    
-    # Warnungen für defekte Werkzeuge und überfällige Ausleihen
-    tool_warnings = []
-    
-    # Defekte Werkzeuge
-    defect_tools = list(mongodb.find('tools', {'status': 'defekt', 'deleted': {'$ne': True}}))
-    for tool in defect_tools:
-        tool_warnings.append({
-            'name': tool['name'],
-            'status': 'defekt',
-            'severity': 'error',
-            'description': 'Werkzeug ist defekt'
-        })
-    
-    # Überfällige Ausleihen
-    overdue_date = datetime.now() - timedelta(days=5)
-    overdue_lendings = list(mongodb.find('lendings', {
-        'returned_at': None,
-        'lent_at': {'$lt': overdue_date}
-    }))
-    
-    for lending in overdue_lendings:
-        tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-        if tool:
-            days_overdue = (datetime.now() - lending['lent_at']).days
+        
+        # Gruppiere nach Abteilung
+        dept_counts = {}
+        for worker in workers:
+            dept = worker.get('department', 'Ohne Abteilung')
+            dept_counts[dept] = dept_counts.get(dept, 0) + 1
+        
+        for dept, count in dept_counts.items():
+            worker_stats['by_department'].append({
+                'name': dept,
+                'count': count
+            })
+        
+        # Tool-Warnungen
+        tool_warnings = []
+        defect_tools = list(mongodb.find('tools', {'status': 'defekt', 'deleted': {'$ne': True}}))
+        for tool in defect_tools:
             tool_warnings.append({
                 'name': tool['name'],
-                'status': 'überfällig',
-                'severity': 'warning',
-                'description': f'Ausleihe seit {days_overdue} Tagen überfällig'
+                'status': 'Defekt',
+                'severity': 'error'
             })
-    
-    # Warnungen für niedrigen Materialbestand
-    consumable_warnings = []
-    low_stock_consumables = list(mongodb.find('consumables', {
-        'deleted': {'$ne': True},
-        '$expr': {'$lte': ['$quantity', '$min_quantity']}
-    }))
-    
-    for consumable in low_stock_consumables:
-        consumable_warnings.append({
-            'message': consumable['name'],
-            'type': 'error',
-            'icon': 'exclamation-triangle',
-            'description': 'Kritischer Bestand'
-        })
-    
-    # Materialverbrauch-Trend
-    consumable_trend = get_consumable_trend()
-    
-    # Aktuelle Ausleihen
-    current_lendings = []
-    active_lendings = mongodb.find('lendings', {'returned_at': None})
-    # NEU: Konvertiere alle lent_at zu datetime
-    for lending in active_lendings:
-        lent_at = lending.get('lent_at')
-        if isinstance(lent_at, str):
-            try:
-                lending['lent_at'] = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
-            except Exception:
-                lending['lent_at'] = datetime.min
-        elif not isinstance(lent_at, datetime):
-            lending['lent_at'] = datetime.min
-    # Sortiere die Ausleihen nach Datum (neueste zuerst)
-    active_lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
-    
-    for lending in active_lendings:
-        tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-        worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-        if tool and worker:
-            current_lendings.append({
-                **lending,
-                'tool_name': tool['name'],
-                'worker_name': f"{worker['firstname']} {worker['lastname']}",
-                'lent_at': lending['lent_at']
+        
+        # Consumable-Warnungen
+        consumable_warnings = []
+        low_stock_consumables = list(mongodb.find('consumables', {
+            'quantity': {'$lt': 5},
+            'deleted': {'$ne': True}
+        }))
+        for consumable in low_stock_consumables:
+            consumable_warnings.append({
+                'message': f"{consumable['name']} (Bestand: {consumable['quantity']})",
+                'type': 'error' if consumable['quantity'] == 0 else 'warning',
+                'icon': 'times' if consumable['quantity'] == 0 else 'exclamation-triangle'
             })
-    
-    # Letzte Materialentnahmen
-    recent_consumable_usage = []
-    recent_usages = mongodb.find('consumable_usages')
-    # Sortiere und limitiere die Verwendungen
-    recent_usages.sort(key=lambda x: x.get('used_at', datetime.min), reverse=True)
-    recent_usages = recent_usages[:10]
-    
-    for usage in recent_usages:
-        consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
-        worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
-        if consumable and worker:
-            recent_consumable_usage.append({
-                'consumable_name': consumable['name'],
-                'quantity': usage['quantity'],
-                'worker_name': f"{worker['firstname']} {worker['lastname']}",
-                'used_at': usage['used_at']
-            })
-    
-    # Bestandsprognose
-    consumables_forecast = get_consumables_forecast()
-    
-    # Prüfung auf doppelte Barcodes
-    duplicate_barcodes = MongoDBTool.get_duplicate_barcodes()
-
-    return render_template('admin/dashboard.html',
-                         tool_stats=tool_stats,
-                         consumable_stats=consumable_stats,
-                         worker_stats=worker_stats,
-                         tool_warnings=tool_warnings,
-                         consumable_warnings=consumable_warnings,
-                         consumable_trend=consumable_trend,
-                         current_lendings=current_lendings,
-                         recent_consumable_usage=recent_consumable_usage,
-                         duplicate_barcodes=duplicate_barcodes)
-
-def get_consumable_trend():
-    """Hole die Top 5 Materialverbrauch der letzten 7 Tage"""
-    try:
-        # Hole die letzten 7 Tage
-        seven_days_ago = datetime.now() - timedelta(days=6)
         
-        # Top 5 Verbrauchsmaterialien der letzten 7 Tage
-        top_consumables_pipeline = [
-            {
-                '$match': {
-                    'used_at': {'$gte': seven_days_ago},
-                    'quantity': {'$gt': 0}
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'consumables',
-                    'localField': 'consumable_barcode',
-                    'foreignField': 'barcode',
-                    'as': 'consumable'
-                }
-            },
-            {
-                '$unwind': '$consumable'
-            },
-            {
-                '$group': {
-                    '_id': '$consumable.name',
-                    'total_quantity': {'$sum': '$quantity'}
-                }
-            },
-            {'$sort': {'total_quantity': -1}},
-            {'$limit': 5}
-        ]
+        # Aktuelle Ausleihen
+        current_lendings = list(mongodb.find('lendings', {'returned_at': None}))
         
-        top_consumables = list(mongodb.db.consumable_usages.aggregate(top_consumables_pipeline))
-        
-        # Tägliche Daten für die Top 5
-        labels = []
-        datasets = []
-        
-        # Generiere Datums-Labels für die letzten 7 Tage
-        for i in range(7):
-            date = datetime.now() - timedelta(days=6-i)
-            labels.append(date.strftime('%d.%m.%Y'))
-        
-        # Für jedes Top-Verbrauchsmaterial
-        for i, consumable in enumerate(top_consumables):
-            consumable_name = consumable['_id']
-            data = []
+        # Verarbeite Ausleihen für Anzeige
+        processed_lendings = []
+        for lending in current_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
             
-            # Für jeden Tag
-            for j in range(7):
-                date = datetime.now() - timedelta(days=6-j)
-                start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
-                end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
-                
-                # Finde Verbrauch für diesen Tag
-                daily_usage = mongodb.db.consumable_usages.aggregate([
-                    {
-                        '$match': {
-                            'used_at': {'$gte': start_of_day, '$lte': end_of_day},
-                            'quantity': {'$gt': 0}
-                        }
-                    },
-                    {
-                        '$lookup': {
-                            'from': 'consumables',
-                            'localField': 'consumable_barcode',
-                            'foreignField': 'barcode',
-                            'as': 'consumable'
-                        }
-                    },
-                    {
-                        '$unwind': '$consumable'
-                    },
-                    {
-                        '$match': {'consumable.name': consumable_name}
-                    },
-                    {
-                        '$group': {
-                            '_id': None,
-                            'daily_quantity': {'$sum': '$quantity'}
-                        }
-                    }
-                ])
-                
-                daily_result = list(daily_usage)
-                data.append(daily_result[0]['daily_quantity'] if daily_result else 0)
-            
-            datasets.append({
-                'label': consumable_name,
-                'data': data,
-                'fill': False,
-                'borderColor': f'hsl({(i * 60) % 360}, 70%, 50%)',
-                'tension': 0.1
-            })
-    
-        return {
-            'labels': labels,
-            'datasets': datasets
-        }
+            if tool and worker:
+                processed_lendings.append({
+                    'tool_name': tool['name'],
+                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                    'lent_at': lending['lent_at'],
+                    'days_lent': (datetime.now() - lending['lent_at']).days
+                })
+        
+        # Sortiere nach Ausleihdatum (älteste zuerst)
+        processed_lendings.sort(key=lambda x: x['lent_at'])
+        
+        return render_template('admin/dashboard.html',
+                             recent_activity=recent_activity,
+                             material_usage=material_usage,
+                             warnings=warnings,
+                             backup_info=backup_info,
+                             consumables_forecast=consumables_forecast,
+                             consumable_trend=consumable_trend,
+                             total_tools=total_tools,
+                             total_consumables=total_consumables,
+                             total_workers=total_workers,
+                             total_tickets=total_tickets,
+                             current_lendings=processed_lendings,
+                             tool_stats=tool_stats,
+                             consumable_stats=consumable_stats,
+                             worker_stats=worker_stats,
+                             tool_warnings=tool_warnings,
+                             consumable_warnings=consumable_warnings)
+                             
     except Exception as e:
-        logger.error(f"Fehler beim Laden des Materialverbrauch-Trends: {str(e)}")
-        return {
-            'labels': [],
-            'datasets': []
-        }
+        logger.error(f"Fehler beim Laden des Admin-Dashboards: {str(e)}")
+        flash('Fehler beim Laden des Dashboards', 'error')
+        return render_template('admin/dashboard.html',
+                             recent_activity=[],
+                             material_usage={'usage_data': [], 'period_days': 30},
+                             warnings={'defect_tools': [], 'overdue_lendings': [], 'low_stock_consumables': []},
+                             backup_info={'backups': [], 'total_count': 0, 'total_size_mb': 0},
+                             consumables_forecast=[],
+                             consumable_trend={'labels': [], 'datasets': []},
+                             total_tools=0,
+                             total_consumables=0,
+                             total_workers=0,
+                             total_tickets=0,
+                             current_lendings=[],
+                             tool_stats={'total': 0, 'available': 0, 'lent': 0, 'defect': 0},
+                             consumable_stats={'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0},
+                             worker_stats={'total': 0, 'by_department': []},
+                             tool_warnings=[],
+                             consumable_warnings=[])
 
 @bp.route('/manual-lending', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -1608,15 +1073,6 @@ def ticket_detail(ticket_id):
 def add_ticket_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu."""
     try:
-        # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': convert_id_for_query(ticket_id)})
-        
-        if not ticket:
-            return jsonify({
-                'success': False,
-                'message': 'Ticket nicht gefunden'
-            }), 404
-
         # Hole die Nachricht aus dem Request
         if not request.is_json:
             return jsonify({
@@ -1633,24 +1089,23 @@ def add_ticket_message(ticket_id):
                 'message': 'Nachricht darf nicht leer sein'
             }), 400
 
-        # Füge die Nachricht zur Datenbank hinzu
-        message_data = {
-            'ticket_id': convert_id_for_query(ticket_id),
-            'message': message,
-            'sender': current_user.username,
-            'created_at': datetime.now()
-        }
+        # Verwende den AdminTicketService
+        success, result_message = AdminTicketService.add_ticket_message(ticket_id, message, 'message')
         
-        result = mongodb.insert_one('ticket_messages', message_data)
-
-        return jsonify({
-            'success': True,
-            'message': {
-                'sender': current_user.username,
-                'text': message,
-                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
-            }
-        })
+        if success:
+            return jsonify({
+                'success': True,
+                'message': {
+                    'sender': current_user.username,
+                    'text': message,
+                    'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result_message
+            }), 400
 
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Nachricht: {str(e)}", exc_info=True)
@@ -1764,136 +1219,17 @@ def update_ticket(ticket_id):
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
     try:
-        # Robuste ID-Behandlung für verschiedene ID-Typen
-        ticket = find_document_by_id('tickets', id)
-        if not ticket:
-            logging.error(f"Ticket nicht gefunden: {id}")
-            flash('Ticket nicht gefunden.', 'error')
-            return redirect(url_for('tickets.create'))
+        # Verwende den AdminTicketService
+        success, message, file_path = AdminTicketService.export_ticket_as_word(id)
         
-        # Verwende die Ticket-ID für alle Abfragen
-        ticket_id_for_query = convert_id_for_query(id)
-        
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query}) or {}
-        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query})) or []
-
-        # --- Auftragnehmer (Vorname Nachname) ---
-        auftragnehmer_user = None
-        if ticket.get('assigned_to'):
-            auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
-        if auftragnehmer_user:
-            auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+        if success and file_path:
+            # Sende das Dokument
+            ticket = find_document_by_id('tickets', id)
+            ticket_number = ticket.get('ticket_number', id) if ticket else id
+            return send_file(file_path, as_attachment=True, download_name=f'ticket_{ticket_number}_export.docx')
         else:
-            auftragnehmer_name = ''
-
-        # --- Checkboxen für Auftraggeber intern/extern ---
-        intern_checkbox = '☒' if auftrag_details.get('auftraggeber_intern') else '☐'
-        extern_checkbox = '☒' if auftrag_details.get('auftraggeber_extern') else '☐'
-
-        # --- Ausgeführte Arbeiten (bis zu 5) ---
-        arbeiten_liste = auftrag_details.get('ausgefuehrte_arbeiten', '')
-        arbeiten_zeilen = []
-        if arbeiten_liste:
-            for zeile in arbeiten_liste.split('\n'):
-                if not zeile.strip():
-                    continue
-                teile = [t.strip() for t in zeile.split('|')]
-                eintrag = {
-                    'arbeiten': teile[0] if len(teile) > 0 else '',
-                    'arbeitsstunden': teile[1] if len(teile) > 1 else '',
-                    'leistungskategorie': teile[2] if len(teile) > 2 else ''
-                }
-                arbeiten_zeilen.append(eintrag)
-        # Fülle auf 5 Zeilen auf
-        while len(arbeiten_zeilen) < 5:
-            arbeiten_zeilen.append({'arbeiten':'','arbeitsstunden':'','leistungskategorie':''})
-
-        # Materialdaten aufbereiten
-        material_rows = []
-        summe_material = 0
-        for m in material_list:
-            menge = float(m.get('menge') or 0)
-            einzelpreis = float(m.get('einzelpreis') or 0)
-            gesamtpreis = menge * einzelpreis
-            summe_material += gesamtpreis
-            material_rows.append({
-                'material': m.get('material', '') or '',
-                'materialmenge': f"{menge:.2f}".replace('.', ',') if menge else '',
-                'materialpreis': f"{einzelpreis:.2f}".replace('.', ',') if einzelpreis else '',
-                'materialpreisges': f"{gesamtpreis:.2f}".replace('.', ',') if gesamtpreis else ''
-            })
-        while len(material_rows) < 5:
-            material_rows.append({'material':'','materialmenge':'','materialpreis':'','materialpreisges':''})
-
-        arbeitspausch = 0
-        ubertrag = 0
-        zwischensumme = summe_material + arbeitspausch + ubertrag
-        mwst = zwischensumme * 0.07
-        gesamtsumme = zwischensumme + mwst
-
-        # --- Kontext für docxtpl bauen ---
-        context = {
-            'auftragnehmer': auftragnehmer_name,
-            'auftragnummer': ticket.get('ticket_number', id),
-            'datum': datetime.now().strftime('%d.%m.%Y'),
-            'internchk': '☒' if auftrag_details.get('auftraggeber_intern') else '☐',
-            'externchk': '☒' if auftrag_details.get('auftraggeber_extern') else '☐',
-            'auftraggebername': auftrag_details.get('auftraggeber_name', ''),
-            'auftraggebermail': auftrag_details.get('kontakt', ''),
-            'bereich': auftrag_details.get('bereich', ''),
-            'auftragsbeschreibung': auftrag_details.get('auftragsbeschreibung', ''),
-            'duedate': auftrag_details.get('fertigstellungstermin', ''),
-            'gesamtsumme': f"{gesamtsumme:.2f}".replace('.', ','),
-            'matsum': f"{summe_material:.2f}".replace('.', ','),
-            'ubertrag': f"{ubertrag:.2f}".replace('.', ','),
-            'arpausch': f"{arbeitspausch:.2f}".replace('.', ','),
-            'zwsum': f"{zwischensumme:.2f}".replace('.', ','),
-            'mwst': f"{mwst:.2f}".replace('.', ','),
-            'arbeitenblock': '\n'.join([arbeit['arbeiten'] for arbeit in arbeiten_zeilen]),
-            'stundenblock': '\n'.join([arbeit['arbeitsstunden'] for arbeit in arbeiten_zeilen]),
-            'kategorieblock': '\n'.join([arbeit['leistungskategorie'] for arbeit in arbeiten_zeilen]),
-            'materialblock': '\n'.join([material['material'] for material in material_rows]),
-            'mengenblock': '\n'.join([material['materialmenge'] for material in material_rows]),
-            'preisblock': '\n'.join([material['materialpreis'] for material in material_rows]),
-            'gesamtblock': '\n'.join([material['materialpreisges'] for material in material_rows])
-        }
-
-        # --- Word-Dokument generieren ---
-        logging.info(f"Starte Admin-Export für Ticket {id}")
-        
-        # Lade das Template
-        template_path = os.path.join(current_app.root_path, 'static', 'word', 'btzauftrag.docx')
-        logging.info(f"Template-Pfad: {template_path}")
-        
-        if not os.path.exists(template_path):
-            logging.error(f"Template-Datei nicht gefunden: {template_path}")
-            flash('Word-Template nicht gefunden.', 'error')
+            flash(message, 'error')
             return redirect(url_for('admin.ticket_detail', ticket_id=id))
-        
-        doc = DocxTemplate(template_path)
-        logging.info("Template erfolgreich geladen")
-        
-        # Rendere das Dokument
-        logging.info(f"Rendere Dokument mit Kontext: {context}")
-        doc.render(context)
-        logging.info("Dokument erfolgreich gerendert")
-        
-        # Erstelle das uploads-Verzeichnis falls es nicht existiert
-        uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
-        os.makedirs(uploads_dir, exist_ok=True)
-        
-        # Speichere das generierte Dokument
-        ticket_number = ticket.get('ticket_number', id)
-        output_path = os.path.join(uploads_dir, f'ticket_{ticket_number}_export.docx')
-        
-        logging.info(f"Speichere Dokument unter: {output_path}")
-        doc.save(output_path)
-        logging.info("Dokument erfolgreich gespeichert")
-        
-        logging.info(f"Word-Dokument erfolgreich generiert: {output_path}")
-        
-        # Sende das Dokument
-        return send_file(output_path, as_attachment=True, download_name=f'ticket_{ticket_number}_export.docx')
         
     except Exception as e:
         logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}", exc_info=True)
@@ -2050,7 +1386,7 @@ def create_mongodb_backup():
 def manage_users():
     """Benutzerverwaltung"""
     try:
-        users = mongodb.find('users', {}, sort=[('username', 1)])
+        users = AdminUserService.get_all_users()
         return render_template('admin/users.html', users=users)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Benutzer: {e}")
@@ -2060,109 +1396,91 @@ def manage_users():
 @bp.route('/add_user', methods=['GET', 'POST'])
 @mitarbeiter_required
 def add_user():
+    """Neuen Benutzer hinzufügen"""
     if request.method == 'POST':
+        # Prüfe Berechtigung für Admin-Rolle
         role = request.form.get('role', '').strip()
         if current_user.role != 'admin' and role == 'admin':
             flash('Sie dürfen keine Admin-Benutzer anlegen.', 'error')
             return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'], form_data=request.form)
-    try:
-        username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '').strip()
-        password_confirm = request.form.get('password_confirm', '').strip()
-        firstname = request.form.get('firstname', '').strip()
-        lastname = request.form.get('lastname', '').strip()
-        role = request.form.get('role', '').strip()
         
-        # Validierung der Pflichtfelder (Passwort ist jetzt optional)
-        if not username or not firstname or not lastname or not role:
-            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+        # Verwende Services für Validierung und E-Mail
+        from app.services.validation_service import ValidationService
+        from app.services.email_service import EmailService
+        from app.services.utility_service import UtilityService
+        
+        form_data = UtilityService.get_form_data_dict(request.form)
+        
+        # Validierung mit ValidationService
+        is_valid, errors, processed_data = ValidationService.validate_user_form(form_data, is_edit=False)
+        
+        if not is_valid:
+            for error in errors:
+                flash(error, 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                  form_data=request.form)
         
         # Automatische Passwort-Generierung wenn keines eingegeben wurde
-        if not password:
-            import secrets
-            import string
-            # Mindestens 1 von jeder Kategorie sicherstellen
-            password = (
-                secrets.choice(string.ascii_uppercase) +  # 1 Großbuchstabe
-                secrets.choice(string.ascii_lowercase) +  # 1 Kleinbuchstabe
-                secrets.choice(string.digits) +           # 1 Ziffer
-                secrets.choice("!@#$%^&*") +              # 1 Sonderzeichen
-                ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(8))  # 8 weitere zufällige Zeichen
-            )
-            # Passwort mischen
-            password_list = list(password)
-            secrets.SystemRandom().shuffle(password_list)
-            password = ''.join(password_list)
-            password_confirm = password  # Für die Validierung
-        else:
-            # Wenn Passwort eingegeben wurde, prüfe ob es bestätigt wurde
-            if password != password_confirm:
-                flash('Passwörter stimmen nicht überein', 'error')
-                return render_template('admin/user_form.html', 
-                                     roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
-                                     form_data=request.form)
+        if not processed_data['password']:
+            password = ValidationService.generate_secure_password()
+            processed_data['password'] = password
+            processed_data['password_confirm'] = password
         
-        # Prüfe ob Benutzername bereits existiert
-        existing_user = mongodb.find_one('users', {'username': username})
-        if existing_user:
-            flash('Benutzername existiert bereits', 'error')
+        # Benutzer erstellen mit AdminUserService
+        user_data = {
+            'username': processed_data['username'],
+            'password': processed_data['password'],
+            'role': processed_data['role'],
+            'email': processed_data['email'] if processed_data['email'] else '',
+            'firstname': processed_data['firstname'],
+            'lastname': processed_data['lastname'],
+            'timesheet_enabled': processed_data['timesheet_enabled'],
+            'is_active': True
+        }
+        
+        success, message, user_id = AdminUserService.create_user(user_data)
+        
+        if success:
+            # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
+            if processed_data['email']:
+                try:
+                    email_sent = EmailService.send_new_user_email(
+                        processed_data['email'],
+                        processed_data['username'],
+                        processed_data['password'],
+                        processed_data['firstname']
+                    )
+                    
+                    if email_sent:
+                        flash(f'{message} Passwort wurde per E-Mail an {processed_data["email"]} gesendet.', 'success')
+                    else:
+                        flash(f'{message} E-Mail konnte nicht versendet werden.', 'warning')
+                except Exception as e:
+                    logger.error(f"Fehler beim Versenden der E-Mail: {e}")
+                    flash(f'{message} E-Mail konnte nicht versendet werden.', 'warning')
+            else:
+                flash(f'{message} Passwort: {processed_data["password"]}', 'success')
+            
+            return redirect(url_for('admin.manage_users'))
+        else:
+            flash(message, 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                  form_data=request.form)
-        
-        # Hole timesheet_enabled aus dem Formular
-        timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
-        
-        # Benutzer erstellen
-        user_data = {
-            'username': username,
-            'email': email if email else None,
-            'password_hash': generate_password_hash(password),
-            'firstname': firstname,
-            'lastname': lastname,
-            'role': role,
-            'timesheet_enabled': timesheet_enabled,
-            'is_active': True,
-            'created_at': datetime.now(),
-            'updated_at': datetime.now()
-        }
-        
-        mongodb.insert_one('users', user_data)
-        
-        # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
-        if email:
-            try:
-                from app.utils.email_utils import send_password_mail
-                send_password_mail(email, password)
-                flash(f'Benutzer "{username}" erfolgreich erstellt. Passwort wurde per E-Mail an {email} gesendet.', 'success')
-            except Exception as e:
-                logger.error(f"Fehler beim Versenden der E-Mail: {e}")
-                flash(f'Benutzer "{username}" erfolgreich erstellt. E-Mail konnte nicht versendet werden.', 'warning')
-        else:
-            flash(f'Benutzer "{username}" erfolgreich erstellt. Passwort: {password}', 'success')
-        
-        return redirect(url_for('admin.manage_users'))
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
-        flash('Fehler beim Erstellen des Benutzers', 'error')
-        return render_template('admin/user_form.html', 
-                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
-                             form_data=request.form)
     
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
 
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
 @mitarbeiter_required
 def edit_user(user_id):
-    user = find_user_by_id(user_id)
+    """Benutzer bearbeiten"""
+    user = AdminUserService.get_user_by_id(user_id)
+    
     if not user:
         flash('Benutzer nicht gefunden', 'error')
         return redirect(url_for('admin.manage_users'))
+    
     if current_user.role != 'admin' and user.get('role') == 'admin':
         flash('Sie dürfen keine Admin-Benutzer bearbeiten.', 'error')
         return redirect(url_for('admin.manage_users'))
@@ -2175,66 +1493,46 @@ def edit_user(user_id):
     
     # POST-Request: Verarbeite die Formulardaten
     try:
-        username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '').strip()
-        password_confirm = request.form.get('password_confirm', '').strip()
-        firstname = request.form.get('firstname', '').strip()
-        lastname = request.form.get('lastname', '').strip()
-        role = request.form.get('role', '').strip()
+        # Verwende Services für Validierung
+        from app.services.validation_service import ValidationService
+        from app.services.utility_service import UtilityService
         
-        # Validierung nur beim POST-Request
-        if not username or not firstname or not lastname or not role:
-            flash('Alle Pflichtfelder müssen ausgefüllt werden', 'error')
+        form_data = UtilityService.get_form_data_dict(request.form)
+        
+        # Validierung mit ValidationService
+        is_valid, errors, processed_data = ValidationService.validate_user_form(form_data, is_edit=True)
+        
+        if not is_valid:
+            for error in errors:
+                flash(error, 'error')
             return render_template('admin/user_form.html', 
                                  user=user,
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
         
-        # Prüfe ob Passwort geändert werden soll
-        if password:
-            if password != password_confirm:
-                flash('Passwörter stimmen nicht überein', 'error')
-                return render_template('admin/user_form.html', 
-                                     user=user,
-                                     roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
-            password_hash = generate_password_hash(password)
-        else:
-            password_hash = user.get('password_hash')
-        
-        # Prüfe ob Benutzername bereits existiert (außer bei diesem Benutzer)
-        # Verwende die ursprüngliche User-ID für die Abfrage
-        user_id_for_query = convert_id_for_query(user_id)
-        existing_user = mongodb.find_one('users', {
-            'username': username,
-            '_id': {'$ne': user_id_for_query}
-        })
-        if existing_user:
-            flash('Benutzername existiert bereits', 'error')
-            return render_template('admin/user_form.html', 
-                                 user=user,
-                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
-        
-        # Hole timesheet_enabled aus dem Formular
-        timesheet_enabled = request.form.get('timesheet_enabled') == 'on'
-        
-        # Benutzer aktualisieren
-        update_data = {
-            'username': username,
-            'email': email if email else None,
-            'password_hash': password_hash,
-            'firstname': firstname,
-            'lastname': lastname,
-            'role': role,
-            'timesheet_enabled': timesheet_enabled,
-            'updated_at': datetime.now()
+        # Benutzer aktualisieren mit AdminUserService
+        user_data = {
+            'username': processed_data['username'],
+            'role': processed_data['role'],
+            'email': processed_data['email'] if processed_data['email'] else '',
+            'firstname': processed_data['firstname'],
+            'lastname': processed_data['lastname'],
+            'timesheet_enabled': processed_data['timesheet_enabled']
         }
         
-        mongodb.update_one('users', 
-                         {'_id': user_id_for_query}, 
-                         {'$set': update_data})
+        # Passwort hinzufügen falls angegeben
+        if processed_data['password']:
+            user_data['password'] = processed_data['password']
         
-        flash(f'Benutzer "{username}" erfolgreich aktualisiert', 'success')
-        return redirect(url_for('admin.manage_users'))
+        success, message = AdminUserService.update_user(user_id, user_data)
+        
+        if success:
+            flash(message, 'success')
+            return redirect(url_for('admin.manage_users'))
+        else:
+            flash(message, 'error')
+            return render_template('admin/user_form.html', 
+                                 user=user,
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
         
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
@@ -2251,7 +1549,7 @@ def edit_user(user_id):
 @admin_required
 def notices():
     """Notizen-Übersicht"""
-    notices = mongodb.find('homepage_notices', {})
+    notices = AdminNotificationService.get_all_notices()
     return render_template('admin/notices.html', notices=notices)
 
 @bp.route('/create_notice', methods=['GET', 'POST'])
@@ -2259,8 +1557,19 @@ def notices():
 def create_notice():
     """Neue Notiz erstellen"""
     if request.method == 'POST':
-        flash('Notiz-Funktion noch nicht implementiert', 'warning')
+        title = request.form.get('title')
+        content = request.form.get('content')
+        notice_type = request.form.get('type', 'info')
+        
+        success, message = AdminNotificationService.create_notice(title, content, notice_type)
+        
+        if success:
+            flash(message, 'success')
+        else:
+            flash(message, 'error')
+        
         return redirect(url_for('admin.notices'))
+    
     return render_template('admin/notice_form.html')
 
 @bp.route('/edit_notice/<id>', methods=['GET', 'POST'])
@@ -2268,9 +1577,24 @@ def create_notice():
 def edit_notice(id):
     """Notiz bearbeiten"""
     if request.method == 'POST':
-        flash('Notiz-Funktion noch nicht implementiert', 'warning')
+        title = request.form.get('title')
+        content = request.form.get('content')
+        notice_type = request.form.get('type', 'info')
+        
+        success, message = AdminNotificationService.update_notice(id, title, content, notice_type)
+        
+        if success:
+            flash(message, 'success')
+        else:
+            flash(message, 'error')
+        
         return redirect(url_for('admin.notices'))
-    notice = mongodb.find_one('homepage_notices', {'_id': convert_id_for_query(id)})
+    
+    notice = AdminNotificationService.get_notice_by_id(id)
+    if not notice:
+        flash('Notiz nicht gefunden', 'error')
+        return redirect(url_for('admin.notices'))
+    
     return render_template('admin/notice_form.html', notice=notice)
 
 @bp.route('/delete_notice/<id>', methods=['POST'])
@@ -2278,17 +1602,13 @@ def edit_notice(id):
 def delete_notice(id):
     """Löscht einen Hinweis"""
     try:
-        # Konvertiere String-ID zu ObjectId
-        object_id = convert_id_for_query(id)
+        success, message = AdminNotificationService.delete_notice(id)
         
-        # Lösche den Hinweis
-        result = mongodb.delete_one('homepage_notices', {'_id': object_id})
-        
-        if result:
-            flash('Hinweis erfolgreich gelöscht', 'success')
+        if success:
+            flash(message, 'success')
         else:
-            flash('Hinweis nicht gefunden', 'error')
-            
+            flash(message, 'error')
+        
         return redirect(url_for('admin.notices'))
         
     except Exception as e:
@@ -2387,78 +1707,39 @@ def system():
     try:
         if request.method == 'POST':
             # Begriffe & Icons verarbeiten
-            label_tools_name = request.form.get('label_tools_name', 'Werkzeuge')
-            label_tools_icon = request.form.get('label_tools_icon', 'fas fa-tools')
-            label_consumables_name = request.form.get('label_consumables_name', 'Verbrauchsmaterial')
-            label_consumables_icon = request.form.get('label_consumables_icon', 'fas fa-box')
-            label_tickets_name = request.form.get('label_tickets_name', 'Tickets')
-            label_tickets_icon = request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
+            app_labels = {
+                'tools': {
+                    'name': request.form.get('label_tools_name', 'Werkzeuge'),
+                    'icon': request.form.get('label_tools_icon', 'fas fa-tools')
+                },
+                'consumables': {
+                    'name': request.form.get('label_consumables_name', 'Verbrauchsmaterial'),
+                    'icon': request.form.get('label_consumables_icon', 'fas fa-box')
+                },
+                'tickets': {
+                    'name': request.form.get('label_tickets_name', 'Tickets'),
+                    'icon': request.form.get('label_tickets_icon', 'fas fa-ticket-alt')
+                }
+            }
             
-            # Speichere die Einstellungen
-            mongodb.db.settings.update_one(
-                {'key': 'label_tools_name'},
-                {'$set': {'value': label_tools_name}},
-                upsert=True
-            )
-            mongodb.db.settings.update_one(
-                {'key': 'label_tools_icon'},
-                {'$set': {'value': label_tools_icon}},
-                upsert=True
-            )
-            mongodb.db.settings.update_one(
-                {'key': 'label_consumables_name'},
-                {'$set': {'value': label_consumables_name}},
-                upsert=True
-            )
-            mongodb.db.settings.update_one(
-                {'key': 'label_consumables_icon'},
-                {'$set': {'value': label_consumables_icon}},
-                upsert=True
-            )
-            mongodb.db.settings.update_one(
-                {'key': 'label_tickets_name'},
-                {'$set': {'value': label_tickets_name}},
-                upsert=True
-            )
-            mongodb.db.settings.update_one(
-                {'key': 'label_tickets_icon'},
-                {'$set': {'value': label_tickets_icon}},
-                upsert=True
-            )
+            success, message = AdminSystemService.save_app_labels(app_labels)
             
-            flash('Begriffe & Icons erfolgreich gespeichert!', 'success')
+            if success:
+                flash(message, 'success')
+            else:
+                flash(message, 'error')
+            
             return redirect(url_for('admin.system'))
         
         # Hole alle verfügbaren Logos
-        logos = []
-        logos_dir = os.path.join(current_app.static_folder, 'uploads', 'logos')
-        if os.path.exists(logos_dir):
-            for filename in os.listdir(logos_dir):
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
-                    logos.append(filename)
+        logos = AdminSystemService.get_available_logos()
         
-        # Hole aktuelle Einstellungen
-        settings = mongodb.db.settings.find_one({'key': 'system'}) or {}
-        
-        # Lade app_labels aus der Datenbank
-        app_labels = {
-            'tools': {
-                'name': mongodb.db.settings.find_one({'key': 'label_tools_name'}, {}).get('value', 'Werkzeuge'),
-                'icon': mongodb.db.settings.find_one({'key': 'label_tools_icon'}, {}).get('value', 'fas fa-tools')
-            },
-            'consumables': {
-                'name': mongodb.db.settings.find_one({'key': 'label_consumables_name'}, {}).get('value', 'Verbrauchsmaterial'),
-                'icon': mongodb.db.settings.find_one({'key': 'label_consumables_icon'}, {}).get('value', 'fas fa-box')
-            },
-            'tickets': {
-                'name': mongodb.db.settings.find_one({'key': 'label_tickets_name'}, {}).get('value', 'Tickets'),
-                'icon': mongodb.db.settings.find_one({'key': 'label_tickets_icon'}, {}).get('value', 'fas fa-ticket-alt')
-            }
-        }
+        # Hole aktuelle Einstellungen und App-Labels
+        settings, app_labels = AdminSystemService.get_system_data()
         
         return render_template('admin/server-settings.html', 
                              logos=logos, 
-                             settings=settings.get('value', {}),
+                             settings=settings,
                              app_labels=app_labels)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Systemeinstellungen: {str(e)}")
@@ -3097,7 +2378,7 @@ def delete_ticket_category_legacy(category):
 def backup_list():
     """Gibt eine Liste der verfügbaren Backups zurück"""
     try:
-        backups = get_backup_info()
+        backups = AdminBackupService.get_backup_list()
         return jsonify({
             'status': 'success',
             'backups': backups
@@ -3114,40 +2395,39 @@ def backup_list():
 def create_backup():
     """Erstellt ein neues Backup der aktuellen Datenbank"""
     try:
-        from app.utils.backup_manager import backup_manager
+        success, message, backup_filename = AdminBackupService.create_backup()
         
-        backup_file = backup_manager.create_backup()
-        
-        if backup_file:
+        if success:
             # E-Mail-Versand (optional)
             email_recipient = request.form.get('email_recipient', '').strip()
-            if email_recipient:
+            if email_recipient and backup_filename:
                 try:
                     from app.utils.email_utils import send_backup_mail
-                    backup_path = backup_manager.get_backup_path(backup_file)
+                    from app.utils.backup_manager import backup_manager
+                    backup_path = backup_manager.get_backup_path(backup_filename)
                     send_backup_mail(email_recipient, str(backup_path))
                     return jsonify({
                         'status': 'success',
-                        'message': f'Backup erfolgreich erstellt und an {email_recipient} gesendet',
-                        'filename': backup_file
+                        'message': f'{message} und an {email_recipient} gesendet',
+                        'filename': backup_filename
                     })
                 except Exception as e:
                     logger.error(f"Fehler beim E-Mail-Versand: {str(e)}")
                     return jsonify({
                         'status': 'success',
-                        'message': 'Backup erfolgreich erstellt, aber E-Mail-Versand fehlgeschlagen',
-                        'filename': backup_file
+                        'message': f'{message}, aber E-Mail-Versand fehlgeschlagen',
+                        'filename': backup_filename
                     })
             else:
                 return jsonify({
                     'status': 'success',
-                    'message': 'Backup erfolgreich erstellt',
-                    'filename': backup_file
+                    'message': message,
+                    'filename': backup_filename
                 })
         else:
             return jsonify({
                 'status': 'error',
-                'message': 'Fehler beim Erstellen des Backups'
+                'message': message
             }), 500
             
     except Exception as e:
@@ -3198,28 +2478,20 @@ def upload_backup():
                 'status': 'error',
                 'message': 'Die hochgeladene Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.'
             }), 400
-            
-        from app.utils.backup_manager import backup_manager
         
-        # Erstelle Backup der aktuellen DB vor dem Upload
-        current_backup = backup_manager.create_backup()
-        logger.info(f"Backup-Upload: Aktuelles Backup erstellt: {current_backup}")
-        
-        # Stelle das hochgeladene Backup wieder her
-        success = backup_manager.restore_backup(file)
+        success, message = AdminBackupService.upload_backup(file)
         
         if success:
             logger.info("Backup-Upload: Backup erfolgreich wiederhergestellt")
             return jsonify({
                 'status': 'success',
-                'message': 'Backup erfolgreich hochgeladen und aktiviert',
-                'previous_backup': current_backup
+                'message': message
             })
         else:
             logger.error("Backup-Upload: Fehler beim Wiederherstellen des Backups")
             return jsonify({
                 'status': 'error',
-                'message': 'Fehler beim Wiederherstellen des Backups. Bitte überprüfen Sie die Datei.'
+                'message': message
             }), 500
             
     except Exception as e:
@@ -3234,33 +2506,18 @@ def upload_backup():
 def restore_backup(filename):
     """Stellt ein Backup wieder her"""
     try:
-        from app.utils.backup_manager import backup_manager
-        
-        # Validiere Backup vor der Wiederherstellung
-        is_valid, validation_result = backup_manager.test_backup(filename)
-        if not is_valid:
-            return jsonify({
-                'status': 'error',
-                'message': f'Backup ist ungültig: {validation_result}'
-            }), 400
-        
-        # Erstelle Backup der aktuellen DB vor der Wiederherstellung
-        current_backup = backup_manager.create_backup()
-        
-        # Stelle das Backup wieder her
-        success = backup_manager.restore_backup_by_filename(filename)
+        success, message, validation_info = AdminBackupService.restore_backup(filename)
         
         if success:
             return jsonify({
                 'status': 'success',
-                'message': 'Backup erfolgreich wiederhergestellt',
-                'previous_backup': current_backup,
-                'validation_info': validation_result
+                'message': message,
+                'validation_info': validation_info
             })
         else:
             return jsonify({
                 'status': 'error',
-                'message': 'Fehler beim Wiederherstellen des Backups'
+                'message': message
             }), 500
             
     except Exception as e:
@@ -3275,11 +2532,9 @@ def restore_backup(filename):
 def download_backup(filename):
     """Lädt ein Backup herunter"""
     try:
-        from app.utils.backup_manager import backup_manager
+        backup_path = AdminBackupService.get_backup_path(filename)
         
-        backup_path = backup_manager.get_backup_path(filename)
-        
-        if not backup_path.exists():
+        if not backup_path or not backup_path.exists():
             return jsonify({
                 'status': 'error',
                 'message': 'Backup-Datei nicht gefunden'
@@ -3331,9 +2586,7 @@ def delete_backup(filename):
 def test_backup(filename):
     """Testet ein Backup ohne es wiederherzustellen"""
     try:
-        from app.utils.backup_manager import backup_manager
-        
-        success, result = backup_manager.test_backup(filename)
+        success, result = AdminBackupService.test_backup(filename)
         
         if success:
             return jsonify({
@@ -3897,36 +3150,19 @@ def update_ticket_status(ticket_id):
 def delete_ticket(ticket_id):
     """Ticket soft löschen (markieren als gelöscht)"""
     try:
-        # Verwende die ursprüngliche ID direkt für das Update
-        from bson import ObjectId
-        try:
-            # Versuche zuerst mit ObjectId
-            ticket_id_for_update = ObjectId(ticket_id)
-        except:
-            # Falls das fehlschlägt, verwende die ursprüngliche ID als String
-            ticket_id_for_update = ticket_id
+        # Verwende den AdminTicketService
+        success, message = AdminTicketService.delete_ticket(ticket_id, permanent=False)
         
-        # Prüfe ob das Ticket existiert
-        ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
-        
-        if not ticket:
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
             return jsonify({
                 'success': False,
-                'message': 'Ticket nicht gefunden'
-            }), 404
-            
-        # Führe das Soft-Delete durch (markieren als gelöscht)
-        mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {
-            '$set': {
-                'deleted': True,
-                'deleted_at': datetime.now()
-            }
-        })
-        
-        return jsonify({
-            'success': True,
-            'message': 'Ticket wurde erfolgreich gelöscht'
-        })
+                'message': message
+            }), 400
         
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Tickets: {str(e)}", exc_info=True)
@@ -3995,7 +3231,7 @@ def delete_ticket_permanent(ticket_id):
 def delete_user(user_id):
     """Benutzer löschen"""
     try:
-        user = find_user_by_id(user_id)
+        user = AdminUserService.get_user_by_id(user_id)
         if not user:
             flash('Benutzer nicht gefunden', 'error')
             return redirect(url_for('admin.manage_users'))
@@ -4005,10 +3241,14 @@ def delete_user(user_id):
             flash('Sie können Ihren eigenen Account nicht löschen', 'error')
             return redirect(url_for('admin.manage_users'))
         
-        # Verwende die ursprüngliche User-ID für das Löschen
-        user_id_for_query = convert_id_for_query(user_id)
-        mongodb.delete_one('users', {'_id': user_id_for_query})
-        flash(f'Benutzer "{user["username"]}" erfolgreich gelöscht', 'success')
+        # Benutzer löschen mit AdminUserService
+        success, message = AdminUserService.delete_user(user_id)
+        
+        if success:
+            flash(message, 'success')
+        else:
+            flash(message, 'error')
+        
         return redirect(url_for('admin.manage_users'))
         
     except Exception as e:
@@ -4491,8 +3731,6 @@ def auto_backup():
 def email_settings():
     """E-Mail-Konfiguration verwalten"""
     try:
-        from app.utils.email_utils import get_email_config, save_email_config, test_email_config
-        
         if request.method == 'POST':
             action = request.form.get('action')
             
@@ -4523,13 +3761,11 @@ def email_settings():
                         'use_auth': False
                     }
                 
-                if save_email_config(config_data):
-                    # E-Mail-Konfiguration neu laden
-                    from app.utils.email_utils import reload_email_config
-                    reload_email_config(current_app)
-                    flash('E-Mail-Konfiguration erfolgreich gespeichert und aktiviert.', 'success')
+                success, message = AdminEmailService.save_email_config(config_data)
+                if success:
+                    flash(message, 'success')
                 else:
-                    flash('Fehler beim Speichern der E-Mail-Konfiguration.', 'error')
+                    flash(message, 'error')
                     
             elif action == 'test':
                 # E-Mail-Konfiguration testen
@@ -4556,24 +3792,14 @@ def email_settings():
                         'test_email': request.form.get('test_email', '')
                     }
                 
-                success, message = test_email_config(config_data)
+                success, message = AdminEmailService.test_email_config(config_data)
                 if success:
                     flash(f'E-Mail-Test erfolgreich: {message}', 'success')
                 else:
                     flash(f'E-Mail-Test fehlgeschlagen: {message}', 'error')
         
         # Lade aktuelle Konfiguration
-        config = get_email_config()
-        if not config:
-            config = {
-                'mail_server': 'smtp.gmail.com',
-                'mail_port': 587,
-                'mail_use_tls': True,
-                'mail_username': '',
-                'mail_password': '',
-                'test_email': '',
-                'use_auth': True
-            }
+        config = AdminEmailService.get_email_config()
         
         return render_template('admin/email_settings.html', config=config)
         
@@ -4588,13 +3814,11 @@ def email_settings():
 def diagnose_email():
     """Diagnostiziert die SMTP-Verbindung"""
     try:
-        from app.utils.email_utils import get_email_config, diagnose_smtp_connection
-        
-        config_data = get_email_config()
+        config_data = AdminEmailService.get_email_config()
         if not config_data:
             return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
         
-        success, result = diagnose_smtp_connection(config_data)
+        success, result = AdminEmailService.diagnose_smtp_connection(config_data)
         
         if success:
             return jsonify({
@@ -4620,13 +3844,11 @@ def diagnose_email():
 def test_email_simple():
     """Einfacher E-Mail-Test"""
     try:
-        from app.utils.email_utils import get_email_config, test_email_config
-        
-        config_data = get_email_config()
+        config_data = AdminEmailService.get_email_config()
         if not config_data:
             return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
         
-        success, message = test_email_config(config_data)
+        success, message = AdminEmailService.test_email_config(config_data)
         
         if success:
             return jsonify({

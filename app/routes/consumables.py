@@ -1,10 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import current_user
 from app.models.mongodb_database import mongodb
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
+from app.services.consumable_service import ConsumableService
 
 # Blueprint mit URL-Präfix definieren
 bp = Blueprint('consumables', __name__, url_prefix='/consumables')
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 def index():
     """Zeigt alle Verbrauchsmaterialien an"""
     try:
-        consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+        consumables = ConsumableService.get_all_consumables()
         
         # Hole Kategorien und Standorte aus den Settings
         categories = get_categories_from_settings()
@@ -42,46 +43,21 @@ def add():
     """Fügt ein neues Verbrauchsmaterial hinzu"""
     if request.method == 'POST':
         try:
-            # Formulardaten abrufen
-            name = request.form.get('name')
-            barcode = request.form.get('barcode')
-            category = request.form.get('category')
-            location = request.form.get('location')
-            quantity = int(request.form.get('quantity', 0))
-            min_quantity = int(request.form.get('min_quantity', 0))
-            description = request.form.get('description', '')
-            
-            # Prüfe ob Barcode bereits existiert
-            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
-            
-            if existing_tool or existing_consumable or existing_worker:
-                flash('Barcode bereits vergeben', 'error')
-                categories = get_categories_from_settings()
-                locations = get_locations_from_settings()
-                return render_template('consumables/add.html', 
-                                   categories=categories, 
-                                   locations=locations)
-            
-            # Neues Verbrauchsmaterial erstellen
-            consumable_data = {
-                'name': name,
-                'barcode': barcode,
-                'category': category,
-                'location': location,
-                'quantity': quantity,
-                'min_quantity': min_quantity,
-                'description': description,
-                'created_at': datetime.now(),
-                'updated_at': datetime.now(),
-                'deleted': False
+            data = {
+                'name': request.form.get('name'),
+                'barcode': request.form.get('barcode'),
+                'category': request.form.get('category'),
+                'location': request.form.get('location'),
+                'quantity': request.form.get('quantity', 0),
+                'min_quantity': request.form.get('min_quantity', 0),
+                'description': request.form.get('description', '')
             }
-            
-            mongodb.insert_one('consumables', consumable_data)
-            flash('Verbrauchsmaterial wurde erfolgreich hinzugefügt', 'success')
-            return redirect(url_for('consumables.index'))
-            
+            success, message = ConsumableService.add_consumable(data)
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('consumables.index'))
+            else:
+                flash(message, 'error')
         except Exception as e:
             logger.error(f"Fehler beim Hinzufügen des Verbrauchsmaterials: {str(e)}", exc_info=True)
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
@@ -100,88 +76,24 @@ def detail(barcode):
     if request.method == 'POST':
         try:
             data = request.form
-            new_barcode = data.get('barcode')
-            
-            # Prüfe ob das Verbrauchsmaterial existiert
-            current = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-            
-            if not current:
-                return jsonify({
-                    'success': False,
-                    'message': 'Verbrauchsmaterial nicht gefunden'
-                }), 404
-            
-            # Prüfe ob der neue Barcode bereits existiert (wenn er sich geändert hat)
-            if new_barcode != barcode:
-                existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
-                existing_consumable = mongodb.find_one('consumables', {'barcode': new_barcode, 'deleted': {'$ne': True}})
-                existing_worker = mongodb.find_one('workers', {'barcode': new_barcode, 'deleted': {'$ne': True}})
-                
-                if existing_tool or existing_consumable or existing_worker:
-                    return jsonify({
-                        'success': False,
-                        'message': f'Der Barcode "{new_barcode}" existiert bereits'
-                    }), 400
-            
-            # Update durchführen
-            update_data = {
-                'name': data.get('name'),
-                'description': data.get('description'),
-                'category': data.get('category'),
-                'location': data.get('location'),
-                'quantity': int(data.get('quantity', current['quantity'])),
-                'min_quantity': int(data.get('min_quantity', current['min_quantity'])),
-                'barcode': new_barcode,
-                'modified_at': datetime.now()
-            }
-            
-            mongodb.update_one('consumables', {'barcode': barcode}, {'$set': update_data})
-            
-            # Bestandsänderung protokollieren
-            if int(data.get('quantity', current['quantity'])) != current['quantity']:
-                usage_data = {
-                    'consumable_barcode': new_barcode,
-                    'worker_barcode': 'admin',
-                    'quantity': int(data.get('quantity', current['quantity'])) - current['quantity'],
-                    'used_at': datetime.now()
-                }
-                mongodb.insert_one('consumable_usages', usage_data)
-            
-            return jsonify({'success': True, 'redirect': url_for('consumables.detail', barcode=new_barcode)})
-            
+            success, message, new_barcode = ConsumableService.update_consumable(barcode, data)
+            if success:
+                return jsonify({'success': True, 'redirect': url_for('consumables.detail', barcode=new_barcode)})
+            else:
+                return jsonify({'success': False, 'message': message}), 400
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren des Verbrauchsmaterials: {str(e)}", exc_info=True)
             return jsonify({'success': False, 'message': str(e)}), 500
     
     # GET-Methode: Details anzeigen
-    consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-    
+    consumable = ConsumableService.get_consumable_detail(barcode)
     if not consumable:
         flash('Verbrauchsmaterial nicht gefunden', 'error')
         return redirect(url_for('consumables.index'))
     
-    # Hole vordefinierte Kategorien und Standorte
     categories = get_categories_from_settings()
     locations = get_locations_from_settings()
-    
-    # Hole Bestandsänderungen
-    usages = mongodb.find('consumable_usages', {'consumable_barcode': barcode})
-    usages = list(usages)
-    
-    # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
-    def safe_date_key(usage):
-        used_at = usage.get('used_at')
-        if isinstance(used_at, str):
-            try:
-                return datetime.strptime(used_at, '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                return datetime.min
-        elif isinstance(used_at, datetime):
-            return used_at
-        else:
-            return datetime.min
-    
-    usages.sort(key=safe_date_key, reverse=True)
+    usages = ConsumableService.get_consumable_usages(barcode)
     
     # Erstelle Verlaufsliste
     history = []
@@ -192,7 +104,6 @@ def detail(barcode):
         action = "Entnommen" if usage['quantity'] < 0 else "Hinzugefügt"
         quantity = abs(usage['quantity'])
         
-        # Stelle sicher, dass das Datum korrekt formatiert wird
         action_date = usage['used_at']
         if isinstance(action_date, str):
             try:
@@ -201,133 +112,357 @@ def detail(barcode):
                 action_date = datetime.now()
         
         history.append({
-            'action_type': 'Bestandsänderung',
-            'action_date': action_date,
-            'worker': worker_name,
-            'action': f"{action}: {quantity} Stück",
-            'reason': None
+            'action': action,
+            'quantity': quantity,
+            'worker_name': worker_name,
+            'date': action_date
         })
     
     return render_template('consumables/details.html',
                          consumable=consumable,
+                       history=history,
                          categories=categories,
-                         locations=locations,
-                         history=history)
+                       locations=locations)
 
 @bp.route('/<barcode>/adjust-stock', methods=['POST'])
 @login_required
 def adjust_stock(barcode):
     """Passt den Bestand eines Verbrauchsmaterials an"""
     try:
-        # Versuche zuerst JSON-Daten zu lesen, falls das fehlschlägt, verwende Form-Daten
-        try:
-            data = request.get_json()
-        except:
-            # Fallback auf Form-Daten
-            data = request.form.to_dict()
-        
-        quantity_change = data.get('quantity')
-        if quantity_change is not None:
-            try:
-                quantity_change = int(quantity_change)
-            except (ValueError, TypeError):
-                return jsonify({'success': False, 'message': 'Ungültige Menge'}), 400
-        else:
-            return jsonify({'success': False, 'message': 'Menge ist erforderlich'}), 400
-            
+        data = request.get_json()
+        quantity = int(data.get('quantity', 0))
         reason = data.get('reason', '')
         
-        # Hole aktuelles Verbrauchsmaterial
-        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-        if not consumable:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
-        
-        # Berechne neue Menge
-        new_quantity = consumable.get('quantity', 0) + quantity_change
-        if new_quantity < 0:
-            return jsonify({'success': False, 'message': 'Bestand kann nicht negativ sein'}), 400
-        
-        # Aktualisiere Bestand
-        mongodb.update_one('consumables', 
-                          {'barcode': barcode}, 
-                          {'$set': {'quantity': new_quantity, 'modified_at': datetime.now()}})
-        
-        # Protokolliere Bestandsänderung
-        usage_data = {
-            'consumable_barcode': barcode,
-            'worker_barcode': getattr(current_user, 'username', 'admin'),
-            'quantity': quantity_change,
-            'used_at': datetime.now(),
-            'reason': reason
-        }
-        mongodb.insert_one('consumable_usages', usage_data)
-        
-        return jsonify({
-            'success': True, 
-            'message': 'Bestand erfolgreich angepasst',
-            'new_quantity': new_quantity
-        })
-        
+        success, message = ConsumableService.adjust_stock(barcode, quantity, reason)
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
     except Exception as e:
         logger.error(f"Fehler beim Anpassen des Bestands: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': 'Fehler beim Anpassen des Bestands'}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
-@mitarbeiter_required
-def delete_by_barcode(barcode):
-    """Löscht ein Verbrauchsmaterial (Soft-Delete)"""
+@login_required
+def delete(barcode):
+    """Löscht ein Verbrauchsmaterial"""
     try:
-        # Prüfe ob das Verbrauchsmaterial existiert
-        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-        if not consumable:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
-        
-        # Führe Soft-Delete durch
-        mongodb.update_one('consumables', 
-                          {'barcode': barcode}, 
-                          {'$set': {'deleted': True, 'deleted_at': datetime.now()}})
-        
-        return jsonify({'success': True, 'message': 'Verbrauchsmaterial erfolgreich gelöscht'})
-        
+        success, message = ConsumableService.delete_consumable(barcode)
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': 'Fehler beim Löschen'}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @bp.route('/<barcode>/forecast')
 @login_required
 def forecast(barcode):
-    """Zeigt eine Bestandsprognose für ein Verbrauchsmaterial"""
+    """Zeigt eine Vorhersage für ein Verbrauchsmaterial an"""
     try:
-        consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-        if not consumable:
-            return jsonify({'success': False, 'message': 'Verbrauchsmaterial nicht gefunden'}), 404
-        
-        # Hole Verbrauch der letzten 30 Tage
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        usages = list(mongodb.find('consumable_usages', {
-            'consumable_barcode': barcode,
-            'used_at': {'$gte': thirty_days_ago},
-            'quantity': {'$lt': 0}  # Nur Entnahmen
-        }))
-        
-        # Berechne durchschnittlichen täglichen Verbrauch
-        total_usage = abs(sum(usage['quantity'] for usage in usages))
-        avg_daily_usage = total_usage / 30 if usages else 0
-        
-        # Berechne Tage bis zur Neubestellung
-        current_quantity = consumable.get('quantity', 0)
-        days_until_reorder = int(current_quantity / avg_daily_usage) if avg_daily_usage > 0 else 999
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'current_quantity': current_quantity,
-                'avg_daily_usage': round(avg_daily_usage, 2),
-                'days_until_reorder': days_until_reorder,
-                'min_quantity': consumable.get('min_quantity', 0)
-            }
-        })
-        
+        forecast_data = ConsumableService.get_consumable_forecast(barcode)
+        if forecast_data:
+            return jsonify({'success': True, 'forecast': forecast_data})
+        else:
+            return jsonify({'success': False, 'message': 'Keine ausreichenden Daten für Vorhersage'}), 400
     except Exception as e:
-        logger.error(f"Fehler bei der Bestandsprognose: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': 'Fehler bei der Berechnung'}), 500
+        logger.error(f"Fehler bei der Vorhersage: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/export')
+@login_required
+def export():
+    """Exportiert alle Verbrauchsmaterialien als CSV"""
+    try:
+        csv_data = ConsumableService.export_consumables()
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=verbrauchsmaterialien.csv'}
+        )
+    except Exception as e:
+        logger.error(f"Fehler beim Export: {str(e)}", exc_info=True)
+        flash('Fehler beim Export', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/search')
+@login_required
+def search():
+    """Sucht nach Verbrauchsmaterialien"""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return redirect(url_for('consumables.index'))
+    
+    try:
+        consumables = ConsumableService.search_consumables(query)
+        return render_template('consumables/index.html', 
+                           consumables=consumables, 
+                           search_query=query)
+    except Exception as e:
+        logger.error(f"Fehler bei der Suche: {str(e)}", exc_info=True)
+        flash('Fehler bei der Suche', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/bulk-actions', methods=['POST'])
+@login_required
+def bulk_actions():
+    """Führt Massenaktionen auf Verbrauchsmaterialien aus"""
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        barcodes = data.get('barcodes', [])
+        
+        if not barcodes:
+            return jsonify({'success': False, 'message': 'Keine Verbrauchsmaterialien ausgewählt'}), 400
+        
+        success, message = ConsumableService.bulk_action(action, barcodes)
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+    except Exception as e:
+        logger.error(f"Fehler bei Massenaktion: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/statistics')
+@login_required
+def statistics():
+    """Zeigt Statistiken für Verbrauchsmaterialien an"""
+    try:
+        stats = ConsumableService.get_statistics()
+        # Verwende das index Template mit Statistiken
+        return render_template('consumables/index.html', stats=stats)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Statistiken: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Statistiken', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/low-stock')
+@login_required
+def low_stock():
+    """Zeigt Verbrauchsmaterialien mit niedrigem Bestand an"""
+    try:
+        low_stock_items = ConsumableService.get_low_stock_items()
+        # Verwende das index Template mit Niedrigbestand-Filter
+        return render_template('consumables/index.html', consumables=low_stock_items, show_low_stock=True)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Niedrigbestand-Liste: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Niedrigbestand-Liste', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/import', methods=['GET', 'POST'])
+@login_required
+def import_consumables():
+    """Importiert Verbrauchsmaterialien aus einer CSV-Datei"""
+    if request.method == 'POST':
+        try:
+            if 'file' not in request.files:
+                flash('Keine Datei ausgewählt', 'error')
+                return redirect(request.url)
+            
+            file = request.files['file']
+            if file.filename == '':
+                flash('Keine Datei ausgewählt', 'error')
+                return redirect(request.url)
+            
+            if file and file.filename.endswith('.csv'):
+                success, message = ConsumableService.import_consumables(file)
+                if success:
+                    flash(message, 'success')
+                else:
+                    flash(message, 'error')
+            else:
+                flash('Nur CSV-Dateien sind erlaubt', 'error')
+            
+            return redirect(url_for('consumables.index'))
+        except Exception as e:
+            logger.error(f"Fehler beim Import: {str(e)}", exc_info=True)
+            flash('Fehler beim Import', 'error')
+            return redirect(url_for('consumables.index'))
+    
+    # Verwende das add Template für Import-Funktionalität
+    return render_template('consumables/add.html', show_import=True)
+
+@bp.route('/scan/<barcode>')
+@login_required
+def barcode_scan(barcode):
+    """Verarbeitet einen Barcode-Scan für Verbrauchsmaterialien"""
+    try:
+        result = ConsumableService.process_barcode_scan(barcode)
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 404
+    except Exception as e:
+        logger.error(f"Fehler beim Barcode-Scan: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/quick-scan', methods=['GET', 'POST'])
+@login_required
+def quick_scan():
+    """Schneller Scan für Verbrauchsmaterialien"""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            barcode = data.get('barcode')
+            action = data.get('action', 'consume')  # 'consume' oder 'add'
+            quantity = int(data.get('quantity', 1))
+            
+            result = ConsumableService.quick_scan_action(barcode, action, quantity)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Fehler beim Quick-Scan: {str(e)}", exc_info=True)
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    # Verwende das index Template für Quick-Scan
+    return render_template('consumables/index.html', show_quick_scan=True)
+
+@bp.route('/restock-alert/<barcode>', methods=['POST'])
+@login_required
+def restock_alert(barcode):
+    """Sendet eine Nachbestellungs-Benachrichtigung für ein Verbrauchsmaterial"""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        
+        success, result = ConsumableService.send_restock_alert(barcode, message)
+        if success:
+            return jsonify({'success': True, 'message': result})
+        else:
+            return jsonify({'success': False, 'message': result}), 400
+    except Exception as e:
+        logger.error(f"Fehler beim Senden der Nachbestellungs-Benachrichtigung: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/usage-history/<barcode>')
+@login_required
+def usage_history(barcode):
+    """Zeigt die Nutzungshistorie eines Verbrauchsmaterials an"""
+    try:
+        history_data = ConsumableService.get_usage_history(barcode)
+        if history_data:
+            return jsonify({'success': True, 'history': history_data})
+        else:
+            return jsonify({'success': False, 'message': 'Keine Historie gefunden'}), 404
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Nutzungshistorie: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/categories', methods=['GET', 'POST'])
+@login_required
+def category_management():
+    """Verwaltet Kategorien für Verbrauchsmaterialien"""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            action = data.get('action')
+            
+            if action == 'add':
+                name = data.get('name')
+                success, message = ConsumableService.add_category(name)
+            elif action == 'delete':
+                name = data.get('name')
+                success, message = ConsumableService.delete_category(name)
+            else:
+                return jsonify({'success': False, 'message': 'Ungültige Aktion'}), 400
+            
+            if success:
+                return jsonify({'success': True, 'message': message})
+            else:
+                return jsonify({'success': False, 'message': message}), 400
+        except Exception as e:
+            logger.error(f"Fehler bei der Kategorieverwaltung: {str(e)}", exc_info=True)
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    # GET-Methode: Kategorien anzeigen
+    try:
+        categories = ConsumableService.get_categories()
+        # Verwende das index Template für Kategorieverwaltung
+        return render_template('consumables/index.html', categories=categories, show_categories=True)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Kategorien: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Kategorien', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/locations', methods=['GET', 'POST'])
+@login_required
+def location_management():
+    """Verwaltet Standorte für Verbrauchsmaterialien"""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            action = data.get('action')
+            
+            if action == 'add':
+                name = data.get('name')
+                success, message = ConsumableService.add_location(name)
+            elif action == 'delete':
+                name = data.get('name')
+                success, message = ConsumableService.delete_location(name)
+            else:
+                return jsonify({'success': False, 'message': 'Ungültige Aktion'}), 400
+            
+            if success:
+                return jsonify({'success': True, 'message': message})
+            else:
+                return jsonify({'success': False, 'message': message}), 400
+        except Exception as e:
+            logger.error(f"Fehler bei der Standortverwaltung: {str(e)}", exc_info=True)
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    # GET-Methode: Standorte anzeigen
+    try:
+        locations = ConsumableService.get_locations()
+        # Verwende das index Template für Standortverwaltung
+        return render_template('consumables/index.html', locations=locations, show_locations=True)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Standorte: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Standorte', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/report')
+@login_required
+def report():
+    """Generiert einen Bericht über Verbrauchsmaterialien"""
+    try:
+        report_type = request.args.get('type', 'overview')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        
+        report_data = ConsumableService.generate_report(report_type, date_from, date_to)
+        # Verwende das index Template für Berichte
+        return render_template('consumables/index.html', 
+                           report_data=report_data,
+                           report_type=report_type,
+                           show_report=True)
+    except Exception as e:
+        logger.error(f"Fehler beim Generieren des Berichts: {str(e)}", exc_info=True)
+        flash('Fehler beim Generieren des Berichts', 'error')
+        return redirect(url_for('consumables.index'))
+
+@bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    """Verwaltet Einstellungen für Verbrauchsmaterialien"""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            success, message = ConsumableService.update_settings(data)
+            if success:
+                return jsonify({'success': True, 'message': message})
+            else:
+                return jsonify({'success': False, 'message': message}), 400
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren der Einstellungen: {str(e)}", exc_info=True)
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    # GET-Methode: Einstellungen anzeigen
+    try:
+        settings_data = ConsumableService.get_settings()
+        # Verwende das index Template für Einstellungen
+        return render_template('consumables/index.html', settings=settings_data, show_settings=True)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Einstellungen: {str(e)}", exc_info=True)
+        flash('Fehler beim Laden der Einstellungen', 'error')
+        return redirect(url_for('consumables.index'))

@@ -292,5 +292,19 @@ class MongoDBDatabase:
 # Alias für einfacheren Import
 MongoDB = MongoDBDatabase
 
-# Globale Instanz
-mongodb = MongoDBDatabase() 
+# Globale Instanz (lazy initialization)
+_mongodb_instance = None
+
+def get_mongodb():
+    """Lazy initialization der MongoDB-Instanz"""
+    global _mongodb_instance
+    if _mongodb_instance is None:
+        _mongodb_instance = MongoDBDatabase()
+    return _mongodb_instance
+
+# Alias für Rückwärtskompatibilität - wird erst bei Verwendung initialisiert
+class LazyMongoDB:
+    def __getattr__(self, name):
+        return getattr(get_mongodb(), name)
+
+mongodb = LazyMongoDB() 

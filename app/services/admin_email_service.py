@@ -1,0 +1,436 @@
+"""
+Admin Email Service
+
+Dieser Service enthält alle Funktionen für die E-Mail-Verwaltung,
+die aus der großen admin.py Datei ausgelagert wurden.
+"""
+
+import logging
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from app.models.mongodb_database import mongodb
+from app.utils.email_utils import send_email
+
+logger = logging.getLogger(__name__)
+
+class AdminEmailService:
+    """Service für Admin-E-Mail-Funktionen"""
+    
+    @staticmethod
+    def get_email_settings() -> Dict[str, Any]:
+        """Hole alle E-Mail-Einstellungen"""
+        try:
+            settings = {}
+            rows = mongodb.find('settings', {})
+            
+            for row in rows:
+                if row['key'].startswith('email_'):
+                    settings[row['key']] = row['value']
+            
+            return settings
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der E-Mail-Einstellungen: {str(e)}")
+            return {}
+
+    @staticmethod
+    def update_email_settings(settings_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Aktualisiert E-Mail-Einstellungen
+        
+        Args:
+            settings_data: Neue E-Mail-Einstellungen
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            for key, value in settings_data.items():
+                if key.startswith('email_'):
+                    mongodb.update_one('settings', 
+                                     {'key': key}, 
+                                     {'$set': {'value': value}}, 
+                                     upsert=True)
+            
+            logger.info("E-Mail-Einstellungen aktualisiert")
+            return True, "E-Mail-Einstellungen erfolgreich gespeichert"
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der E-Mail-Einstellungen: {str(e)}")
+            return False, f"Fehler beim Speichern der E-Mail-Einstellungen: {str(e)}"
+
+    @staticmethod
+    def test_email_configuration() -> Tuple[bool, str]:
+        """
+        Testet die E-Mail-Konfiguration
+        
+        Returns:
+            (success, message)
+        """
+        try:
+            # Hole E-Mail-Einstellungen
+            settings = AdminEmailService.get_email_settings()
+            
+            # Prüfe ob alle erforderlichen Einstellungen vorhanden sind
+            required_settings = ['email_smtp_server', 'email_smtp_port', 'email_username', 'email_password']
+            missing_settings = []
+            
+            for setting in required_settings:
+                if setting not in settings or not settings[setting]:
+                    missing_settings.append(setting.replace('email_', ''))
+            
+            if missing_settings:
+                return False, f"Fehlende E-Mail-Einstellungen: {', '.join(missing_settings)}"
+            
+            # Teste E-Mail-Versand
+            test_subject = "Scandy - E-Mail-Test"
+            test_message = f"""
+            Dies ist eine Test-E-Mail von Scandy.
+            
+            Gesendet am: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+            
+            Wenn Sie diese E-Mail erhalten, ist die E-Mail-Konfiguration korrekt.
+            """
+            
+            # Sende Test-E-Mail an Admin
+            admin_users = list(mongodb.find('users', {'role': 'admin'}))
+            
+            if not admin_users:
+                return False, "Keine Admin-Benutzer gefunden"
+            
+            admin_email = admin_users[0].get('email')
+            if not admin_email:
+                return False, "Admin-Benutzer hat keine E-Mail-Adresse"
+            
+            success = send_email(
+                to_email=admin_email,
+                subject=test_subject,
+                message=test_message
+            )
+            
+            if success:
+                logger.info("E-Mail-Konfiguration erfolgreich getestet")
+                return True, f"Test-E-Mail erfolgreich an {admin_email} gesendet"
+            else:
+                return False, "Fehler beim Senden der Test-E-Mail"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Testen der E-Mail-Konfiguration: {str(e)}")
+            return False, f"Fehler beim Testen der E-Mail-Konfiguration: {str(e)}"
+
+    @staticmethod
+    def send_notification_email(recipient_email: str, subject: str, message: str) -> Tuple[bool, str]:
+        """
+        Sendet eine Benachrichtigungs-E-Mail
+        
+        Args:
+            recipient_email: E-Mail-Adresse des Empfängers
+            subject: Betreff der E-Mail
+            message: Nachrichtentext
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            success = send_email(
+                to_email=recipient_email,
+                subject=subject,
+                message=message
+            )
+            
+            if success:
+                logger.info(f"Benachrichtigungs-E-Mail gesendet an: {recipient_email}")
+                return True, f"E-Mail erfolgreich an {recipient_email} gesendet"
+            else:
+                return False, "Fehler beim Senden der E-Mail"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der Benachrichtigungs-E-Mail: {str(e)}")
+            return False, f"Fehler beim Senden der E-Mail: {str(e)}"
+
+    @staticmethod
+    def send_low_stock_notification(consumable_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Sendet eine Niedrigbestand-Benachrichtigung
+        
+        Args:
+            consumable_data: Verbrauchsmaterial-Daten
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            # Hole Admin-Benutzer
+            admin_users = list(mongodb.find('users', {'role': 'admin'}))
+            
+            if not admin_users:
+                return False, "Keine Admin-Benutzer für Benachrichtigung gefunden"
+            
+            # Erstelle E-Mail-Nachricht
+            subject = f"Scandy - Niedrigbestand: {consumable_data.get('name', 'Unbekannt')}"
+            message = f"""
+            Niedrigbestand-Warnung
+            
+            Verbrauchsmaterial: {consumable_data.get('name', 'Unbekannt')}
+            Barcode: {consumable_data.get('barcode', 'Unbekannt')}
+            Aktueller Bestand: {consumable_data.get('quantity', 0)}
+            Mindestbestand: {consumable_data.get('min_quantity', 0)}
+            
+            Bitte bestellen Sie das Verbrauchsmaterial nach.
+            
+            Gesendet am: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+            """
+            
+            # Sende E-Mail an alle Admins
+            success_count = 0
+            total_count = 0
+            
+            for admin in admin_users:
+                admin_email = admin.get('email')
+                if admin_email:
+                    total_count += 1
+                    success, _ = AdminEmailService.send_notification_email(
+                        admin_email, subject, message
+                    )
+                    if success:
+                        success_count += 1
+            
+            if success_count > 0:
+                logger.info(f"Niedrigbestand-Benachrichtigung gesendet: {success_count}/{total_count} erfolgreich")
+                return True, f"Niedrigbestand-Benachrichtigung an {success_count}/{total_count} Admins gesendet"
+            else:
+                return False, "Keine E-Mails erfolgreich gesendet"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der Niedrigbestand-Benachrichtigung: {str(e)}")
+            return False, f"Fehler beim Senden der Niedrigbestand-Benachrichtigung: {str(e)}"
+
+    @staticmethod
+    def send_overdue_notification(lending_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Sendet eine Überfälligkeits-Benachrichtigung
+        
+        Args:
+            lending_data: Ausleih-Daten
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            # Hole Werkzeug und Mitarbeiter
+            tool = mongodb.find_one('tools', {'barcode': lending_data.get('tool_barcode')})
+            worker = mongodb.find_one('workers', {'barcode': lending_data.get('worker_barcode')})
+            
+            if not tool or not worker:
+                return False, "Werkzeug oder Mitarbeiter nicht gefunden"
+            
+            # Erstelle E-Mail-Nachricht
+            subject = f"Scandy - Überfällige Ausleihe: {tool.get('name', 'Unbekannt')}"
+            message = f"""
+            Überfällige Ausleihe
+            
+            Werkzeug: {tool.get('name', 'Unbekannt')}
+            Barcode: {tool.get('barcode', 'Unbekannt')}
+            Mitarbeiter: {worker.get('firstname', '')} {worker.get('lastname', '')}
+            Ausgeliehen am: {lending_data.get('lent_at', 'Unbekannt')}
+            
+            Das Werkzeug ist überfällig und sollte zurückgegeben werden.
+            
+            Gesendet am: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+            """
+            
+            # Sende E-Mail an Admin
+            admin_users = list(mongodb.find('users', {'role': 'admin'}))
+            
+            if not admin_users:
+                return False, "Keine Admin-Benutzer für Benachrichtigung gefunden"
+            
+            success_count = 0
+            total_count = 0
+            
+            for admin in admin_users:
+                admin_email = admin.get('email')
+                if admin_email:
+                    total_count += 1
+                    success, _ = AdminEmailService.send_notification_email(
+                        admin_email, subject, message
+                    )
+                    if success:
+                        success_count += 1
+            
+            if success_count > 0:
+                logger.info(f"Überfälligkeits-Benachrichtigung gesendet: {success_count}/{total_count} erfolgreich")
+                return True, f"Überfälligkeits-Benachrichtigung an {success_count}/{total_count} Admins gesendet"
+            else:
+                return False, "Keine E-Mails erfolgreich gesendet"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der Überfälligkeits-Benachrichtigung: {str(e)}")
+            return False, f"Fehler beim Senden der Überfälligkeits-Benachrichtigung: {str(e)}"
+
+    @staticmethod
+    def get_email_statistics() -> Dict[str, Any]:
+        """Hole E-Mail-Statistiken"""
+        try:
+            # Zähle E-Mail-Einstellungen
+            email_settings = AdminEmailService.get_email_settings()
+            
+            # Prüfe ob E-Mail konfiguriert ist
+            smtp_configured = all([
+                'email_smtp_server' in email_settings and email_settings['email_smtp_server'],
+                'email_smtp_port' in email_settings and email_settings['email_smtp_port'],
+                'email_username' in email_settings and email_settings['email_username'],
+                'email_password' in email_settings and email_settings['email_password']
+            ])
+            
+            # Zähle Benutzer mit E-Mail-Adressen
+            users_with_email = mongodb.count_documents('users', {'email': {'$ne': ''}})
+            total_users = mongodb.count_documents('users', {})
+            
+            return {
+                'email_configured': smtp_configured,
+                'users_with_email': users_with_email,
+                'total_users': total_users,
+                'email_percentage': round((users_with_email / total_users * 100), 1) if total_users > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der E-Mail-Statistiken: {str(e)}")
+            return {
+                'email_configured': False,
+                'users_with_email': 0,
+                'total_users': 0,
+                'email_percentage': 0
+            } 
+
+    @staticmethod
+    def get_email_config() -> Dict[str, Any]:
+        """
+        Gibt die aktuelle E-Mail-Konfiguration zurück
+        
+        Returns:
+            Dictionary mit E-Mail-Konfiguration
+        """
+        try:
+            settings = AdminEmailService.get_email_settings()
+            
+            # Mappe die Einstellungen auf das erwartete Format
+            config = {
+                'mail_server': settings.get('email_smtp_server', 'smtp.gmail.com'),
+                'mail_port': int(settings.get('email_smtp_port', 587)),
+                'mail_use_tls': settings.get('email_use_tls', True),
+                'mail_username': settings.get('email_username', ''),
+                'mail_password': settings.get('email_password', ''),
+                'test_email': settings.get('email_test_email', ''),
+                'use_auth': settings.get('email_use_auth', True)
+            }
+            
+            return config
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der E-Mail-Konfiguration: {str(e)}")
+            return {
+                'mail_server': 'smtp.gmail.com',
+                'mail_port': 587,
+                'mail_use_tls': True,
+                'mail_username': '',
+                'mail_password': '',
+                'test_email': '',
+                'use_auth': True
+            }
+
+    @staticmethod
+    def save_email_config(config_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Speichert die E-Mail-Konfiguration
+        
+        Args:
+            config_data: E-Mail-Konfiguration
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            # Mappe die Konfiguration auf die Datenbankfelder
+            settings_data = {
+                'email_smtp_server': config_data.get('mail_server', 'smtp.gmail.com'),
+                'email_smtp_port': str(config_data.get('mail_port', 587)),
+                'email_use_tls': config_data.get('mail_use_tls', True),
+                'email_username': config_data.get('mail_username', ''),
+                'email_password': config_data.get('mail_password', ''),
+                'email_test_email': config_data.get('test_email', ''),
+                'email_use_auth': config_data.get('use_auth', True)
+            }
+            
+            success, message = AdminEmailService.update_email_settings(settings_data)
+            return success, message
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der E-Mail-Konfiguration: {str(e)}")
+            return False, f"Fehler beim Speichern der E-Mail-Konfiguration: {str(e)}"
+
+    @staticmethod
+    def test_email_config(config_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Testet die E-Mail-Konfiguration
+        
+        Args:
+            config_data: E-Mail-Konfiguration zum Testen
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            # Temporär die Konfiguration speichern
+            original_config = AdminEmailService.get_email_config()
+            AdminEmailService.save_email_config(config_data)
+            
+            # Teste die Konfiguration
+            success, message = AdminEmailService.test_email_configuration()
+            
+            # Stelle die ursprüngliche Konfiguration wieder her
+            AdminEmailService.save_email_config(original_config)
+            
+            return success, message
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Testen der E-Mail-Konfiguration: {str(e)}")
+            return False, f"Fehler beim Testen der E-Mail-Konfiguration: {str(e)}"
+
+    @staticmethod
+    def diagnose_smtp_connection(config_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Diagnostiziert die SMTP-Verbindung
+        
+        Args:
+            config_data: E-Mail-Konfiguration
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            
+            # Erstelle SMTP-Verbindung
+            if config_data.get('mail_use_tls', True):
+                server = smtplib.SMTP(config_data.get('mail_server', 'smtp.gmail.com'), 
+                                    config_data.get('mail_port', 587))
+                server.starttls()
+            else:
+                server = smtplib.SMTP(config_data.get('mail_server', 'smtp.gmail.com'), 
+                                    config_data.get('mail_port', 587))
+            
+            # Authentifizierung
+            if config_data.get('use_auth', True):
+                username = config_data.get('mail_username', '')
+                password = config_data.get('mail_password', '')
+                server.login(username, password)
+            
+            server.quit()
+            
+            return True, "SMTP-Verbindung erfolgreich"
+            
+        except Exception as e:
+            logger.error(f"SMTP-Diagnose fehlgeschlagen: {str(e)}")
+            return False, f"SMTP-Verbindung fehlgeschlagen: {str(e)}" 

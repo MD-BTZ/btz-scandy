@@ -14,16 +14,13 @@ def index():
     if current_user.role == 'teilnehmer':
         return redirect(url_for('workers.teilnehmer_timesheet_list'))
     
-    # Statistiken laden
-    stats = MongoDBTool.get_statistics()
+    # Verwende den zentralen Statistics Service
+    from app.services.statistics_service import StatisticsService
     
-    # Bestandsprognose laden
-    consumables_forecast = MongoDBTool.get_consumables_forecast()
-    
-    # Duplikat-Barcodes prüfen
-    duplicate_barcodes = MongoDBTool.get_duplicate_barcodes()
+    # Alle Statistiken auf einmal laden
+    stats = StatisticsService.get_all_statistics()
     
     return render_template('dashboard/index.html',
-                         stats=stats,
-                         consumables_forecast=consumables_forecast,
-                         duplicate_barcodes=duplicate_barcodes) 
+                         stats=stats['all_stats'],
+                         consumables_forecast=stats['consumables_forecast'],
+                         duplicate_barcodes=stats['duplicate_barcodes']) 

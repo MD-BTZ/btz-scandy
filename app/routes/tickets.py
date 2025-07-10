@@ -557,79 +557,43 @@ def analyze_ticket(ticket_id):
 @login_required
 def create():
     """Erstellt ein neues Ticket."""
+    # Verwende den TicketService
+    from app.services.ticket_service import TicketService
+    ticket_service = TicketService()
+    
     if request.method == 'POST':
         try:
             # Prüfe ob die Anfrage JSON enthält
             if request.is_json:
                 data = request.get_json()
-                title = data.get('title')
-                description = data.get('description')
-                priority = data.get('priority', 'normal')
-                category = data.get('category')
-                new_category = data.get('new_category')
             else:
-                title = request.form.get('title')
-                description = request.form.get('description')
-                priority = request.form.get('priority', 'normal')
-                category = request.form.get('category')
-                new_category = request.form.get('new_category')
+                data = {
+                    'title': request.form.get('title'),
+                    'description': request.form.get('description'),
+                    'priority': request.form.get('priority', 'normal'),
+                    'category': request.form.get('category'),
+                    'due_date': request.form.get('due_date'),
+                    'estimated_time': request.form.get('estimated_time')
+                }
 
-            # Wenn eine neue Kategorie eingegeben wurde, prüfe und füge sie ggf. hinzu
-            if category:
-                # Prüfe ob die Kategorie bereits in den Settings existiert
-                ticket_categories = get_ticket_categories_from_settings()
-                if category not in ticket_categories:
-                    # Füge die neue Kategorie zu den Settings hinzu
-                    mongodb.update_one_array(
-                        'settings',
-                        {'key': 'ticket_categories'},
-                        {'$push': {'value': category}},
-                        upsert=True
-                    )
+            # Ticket erstellen
+            success, message, ticket_id = ticket_service.create_ticket(data, current_user.username)
 
-            due_date = data.get('due_date') if request.is_json else request.form.get('due_date')
-            estimated_time = data.get('estimated_time') if request.is_json else request.form.get('estimated_time')
-
-            # Formatiere das Fälligkeitsdatum
-            if due_date:
-                try:
-                    due_date = datetime.strptime(due_date, '%Y-%m-%dT%H:%M')
-                except ValueError:
-                    due_date = None
-
-            if not title:
+            if success:
                 if request.is_json:
-                    return jsonify({'success': False, 'message': 'Titel ist erforderlich'}), 400
-                flash('Titel ist erforderlich.', 'error')
+                    return jsonify({
+                        'success': True,
+                        'message': message,
+                        'ticket_id': ticket_id
+                    })
+                flash(message, 'success')
                 return redirect(url_for('tickets.create'))
-
-            # Erstelle das Ticket
-            ticket_data = {
-                'title': title,
-                'description': description,
-                'priority': priority,
-                'created_by': current_user.username,
-                'category': category,
-                'due_date': due_date,
-                'estimated_time': estimated_time,
-                'status': 'offen',
-                'created_at': datetime.now(),
-                'updated_at': datetime.now(),
-                'ticket_number': get_next_ticket_number()  # Neue Auftragsnummer
-            }
-            
-            result = mongodb.insert_one('tickets', ticket_data)
-            ticket_id = str(result)
-
-            if request.is_json:
-                return jsonify({
-                    'success': True,
-                    'message': 'Ticket wurde erfolgreich erstellt',
-                    'ticket_id': ticket_id
-                })
-            
-            flash('Ticket wurde erfolgreich erstellt.', 'success')
-            return redirect(url_for('tickets.create'))
+            else:
+                if request.is_json:
+                    return jsonify({'success': False, 'message': message}), 400
+                flash(message, 'error')
+                return redirect(url_for('tickets.create'))
+                
         except Exception as e:
             if request.is_json:
                 return jsonify({
@@ -639,162 +603,30 @@ def create():
             flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
             return redirect(url_for('tickets.create'))
     
-    # Hole offene Tickets (nicht zugewiesene, offene Tickets)
-    open_tickets = mongodb.find('tickets', {
-        '$or': [
-            {'assigned_to': None},
-            {'assigned_to': ''}
-        ],
-        'status': 'offen',
-        'deleted': {'$ne': True}
-    })
-    open_tickets = list(open_tickets)
+    # Verwende den TicketService für alle Ticket-Operationen
+    print(f"DEBUG: Lade Tickets für Benutzer: {current_user.username}, Rolle: {current_user.role}")
+    tickets_data = ticket_service.get_tickets_by_user(current_user.username, current_user.role)
+    open_tickets = tickets_data['open_tickets']
+    assigned_tickets = tickets_data['assigned_tickets']
+    all_tickets = tickets_data['all_tickets']
     
-    # Füge Nachrichtenanzahl hinzu
-    for ticket in open_tickets:
-        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-        ticket['message_count'] = message_count
-
-    # Hole die zugewiesenen Tickets (dem aktuellen Benutzer zugewiesene Tickets + gelöste/geschlossene für alle)
-    if current_user.role in ['admin', 'mitarbeiter']:
-        # Für Admins/Mitarbeiter: Eigene zugewiesene Tickets + alle gelösten/geschlossenen
-        assigned_tickets = mongodb.find('tickets', {
-            '$or': [
-                {'assigned_to': current_user.username, 'deleted': {'$ne': True}},
-                {'status': {'$in': ['gelöst', 'geschlossen']}, 'deleted': {'$ne': True}}
-            ]
-        })
-    else:
-        # Für normale User: Nur eigene zugewiesene Tickets
-        assigned_tickets = mongodb.find('tickets', {
-            'assigned_to': current_user.username,
-            'deleted': {'$ne': True}
-        })
+    print(f"DEBUG: Route erhalten: {len(open_tickets)} offene, {len(assigned_tickets)} zugewiesene, {len(all_tickets)} alle Tickets")
     
-    assigned_tickets = list(assigned_tickets)
-    
-    # Füge Nachrichtenanzahl hinzu
-    for ticket in assigned_tickets:
-        message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-        ticket['message_count'] = message_count
+    # Debug: Zeige Details der ersten Tickets
+    if open_tickets:
+        print(f"DEBUG: Erstes offenes Ticket: {open_tickets[0].get('title', 'Kein Titel')} (ID: {open_tickets[0].get('id', 'Keine ID')})")
+    if assigned_tickets:
+        print(f"DEBUG: Erstes zugewiesenes Ticket: {assigned_tickets[0].get('title', 'Kein Titel')} (ID: {assigned_tickets[0].get('id', 'Keine ID')})")
     
     # Hole alle Kategorien aus der settings Collection
     categories = get_ticket_categories_from_settings()
     
-    # Für Admins und Mitarbeiter: Hole auch alle Tickets
-    all_tickets = []
+    # Für Admins und Mitarbeiter: Hole auch alle Mitarbeiter
     workers = []
     if current_user.role in ['admin', 'mitarbeiter']:
-        # Hole alle Tickets (nur nicht gelöschte)
-        all_tickets = mongodb.find('tickets', {'deleted': {'$ne': True}})
-        all_tickets = list(all_tickets)
-        
-        # Füge Nachrichtenanzahl hinzu
-        for ticket in all_tickets:
-            message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket['_id']})
-            ticket['message_count'] = message_count
-        
-        # Hole Auftragsdetails für alle Tickets
-        for ticket in all_tickets:
-            auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-            if auftrag_details:
-                ticket['auftrag_details'] = auftrag_details
-        
-        # Sortiere nach Erstellungsdatum (neueste zuerst) - wird nach datetime-Konvertierung gemacht
-        
-        # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
-        for ticket in all_tickets:
-            ticket['id'] = str(ticket['_id'])
-        
-        # Hole alle Mitarbeiter für die Anzeige
         workers = list(mongodb.find('users', {'role': {'$in': ['admin', 'mitarbeiter']}}))
     
-    # Hole Auftragsdetails für zugewiesene und offene Tickets
-    for ticket in assigned_tickets:
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-        if auftrag_details:
-            ticket['auftrag_details'] = auftrag_details
-    
-    for ticket in open_tickets:
-        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket['_id']})
-        if auftrag_details:
-            ticket['auftrag_details'] = auftrag_details
-    
-    # Hilfsfunktion zur Konvertierung von datetime-Strings zu datetime-Objekten
-    def convert_datetime_fields(ticket):
-        date_fields = ['created_at', 'updated_at', 'due_date']
-        for field in date_fields:
-            if ticket.get(field):
-                if isinstance(ticket[field], str):
-                    try:
-                        # Versuche verschiedene Datumsformate zu parsen
-                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d']:
-                            try:
-                                ticket[field] = datetime.strptime(ticket[field], fmt)
-                                break
-                            except ValueError:
-                                continue
-                    except:
-                        # Wenn alle Formate fehlschlagen, setze auf None
-                        ticket[field] = None
-                elif isinstance(ticket[field], datetime):
-                    # Bereits ein datetime-Objekt, nichts zu tun
-                    pass
-                else:
-                    # Versuche es als datetime zu konvertieren
-                    try:
-                        ticket[field] = datetime.fromisoformat(str(ticket[field]))
-                    except:
-                        # Wenn Konvertierung fehlschlägt, setze auf None
-                        ticket[field] = None
-            else:
-                # Feld ist None oder nicht vorhanden, setze auf None
-                ticket[field] = None
-        return ticket
-    
-    # Konvertiere datetime-Felder für alle Tickets
-    for ticket in assigned_tickets:
-        convert_datetime_fields(ticket)
-    for ticket in open_tickets:
-        convert_datetime_fields(ticket)
-    if all_tickets:  # Nur wenn all_tickets existiert und nicht leer ist
-        for ticket in all_tickets:
-            convert_datetime_fields(ticket)
-    
-    # Zusätzliche Sicherheitsmaßnahme: Stelle sicher, dass alle datetime-Felder korrekt sind
-    def ensure_datetime_fields(ticket):
-        for field in ['created_at', 'updated_at', 'due_date']:
-            if field in ticket and not isinstance(ticket[field], (datetime, type(None))):
-                ticket[field] = None
-        return ticket
-    
-    # Wende die Sicherheitsmaßnahme auf alle Tickets an
-    for ticket in assigned_tickets:
-        ensure_datetime_fields(ticket)
-    for ticket in open_tickets:
-        ensure_datetime_fields(ticket)
-    if all_tickets:
-        for ticket in all_tickets:
-            ensure_datetime_fields(ticket)
-    
-    # Sortiere alle Listen nach Erstellungsdatum (neueste zuerst)
-    # Sichere Sortierung mit None-Behandlung
-    def safe_sort_key(ticket):
-        created_at = ticket.get('created_at')
-        if created_at is None:
-            return datetime.min
-        return created_at
-    
-    assigned_tickets.sort(key=safe_sort_key, reverse=True)
-    open_tickets.sort(key=safe_sort_key, reverse=True)
-    if all_tickets:  # Sortiere all_tickets nur wenn es existiert
-        all_tickets.sort(key=safe_sort_key, reverse=True)
-    
-    # Füge id-Feld zu allen Tickets hinzu (für Template-Kompatibilität)
-    for ticket in assigned_tickets:
-        ticket['id'] = str(ticket['_id'])
-    for ticket in open_tickets:
-        ticket['id'] = str(ticket['_id'])
+    print(f"DEBUG: Rendere Template mit {len(open_tickets)} offenen, {len(assigned_tickets)} zugewiesenen, {len(all_tickets)} allen Tickets")
             
     return render_template('tickets/create.html', 
                          assigned_tickets=assigned_tickets,
