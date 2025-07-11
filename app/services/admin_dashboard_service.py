@@ -33,9 +33,17 @@ class AdminDashboardService:
                 worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
                 
                 if tool and worker:
+                    # Konvertiere lent_at zu datetime falls es ein String ist
+                    lent_at = lending['lent_at']
+                    if isinstance(lent_at, str):
+                        try:
+                            lent_at = datetime.fromisoformat(lent_at.replace('Z', '+00:00'))
+                        except:
+                            lent_at = datetime.now()
+                    
                     activities.append({
                         'type': 'lending',
-                        'timestamp': lending['lent_at'],
+                        'timestamp': lent_at,
                         'description': f'Werkzeug "{tool["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgeliehen',
                         'icon': 'fas fa-tools'
                     })
@@ -46,9 +54,17 @@ class AdminDashboardService:
                 worker = mongodb.find_one('workers', {'barcode': usage['worker_barcode']})
                 
                 if consumable and worker:
+                    # Konvertiere used_at zu datetime falls es ein String ist
+                    used_at = usage['used_at']
+                    if isinstance(used_at, str):
+                        try:
+                            used_at = datetime.fromisoformat(used_at.replace('Z', '+00:00'))
+                        except:
+                            used_at = datetime.now()
+                    
                     activities.append({
                         'type': 'usage',
-                        'timestamp': usage['used_at'],
+                        'timestamp': used_at,
                         'description': f'{usage["quantity"]}x "{consumable["name"]}" an {worker["firstname"]} {worker["lastname"]} ausgegeben',
                         'icon': 'fas fa-box-open'
                     })

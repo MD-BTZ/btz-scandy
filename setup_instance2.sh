@@ -22,33 +22,94 @@ echo "Erstelle Ordner für Instance 2..."
 mkdir -p "$INSTANCE2_DIR"
 
 echo "Kopiere alle Dateien..."
-cp -r app/ "$INSTANCE2_DIR/"
-cp -r docs/ "$INSTANCE2_DIR/"
-cp -r mongo-init/ "$INSTANCE2_DIR/"
-cp -r static/ "$INSTANCE2_DIR/"
-cp -r uploads/ "$INSTANCE2_DIR/"
-cp -r backups/ "$INSTANCE2_DIR/"
-cp -r logs/ "$INSTANCE2_DIR/"
+# Kopiere das gesamte Verzeichnis
+cp -r . "$INSTANCE2_DIR/"
 
-# Kopiere wichtige Dateien
-cp docker-compose-instance2.yml "$INSTANCE2_DIR/docker-compose.yml"
-cp Dockerfile "$INSTANCE2_DIR/"
-cp requirements.txt "$INSTANCE2_DIR/"
-cp package.json "$INSTANCE2_DIR/"
-cp tailwind.config.js "$INSTANCE2_DIR/"
-cp postcss.config.js "$INSTANCE2_DIR/"
-cp .dockerignore "$INSTANCE2_DIR/"
+echo "Bereinige Instance 2 Ordner..."
+cd "$INSTANCE2_DIR"
 
-# Kopiere Skripte
-cp start_instance2.sh "$INSTANCE2_DIR/start.sh"
-cp stop_instance2.sh "$INSTANCE2_DIR/stop.sh"
-cp status_instance2.sh "$INSTANCE2_DIR/status.sh"
+# Entferne nicht benötigte Dateien
+rm -rf .git
+rm -rf venv
+rm -rf node_modules
+rm -rf __pycache__
+rm -rf .DS_Store
+rm -f backup.log
+rm -f package-lock.json
 
-# Erstelle .env-Datei
-cp env_instance2.example "$INSTANCE2_DIR/.env"
+# Entferne andere Docker-Compose-Dateien
+rm -f docker-compose.btz.yml
+rm -f docker-compose.dynamic.yml
+rm -f docker-compose.verwaltung.yml
+rm -f docker-compose.werkstatt.yml
+
+# Entferne andere Skripte
+rm -f start_*.sh
+rm -f stop_*.sh
+rm -f status_*.sh
+rm -f setup_*.sh
+
+# Erstelle angepasste Skripte für Instance 2
+echo "Erstelle angepasste Skripte für Instance 2..."
+
+# Start-Skript
+cat > "start.sh" << 'EOF'
+#!/bin/bash
+
+# Start-Skript für Scandy Instance 2
+echo "Starte Scandy Instance 2..."
+
+# Prüfe ob Docker läuft
+if ! docker info > /dev/null 2>&1; then
+    echo "Fehler: Docker läuft nicht!"
+    exit 1
+fi
+
+# Starte die zweite Instanz
+docker compose up -d
+
+echo "Scandy Instance 2 wird gestartet..."
+echo "App wird verfügbar sein unter: http://localhost:5001"
+echo "MongoDB Admin unter: http://localhost:8082"
+echo ""
+echo "Status prüfen mit: docker compose ps"
+EOF
+
+# Stop-Skript
+cat > "stop.sh" << 'EOF'
+#!/bin/bash
+
+# Stopp-Skript für Scandy Instance 2
+echo "Stoppe Scandy Instance 2..."
+
+# Stoppe die zweite Instanz
+docker compose down
+
+echo "Scandy Instance 2 wurde gestoppt."
+EOF
+
+# Status-Skript
+cat > "status.sh" << 'EOF'
+#!/bin/bash
+
+# Status-Skript für Scandy Instance 2
+echo "Status von Scandy Instance 2:"
+echo "================================"
+
+# Zeige Container-Status
+docker compose ps
+
+echo ""
+echo "Logs der letzten 20 Zeilen:"
+echo "================================"
+docker compose logs --tail=20
+EOF
+
+# Erstelle .env-Datei aus der Vorlage
+cp env_instance2.example .env
 
 echo "Erstelle .gitignore für Instance 2..."
-cat > "$INSTANCE2_DIR/.gitignore" << 'EOF'
+cat > ".gitignore" << 'EOF'
 # Python
 __pycache__/
 *.py[cod]
@@ -175,7 +236,7 @@ package-lock.json
 EOF
 
 echo "Erstelle README für Instance 2..."
-cat > "$INSTANCE2_DIR/README.md" << 'EOF'
+cat > "README.md" << 'EOF'
 # Scandy Instance 2
 
 Dies ist eine separate Installation von Scandy.
@@ -206,9 +267,11 @@ Diese Instanz kann unabhängig von der Hauptinstallation aktualisiert werden.
 EOF
 
 echo "Berechtigungen setzen..."
-chmod +x "$INSTANCE2_DIR/start.sh"
-chmod +x "$INSTANCE2_DIR/stop.sh"
-chmod +x "$INSTANCE2_DIR/status.sh"
+chmod +x "start.sh"
+chmod +x "stop.sh"
+chmod +x "status.sh"
+
+cd ..
 
 echo "========================================"
 echo "Setup abgeschlossen!"
