@@ -49,6 +49,26 @@ logs/
 
 # Uploads
 app/uploads/
+app/static/uploads/
+
+# Generierte Word-Dokumente (ausschließen)
+# Aber Word-Vorlagen im static/word/ Verzeichnis beibehalten
+app/uploads/**/*.docx
+app/uploads/**/*.doc
+app/uploads/**/*.pdf
+app/uploads/**/*.xlsx
+app/uploads/**/*.xls
+app/static/uploads/**/*.docx
+app/static/uploads/**/*.doc
+app/static/uploads/**/*.pdf
+app/static/uploads/**/*.xlsx
+app/static/uploads/**/*.xls
+
+# Temporäre generierte Dateien
+*ticket_*_export.docx
+*woplan_*.docx
+*auftrag_*.docx
+*tmp*.docx
 
 # OS
 .DS_Store
