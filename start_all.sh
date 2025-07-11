@@ -9,13 +9,13 @@ echo "Starte alle Scandy-Instanzen..."
 echo
 
 echo "1. BTZ (Port 5003)..."
-docker-compose -f docker-compose.btz.yml up -d
+docker compose -f docker-compose.btz.yml up -d
 
 echo "2. Werkstatt (Port 5001)..."
-docker-compose -f docker-compose.werkstatt.yml up -d
+docker compose -f docker-compose.werkstatt.yml up -d
 
 echo "3. Verwaltung (Port 5002)..."
-docker-compose -f docker-compose.verwaltung.yml up -d
+docker compose -f docker-compose.verwaltung.yml up -d
 
 echo
 echo "========================================"
