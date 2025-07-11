@@ -35,6 +35,8 @@ from app.services.admin_system_service import AdminSystemService
 from app.services.admin_email_service import AdminEmailService
 from app.services.admin_notification_service import AdminNotificationService
 from app.services.admin_ticket_service import AdminTicketService
+from app.services.admin_debug_service import AdminDebugService
+from app.services.admin_system_settings_service import AdminSystemSettingsService
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
 # Logger einrichten
@@ -225,7 +227,7 @@ def dashboard():
         
         # Sortiere nach Ausleihdatum (älteste zuerst)
         processed_lendings.sort(key=lambda x: x['lent_at'])
-        
+
         return render_template('admin/dashboard.html',
                              recent_activity=recent_activity,
                              material_usage=material_usage,
@@ -238,10 +240,10 @@ def dashboard():
                              total_workers=total_workers,
                              total_tickets=total_tickets,
                              current_lendings=processed_lendings,
-                             tool_stats=tool_stats,
-                             consumable_stats=consumable_stats,
-                             worker_stats=worker_stats,
-                             tool_warnings=tool_warnings,
+                         tool_stats=tool_stats,
+                         consumable_stats=consumable_stats,
+                         worker_stats=worker_stats,
+                         tool_warnings=tool_warnings,
                              consumable_warnings=consumable_warnings)
                              
     except Exception as e:
@@ -1442,7 +1444,7 @@ def add_user():
         success, message, user_id = AdminUserService.create_user(user_data)
         
         if success:
-            # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
+        # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
             if processed_data['email']:
                 try:
                     email_sent = EmailService.send_new_user_email(
@@ -1527,8 +1529,8 @@ def edit_user(user_id):
         
         if success:
             flash(message, 'success')
-            return redirect(url_for('admin.manage_users'))
-        else:
+        return redirect(url_for('admin.manage_users'))
+        if not success:
             flash(message, 'error')
             return render_template('admin/user_form.html', 
                                  user=user,
@@ -1608,7 +1610,7 @@ def delete_notice(id):
             flash(message, 'success')
         else:
             flash(message, 'error')
-        
+            
         return redirect(url_for('admin.notices'))
         
     except Exception as e:
@@ -1752,14 +1754,8 @@ def system():
 def get_departments():
     """Gibt alle Abteilungen zurück"""
     try:
-        settings = mongodb.db.settings.find_one({'key': 'departments'})
-        departments = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                departments = [dept.strip() for dept in value.split(',') if dept.strip()]
-            elif isinstance(value, list):
-                departments = value
+        # Verwende den AdminSystemSettingsService
+        departments = AdminSystemSettingsService.get_departments_from_settings()
         return jsonify({
             'success': True,
             'departments': [{'name': dept} for dept in departments]
@@ -1784,47 +1780,18 @@ def add_department():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Lade aktuelle Abteilungen
-        settings = mongodb.db.settings.find_one({'key': 'departments'})
-        current_departments = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_departments = [dept.strip() for dept in value.split(',') if dept.strip()]
-            elif isinstance(value, list):
-                current_departments = value
+        # Verwende den AdminSystemSettingsService
+        success, message = AdminSystemSettingsService.add_department(name)
         
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(dept.lower() == name.lower() for dept in current_departments):
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
             return jsonify({
                 'success': False,
-                'message': 'Diese Abteilung existiert bereits.'
-            })
-
-        # Abteilung zur Liste hinzufügen
-        current_departments.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'departments'},
-                {'value': current_departments},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern der Abteilung: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'departments'},
-                {'$set': {'value': current_departments}},
-                upsert=True
-            )
-
-        return jsonify({
-            'success': True,
-            'message': 'Abteilung erfolgreich hinzugefügt.'
+                'message': message
         })
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Abteilung: {str(e)}")
@@ -1838,49 +1805,21 @@ def add_department():
 def delete_department(name):
     try:
         # URL-dekodieren
+        from urllib.parse import unquote
         decoded_name = unquote(name)
         
-        # Überprüfen, ob die Abteilung in Verwendung ist
-        workers_with_department = mongodb.db.workers.find_one({'department': decoded_name})
-        if workers_with_department:
+        # Verwende den AdminSystemSettingsService
+        success, message = AdminSystemSettingsService.delete_department(decoded_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
             return jsonify({
                 'success': False,
-                'message': 'Die Abteilung kann nicht gelöscht werden, da sie noch von Mitarbeitern verwendet wird.'
-            })
-
-        # Lade aktuelle Abteilungen
-        settings = mongodb.db.settings.find_one({'key': 'departments'})
-        current_departments = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_departments = [dept.strip() for dept in value.split(',') if dept.strip()]
-            elif isinstance(value, list):
-                current_departments = value
-        
-        # Abteilung aus der Liste entfernen
-        if decoded_name in current_departments:
-            current_departments.remove(decoded_name)
-            try:
-                mongodb.update_one(
-                    'settings',
-                    {'key': 'departments'},
-                    {'value': current_departments},
-                    upsert=True
-                )
-            except Exception as db_error:
-                logger.error(f"Datenbankfehler beim Löschen der Abteilung: {str(db_error)}")
-                # Fallback: Versuche es mit update_one_array
-                mongodb.update_one_array(
-                    'settings',
-                    {'key': 'departments'},
-                    {'$set': {'value': current_departments}},
-                    upsert=True
-                )
-        
-        return jsonify({
-            'success': True,
-            'message': 'Abteilung erfolgreich gelöscht.'
+                'message': message
         })
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Abteilung: {str(e)}")
@@ -1895,14 +1834,8 @@ def delete_department(name):
 def get_categories_admin():
     """Gibt alle Kategorien zurück"""
     try:
-        settings = mongodb.db.settings.find_one({'key': 'categories'})
-        categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                categories = value
+        # Verwende den AdminSystemSettingsService
+        categories = AdminSystemSettingsService.get_categories_from_settings()
         return jsonify({
             'success': True,
             'categories': [{'name': cat} for cat in categories]
@@ -2038,14 +1971,8 @@ def delete_category(name):
 def get_locations():
     """Gibt alle Standorte zurück"""
     try:
-        settings = mongodb.db.settings.find_one({'key': 'locations'})
-        locations = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-            elif isinstance(value, list):
-                locations = value
+        # Verwende den AdminSystemSettingsService
+        locations = AdminSystemSettingsService.get_locations_from_settings()
         return jsonify({
             'success': True,
             'locations': [{'name': loc} for loc in locations]
@@ -2478,7 +2405,7 @@ def upload_backup():
                 'status': 'error',
                 'message': 'Die hochgeladene Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.'
             }), 400
-        
+            
         success, message = AdminBackupService.upload_backup(file)
         
         if success:
@@ -2611,52 +2538,9 @@ def test_backup(filename):
 def debug_session():
     """Debug-Route für Session-Informationen"""
     try:
-        from flask import session
-        from app.models.mongodb_models import MongoDBUser
-        from app.models.mongodb_database import mongodb
-        
-        session_info = {
-            'session_id': session.get('_id'),
-            'user_id': session.get('user_id'),
-            'all_session_keys': list(session.keys())
-        }
-        
-        # Alle User in der Datenbank mit detaillierten Informationen
-        all_users = mongodb.find('users', {})
-        user_list = []
-        for user in all_users:
-            user_list.append({
-                'id': str(user.get('_id')),
-                'id_type': type(user.get('_id')).__name__,
-                'username': user.get('username'),
-                'role': user.get('role'),
-                'is_active': user.get('is_active', True),
-                'email': user.get('email', 'N/A')
-            })
-        
-        # Versuche den spezifischen User zu finden
-        target_id = '685e3b2dbf696ee3c30fc7ab'
-        specific_user = None
-        
-        # Suche mit verschiedenen Methoden
-        for user in all_users:
-            if str(user.get('_id')) == target_id:
-                specific_user = {
-                    'id': str(user.get('_id')),
-                    'id_type': type(user.get('_id')).__name__,
-                    'username': user.get('username'),
-                    'role': user.get('role'),
-                    'is_active': user.get('is_active', True)
-                }
-                break
-        
-        return jsonify({
-            'session_info': session_info,
-            'users_in_db': user_list,
-            'total_users': len(user_list),
-            'target_user': specific_user,
-            'target_id': target_id
-        })
+        # Verwende den AdminDebugService
+        session_info = AdminDebugService.debug_session_info()
+        return jsonify(session_info)
         
     except Exception as e:
         return jsonify({
@@ -2668,29 +2552,8 @@ def debug_session():
 def debug_backup_info():
     """Debug-Route für Backup-Informationen"""
     try:
-        backup_dir = Path(__file__).parent.parent.parent / 'backups'
-        backup_info = {
-            'backup_dir_exists': backup_dir.exists(),
-            'backup_dir_path': str(backup_dir),
-            'backup_dir_absolute': str(backup_dir.absolute()),
-            'backup_files': []
-        }
-        
-        if backup_dir.exists():
-            for backup_file in backup_dir.glob('*.json'):
-                try:
-                    backup_info['backup_files'].append({
-                        'name': backup_file.name,
-                        'size': backup_file.stat().st_size,
-                        'exists': backup_file.exists(),
-                        'readable': backup_file.is_file()
-                    })
-                except Exception as e:
-                    backup_info['backup_files'].append({
-                        'name': backup_file.name,
-                        'error': str(e)
-                    })
-        
+        # Verwende den AdminDebugService
+        backup_info = AdminDebugService.debug_backup_info()
         return jsonify(backup_info)
     except Exception as e:
         return jsonify({
@@ -2702,16 +2565,19 @@ def debug_backup_info():
 def clear_session():
     """Löscht die aktuelle Session"""
     try:
-        from flask import session
-        from flask_login import logout_user
+        # Verwende den AdminDebugService
+        success, message = AdminDebugService.clear_session()
         
-        logout_user()
-        session.clear()
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Session gelöscht. Bitte melden Sie sich erneut an.'
-        })
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': message
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': message
+            }), 500
         
     except Exception as e:
         return jsonify({
@@ -2723,32 +2589,19 @@ def clear_session():
 def fix_session(username):
     """Repariert die Session für einen bestimmten Benutzer"""
     try:
-        from flask import session
-        from flask_login import login_user
-        from app.models.mongodb_models import MongoDBUser
-        from app.models.user import User
+        # Verwende den AdminDebugService
+        success, message = AdminDebugService.fix_session_for_user(username)
         
-        # Finde den User
-        user_data = MongoDBUser.get_by_username(username)
-        if not user_data:
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': message
+            })
+        else:
             return jsonify({
                 'status': 'error',
-                'message': f'Benutzer {username} nicht gefunden'
-            }), 404
-        
-        # Erstelle User-Objekt
-        user = User(user_data)
-        
-        # Logge den User ein
-        login_user(user)
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Session für {username} repariert',
-            'user_id': user.id,
-            'username': user.username,
-            'role': user.role
-        })
+                'message': message
+            }), 400
         
     except Exception as e:
         return jsonify({
@@ -2760,36 +2613,20 @@ def fix_session(username):
 def normalize_user_ids():
     """Normalisiert alle User-IDs in der Datenbank zu Strings"""
     try:
-        from app.models.mongodb_database import mongodb
-        from bson import ObjectId
+        # Verwende den AdminDebugService
+        success, message, stats = AdminDebugService.normalize_user_ids()
         
-        # Hole alle User
-        all_users = mongodb.find('users', {})
-        updated_count = 0
-        
-        for user in all_users:
-            user_id = user.get('_id')
-            
-            # Falls die ID ein ObjectId ist, konvertiere sie zu String
-            if isinstance(user_id, ObjectId):
-                string_id = str(user_id)
-                
-                # Erstelle ein neues Dokument mit String-ID
-                new_user = user.copy()
-                new_user['_id'] = string_id
-                
-                # Lösche das alte Dokument und füge das neue ein
-                mongodb.delete_one('users', {'_id': user_id})
-                mongodb.insert_one('users', new_user)
-                
-                updated_count += 1
-                print(f"User-ID normalisiert: {user.get('username')} von {user_id} zu {string_id}")
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'{updated_count} User-IDs normalisiert',
-            'updated_count': updated_count
-        })
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': message,
+                'statistics': stats
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': message
+            }), 500
         
     except Exception as e:
         return jsonify({
@@ -2972,59 +2809,9 @@ def debug_user_management():
 def debug_test_user_id(user_id):
     """Testet eine spezifische User-ID"""
     try:
-        logging.info(f"DEBUG: Teste User-ID: {user_id}")
-        
-        # Teste verschiedene Suchmethoden
-        results = {}
-        
-        # 1. Direkte Suche mit String
-        user1 = mongodb.find_one('users', {'_id': user_id})
-        results['direct_string'] = {
-            'found': user1 is not None,
-            'username': user1.get('username') if user1 else None
-        }
-        
-        # 2. Suche mit ObjectId
-        try:
-            object_id = ObjectId(user_id)
-            user2 = mongodb.find_one('users', {'_id': object_id})
-            results['objectid'] = {
-                'found': user2 is not None,
-                'username': user2.get('username') if user2 else None
-            }
-        except Exception as e:
-            results['objectid'] = {
-                'found': False,
-                'error': str(e)
-            }
-        
-        # 3. Suche mit find_user_by_id
-        user3 = find_user_by_id(user_id)
-        results['find_user_by_id'] = {
-            'found': user3 is not None,
-            'username': user3.get('username') if user3 else None
-        }
-        
-        # 4. Suche mit convert_id_for_query
-        try:
-            converted_id = convert_id_for_query(user_id)
-            user4 = mongodb.find_one('users', {'_id': converted_id})
-            results['convert_id_for_query'] = {
-                'found': user4 is not None,
-                'username': user4.get('username') if user4 else None,
-                'converted_id_type': type(converted_id).__name__
-            }
-        except Exception as e:
-            results['convert_id_for_query'] = {
-                'found': False,
-                'error': str(e)
-            }
-        
-        return jsonify({
-            'success': True,
-            'tested_id': user_id,
-            'results': results
-        })
+        # Verwende den AdminDebugService
+        test_results = AdminDebugService.test_user_id(user_id)
+        return jsonify(test_results)
         
     except Exception as e:
         logger.error(f"Fehler beim Testen der User-ID {user_id}: {e}")
@@ -3038,19 +2825,8 @@ def debug_test_user_id(user_id):
 def available_logos():
     """Gibt eine Liste der verfügbaren Logos zurück"""
     try:
-        logo_dir = Path(current_app.static_folder) / 'uploads' / 'logos'
-        logos = []
-        
-        if logo_dir.exists():
-            for logo_file in logo_dir.glob('*'):
-                if logo_file.is_file() and logo_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.svg']:
-                    logos.append({
-                        'name': logo_file.name,
-                        'path': f'/static/uploads/logos/{logo_file.name}',
-                        'size': logo_file.stat().st_size,
-                        'modified': datetime.fromtimestamp(logo_file.stat().st_mtime)
-                    })
-        
+        # Verwende den AdminDebugService
+        logos = AdminDebugService.get_available_logos()
         return jsonify({
             'success': True,
             'logos': logos

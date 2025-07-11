@@ -124,4 +124,55 @@ class ConsumableService:
                 return False, 'Fehler beim Löschen'
         except Exception as e:
             logger.error(f"Fehler beim Löschen des Verbrauchsmaterials: {str(e)}")
-            return False, 'Fehler beim Löschen' 
+            return False, 'Fehler beim Löschen'
+    
+    @staticmethod
+    def get_statistics() -> Dict[str, Any]:
+        """Holt Statistiken für Verbrauchsmaterialien"""
+        try:
+            all_consumables = ConsumableService.get_all_consumables()
+            
+            stats = {
+                'total_consumables': len(all_consumables),
+                'categories': {},
+                'locations': {},
+                'stock_levels': {
+                    'sufficient': 0,
+                    'warning': 0,
+                    'critical': 0
+                }
+            }
+            
+            # Kategorie- und Standort-Statistiken
+            for consumable in all_consumables:
+                category = consumable.get('category', 'Keine Kategorie')
+                stats['categories'][category] = stats['categories'].get(category, 0) + 1
+                
+                location = consumable.get('location', 'Kein Standort')
+                stats['locations'][location] = stats['locations'].get(location, 0) + 1
+                
+                # Bestandslevel
+                quantity = consumable.get('quantity', 0)
+                min_quantity = consumable.get('min_quantity', 0)
+                
+                if quantity >= min_quantity:
+                    stats['stock_levels']['sufficient'] += 1
+                elif quantity > 0:
+                    stats['stock_levels']['warning'] += 1
+                else:
+                    stats['stock_levels']['critical'] += 1
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Verbrauchsmaterial-Statistiken: {str(e)}")
+            return {
+                'total_consumables': 0,
+                'categories': {},
+                'locations': {},
+                'stock_levels': {
+                    'sufficient': 0,
+                    'warning': 0,
+                    'critical': 0
+                }
+            } 

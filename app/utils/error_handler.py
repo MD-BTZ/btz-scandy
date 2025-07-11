@@ -8,35 +8,51 @@ from werkzeug.exceptions import HTTPException
 import os
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('app.error_handler')
 
 def setup_logging():
     """Richtet das Logging-System ein"""
-    log_dir = os.path.join(current_app.root_path, '..', 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Log-Datei mit Datum
-    log_file = os.path.join(log_dir, f'app_{datetime.now().strftime("%Y%m%d")}.log')
-    
-    # Konfiguriere File-Handler
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    ))
-    
-    # Konfiguriere Console-Handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    ))
-    
-    # Füge Handler zum Root-Logger hinzu
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+    try:
+        log_dir = os.path.join(current_app.root_path, '..', 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        
+        # Log-Datei mit Datum
+        log_file = os.path.join(log_dir, f'app_{datetime.now().strftime("%Y%m%d")}.log')
+        
+        # Konfiguriere File-Handler nur für unseren App-Logger
+        app_logger = logging.getLogger('app')
+        app_logger.setLevel(logging.INFO)
+        
+        # Prüfe ob Handler bereits existieren
+        if not app_logger.handlers:
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            ))
+            app_logger.addHandler(file_handler)
+            
+            # Console-Handler nur für App-Logger
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s'
+            ))
+            app_logger.addHandler(console_handler)
+        
+        # Verhindere Propagation zum Root-Logger
+        app_logger.propagate = False
+        
+    except Exception as e:
+        # Fallback: Verwende nur Console-Logging
+        print(f"Logging-Setup fehlgeschlagen: {e}")
+        app_logger = logging.getLogger('app')
+        app_logger.setLevel(logging.INFO)
+        if not app_logger.handlers:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            app_logger.addHandler(console_handler)
+        app_logger.propagate = False
 
 def handle_errors(app):
     """Registriert globale Fehlerbehandlung für die Anwendung"""

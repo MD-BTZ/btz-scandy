@@ -31,15 +31,17 @@ class AdminBackupService:
                     if backup_file.is_file():
                         stat = backup_file.stat()
                         backups.append({
-                            'filename': backup_file.name,
+                            'name': backup_file.name,
                             'size': stat.st_size,
+                            'created': stat.st_mtime,
+                            'filename': backup_file.name,
                             'size_mb': round(stat.st_size / (1024 * 1024), 2),
                             'modified': datetime.fromtimestamp(stat.st_mtime),
                             'modified_str': datetime.fromtimestamp(stat.st_mtime).strftime('%d.%m.%Y %H:%M:%S')
                         })
             
             # Sortiere nach Änderungsdatum (neueste zuerst)
-            backups.sort(key=lambda x: x['modified'], reverse=True)
+            backups.sort(key=lambda x: x['created'], reverse=True)
             
             return backups
             

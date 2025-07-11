@@ -343,6 +343,9 @@ def create_app(test_config=None):
     handle_errors(app)
     register_filters(app)
     
+    # Logging-Setup für Gunicorn deaktiviert
+    # setup_logging() verursacht Deadlocks mit Gunicorn
+    
     # Register custom filters
     app.jinja_env.filters['status_color'] = status_color
     app.jinja_env.filters['priority_color'] = priority_color

@@ -21,6 +21,6 @@ def index():
     stats = StatisticsService.get_all_statistics()
     
     return render_template('dashboard/index.html',
-                         stats=stats['all_stats'],
+                         stats=stats,
                          consumables_forecast=stats['consumables_forecast'],
                          duplicate_barcodes=stats['duplicate_barcodes']) 
