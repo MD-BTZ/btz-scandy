@@ -3722,6 +3722,35 @@ def check_version():
             'message': f'Fehler beim Versionscheck: {str(e)}'
         }), 500
 
+@bp.route('/version_check', methods=['GET'])
+@login_required
+def version_check():
+    """Prüft ob Updates verfügbar sind (für alle Benutzer)"""
+    try:
+        from app.utils.version_checker import check_version
+        
+        result = check_version()
+        
+        # Vereinfachte Antwort für das Menü
+        if result.get('status') == 'update_available':
+            return jsonify({
+                'update_available': True,
+                'current_version': result.get('current_version'),
+                'latest_version': result.get('latest_version')
+            })
+        else:
+            return jsonify({
+                'update_available': False,
+                'current_version': result.get('current_version')
+            })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Versionscheck: {str(e)}")
+        return jsonify({
+            'update_available': False,
+            'error': str(e)
+        })
+
 @bp.route('/version/info', methods=['GET'])
 @login_required
 @admin_required
