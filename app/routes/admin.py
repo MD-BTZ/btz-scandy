@@ -2459,9 +2459,12 @@ def restore_backup(filename):
 def download_backup(filename):
     """Lädt ein Backup herunter"""
     try:
-        backup_path = AdminBackupService.get_backup_path(filename)
+        from pathlib import Path
+        from app.utils.backup_manager import backup_manager
         
-        if not backup_path or not backup_path.exists():
+        backup_path = backup_manager.backup_dir / filename
+        
+        if not backup_path.exists():
             return jsonify({
                 'status': 'error',
                 'message': 'Backup-Datei nicht gefunden'
@@ -3664,6 +3667,54 @@ def test_weekly_backup():
             'success': False,
             'message': f'Fehler beim Versenden: {str(e)}'
         })
+
+@bp.route('/version/check', methods=['GET'])
+@login_required
+@admin_required
+def check_version():
+    """Prüft ob Updates verfügbar sind"""
+    try:
+        from app.utils.version_checker import check_version
+        
+        result = check_version()
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Versionscheck: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Versionscheck: {str(e)}'
+        }), 500
+
+@bp.route('/version/info', methods=['GET'])
+@login_required
+@admin_required
+def get_version_info():
+    """Gibt detaillierte Versionsinformationen zurück"""
+    try:
+        from app.utils.version_checker import get_version_info
+        
+        info = get_version_info()
+        return jsonify(info)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Versionsinformationen: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Abrufen der Versionsinformationen: {str(e)}'
+        }), 500
+
+@bp.route('/version', methods=['GET'])
+@login_required
+@admin_required
+def version_check_page():
+    """Versionscheck-Seite"""
+    try:
+        return render_template('admin/version_check.html')
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Versionscheck-Seite: {str(e)}")
+        flash(f'Fehler beim Laden der Seite: {str(e)}', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 
 

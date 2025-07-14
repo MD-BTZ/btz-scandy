@@ -245,7 +245,7 @@ class AdminBackupService:
             }
 
     @staticmethod
-    def get_backup_path(filename: str) -> str:
+    def get_backup_path(filename: str) -> Path:
         """
         Gibt den Pfad zu einer Backup-Datei zurück
         
@@ -253,15 +253,15 @@ class AdminBackupService:
             filename: Name der Backup-Datei
             
         Returns:
-            Pfad zur Backup-Datei
+            Path-Objekt zur Backup-Datei
         """
         try:
             backup_path = backup_manager.backup_dir / filename
-            return str(backup_path)
+            return backup_path
             
         except Exception as e:
             logger.error(f"Fehler beim Ermitteln des Backup-Pfads für {filename}: {str(e)}")
-            return ""
+            return Path()
 
     @staticmethod
     def test_backup(filename: str) -> Tuple[bool, str]:

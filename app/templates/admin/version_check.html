@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Versionscheck - {{ app_labels.system_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                <i class="fas fa-code-branch text-primary mr-3"></i>
+                Versionscheck
+            </h1>
+            <p class="text-gray-600">
+                Prüft ob Updates für {{ app_labels.system_name }} verfügbar sind
+            </p>
+        </div>
+
+        <!-- Versionsstatus -->
+        <div class="card bg-base-100 shadow-xl mb-6">
+            <div class="card-body">
+                <h2 class="card-title text-xl mb-4">
+                    <i class="fas fa-info-circle text-primary mr-2"></i>
+                    Aktueller Status
+                </h2>
+                
+                <div id="versionStatus" class="space-y-4">
+                    <!-- Loading -->
+                    <div id="loadingStatus" class="flex items-center justify-center py-8">
+                        <div class="loading loading-spinner loading-lg text-primary"></div>
+                        <span class="ml-3 text-lg">Prüfe Version...</span>
+                    </div>
+                    
+                    <!-- Status wird hier dynamisch eingefügt -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Versionsdetails -->
+        <div class="card bg-base-100 shadow-xl mb-6">
+            <div class="card-body">
+                <h2 class="card-title text-xl mb-4">
+                    <i class="fas fa-list-alt text-primary mr-2"></i>
+                    Versionsdetails
+                </h2>
+                
+                <div id="versionDetails" class="space-y-4">
+                    <!-- Loading -->
+                    <div id="loadingDetails" class="flex items-center justify-center py-8">
+                        <div class="loading loading-spinner loading-lg text-primary"></div>
+                        <span class="ml-3 text-lg">Lade Details...</span>
+                    </div>
+                    
+                    <!-- Details werden hier dynamisch eingefügt -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Update-Anleitung -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-xl mb-4">
+                    <i class="fas fa-download text-primary mr-2"></i>
+                    Update durchführen
+                </h2>
+                
+                <div class="prose max-w-none">
+                    <p class="mb-4">
+                        Um {{ app_labels.system_name }} zu aktualisieren, führen Sie folgende Schritte aus:
+                    </p>
+                    
+                    <div class="bg-base-200 p-4 rounded-lg mb-4">
+                        <h3 class="font-bold mb-2">Linux/macOS:</h3>
+                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>./update.sh</code></pre>
+                    </div>
+                    
+                    <div class="bg-base-200 p-4 rounded-lg mb-4">
+                        <h3 class="font-bold mb-2">Windows:</h3>
+                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>update.bat</code></pre>
+                    </div>
+                    
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h3 class="font-bold mb-2">Manuell:</h3>
+                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>git pull
+docker compose down
+docker compose up -d --build</code></pre>
+                    </div>
+                    
+                    <div class="alert alert-info mt-4">
+                        <i class="fas fa-info-circle"></i>
+                        <span>
+                            <strong>Hinweis:</strong> Das Update kann einige Minuten dauern. 
+                            Die Anwendung ist während des Updates nicht erreichbar.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Versionsstatus laden
+    loadVersionStatus();
+    
+    // Versionsdetails laden
+    loadVersionDetails();
+    
+    // Automatisch alle 5 Minuten aktualisieren
+    setInterval(loadVersionStatus, 300000);
+});
+
+function loadVersionStatus() {
+    fetch('/admin/version/check')
+        .then(response => response.json())
+        .then(data => {
+            displayVersionStatus(data);
+        })
+        .catch(error => {
+            console.error('Fehler beim Versionscheck:', error);
+            displayVersionStatus({
+                status: 'error',
+                message: 'Fehler beim Versionscheck'
+            });
+        });
+}
+
+function loadVersionDetails() {
+    fetch('/admin/version/info')
+        .then(response => response.json())
+        .then(data => {
+            displayVersionDetails(data);
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Versionsdetails:', error);
+            displayVersionDetails({
+                error: 'Fehler beim Laden der Versionsdetails'
+            });
+        });
+}
+
+function displayVersionStatus(data) {
+    const container = document.getElementById('versionStatus');
+    const loading = document.getElementById('loadingStatus');
+    
+    // Loading ausblenden
+    loading.style.display = 'none';
+    
+    let statusHtml = '';
+    
+    switch(data.status) {
+        case 'up_to_date':
+            statusHtml = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle text-2xl"></i>
+                    <div>
+                        <h3 class="font-bold">Aktuell!</h3>
+                        <div class="text-sm">
+                            <p>Installation ist auf dem neuesten Stand</p>
+                            <p><strong>Version:</strong> ${data.local_version}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'update_available':
+            statusHtml = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle text-2xl"></i>
+                    <div>
+                        <h3 class="font-bold">Update verfügbar!</h3>
+                        <div class="text-sm">
+                            <p>Aktuelle Version: ${data.local_version}</p>
+                            <p>Neueste Version: ${data.github_version}</p>
+                            <a href="${data.update_url}" target="_blank" class="btn btn-sm btn-primary mt-2">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                GitHub öffnen
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'error':
+        default:
+            statusHtml = `
+                <div class="alert alert-error">
+                    <i class="fas fa-exclamation-circle text-2xl"></i>
+                    <div>
+                        <h3 class="font-bold">Fehler</h3>
+                        <div class="text-sm">
+                            <p>${data.message}</p>
+                            <p><strong>Lokale Version:</strong> ${data.local_version || 'Unbekannt'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+    }
+    
+    container.innerHTML = statusHtml;
+}
+
+function displayVersionDetails(data) {
+    const container = document.getElementById('versionDetails');
+    const loading = document.getElementById('loadingDetails');
+    
+    // Loading ausblenden
+    loading.style.display = 'none';
+    
+    if (data.error) {
+        container.innerHTML = `
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${data.error}</span>
+            </div>
+        `;
+        return;
+    }
+    
+    const detailsHtml = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="stat bg-base-200 rounded-lg p-4">
+                <div class="stat-title">Lokale Version</div>
+                <div class="stat-value text-primary">${data.local_version}</div>
+                <div class="stat-desc">Installierte Version</div>
+            </div>
+            
+            <div class="stat bg-base-200 rounded-lg p-4">
+                <div class="stat-title">GitHub Version</div>
+                <div class="stat-value ${data.github_version ? 'text-secondary' : 'text-error'}">
+                    ${data.github_version || 'Nicht verfügbar'}
+                </div>
+                <div class="stat-desc">Neueste verfügbare Version</div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <div class="badge badge-lg ${data.is_up_to_date ? 'badge-success' : 'badge-warning'}">
+                <i class="fas ${data.is_up_to_date ? 'fa-check' : 'fa-exclamation-triangle'} mr-1"></i>
+                ${data.is_up_to_date ? 'Aktuell' : 'Update verfügbar'}
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = detailsHtml;
+}
+</script>
+{% endblock %} 

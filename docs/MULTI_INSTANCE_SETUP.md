@@ -1,175 +1,266 @@
-# Multi-Instance Setup für Scandy
+# Scandy Multi-Instance Setup
 
 ## Übersicht
 
-Jede Abteilung bekommt ihre **eigene, komplett unabhängige** Scandy-Instanz mit separater Datenbank. Das ist viel einfacher als Multi-Tenant!
+Das Scandy-System unterstützt die Installation mehrerer Instances auf einem Server. Jede Instance hat:
 
-## Architektur
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   BTZ System    │    │ Werkstatt System│    │Verwaltung System│
-│                 │    │                 │    │                 │
-│ Port: 5003      │    │ Port: 5001      │    │ Port: 5002      │
-│ MongoDB: 27020  │    │ MongoDB: 27018  │    │ MongoDB: 27019  │
-│ DB: btz_scandy  │    │ DB: werkstatt_  │    │ DB: verwaltung_ │
-│                 │    │ scandy          │    │ scandy          │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-## Vorteile
-
-✅ **Komplett unabhängig** - Keine Datenvermischung  
-✅ **Einfach zu verwalten** - Jede Abteilung für sich  
-✅ **Keine komplexe Multi-Tenant-Logik**  
-✅ **Einfache Backups** - Pro Abteilung  
-✅ **Sichere Trennung** - Keine Zugriffsprobleme  
-✅ **Einfache Updates** - Pro Abteilung möglich  
+- Eigene Container-Namen
+- Separate Ports
+- Individuelle Datenbanken
+- Isolierte Volumes und Networks
 
 ## Installation
 
-### 1. Alle Systeme starten
+### Einheitliches Installationsskript
+
 ```bash
-start_all.bat
+# Standard-Installation
+./install_unified.sh
+
+# Installation mit Instance-Name (automatische Port-Berechnung)
+./install_unified.sh -n verwaltung
+
+# Installation mit custom Ports
+./install_unified.sh -n werkstatt -p 8080 -m 27018 -e 8082
+
+# Update-Modus (keine Daten löschen)
+./install_unified.sh -u
 ```
 
-### 2. Einzelne Abteilung starten
+### Optionen
+
+| Option | Beschreibung | Standard |
+|--------|-------------|----------|
+| `-n, --name NAME` | Instance-Name | `scandy` |
+| `-p, --port PORT` | Web-App Port | `5000` |
+| `-m, --mongodb-port PORT` | MongoDB Port | `27017` |
+| `-e, --express-port PORT` | Mongo Express Port | `8081` |
+| `-f, --force` | Bestehende Installation überschreiben | `false` |
+| `-u, --update` | Nur App aktualisieren | `false` |
+
+### Port-Berechnung
+
+Bei Verwendung eines Instance-Namens werden Ports automatisch berechnet:
+
+- **Web-Port**: `5000 + Instance-Nummer`
+- **MongoDB-Port**: `27017 + Instance-Nummer`
+- **Mongo Express-Port**: `8081 + Instance-Nummer`
+
+Beispiele:
+- `verwaltung` → Web: 5001, MongoDB: 27018, Express: 8082
+- `werkstatt` → Web: 5002, MongoDB: 27019, Express: 8083
+
+## Multi-Instance Manager
+
+### Verwaltung aller Instances
+
 ```bash
-# BTZ
-start_btz.bat
+# Alle Instances auflisten
+./manage_all_instances.sh list
 
-# Werkstatt  
-start_werkstatt.bat
+# Status aller Instances
+./manage_all_instances.sh status
 
-# Verwaltung
-start_verwaltung.bat
+# Spezifische Instance starten
+./manage_all_instances.sh start verwaltung
+
+# Alle Instances stoppen
+./manage_all_instances.sh stop
+
+# Neue Instance installieren
+./manage_all_instances.sh install btz -p 8080
 ```
 
-### 3. Alle Systeme stoppen
+### Befehle
+
+| Befehl | Beschreibung |
+|--------|-------------|
+| `list` | Alle Instances auflisten |
+| `status [INSTANCE]` | Status aller oder einer Instance |
+| `start [INSTANCE]` | Alle oder eine Instance starten |
+| `stop [INSTANCE]` | Alle oder eine Instance stoppen |
+| `restart [INSTANCE]` | Alle oder eine Instance neustarten |
+| `logs [INSTANCE]` | Logs aller oder einer Instance |
+| `update [INSTANCE]` | Alle oder eine Instance aktualisieren |
+| `install NAME [OPTIONS]` | Neue Instance installieren |
+
+## Instance-Verwaltung
+
+### Einzelne Instance verwalten
+
+Jede Instance hat ihr eigenes `manage.sh` Skript:
+
 ```bash
-stop_all.bat
+# In das Instance-Verzeichnis wechseln
+cd /path/to/instance
+
+# Instance-spezifische Befehle
+./manage.sh start
+./manage.sh status
+./manage.sh logs
+./manage.sh info
+./manage.sh update
+./manage.sh backup
+./manage.sh shell
+./manage.sh clean
 ```
 
-## Zugriff
+## Beispiel-Setup
 
-| Abteilung | Web-Interface | MongoDB | Datenbank |
-|-----------|---------------|---------|-----------|
-| BTZ | http://localhost:5003 | localhost:27020 | btz_scandy |
-| Werkstatt | http://localhost:5001 | localhost:27018 | werkstatt_scandy |
-| Verwaltung | http://localhost:5002 | localhost:27019 | verwaltung_scandy |
+### Szenario: Drei Instances
 
-## Datenverzeichnisse
-
-```
-data/
-├── btz/           # BTZ-Daten (Uploads, Logs, etc.)
-├── werkstatt/     # Werkstatt-Daten
-└── verwaltung/    # Verwaltungs-Daten
-```
-
-## Backup & Restore
-
-### Backup einer Abteilung
 ```bash
-# BTZ Backup
-docker exec btz-mongodb mongodump --out /backup/btz_$(date +%Y%m%d)
+# 1. Verwaltung (Standard-Ports)
+./install_unified.sh -n verwaltung
 
-# Werkstatt Backup  
-docker exec werkstatt-mongodb mongodump --out /backup/werkstatt_$(date +%Y%m%d)
+# 2. Werkstatt (Custom-Ports)
+./install_unified.sh -n werkstatt -p 8080 -m 27018 -e 8082
 
-# Verwaltung Backup
-docker exec verwaltung-mongodb mongodump --out /backup/verwaltung_$(date +%Y%m%d)
+# 3. BTZ (Automatische Port-Berechnung)
+./install_unified.sh -n btz
 ```
 
-### Restore einer Abteilung
-```bash
-# BTZ Restore
-docker exec btz-mongodb mongorestore /backup/btz_20241201/
+### Resultierende Konfiguration
 
-# Werkstatt Restore
-docker exec werkstatt-mongodb mongorestore /backup/werkstatt_20241201/
+| Instance | Web-Port | MongoDB-Port | Express-Port | URL |
+|----------|----------|--------------|--------------|-----|
+| verwaltung | 5001 | 27018 | 8082 | http://localhost:5001 |
+| werkstatt | 8080 | 27018 | 8082 | http://localhost:8080 |
+| btz | 5003 | 27020 | 8084 | http://localhost:5003 |
 
-# Verwaltung Restore  
-docker exec verwaltung-mongodb mongorestore /backup/verwaltung_20241201/
-```
+## Datenbank-Isolation
 
-## Updates
+Jede Instance hat:
 
-### Alle Systeme aktualisieren
-```bash
-# Stoppen
-stop_all.bat
-
-# Code aktualisieren (git pull)
-
-# Alle neu starten
-start_all.bat
-```
-
-### Einzelne Abteilung aktualisieren
-```bash
-# Nur BTZ neu starten
-docker-compose -f docker-compose.btz.yml down
-docker-compose -f docker-compose.btz.yml up -d --build
-```
-
-## Monitoring
-
-### Status aller Systeme prüfen
-```bash
-docker ps | grep scandy
-```
-
-### Logs einer Abteilung
-```bash
-# BTZ Logs
-docker logs btz-scandy
-
-# Werkstatt Logs
-docker logs werkstatt-scandy
-
-# Verwaltung Logs
-docker logs verwaltung-scandy
-```
+- **Eigene Datenbank**: `{instance_name}_scandy`
+- **Separate Volumes**: `mongodb_data_{instance_name}`
+- **Isolierte Networks**: `scandy-network-{instance_name}`
+- **Individuelle Container**: `scandy-app-{instance_name}`
 
 ## Sicherheit
 
-- **Separate Passwörter** für jede MongoDB-Instanz
-- **Separate Secret Keys** für jede App-Instanz
-- **Keine Datenvermischung** zwischen Abteilungen
-- **Einfache Zugriffskontrolle** - nur lokale Netzwerk-Zugriffe
+### Passwort-Generierung
+
+Das Skript generiert automatisch:
+- Sichere MongoDB-Passwörter
+- Flask Secret Keys
+
+### Produktions-Empfehlungen
+
+1. **Passwörter ändern**: Ändere die Standard-Passwörter in `.env`
+2. **Firewall**: Konfiguriere Firewall-Regeln für die Ports
+3. **SSL/TLS**: Verwende Reverse-Proxy mit SSL-Terminierung
+4. **Backups**: Regelmäßige Backups aller Instances
 
 ## Troubleshooting
 
 ### Port-Konflikte
-Falls Ports bereits belegt sind, ändere die Ports in den docker-compose-Dateien:
 
-```yaml
-# In docker-compose.btz.yml
-ports:
-  - "5003:5000"  # Ändern zu z.B. "5010:5000"
+```bash
+# Prüfe Port-Verfügbarkeit
+lsof -i :5000
+lsof -i :27017
+lsof -i :8081
+
+# Verwende andere Ports
+./install_unified.sh -p 8080 -m 27018 -e 8082
 ```
 
-### Datenbank-Verbindung
-Prüfe die MongoDB-Verbindung:
+### Container-Probleme
+
 ```bash
-# BTZ
-docker exec btz-mongodb mongosh --eval "db.adminCommand('ping')"
+# Container-Logs anzeigen
+docker compose logs
 
-# Werkstatt
-docker exec werkstatt-mongodb mongosh --eval "db.adminCommand('ping')"
+# Container neustarten
+docker compose restart
 
-# Verwaltung
-docker exec verwaltung-mongodb mongosh --eval "db.adminCommand('ping')"
+# Container komplett neu erstellen
+docker compose down
+docker compose up -d --build
 ```
 
-### Container-Neustart
-```bash
-# BTZ neu starten
-docker-compose -f docker-compose.btz.yml restart
+### Multi-Instance-Probleme
 
-# Alle neu starten
-docker-compose -f docker-compose.btz.yml restart
-docker-compose -f docker-compose.werkstatt.yml restart  
-docker-compose -f docker-compose.verwaltung.yml restart
-``` 
+```bash
+# Alle Instances auflisten
+./manage_all_instances.sh list
+
+# Spezifische Instance prüfen
+./manage_all_instances.sh status verwaltung
+
+# Instance neu installieren
+./manage_all_instances.sh install verwaltung
+```
+
+## Backup und Migration
+
+### Backup erstellen
+
+```bash
+# Einzelne Instance
+./manage.sh backup
+
+# Alle Instances
+./manage_all_instances.sh backup
+```
+
+### Migration
+
+```bash
+# 1. Backup erstellen
+./manage.sh backup
+
+# 2. Daten exportieren
+docker compose exec scandy-mongodb-{instance} mongodump --out /backup
+
+# 3. Auf neuem Server installieren
+./install_unified.sh -n {instance}
+
+# 4. Daten importieren
+docker compose exec scandy-mongodb-{instance} mongorestore /backup
+```
+
+## Monitoring
+
+### Health Checks
+
+Alle Container haben Health Checks:
+- **MongoDB**: Ping-Test alle 10s
+- **App**: HTTP-Health-Check alle 30s
+
+### Logs
+
+```bash
+# Container-Logs
+docker compose logs -f
+
+# Spezifische Service-Logs
+docker compose logs -f scandy-app-{instance}
+docker compose logs -f scandy-mongodb-{instance}
+```
+
+## Best Practices
+
+### Installation
+
+1. **Planung**: Definiere Port-Bereiche und Instance-Namen
+2. **Verzeichnisse**: Verwende separate Verzeichnisse für jede Instance
+3. **Dokumentation**: Dokumentiere Konfigurationen und Zugangsdaten
+4. **Backup-Strategie**: Implementiere regelmäßige Backups
+
+### Wartung
+
+1. **Updates**: Regelmäßige Updates aller Instances
+2. **Monitoring**: Überwachung der System-Ressourcen
+3. **Logs**: Regelmäßige Log-Analyse
+4. **Sicherheit**: Regelmäßige Sicherheits-Updates
+
+## Support
+
+Bei Problemen:
+
+1. **Logs prüfen**: `./manage.sh logs`
+2. **Status prüfen**: `./manage.sh status`
+3. **Container neustarten**: `./manage.sh restart`
+4. **Komplett neu installieren**: `./manage.sh clean` + Neuinstallation 

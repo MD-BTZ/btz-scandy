@@ -203,6 +203,53 @@
         </div>
     </div>
 
+    <!-- System-Verwaltung: eigene Zeile -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <!-- Versionscheck -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-code-branch text-primary"></i>
+                    System-Status
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">Version:</span>
+                        <span class="badge badge-primary">{{ version }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">Status:</span>
+                        <span id="versionStatus" class="badge badge-info">Prüfe...</span>
+                    </div>
+                    <a href="{{ url_for('admin.version_check_page') }}" class="btn btn-primary btn-sm w-full">
+                        <i class="fas fa-search mr-2"></i>
+                        Versionscheck
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup-Status -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-database text-primary"></i>
+                    Backup-System
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">Auto-Backup:</span>
+                        <span id="backupStatus" class="badge badge-info">Prüfe...</span>
+                    </div>
+                    <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-secondary btn-sm w-full">
+                        <i class="fas fa-cog mr-2"></i>
+                        Backup-Einstellungen
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Abteilungsverwaltung: eigene Zeile -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
         <!-- Abteilungen -->
@@ -693,12 +740,47 @@ function returnTool(barcode) {
         });
 }
 
+// Versionsstatus laden
+async function loadVersionStatus() {
+    try {
+        const response = await fetch('/admin/version/check');
+        const data = await response.json();
+        
+        const statusElement = document.getElementById('versionStatus');
+        if (statusElement) {
+            switch(data.status) {
+                case 'up_to_date':
+                    statusElement.className = 'badge badge-success';
+                    statusElement.textContent = 'Aktuell';
+                    break;
+                case 'update_available':
+                    statusElement.className = 'badge badge-warning';
+                    statusElement.textContent = 'Update verfügbar';
+                    break;
+                case 'error':
+                default:
+                    statusElement.className = 'badge badge-error';
+                    statusElement.textContent = 'Fehler';
+                    break;
+            }
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden des Versionsstatus:', error);
+        const statusElement = document.getElementById('versionStatus');
+        if (statusElement) {
+            statusElement.className = 'badge badge-error';
+            statusElement.textContent = 'Fehler';
+        }
+    }
+}
+
 // Initialisierung der Manager beim Laden der Seite
 document.addEventListener('DOMContentLoaded', function() {
     DepartmentManager.init();
     LocationManager.init();
     CategoryManager.init();
     initChart();
+    loadVersionStatus();
 });
 </script>
 {% endblock %} 

@@ -7,6 +7,8 @@ import time
 import threading
 import logging
 import zipfile
+import socket
+import random
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from app.utils.backup_manager import BackupManager
@@ -20,6 +22,9 @@ class AutoBackupScheduler:
         self.backup_manager = BackupManager()
         self.running = False
         self.thread = None
+        
+        # Worker-ID für Koordination zwischen Gunicorn-Workern
+        self.worker_id = self._generate_worker_id()
         
         # Standard-Backup-Zeiten (24h Format) - werden aus DB überschrieben
         self.backup_times = [
@@ -39,6 +44,92 @@ class AutoBackupScheduler:
         self._load_backup_times()
         self._load_weekly_backup_config()
         
+    def _generate_worker_id(self):
+        """Generiert eine eindeutige Worker-ID basierend auf Hostname und PID"""
+        try:
+            hostname = socket.gethostname()
+            pid = os.getpid()
+            # Zusätzliche Zufallszahl für bessere Eindeutigkeit
+            random_suffix = random.randint(1000, 9999)
+            return f"{hostname}-{pid}-{random_suffix}"
+        except Exception:
+            # Fallback falls Hostname nicht verfügbar
+            return f"worker-{os.getpid()}-{random.randint(1000, 9999)}"
+    
+    def _is_primary_worker(self):
+        """Ermittelt ob dieser Worker das Backup ausführen soll"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            # Prüfe ob bereits ein Backup für diese Zeit läuft
+            current_time = datetime.now()
+            backup_key = f"backup_running_{current_time.strftime('%Y%m%d_%H%M')}"
+            
+            # Versuche Lock zu setzen (TTL: 5 Minuten)
+            lock_result = mongodb.update_one(
+                'system_locks',
+                {
+                    'key': backup_key,
+                    'expires_at': {'$lt': current_time}  # Nur wenn abgelaufen
+                },
+                {
+                    '$set': {
+                        'worker_id': self.worker_id,
+                        'created_at': current_time,
+                        'expires_at': current_time + timedelta(minutes=5)
+                    }
+                },
+                upsert=True
+            )
+            
+            # Wenn ein neues Dokument erstellt wurde oder das Update erfolgreich war
+            if lock_result.upserted_id or lock_result.modified_count > 0:
+                logger.info(f"Worker {self.worker_id} übernimmt Backup-Aufgabe")
+                return True
+            else:
+                logger.info(f"Worker {self.worker_id} überspringt Backup (bereits in Bearbeitung)")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Fehler bei Worker-Koordination: {e}")
+            # Bei Fehlern: Backup trotzdem ausführen (sicherer Fallback)
+            return True
+    
+    def _release_backup_lock(self):
+        """Gibt den Backup-Lock frei"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            current_time = datetime.now()
+            backup_key = f"backup_running_{current_time.strftime('%Y%m%d_%H%M')}"
+            
+            # Lösche Lock nur wenn er von diesem Worker gesetzt wurde
+            mongodb.delete_one('system_locks', {
+                'key': backup_key,
+                'worker_id': self.worker_id
+            })
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Freigeben des Backup-Locks: {e}")
+    
+    def _cleanup_expired_locks(self):
+        """Bereinigt abgelaufene Locks aus der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            
+            current_time = datetime.now()
+            
+            # Lösche alle abgelaufenen Locks
+            result = mongodb.delete_many('system_locks', {
+                'expires_at': {'$lt': current_time}
+            })
+            
+            if result.deleted_count > 0:
+                logger.info(f"{result.deleted_count} abgelaufene Locks bereinigt")
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Bereinigen abgelaufener Locks: {e}")
+    
     def _load_backup_times(self):
         """Lädt die konfigurierten Backup-Zeiten aus der Datenbank"""
         try:
@@ -203,11 +294,18 @@ class AutoBackupScheduler:
         
     def _scheduler_loop(self):
         """Hauptschleife des Schedulers"""
+        last_cleanup = datetime.now()
+        
         while self.running:
             try:
                 now = datetime.now()
                 current_time = now.time()
                 current_date = now.date()
+                
+                # Bereinige abgelaufene Locks alle 10 Minuten
+                if (now - last_cleanup).total_seconds() > 600:  # 10 Minuten
+                    self._cleanup_expired_locks()
+                    last_cleanup = now
                 
                 # Prüfe ob es Zeit für ein normales Backup ist
                 for backup_time in self.backup_times:
@@ -244,6 +342,11 @@ class AutoBackupScheduler:
             logger.info("Erstelle automatisches Backup...")
             self._log_backup_event("Starte automatisches Backup")
             
+            # Prüfe ob dieser Worker das Backup ausführen soll
+            if not self._is_primary_worker():
+                logger.info(f"Worker {self.worker_id} überspringt Backup (nicht primär)")
+                return
+
             # Backup erstellen
             backup_filename = self.backup_manager.create_backup()
             
@@ -262,6 +365,9 @@ class AutoBackupScheduler:
             logger.error(f"Fehler beim automatischen Backup: {e}")
             self._log_backup_event(f"Backup-Fehler: {e}")
             self._send_backup_notification(None, success=False)
+        finally:
+            # Lock freigeben
+            self._release_backup_lock()
     
     def _create_weekly_backup_archive(self):
         """Erstellt ein wöchentliches Backup-Archiv und sendet es per E-Mail"""
@@ -269,6 +375,11 @@ class AutoBackupScheduler:
             logger.info("Erstelle wöchentliches Backup-Archiv...")
             self._log_backup_event("Starte wöchentliches Backup-Archiv")
             
+            # Prüfe ob dieser Worker das Backup ausführen soll
+            if not self._is_primary_worker():
+                logger.info(f"Worker {self.worker_id} überspringt wöchentliches Backup (nicht primär)")
+                return
+
             # Alle aktuellen Backups finden
             backup_files = list(self.backup_manager.backup_dir.glob('scandy_backup_*.json'))
             
@@ -310,6 +421,9 @@ class AutoBackupScheduler:
         except Exception as e:
             logger.error(f"Fehler beim Erstellen des wöchentlichen Backup-Archivs: {e}")
             self._log_backup_event(f"Fehler beim wöchentlichen Backup-Archiv: {e}")
+        finally:
+            # Lock freigeben
+            self._release_backup_lock()
     
     def _send_weekly_backup_archive(self, archive_path):
         """Sendet das wöchentliche Backup-Archiv per E-Mail"""
