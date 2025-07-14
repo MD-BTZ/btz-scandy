@@ -255,10 +255,10 @@ services:
     command: mongod --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 10s
-      retries: 15
-      start_period: 30s
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 60s
     env_file:
       - .env
 
@@ -503,33 +503,54 @@ install_containers() {
 wait_for_services() {
     log "${BLUE}⏳ Warte auf Service-Start...${NC}"
     
-    # Warte auf MongoDB
-    local retries=0
-    while [ $retries -lt 12 ]; do
+    # Warte auf MongoDB Container
+    log "${YELLOW}⏳ Warte auf MongoDB Container...${NC}"
+    local container_retries=0
+    while [ $container_retries -lt 30 ]; do
         if docker ps | grep -q scandy-mongodb-$INSTANCE_NAME; then
+            log "${GREEN}✅ MongoDB Container läuft${NC}"
             break
         fi
-        log "${YELLOW}⏳ MongoDB Container startet noch...${NC}"
-        sleep 5
-        ((retries++))
+        log "${YELLOW}⏳ MongoDB Container startet noch... ($container_retries/30)${NC}"
+        sleep 10
+        ((container_retries++))
     done
     
-    # Prüfe Health Status
+    if [ $container_retries -ge 30 ]; then
+        log "${RED}❌ MongoDB Container konnte nicht gestartet werden${NC}"
+        exit 1
+    fi
+    
+    # Warte auf MongoDB Health Status
+    log "${YELLOW}⏳ Warte auf MongoDB Health Status...${NC}"
     local health_retries=0
-    while [ $health_retries -lt 15 ]; do
+    while [ $health_retries -lt 60 ]; do
         health_status=$(docker inspect -f "{{.State.Health.Status}}" scandy-mongodb-$INSTANCE_NAME 2>/dev/null)
+        
         if [ "$health_status" = "healthy" ]; then
             log "${GREEN}✅ MongoDB ist healthy!${NC}"
             break
+        elif [ "$health_status" = "unhealthy" ]; then
+            log "${RED}❌ MongoDB ist unhealthy - prüfe Logs${NC}"
+            docker logs scandy-mongodb-$INSTANCE_NAME --tail 20
+            exit 1
         fi
+        
         ((health_retries++))
-        if [ $health_retries -ge 15 ]; then
-            log "${YELLOW}⚠️  MongoDB wird nicht healthy - fahre trotzdem fort...${NC}"
+        if [ $health_retries -ge 60 ]; then
+            log "${YELLOW}⚠️  MongoDB wird nicht healthy - prüfe Status...${NC}"
+            docker logs scandy-mongodb-$INSTANCE_NAME --tail 10
+            log "${YELLOW}⚠️  Fahre trotzdem fort - MongoDB läuft möglicherweise${NC}"
             break
         fi
-        log "${YELLOW}⏳ Warte auf MongoDB Health... ($health_retries/15)${NC}"
-        sleep 6
+        
+        log "${YELLOW}⏳ Warte auf MongoDB Health... ($health_retries/60)${NC}"
+        sleep 10
     done
+    
+    # Warte zusätzlich für vollständige Initialisierung
+    log "${YELLOW}⏳ Warte auf vollständige MongoDB-Initialisierung...${NC}"
+    sleep 30
 }
 
 # Zeige finale Informationen
