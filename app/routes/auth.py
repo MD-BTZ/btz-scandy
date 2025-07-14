@@ -42,6 +42,14 @@ def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
             # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
             return id_value
 
+def get_objectid_if_possible(id_value):
+    if isinstance(id_value, str) and len(id_value) == 24:
+        try:
+            return ObjectId(id_value)
+        except Exception:
+            return id_value
+    return id_value
+
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     """
@@ -225,17 +233,24 @@ def profile():
     """
     if request.method == 'POST':
         try:
+            # ===== DEBUG: Formulardaten loggen =====
+            logger.info(f"DEBUG: Profile-Update für User: {current_user.username}")
+            logger.info(f"DEBUG: Formulardaten: {dict(request.form)}")
+            
             # ===== AKTUELLE BENUTZERDATEN HOLEN =====
             user = mongodb.find_one('users', {'username': current_user.username})
             if not user:
                 flash('Benutzer nicht gefunden', 'error')
                 return redirect(url_for('auth.profile'))
             
+            logger.info(f"DEBUG: Aktueller User aus DB: {user.get('username')}, ID: {user.get('_id')}, Email: {user.get('email')}")
+            
             # ===== FORMULARDATEN HOLEN UND VALIDIEREN =====
             from app.services.validation_service import ValidationService
             from app.services.utility_service import UtilityService
             
             form_data = UtilityService.get_form_data_dict(request.form)
+            logger.info(f"DEBUG: Verarbeitete Formulardaten: {form_data}")
             
             # Validierung für Profil-Update
             email = form_data.get('email', '').strip()
@@ -244,8 +259,12 @@ def profile():
             new_password_confirm = form_data.get('new_password_confirm', '').strip()
             timesheet_enabled = form_data.get('timesheet_enabled') == 'on'
             
+            logger.info(f"DEBUG: Extrahierte Werte - Email: '{email}', Timesheet: {timesheet_enabled}")
+            
             # ===== E-MAIL ÄNDERN =====
             if email and email != user.get('email', ''):
+                logger.info(f"DEBUG: E-Mail-Update wird durchgeführt - von '{user.get('email')}' zu '{email}'")
+                
                 # Prüfe ob E-Mail bereits von anderem Benutzer verwendet wird
                 existing_user = mongodb.find_one('users', {
                     'email': email,
@@ -261,10 +280,15 @@ def profile():
                     return render_template('auth/profile.html', user=user)
                 
                 # E-Mail aktualisieren
-                mongodb.update_one('users', 
-                                 {'_id': convert_id_for_query(user['_id'])}, 
+                logger.info(f"DEBUG: Führe E-Mail-Update aus mit ID: {get_objectid_if_possible(user['_id'])}")
+                update_result = mongodb.update_one('users', 
+                                 {'_id': get_objectid_if_possible(user['_id'])}, 
                                  {'$set': {'email': email, 'updated_at': datetime.now()}})
+                logger.info(f"DEBUG: E-Mail-Update-Ergebnis: {update_result}")
+                
                 flash('E-Mail-Adresse erfolgreich aktualisiert.', 'success')
+            else:
+                logger.info(f"DEBUG: Kein E-Mail-Update - Email: '{email}', DB-Email: '{user.get('email')}'")
             
             # ===== PASSWORT ÄNDERN =====
             if new_password:
@@ -295,14 +319,14 @@ def profile():
                 password_hash = generate_password_hash(new_password)
                 
                 mongodb.update_one('users', 
-                                 {'_id': convert_id_for_query(user['_id'])}, 
+                                 {'_id': get_objectid_if_possible(user['_id'])}, 
                                  {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
                 flash('Passwort erfolgreich geändert.', 'success')
             
             # ===== WOCHENBERICHT-EINSTELLUNG ÄNDERN =====
             if timesheet_enabled != user.get('timesheet_enabled', False):
                 mongodb.update_one('users', 
-                                 {'_id': convert_id_for_query(user['_id'])}, 
+                                 {'_id': get_objectid_if_possible(user['_id'])}, 
                                  {'$set': {'timesheet_enabled': timesheet_enabled, 'updated_at': datetime.now()}})
                 
                 if timesheet_enabled:
@@ -312,6 +336,7 @@ def profile():
             
             # Aktualisiere user für Template
             user = mongodb.find_one('users', {'username': current_user.username})
+            logger.info(f"DEBUG: User nach Update - Email: {user.get('email')}")
             
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren des Benutzerprofils: {e}")

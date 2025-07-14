@@ -105,7 +105,8 @@ class AdminEmailService:
             success = send_email(
                 to_email=admin_email,
                 subject=test_subject,
-                message=test_message
+                html_content=test_message,
+                text_content=test_message
             )
             
             if success:
@@ -135,7 +136,8 @@ class AdminEmailService:
             success = send_email(
                 to_email=recipient_email,
                 subject=subject,
-                message=message
+                html_content=message,
+                text_content=message
             )
             
             if success:
@@ -312,21 +314,25 @@ class AdminEmailService:
             Dictionary mit E-Mail-Konfiguration
         """
         try:
-            settings = AdminEmailService.get_email_settings()
+            from app.utils.email_utils import get_email_config as get_config
             
-            # Mappe die Einstellungen auf das erwartete Format
-            config = {
-                'mail_server': settings.get('email_smtp_server', 'smtp.gmail.com'),
-                'mail_port': int(settings.get('email_smtp_port', 587)),
-                'mail_use_tls': settings.get('email_use_tls', True),
-                'mail_username': settings.get('email_username', ''),
-                'mail_password': settings.get('email_password', ''),
-                'test_email': settings.get('email_test_email', ''),
-                'use_auth': settings.get('email_use_auth', True)
-            }
+            # Verwende die get_email_config aus email_utils
+            config = get_config()
             
-            return config
-            
+            if config:
+                return config
+            else:
+                # Fallback-Konfiguration
+                return {
+                    'mail_server': 'smtp.gmail.com',
+                    'mail_port': 587,
+                    'mail_use_tls': True,
+                    'mail_username': '',
+                    'mail_password': '',
+                    'test_email': '',
+                    'use_auth': True
+                }
+                
         except Exception as e:
             logger.error(f"Fehler beim Laden der E-Mail-Konfiguration: {str(e)}")
             return {
@@ -351,20 +357,16 @@ class AdminEmailService:
             (success, message)
         """
         try:
-            # Mappe die Konfiguration auf die Datenbankfelder
-            settings_data = {
-                'email_smtp_server': config_data.get('mail_server', 'smtp.gmail.com'),
-                'email_smtp_port': str(config_data.get('mail_port', 587)),
-                'email_use_tls': config_data.get('mail_use_tls', True),
-                'email_username': config_data.get('mail_username', ''),
-                'email_password': config_data.get('mail_password', ''),
-                'email_test_email': config_data.get('test_email', ''),
-                'email_use_auth': config_data.get('use_auth', True)
-            }
+            from app.utils.email_utils import save_email_config as save_config
             
-            success, message = AdminEmailService.update_email_settings(settings_data)
-            return success, message
+            # Verwende die save_email_config aus email_utils
+            success = save_config(config_data)
             
+            if success:
+                return True, "E-Mail-Konfiguration erfolgreich gespeichert"
+            else:
+                return False, "Fehler beim Speichern der E-Mail-Konfiguration"
+                
         except Exception as e:
             logger.error(f"Fehler beim Speichern der E-Mail-Konfiguration: {str(e)}")
             return False, f"Fehler beim Speichern der E-Mail-Konfiguration: {str(e)}"
@@ -406,31 +408,19 @@ class AdminEmailService:
             config_data: E-Mail-Konfiguration
             
         Returns:
-            (success, message)
+            (success, result)
         """
         try:
-            import smtplib
-            from email.mime.text import MIMEText
+            from app.utils.email_utils import diagnose_smtp_connection as diagnose_smtp
             
-            # Erstelle SMTP-Verbindung
-            if config_data.get('mail_use_tls', True):
-                server = smtplib.SMTP(config_data.get('mail_server', 'smtp.gmail.com'), 
-                                    config_data.get('mail_port', 587))
-                server.starttls()
+            # Verwende die diagnose_smtp_connection aus email_utils
+            result = diagnose_smtp(config_data)
+            
+            if result.get('success'):
+                return True, result
             else:
-                server = smtplib.SMTP(config_data.get('mail_server', 'smtp.gmail.com'), 
-                                    config_data.get('mail_port', 587))
-            
-            # Authentifizierung
-            if config_data.get('use_auth', True):
-                username = config_data.get('mail_username', '')
-                password = config_data.get('mail_password', '')
-                server.login(username, password)
-            
-            server.quit()
-            
-            return True, "SMTP-Verbindung erfolgreich"
-            
+                return False, result.get('error', 'Unbekannter Fehler')
+                
         except Exception as e:
-            logger.error(f"SMTP-Diagnose fehlgeschlagen: {str(e)}")
-            return False, f"SMTP-Verbindung fehlgeschlagen: {str(e)}" 
+            logger.error(f"Fehler bei SMTP-Diagnose: {str(e)}")
+            return False, f"Diagnose-Fehler: {str(e)}" 

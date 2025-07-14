@@ -204,7 +204,7 @@
     </div>
 
     <!-- System-Verwaltung: eigene Zeile -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+    <div class="grid grid-cols-1 lg:grid-cols-1 gap-4 mb-8">
         <!-- Versionscheck -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
@@ -224,26 +224,6 @@
                     <a href="{{ url_for('admin.version_check_page') }}" class="btn btn-primary btn-sm w-full">
                         <i class="fas fa-search mr-2"></i>
                         Versionscheck
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Backup-Status -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-database text-primary"></i>
-                    Backup-System
-                </h2>
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm">Auto-Backup:</span>
-                        <span id="backupStatus" class="badge badge-info">Prüfe...</span>
-                    </div>
-                    <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-secondary btn-sm w-full">
-                        <i class="fas fa-cog mr-2"></i>
-                        Backup-Einstellungen
                     </a>
                 </div>
             </div>

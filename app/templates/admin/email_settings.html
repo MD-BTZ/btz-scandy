@@ -179,7 +179,7 @@
                                 </ul>
                                 <div class="alert alert-warning mt-3">
                                     <i class="fas fa-exclamation-triangle"></i>
-                                    <span><strong>Tipp:</strong> Verwenden Sie den "SMTP-Diagnose"-Button, um die Server-Capabilities zu prüfen.</span>
+                                    <span><strong>Tipp:</strong> Prüfen Sie die SMTP-Einstellungen Ihres E-Mail-Anbieters.</span>
                                 </div>
                             </div>
                             
@@ -236,9 +236,6 @@
                     <button type="submit" name="action" value="save" class="btn btn-primary">
                         <i class="fas fa-save mr-2"></i>Einstellungen speichern
                     </button>
-                    <button type="button" id="diagnoseBtn" class="btn btn-info">
-                        <i class="fas fa-stethoscope mr-2"></i>SMTP-Diagnose
-                    </button>
                     <button type="button" id="simpleTestBtn" class="btn btn-success">
                         <i class="fas fa-check mr-2"></i>Test-E-Mail senden
                     </button>
@@ -290,61 +287,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         authToggle.addEventListener('change', updateAuthFields);
         updateAuthFields(); // Initial status setzen
-    }
-    
-    // Diagnose-Button
-    const diagnoseBtn = document.getElementById('diagnoseBtn');
-    if (diagnoseBtn) {
-        diagnoseBtn.addEventListener('click', function() {
-            diagnoseBtn.disabled = true;
-            diagnoseBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Diagnose läuft...';
-            
-            fetch('{{ url_for("admin.diagnose_email") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Erfolgreiche Diagnose anzeigen
-                    const diagnosis = data.diagnosis;
-                    let message = `SMTP-Diagnose erfolgreich!\n\n`;
-                    message += `Server: ${diagnosis.server}\n`;
-                    message += `Port: ${diagnosis.port}\n`;
-                    message += `TLS konfiguriert: ${diagnosis.tls_configured}\n`;
-                    message += `TLS aktiviert: ${diagnosis.tls_activated}\n`;
-                    message += `SSL: ${diagnosis.ssl}\n`;
-                    message += `STARTTLS verfügbar: ${diagnosis.starttls_available}\n`;
-                    message += `Authentifizierung unterstützt: ${diagnosis.auth_supported}\n`;
-                    message += `Authentifizierung Status: ${diagnosis.auth_status}\n`;
-                    
-                    if (diagnosis.tls_error) {
-                        message += `\nTLS-Fehler: ${diagnosis.tls_error}\n`;
-                    }
-                    
-                    if (diagnosis.capabilities && diagnosis.capabilities.length > 0) {
-                        message += `\nServer-Capabilities:\n`;
-                        diagnosis.capabilities.forEach(cap => {
-                            message += `- ${cap}\n`;
-                        });
-                    }
-                    
-                    alert(message);
-                } else {
-                    alert(`Diagnose fehlgeschlagen: ${data.message}`);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Fehler bei der Diagnose: ' + error.message);
-            })
-            .finally(() => {
-                diagnoseBtn.disabled = false;
-                diagnoseBtn.innerHTML = '<i class="fas fa-stethoscope mr-2"></i>SMTP-Diagnose';
-            });
-        });
     }
     
     // Einfacher Test-Button

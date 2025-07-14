@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, send_file, current_app, abort, session
 from flask_login import current_user
 from app.utils.decorators import admin_required, mitarbeiter_required, login_required
 from app.models.mongodb_models import MongoDBUser
@@ -127,7 +127,6 @@ def dashboard():
         recent_activity = AdminDashboardService.get_recent_activity()
         material_usage = AdminDashboardService.get_material_usage()
         warnings = AdminDashboardService.get_warnings()
-        backup_info = AdminDashboardService.get_backup_info()
         consumables_forecast = AdminDashboardService.get_consumables_forecast()
         consumable_trend = AdminDashboardService.get_consumable_trend()
         
@@ -232,7 +231,6 @@ def dashboard():
                              recent_activity=recent_activity,
                              material_usage=material_usage,
                              warnings=warnings,
-                             backup_info=backup_info,
                              consumables_forecast=consumables_forecast,
                              consumable_trend=consumable_trend,
                              total_tools=total_tools,
@@ -253,7 +251,6 @@ def dashboard():
                              recent_activity=[],
                              material_usage={'usage_data': [], 'period_days': 30},
                              warnings={'defect_tools': [], 'overdue_lendings': [], 'low_stock_consumables': []},
-                             backup_info={'backups': [], 'total_count': 0, 'total_size_mb': 0},
                              consumables_forecast=[],
                              consumable_trend={'labels': [], 'datasets': []},
                              total_tools=0,
@@ -3510,6 +3507,12 @@ def auto_backup():
 def email_settings():
     """E-Mail-Konfiguration verwalten"""
     try:
+        # Session-Persistierung vor dem Speichern
+        current_user_id = session.get('user_id')
+        current_username = session.get('username')
+        current_role = session.get('role')
+        current_authenticated = session.get('is_authenticated', False)
+        
         if request.method == 'POST':
             action = request.form.get('action')
             
@@ -3541,6 +3544,17 @@ def email_settings():
                     }
                 
                 success, message = AdminEmailService.save_email_config(config_data)
+                
+                # Session wiederherstellen nach dem Speichern
+                if current_user_id:
+                    session['user_id'] = current_user_id
+                if current_username:
+                    session['username'] = current_username
+                if current_role:
+                    session['role'] = current_role
+                if current_authenticated:
+                    session['is_authenticated'] = current_authenticated
+                
                 if success:
                     flash(message, 'success')
                 else:
@@ -3572,6 +3586,17 @@ def email_settings():
                     }
                 
                 success, message = AdminEmailService.test_email_config(config_data)
+                
+                # Session wiederherstellen nach dem Test
+                if current_user_id:
+                    session['user_id'] = current_user_id
+                if current_username:
+                    session['username'] = current_username
+                if current_role:
+                    session['role'] = current_role
+                if current_authenticated:
+                    session['is_authenticated'] = current_authenticated
+                
                 if success:
                     flash(f'E-Mail-Test erfolgreich: {message}', 'success')
                 else:
@@ -3584,6 +3609,17 @@ def email_settings():
         
     except Exception as e:
         logger.error(f"Fehler bei E-Mail-Einstellungen: {e}")
+        
+        # Session wiederherstellen bei Fehlern
+        if current_user_id:
+            session['user_id'] = current_user_id
+        if current_username:
+            session['username'] = current_username
+        if current_role:
+            session['role'] = current_role
+        if current_authenticated:
+            session['is_authenticated'] = current_authenticated
+        
         flash('Fehler beim Laden der E-Mail-Einstellungen.', 'error')
         return redirect(url_for('admin.dashboard'))
 

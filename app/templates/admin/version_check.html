@@ -70,27 +70,16 @@
                     </p>
                     
                     <div class="bg-base-200 p-4 rounded-lg mb-4">
-                        <h3 class="font-bold mb-2">Linux/macOS:</h3>
-                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>./update.sh</code></pre>
-                    </div>
-                    
-                    <div class="bg-base-200 p-4 rounded-lg mb-4">
-                        <h3 class="font-bold mb-2">Windows:</h3>
-                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>update.bat</code></pre>
-                    </div>
-                    
-                    <div class="bg-base-200 p-4 rounded-lg">
-                        <h3 class="font-bold mb-2">Manuell:</h3>
-                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>git pull
-docker compose down
-docker compose up -d --build</code></pre>
+                        <h3 class="font-bold mb-2">Einfaches Update:</h3>
+                        <pre class="bg-base-300 p-3 rounded text-sm overflow-x-auto"><code>git pull origin
+docker compose restart</code></pre>
                     </div>
                     
                     <div class="alert alert-info mt-4">
                         <i class="fas fa-info-circle"></i>
                         <span>
-                            <strong>Hinweis:</strong> Das Update kann einige Minuten dauern. 
-                            Die Anwendung ist während des Updates nicht erreichbar.
+                            <strong>Hinweis:</strong> Das Update dauert nur wenige Sekunden. 
+                            Die Anwendung ist kurzzeitig nicht erreichbar.
                         </span>
                     </div>
                 </div>
