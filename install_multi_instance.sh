@@ -215,6 +215,12 @@ SECRET_KEY=$SECRET_KEY
 SESSION_COOKIE_SECURE=False
 REMEMBER_COOKIE_SECURE=False
 
+# Session-Konfiguration (instance-spezifisch)
+SESSION_FILE_DIR=/app/app/flask_session
+SESSION_TYPE=filesystem
+SESSION_PERMANENT=True
+PERMANENT_SESSION_LIFETIME=86400
+
 # Container-Namen
 CONTAINER_NAME=scandy-$INSTANCE_NAME
 TZ=Europe/Berlin
@@ -297,6 +303,10 @@ services:
       - TZ=Europe/Berlin
       - SESSION_COOKIE_SECURE=False
       - REMEMBER_COOKIE_SECURE=False
+      - SESSION_FILE_DIR=\${SESSION_FILE_DIR}
+      - SESSION_TYPE=\${SESSION_TYPE}
+      - SESSION_PERMANENT=\${SESSION_PERMANENT}
+      - PERMANENT_SESSION_LIFETIME=\${PERMANENT_SESSION_LIFETIME}
     ports:
       - "$WEB_PORT:5000"
     volumes:

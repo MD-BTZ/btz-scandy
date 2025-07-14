@@ -23,10 +23,10 @@ class Config:
     BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
     
     # Flask-Session
-    SESSION_TYPE = 'filesystem'
-    SESSION_FILE_DIR = os.path.join(BASE_DIR, 'app', 'flask_session')
-    SESSION_PERMANENT = True
-    PERMANENT_SESSION_LIFETIME = 86400  # 24 Stunden
+    SESSION_TYPE = os.environ.get('SESSION_TYPE', 'filesystem')
+    SESSION_FILE_DIR = os.environ.get('SESSION_FILE_DIR', os.path.join(BASE_DIR, 'app', 'flask_session'))
+    SESSION_PERMANENT = os.environ.get('SESSION_PERMANENT', 'True').lower() == 'true'
+    PERMANENT_SESSION_LIFETIME = int(os.environ.get('PERMANENT_SESSION_LIFETIME', '86400'))  # 24 Stunden
     
     # Sicherheit
     SECRET_KEY = os.environ.get('SECRET_KEY')
