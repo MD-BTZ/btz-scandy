@@ -846,6 +846,7 @@ def timesheet_edit(ts_id):
     ts = mongodb.find_one('timesheets', {'_id': ts_id, 'user_id': user_id})
     if ts:
         print(f"DEBUG: Timesheet mit String-ID gefunden: KW {ts.get('kw', 'Unknown')}")
+        found_id = ts_id  # Verwende die ursprüngliche String-ID
     else:
         # Falls nicht gefunden, versuche mit ObjectId
         try:
@@ -854,8 +855,10 @@ def timesheet_edit(ts_id):
             ts = mongodb.find_one('timesheets', {'_id': obj_id, 'user_id': user_id})
             if ts:
                 print(f"DEBUG: Timesheet mit ObjectId gefunden: KW {ts.get('kw', 'Unknown')}")
+                found_id = obj_id  # Verwende die ObjectId
         except Exception as e:
             print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+            found_id = None
     
     if not ts:
         print(f"DEBUG: Kein Timesheet gefunden für ID: {ts_id}")
@@ -885,7 +888,7 @@ def timesheet_edit(ts_id):
             update_data[f'{day}_end'] = request.form.get(f'end_{day}', '')
         
         mongodb.update_one('timesheets', 
-                         {'_id': convert_id_for_query(ts_id)}, 
+                         {'_id': found_id}, 
                          {'$set': update_data})
         flash('Wochenplan aktualisiert.', 'success')
         return redirect(url_for('workers.timesheet_list'))
