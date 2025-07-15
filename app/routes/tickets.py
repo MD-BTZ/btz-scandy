@@ -806,7 +806,7 @@ def detail(id):
     # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
     if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
         flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
     
     # Füge id-Feld hinzu (für Template-Kompatibilität)
     ticket['id'] = str(ticket['_id'])
@@ -1299,7 +1299,8 @@ def export_ticket(id):
             from app.models.mongodb_models import MongoDBUser
             auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
         if auftragnehmer_user:
-            auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+            # MongoDBUser.get_by_username() gibt ein Dictionary zurück, kein Objekt
+            auftragnehmer_name = f"{auftragnehmer_user.get('firstname', '') or ''} {auftragnehmer_user.get('lastname', '') or ''}".strip()
         else:
             auftragnehmer_name = ''
 
@@ -1385,7 +1386,7 @@ def export_ticket(id):
         if not os.path.exists(template_path):
             logging.error(f"Template-Datei nicht gefunden: {template_path}")
             flash('Word-Template nicht gefunden.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         from docxtpl import DocxTemplate
         doc = DocxTemplate(template_path)
@@ -1416,7 +1417,7 @@ def export_ticket(id):
     except Exception as e:
         logging.error(f"Fehler beim Generieren des Word-Dokuments: {str(e)}", exc_info=True)
         flash(f'Fehler beim Generieren des Dokuments: {str(e)}', 'error')
-        return redirect(url_for('tickets.index'))
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/<id>/note', methods=['POST'])
 @login_required

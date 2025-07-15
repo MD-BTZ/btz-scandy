@@ -254,7 +254,8 @@ class AdminTicketService:
             if ticket.get('assigned_to'):
                 auftragnehmer_user = MongoDBUser.get_by_username(ticket['assigned_to'])
             if auftragnehmer_user:
-                auftragnehmer_name = f"{auftragnehmer_user.firstname or ''} {auftragnehmer_user.lastname or ''}".strip()
+                # MongoDBUser.get_by_username() gibt ein Dictionary zurück, kein Objekt
+                auftragnehmer_name = f"{auftragnehmer_user.get('firstname', '') or ''} {auftragnehmer_user.get('lastname', '') or ''}".strip()
             else:
                 auftragnehmer_name = ''
 

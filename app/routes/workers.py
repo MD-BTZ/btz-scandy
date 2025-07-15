@@ -839,15 +839,26 @@ def timesheet_edit(ts_id):
         return redirect(url_for('main.index'))
     user_id = current_user.username
     
-    # Konvertiere ts_id zu ObjectId
-    try:
-        object_id = convert_id_for_query(ts_id)
-    except:
-        flash('Ungültige Timesheet-ID.', 'error')
-        return redirect(url_for('workers.timesheet_list'))
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    print(f"DEBUG: Timesheet-Edit aufgerufen für ID: {ts_id}")
     
-    ts = mongodb.find_one('timesheets', {'_id': object_id, 'user_id': user_id})
+    # Versuche zuerst mit String-ID
+    ts = mongodb.find_one('timesheets', {'_id': ts_id, 'user_id': user_id})
+    if ts:
+        print(f"DEBUG: Timesheet mit String-ID gefunden: KW {ts.get('kw', 'Unknown')}")
+    else:
+        # Falls nicht gefunden, versuche mit ObjectId
+        try:
+            from bson import ObjectId
+            obj_id = ObjectId(ts_id)
+            ts = mongodb.find_one('timesheets', {'_id': obj_id, 'user_id': user_id})
+            if ts:
+                print(f"DEBUG: Timesheet mit ObjectId gefunden: KW {ts.get('kw', 'Unknown')}")
+        except Exception as e:
+            print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+    
     if not ts:
+        print(f"DEBUG: Kein Timesheet gefunden für ID: {ts_id}")
         flash('Wochenplan nicht gefunden oder keine Berechtigung.', 'error')
         return redirect(url_for('workers.timesheet_list'))
     
@@ -889,15 +900,26 @@ def timesheet_download(ts_id):
         return redirect(url_for('main.index'))
     user_id = current_user.username
     
-    # Konvertiere ts_id zu ObjectId
-    try:
-        object_id = convert_id_for_query(ts_id)
-    except:
-        flash('Ungültige Timesheet-ID.', 'error')
-        return redirect(url_for('workers.timesheet_list'))
+    # Robuste ID-Behandlung für verschiedene ID-Typen
+    print(f"DEBUG: Timesheet-Download aufgerufen für ID: {ts_id}")
     
-    ts = mongodb.find_one('timesheets', {'_id': object_id, 'user_id': user_id})
+    # Versuche zuerst mit String-ID
+    ts = mongodb.find_one('timesheets', {'_id': ts_id, 'user_id': user_id})
+    if ts:
+        print(f"DEBUG: Timesheet mit String-ID gefunden: KW {ts.get('kw', 'Unknown')}")
+    else:
+        # Falls nicht gefunden, versuche mit ObjectId
+        try:
+            from bson import ObjectId
+            obj_id = ObjectId(ts_id)
+            ts = mongodb.find_one('timesheets', {'_id': obj_id, 'user_id': user_id})
+            if ts:
+                print(f"DEBUG: Timesheet mit ObjectId gefunden: KW {ts.get('kw', 'Unknown')}")
+        except Exception as e:
+            print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+    
     if not ts:
+        print(f"DEBUG: Kein Timesheet gefunden für ID: {ts_id}")
         flash('Wochenplan nicht gefunden oder keine Berechtigung.', 'error')
         return redirect(url_for('workers.timesheet_list'))
     # Kontext für docxtpl bauen
