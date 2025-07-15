@@ -59,7 +59,7 @@
             <div class="w-full h-16 min-h-[4rem] px-0" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if not current_user.is_authenticated %}Quick Scan (nicht verfügbar für nicht eingeloggte Benutzer){% elif current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
                 <div class="w-full h-20 rounded-tl-xl overflow-hidden transition-all duration-300 flex items-center justify-center group
                     {% if not current_user.is_authenticated or current_user.role == 'teilnehmer' %}bg-base-100 opacity-50 cursor-not-allowed{% else %}bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer{% endif %}">
-                    <img src="/static/images/scandy-logo.svg" alt="Scandy Logo" class="w-8 h-8 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
+                    <img src="/static/images/scandy-logo.png" alt="Scandy Logo" class="w-8 h-8 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
                     <!-- Scanner Animation -->
                     <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
                 </div>
