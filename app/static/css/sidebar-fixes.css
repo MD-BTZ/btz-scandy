@@ -1,0 +1,70 @@
+/* Permanente Sidebar Anpassungen */
+
+/* Sidebar permanent sichtbar */
+.sidebar-permanent {
+    width: 226px !important;
+    transition: none !important;
+}
+
+/* Hauptinhalt anpassen */
+.main-content-with-sidebar {
+    margin-left: 226px !important;
+    width: calc(100% - 226px) !important;
+}
+
+/* Navbar anpassen */
+.navbar-with-sidebar {
+    margin-left: 226px !important;
+    width: calc(100% - 226px) !important;
+}
+
+/* Responsive Design für mobile Geräte */
+@media (max-width: 768px) {
+    .sidebar-permanent {
+        width: 100% !important;
+        height: auto !important;
+        position: relative !important;
+    }
+    
+    .main-content-with-sidebar {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    .navbar-with-sidebar {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+}
+
+/* Sidebar Navigation Items */
+.sidebar-nav-item {
+    padding-left: 0.5rem !important;
+    margin-bottom: 0.25rem !important;
+    border-radius: 0 0.5rem 0.5rem 0 !important;
+    transition: background-color 0.2s ease !important;
+}
+
+/* Sidebar Hover- und Aktiveffekte verstärken */
+.sidebar-nav-item:hover {
+  background: var(--fallback-b1, #f3f4f6) !important;
+  color: var(--fallback-p, #2563eb) !important;
+}
+.sidebar-nav-item.active, .sidebar-nav-item.bg-primary {
+  background: var(--fallback-p, #2563eb) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+/* Sidebar Text permanent sichtbar */
+.sidebar-text {
+    opacity: 1 !important;
+    transition: none !important;
+}
+
+/* Container Anpassungen */
+.container-with-sidebar {
+    max-width: calc(100% - 226px) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+} 

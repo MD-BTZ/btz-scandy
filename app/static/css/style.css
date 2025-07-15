@@ -11,7 +11,7 @@
 /* QuickScan Button */
 .quickscan-button {
     width: 3rem !important;
-    height: 3rem !important;
+    height: 125% !important;
     margin: 0 2rem !important;
     z-index: 50 !important;
 }

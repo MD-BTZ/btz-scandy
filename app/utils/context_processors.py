@@ -67,9 +67,26 @@ def inject_routes():
 
 def inject_version():
     """Fügt die aktuelle Version zu allen Templates hinzu"""
-    return {
-        'version': VERSION
-    }
+    try:
+        from app.utils.version_checker import get_version_info
+        version_info = get_version_info()
+        
+        return {
+            'version': VERSION,
+            'version_info': version_info
+        }
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Versionsinformationen: {str(e)}")
+        return {
+            'version': VERSION,
+            'version_info': {
+                'local_version': VERSION,
+                'github_version': None,
+                'is_up_to_date': None,
+                'update_available': False,
+                'error': str(e)
+            }
+        }
 
 def inject_app_labels():
     """Fügt die App-Labels in alle Templates ein"""

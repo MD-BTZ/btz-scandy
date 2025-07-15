@@ -1052,8 +1052,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event Listener für den Trigger Button hinzufügen
     if (trigger) {
         trigger.addEventListener('click', () => {
-            // Prüfe ob der Benutzer Teilnehmer ist
-            const isTeilnehmer = trigger.getAttribute('data-role') === 'teilnehmer';
+            // Prüfe ob der Benutzer authentifiziert ist
+            const userRole = trigger.getAttribute('data-role');
+            const isAuthenticated = userRole && userRole !== 'None' && userRole !== 'anonymous';
+            const isTeilnehmer = userRole === 'teilnehmer';
+            
+            if (!isAuthenticated) {
+                // Zeige Meldung für nicht eingeloggte Benutzer
+                showToast('warning', 'QuickScan ist nur für eingeloggte Benutzer verfügbar');
+                return;
+            }
             
             if (isTeilnehmer) {
                 // Zeige Meldung für Teilnehmer
