@@ -54,16 +54,17 @@
 <body class="min-h-screen bg-base-200">
     <div class="flex flex-col min-h-screen">
         <!-- Vertikales Seitenmenü -->
-        <div class="fixed left-0 top-0 h-full w-[226px] bg-base-300 flex flex-col pt-0 pb-4 shadow-lg z-[90] transition-all duration-300 group sidebar-permanent">
-            <!-- QuickScan-Trigger (exakt wie Navbar, bündig) -->
-            <div class="w-full h-16 min-h-[4rem] px-0" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if not current_user.is_authenticated %}Quick Scan (nicht verfügbar für nicht eingeloggte Benutzer){% elif current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
-                <div class="w-full h-20 rounded-tl-xl overflow-hidden transition-all duration-300 flex items-center justify-center group
-                    {% if not current_user.is_authenticated or current_user.role == 'teilnehmer' %}bg-base-100 opacity-50 cursor-not-allowed{% else %}bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer{% endif %}">
-                    <img src="/static/images/scandy-logo.png" alt="Scandy Logo" class="w-8 h-8 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
-                    <!-- Scanner Animation -->
-                    <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
-                </div>
-            </div>
+        <div class="fixed left-0 top-0 h-full w-[226px] bg-base-300 flex flex-col pt-0 pb-4 z-[90] transition-all duration-300 group sidebar-permanent">
+                         <!-- QuickScan-Trigger (exakt wie Navbar, bündig) -->
+             <div class="w-full h-16 min-h-[4rem] px-0" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if not current_user.is_authenticated %}Quick Scan (nicht verfügbar für nicht eingeloggte Benutzer){% elif current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
+                 <div class="w-full h-20 rounded-tl-xl overflow-hidden transition-all duration-300 flex items-center justify-center group
+                     {% if not current_user.is_authenticated or current_user.role == 'teilnehmer' %}bg-base-100 opacity-50 cursor-not-allowed{% else %}bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer{% endif %}">
+                     <img src="/static/images/scandy-logo.png" alt="Scandy Logo" class="w-12 h-12 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
+                     <span class="ml-4 text-base font-semibold text-base-content group-hover:text-primary transition-colors duration-300">Scan</span>
+                     <!-- Scanner Animation -->
+                     <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
+                 </div>
+             </div>
             
             <!-- Trennlinie -->
             <div class="w-8 h-0.5 bg-base-content/20 rounded-full ml-4 mb-2 mt-4"></div>
@@ -184,7 +185,7 @@
         </div>
 
         <!-- Horizontale Navbar mit DaisyUI Struktur -->
-        <div class="navbar bg-base-100 shadow-lg px-4 relative z-[100] w-full min-h-[4rem] flex items-center ml-[226px] navbar-with-sidebar">
+        <div class="navbar bg-base-100 px-4 relative z-[100] w-full min-h-[4rem] flex items-center ml-[226px] navbar-with-sidebar">
             <!-- Linker Bereich -->
             <div class="flex-1 flex items-center min-w-0">
                 <div class="w-24 flex-shrink-0"></div>
