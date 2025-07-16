@@ -708,6 +708,52 @@ def view(ticket_id):
         # Hole Arbeitsliste
         arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ticket_id_for_query}))
         
+        # Berechne die Summe der Arbeitsstunden aus der Arbeitsliste
+        total_arbeitsstunden = 0
+        if arbeit_list:
+            for arbeit in arbeit_list:
+                arbeitsstunden = arbeit.get('arbeitsstunden', 0)
+                if isinstance(arbeitsstunden, (int, float)):
+                    total_arbeitsstunden += arbeitsstunden
+                elif isinstance(arbeitsstunden, str):
+                    try:
+                        total_arbeitsstunden += float(arbeitsstunden)
+                    except ValueError:
+                        pass
+        
+        # Formatiere das Fertigstellungstermin-Datum
+        if auftrag_details and auftrag_details.get('fertigstellungstermin'):
+            try:
+                fertigstellungstermin = auftrag_details['fertigstellungstermin']
+                if isinstance(fertigstellungstermin, str):
+                    # Versuche verschiedene Datumsformate zu parsen
+                    if 'T' in fertigstellungstermin:
+                        fertigstellungstermin = datetime.strptime(fertigstellungstermin, '%Y-%m-%dT%H:%M')
+                    else:
+                        fertigstellungstermin = datetime.strptime(fertigstellungstermin, '%Y-%m-%d')
+                    auftrag_details['fertigstellungstermin_formatted'] = fertigstellungstermin.strftime('%d.%m.%Y')
+                elif isinstance(fertigstellungstermin, datetime):
+                    auftrag_details['fertigstellungstermin_formatted'] = fertigstellungstermin.strftime('%d.%m.%Y')
+                else:
+                    auftrag_details['fertigstellungstermin_formatted'] = str(fertigstellungstermin)
+            except (ValueError, TypeError):
+                auftrag_details['fertigstellungstermin_formatted'] = str(auftrag_details['fertigstellungstermin'])
+        
+        # Füge die berechneten Arbeitsstunden zu den Auftragsdetails hinzu
+        if auftrag_details:
+            auftrag_details['total_arbeitsstunden'] = total_arbeitsstunden
+            
+            # Extrahiere nur die ausgeführten Arbeiten (ohne Stunden und Leistungskategorie)
+            if auftrag_details.get('ausgefuehrte_arbeiten'):
+                arbeit_zeilen = auftrag_details['ausgefuehrte_arbeiten'].split('\n')
+                nur_arbeiten = []
+                for zeile in arbeit_zeilen:
+                    if zeile.strip():
+                        teile = zeile.split('|')
+                        if len(teile) > 0 and teile[0].strip():
+                            nur_arbeiten.append(teile[0].strip())
+                auftrag_details['ausgefuehrte_arbeiten_nur_text'] = '\n'.join(nur_arbeiten)
+        
         # Hole alle Kategorien aus der settings Collection
         categories = get_ticket_categories_from_settings()
         

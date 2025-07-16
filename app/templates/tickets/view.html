@@ -53,7 +53,7 @@
                             <p class="text-sm opacity-70 mt-2">Fällig am</p>
                             {% if current_user.role in ['admin', 'mitarbeiter'] %}
                                 <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                       value="{{ ticket.due_date | datetime if ticket.due_date else '' }}">
+                                       value="{% if ticket.due_date %}{% if ticket.due_date is string %}{{ ticket.due_date }}{% else %}{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
                             {% else %}
                                 <p>{{ ticket.due_date | datetime if ticket.due_date else 'Nicht gesetzt' }}</p>
                             {% endif %}
@@ -103,17 +103,15 @@
                             </div>
                             <div>
                                 <p class="text-sm opacity-70">Fertigstellungstermin</p>
-                                <p>{{ auftrag_details.fertigstellungstermin or 'Nicht gesetzt' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden</p>
-                                <p>{{ auftrag_details.arbeitsstunden or 'Nicht angegeben' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Leistungskategorie</p>
-                                <p>{{ auftrag_details.leistungskategorie or 'Nicht angegeben' }}</p>
+                                <p>{{ auftrag_details.fertigstellungstermin_formatted or 'Nicht gesetzt' }}</p>
+                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden (Summe)</p>
+                                <p>{{ auftrag_details.total_arbeitsstunden or '0' }} Stunden</p>
                             </div>
                         </div>
-                        {% if auftrag_details.ausgefuehrte_arbeiten %}
+                        {% if auftrag_details.ausgefuehrte_arbeiten_nur_text %}
                         <div class="mt-4">
                             <p class="text-sm opacity-70">Ausgeführte Arbeiten</p>
-                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten }}</p>
+                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten_nur_text }}</p>
                         </div>
                         {% endif %}
                     </div>
