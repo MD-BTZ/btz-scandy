@@ -244,7 +244,7 @@
                     <td class="px-4 py-2">{{ lending.worker_name }}</td>
                     <td class="px-4 py-2">{{ lending.worker_barcode }}</td>
                     <td class="px-4 py-2">
-                        {% if lending.category == app_labels.tools.name %}
+                        {% if lending.category == app_labels.tools.name or lending.category == 'Werkzeug' or lending.category == 'Werkzeuge' %}
                             Ausgeliehen am {{ lending.action_date }}
                         {% else %}
                             Ausgegeben am {{ lending.action_date }}
@@ -259,7 +259,7 @@
                         {% endif %}
                     </td>
                     <td class="px-4 py-2">
-                        {% if lending.category == app_labels.tools.name %}
+                        {% if lending.category == app_labels.tools.name or lending.category == 'Werkzeug' or lending.category == 'Werkzeuge' %}
                             <button class="btn btn-sm btn-error" 
                                     data-barcode="{{ lending.item_barcode }}"
                                     data-action="return"
@@ -568,12 +568,45 @@ function returnTool(barcode) {
         return;
     }
     
-    window.LendingService.returnItem(barcode)
-        .then(success => {
-            if (success) {
-                window.location.reload();
+    // Verhindere mehrfache Klicks
+    const button = event?.target?.closest('[data-action="return"]');
+    if (button) {
+        button.disabled = true;
+        button.style.opacity = '0.6';
+    }
+    
+    fetch('/api/lending/return', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            tool_barcode: barcode,
+            worker_barcode: null  // Wird vom Server automatisch ermittelt
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast('error', result.message || 'Fehler bei der Rückgabe');
+            if (button) {
+                button.disabled = false;
+                button.style.opacity = '1';
             }
-        });
+        }
+    })
+    .catch(error => {
+        console.error('Fehler bei der Rückgabe:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+        if (button) {
+            button.disabled = false;
+            button.style.opacity = '1';
+        }
+    });
 }
 </script>
 

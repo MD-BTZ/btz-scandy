@@ -153,61 +153,45 @@ def return_tool():
                 'message': 'Fehlender tool_barcode Parameter'
             }), 400
         
-        # Wenn kein worker_barcode angegeben ist, finde die aktuelle Ausleihe
-        if not worker_barcode:
-            lending = mongodb.find_one('lendings', {
-                'tool_barcode': tool_barcode,
-                'returned_at': None
-            })
-            
-            if not lending:
-                logger.warning(f"No active lending found for tool_barcode={tool_barcode}")
-                return jsonify({
-                    'success': False,
-                    'message': 'Keine aktive Ausleihe für dieses Werkzeug gefunden'
-                }), 404
-                
-            worker_barcode = lending.get('worker_barcode')
-            logger.info(f"Found active lending with worker_barcode={worker_barcode}")
-        else:
-            # Finde aktuelle Ausleihe mit worker_barcode
-            lending = mongodb.find_one('lendings', {
-                'tool_barcode': tool_barcode,
-                'worker_barcode': worker_barcode,
-                'returned_at': None
-            })
-        
-        logger.info(f"Found lending: {lending}")
-        
-        if not lending:
-            logger.warning(f"No active lending found for tool_barcode={tool_barcode}, worker_barcode={worker_barcode}")
+        # Validiere Werkzeug
+        tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+        if not tool:
+            logger.warning(f"Werkzeug {tool_barcode} nicht gefunden")
             return jsonify({
                 'success': False,
-                'message': 'Keine aktive Ausleihe gefunden'
+                'message': 'Werkzeug nicht gefunden'
             }), 404
         
-        # Markiere als zurückgegeben
-        success = mongodb.update_one('lendings', 
-                          {
-                              'tool_barcode': tool_barcode,
-                              'worker_barcode': worker_barcode,
-                              'returned_at': None
-                          }, 
-                          {'$set': {'returned_at': datetime.now()}})
-        
-        logger.info(f"Update lending result: {success}")
-        
-        # Aktualisiere Werkzeug-Status
-        tool_success = mongodb.update_one('tools', 
-                          {'barcode': tool_barcode}, 
-                          {'$set': {'status': 'verfügbar'}})
-        
-        logger.info(f"Update tool result: {tool_success}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Werkzeug erfolgreich zurückgegeben'
+        # Prüfe aktive Ausleihe
+        active_lending = mongodb.find_one('lendings', {
+            'tool_barcode': tool_barcode,
+            'returned_at': None
         })
+        
+        if not active_lending:
+            logger.warning(f"Keine aktive Ausleihe für Werkzeug {tool_barcode}")
+            return jsonify({
+                'success': False,
+                'message': 'Dieses Werkzeug ist nicht ausgeliehen'
+            }), 400
+        
+        # Verwende den zentralen LendingService für konsistente Rückgabe
+        from app.services.lending_service import LendingService
+        
+        success, message = LendingService.return_tool_centralized(tool_barcode, worker_barcode)
+        
+        if success:
+            logger.info(f"Rückgabe erfolgreich: {message}")
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
+            logger.warning(f"Rückgabe fehlgeschlagen: {message}")
+            return jsonify({
+                'success': False,
+                'message': message
+            }), 400
         
     except Exception as e:
         logger.error(f"Error in return_tool: {str(e)}", exc_info=True)
@@ -445,4 +429,121 @@ def process_lending():
         return jsonify({
             'success': False,
             'message': 'Fehler bei der Verarbeitung'
+        }), 500
+
+@bp.route('/debug/test-return/<tool_barcode>', methods=['POST'])
+@login_required
+def test_return_tool(tool_barcode):
+    """Test-Route für Rückgabe-Problem"""
+    try:
+        logger.info(f"Test return für Werkzeug: {tool_barcode}")
+        
+        # Validiere Werkzeug
+        tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+        if not tool:
+            return jsonify({
+                'success': False,
+                'message': 'Werkzeug nicht gefunden'
+            }), 404
+        
+        # Prüfe aktive Ausleihe
+        active_lending = mongodb.find_one('lendings', {
+            'tool_barcode': tool_barcode,
+            'returned_at': None
+        })
+        
+        if not active_lending:
+            return jsonify({
+                'success': False,
+                'message': 'Dieses Werkzeug ist nicht ausgeliehen'
+            }), 400
+        
+        # Verwende den zentralen LendingService
+        from app.services.lending_service import LendingService
+        
+        success, message = LendingService.return_tool_centralized(tool_barcode, None)
+        
+        return jsonify({
+            'success': success,
+            'message': message,
+            'tool': {
+                'name': tool.get('name'),
+                'status': tool.get('status'),
+                'barcode': tool.get('barcode')
+            },
+            'lending': {
+                'id': str(active_lending.get('_id')),
+                'worker_barcode': active_lending.get('worker_barcode'),
+                'lent_at': str(active_lending.get('lent_at'))
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler in test_return_tool: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler: {str(e)}'
+        }), 500
+
+@bp.route('/debug/test-mongodb-update/<tool_barcode>', methods=['POST'])
+@login_required
+def test_mongodb_update(tool_barcode):
+    """Test-Route für MongoDB-Update-Problem"""
+    try:
+        logger.info(f"Test MongoDB Update für Werkzeug: {tool_barcode}")
+        
+        # Finde aktive Ausleihe
+        active_lending = mongodb.find_one('lendings', {
+            'tool_barcode': tool_barcode,
+            'returned_at': None
+        })
+        
+        if not active_lending:
+            return jsonify({
+                'success': False,
+                'message': 'Keine aktive Ausleihe gefunden'
+            }), 400
+        
+        logger.info(f"Aktive Ausleihe gefunden: {active_lending}")
+        
+        # Teste direktes MongoDB-Update
+        from datetime import datetime
+        
+        # Test 1: Einfaches Update
+        logger.info("Test 1: Einfaches Update")
+        result1 = mongodb.update_one('lendings', 
+                                   {'_id': active_lending['_id']}, 
+                                   {'$set': {'test_field': 'test_value'}})
+        logger.info(f"Test 1 Ergebnis: {result1}")
+        
+        # Test 2: Update mit returned_at
+        logger.info("Test 2: Update mit returned_at")
+        result2 = mongodb.update_one('lendings', 
+                                   {'_id': active_lending['_id']}, 
+                                   {'$set': {'returned_at': datetime.now()}})
+        logger.info(f"Test 2 Ergebnis: {result2}")
+        
+        # Test 3: Update mit $unset
+        logger.info("Test 3: Update mit $unset")
+        result3 = mongodb.update_one('lendings', 
+                                   {'_id': active_lending['_id']}, 
+                                   {'$unset': {'test_field': ''}})
+        logger.info(f"Test 3 Ergebnis: {result3}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'MongoDB Update Tests abgeschlossen',
+            'results': {
+                'test1': result1,
+                'test2': result2,
+                'test3': result3
+            },
+            'lending_id': str(active_lending['_id'])
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler in test_mongodb_update: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Fehler: {str(e)}'
         }), 500

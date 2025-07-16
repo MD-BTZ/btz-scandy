@@ -310,32 +310,128 @@ def manual_lending():
                             'message': 'Mitarbeiter nicht gefunden'
                         }), 404
 
-                # Verwende den zentralen LendingService für konsistente Verarbeitung
-                from app.services.lending_service import LendingService
-                
-                # Erstelle Request-Daten für den Service
-                service_data = {
-                    'item_barcode': item_barcode,
-                    'worker_barcode': worker_barcode,
-                    'action': action,
-                    'item_type': item_type,
-                    'quantity': quantity
-                }
-                
-                # Verarbeite über den Service
-                success, message, result_data = LendingService.process_lending_request(service_data)
-                
-                if success:
+                # Prüfe ob es ein Verbrauchsmaterial ist
+                consumable = mongodb.find_one('consumables', {'barcode': item_barcode, 'deleted': {'$ne': True}})
+                if consumable:  # Verbrauchsmaterial-Logik
+                    if not quantity or quantity <= 0:
+                        return jsonify({
+                            'success': False,
+                            'message': 'Ungültige Menge'
+                        }), 400
+                    if quantity > consumable['quantity']:
+                        return jsonify({
+                            'success': False,
+                            'message': 'Nicht genügend Bestand'
+                        }), 400
+                    # Neue Verbrauchsmaterial-Ausgabe erstellen
+                    usage_data = {
+                        'consumable_barcode': item_barcode,
+                        'worker_barcode': worker_barcode,
+                        'quantity': quantity,
+                        'used_at': datetime.now(),
+                        'updated_at': datetime.now(),
+                        'sync_status': 'pending'
+                    }
+                    mongodb.insert_one('consumable_usages', usage_data)
+                    # Bestand aktualisieren
+                    mongodb.update_one('consumables',
+                        {'barcode': item_barcode},
+                        {
+                            '$inc': {'quantity': -quantity},
+                            '$set': {
+                                'updated_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
                     return jsonify({
                         'success': True,
-                        'message': message,
-                        'data': result_data
+                        'message': f'{quantity}x {consumable["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgegeben'
                     })
-                else:
+
+                # Werkzeug-Logik
+                tool = mongodb.find_one('tools', {'barcode': item_barcode, 'deleted': {'$ne': True}})
+                if not tool:
                     return jsonify({
                         'success': False,
-                        'message': message
-                    }), 400
+                        'message': 'Werkzeug nicht gefunden'
+                    }), 404
+                # Prüfe aktuellen Status des Werkzeugs
+                active_lending = mongodb.find_one('lendings', {
+                    'tool_barcode': item_barcode,
+                    'returned_at': None
+                })
+                current_status = 'ausgeliehen' if active_lending else tool.get('status', 'verfügbar')
+                current_worker = None
+                if active_lending:
+                    current_worker = mongodb.find_one('workers', {'barcode': active_lending['worker_barcode']})
+                if action == 'lend':
+                    if current_status == 'ausgeliehen':
+                        worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "unbekannt"
+                        return jsonify({
+                            'success': False,
+                            'message': f'Dieses Werkzeug ist bereits an {worker_name} ausgeliehen'
+                        }), 400
+                    if current_status == 'defekt':
+                        return jsonify({
+                            'success': False,
+                            'message': 'Dieses Werkzeug ist als defekt markiert'
+                        }), 400
+                    # Neue Ausleihe erstellen
+                    lending_data = {
+                        'tool_barcode': item_barcode,
+                        'worker_barcode': worker_barcode,
+                        'lent_at': datetime.now()
+                    }
+                    mongodb.insert_one('lendings', lending_data)
+                    # Status des Werkzeugs aktualisieren
+                    mongodb.update_one('tools',
+                        {'barcode': item_barcode},
+                        {
+                            '$set': {
+                                'status': 'ausgeliehen',
+                                'modified_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
+                    return jsonify({
+                        'success': True,
+                        'message': f'Werkzeug {tool["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgeliehen'
+                    })
+                elif action == 'return':
+                    if current_status != 'ausgeliehen':
+                        return jsonify({
+                            'success': False,
+                            'message': 'Dieses Werkzeug ist nicht ausgeliehen'
+                        }), 400
+                    # Wenn ein Mitarbeiter angegeben wurde, prüfe ob er berechtigt ist
+                    if worker_barcode and active_lending and active_lending['worker_barcode'] != worker_barcode:
+                        worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "unbekannt"
+                        return jsonify({
+                            'success': False,
+                            'message': f'Dieses Werkzeug wurde von {worker_name} ausgeliehen'
+                        }), 403
+                    # Rückgabe verarbeiten
+                    mongodb.update_one('lendings',
+                        {'tool_barcode': item_barcode, 'returned_at': None},
+                        {'$set': {'returned_at': datetime.now()}}
+                    )
+                    # Status des Werkzeugs aktualisieren
+                    mongodb.update_one('tools',
+                        {'barcode': item_barcode},
+                        {
+                            '$set': {
+                                'status': 'verfügbar',
+                                'modified_at': datetime.now(),
+                                'sync_status': 'pending'
+                            }
+                        }
+                    )
+                    return jsonify({
+                        'success': True,
+                        'message': f'Werkzeug {tool["name"]} wurde zurückgegeben'
+                    })
             except Exception as e:
                 logger.error(f"Fehler bei der Ausleihe: {str(e)}")
                 return jsonify({
@@ -3690,21 +3786,57 @@ def version_check_page():
 def fix_lending_inconsistencies():
     """Behebt Inkonsistenzen in den Ausleihdaten"""
     try:
-        from app.services.lending_service import LendingService
+        from app.models.mongodb_database import mongodb
+        from datetime import datetime
         
-        success, message, statistics = LendingService.fix_lending_inconsistencies()
+        fixed_count = 0
+        cleaned_count = 0
         
-        if success:
-            return jsonify({
-                'success': True,
-                'message': message,
-                'statistics': statistics
+        # 1. Werkzeuge mit falschem Status korrigieren
+        tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+        
+        for tool in tools:
+            barcode = tool.get('barcode')
+            status = tool.get('status')
+            
+            # Prüfe aktive Ausleihe
+            active_lending = mongodb.find_one('lendings', {
+                'tool_barcode': barcode,
+                'returned_at': None
             })
-        else:
-            return jsonify({
-                'success': False,
-                'message': message
-            }), 500
+            
+            if active_lending and status != 'ausgeliehen':
+                # Werkzeug ist ausgeliehen aber Status ist falsch
+                mongodb.update_one('tools', 
+                                 {'barcode': barcode}, 
+                                 {'$set': {'status': 'ausgeliehen'}})
+                fixed_count += 1
+            elif not active_lending and status == 'ausgeliehen':
+                # Werkzeug ist nicht ausgeliehen aber Status ist falsch
+                mongodb.update_one('tools', 
+                                 {'barcode': barcode}, 
+                                 {'$set': {'status': 'verfügbar'}})
+                fixed_count += 1
+        
+        # 2. Verwaiste Ausleihen bereinigen
+        orphaned_lendings = list(mongodb.find('lendings', {
+            'returned_at': None,
+            'tool_barcode': {'$exists': True}
+        }))
+        
+        for lending in orphaned_lendings:
+            tool_barcode = lending.get('tool_barcode')
+            tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+            
+            if not tool:
+                # Werkzeug existiert nicht mehr, Ausleihe löschen
+                mongodb.delete_one('lendings', {'_id': lending['_id']})
+                cleaned_count += 1
+        
+        return jsonify({
+            'success': True,
+            'message': f'Inkonsistenzen behoben: {fixed_count} Werkzeug-Status korrigiert, {cleaned_count} verwaiste Ausleihen bereinigt'
+        })
         
     except Exception as e:
         logger.error(f"Fehler beim Beheben der Inkonsistenzen: {str(e)}")
@@ -3713,25 +3845,757 @@ def fix_lending_inconsistencies():
             'message': f'Fehler beim Beheben der Inkonsistenzen: {str(e)}'
         }), 500
 
-@bp.route('/debug/validate-lending-consistency', methods=['GET'])
+@bp.route('/user_form')
+@mitarbeiter_required
+def user_form():
+    """Benutzer-Formular (für neue Benutzer)"""
+    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+
+@bp.route('/export_all_data')
 @admin_required
-def validate_lending_consistency():
-    """Validiert die Konsistenz der Ausleihdaten"""
+def export_all_data():
+    """Exportiert alle Daten als Excel-Datei"""
     try:
-        from app.services.lending_service import LendingService
+        # Hole alle Daten aus der Datenbank
+        tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
+        consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+        lendings = list(mongodb.find('lendings', {}))
+        settings = list(mongodb.find('settings', {}))
         
-        is_consistent, message, issues = LendingService.validate_lending_consistency()
+        # Erstelle Excel-Datei mit mehreren Arbeitsblättern
+        data_dict = {
+            'Werkzeuge': tools,
+            'Mitarbeiter': workers,
+            'Verbrauchsmaterial': consumables,
+            'Ausleihverlauf': lendings,
+            'Settings': settings
+        }
+        
+        # Erstelle Excel-Datei
+        excel_file = create_multi_sheet_excel(data_dict)
+        
+        # Sende Datei als Download
+        return send_file(
+            excel_file,
+            as_attachment=True,
+            download_name=f'scandy_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Exportieren der Daten: {str(e)}")
+        flash('Fehler beim Exportieren der Daten', 'error')
+        return redirect(url_for('admin.system'))
+
+def fix_id_for_import(doc):
+    """
+    Wandelt das _id-Feld in einen echten ObjectId um, wenn möglich.
+    Verbesserte Version für robuste Importe.
+    """
+    if '_id' in doc:
+        # Falls _id ein String ist und wie eine ObjectId aussieht
+        if isinstance(doc['_id'], str) and len(doc['_id']) == 24:
+            try:
+                doc['_id'] = ObjectId(doc['_id'])
+            except Exception:
+                # Falls es keine gültige ObjectId ist, entferne das Feld
+                # MongoDB wird automatisch eine neue ObjectId generieren
+                del doc['_id']
+        # Falls _id bereits eine ObjectId ist, belasse es
+        elif isinstance(doc['_id'], ObjectId):
+            pass
+        # Falls _id ein anderer Typ ist, entferne es
+        else:
+            del doc['_id']
+    
+    # Entferne NaN-Werte und leere Strings
+    cleaned_doc = {}
+    for key, value in doc.items():
+        if pd.isna(value) or value == '' or value == 'nan':
+            continue
+        cleaned_doc[key] = value
+    
+    return cleaned_doc
+
+@bp.route('/import_all_data', methods=['POST'])
+@admin_required
+def import_all_data():
+    """Importiert Daten aus einer Excel-Datei"""
+    try:
+        if 'file' not in request.files:
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('admin.system'))
+            
+        file = request.files['file']
+        if file.filename == '':
+            flash('Keine Datei ausgewählt', 'error')
+            return redirect(url_for('admin.system'))
+            
+        if not file.filename.endswith('.xlsx'):
+            flash('Nur Excel-Dateien (.xlsx) werden unterstützt', 'error')
+            return redirect(url_for('admin.system'))
+        
+        # Speichere temporäre Datei
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            file.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Lese Excel-Datei
+            import pandas as pd
+            
+            # Lese alle Arbeitsblätter
+            excel_file = pd.ExcelFile(tmp_file_path)
+            
+            imported_count = 0
+            errors = []
+            
+            # Importiere Werkzeuge
+            if 'Werkzeuge' in excel_file.sheet_names:
+                try:
+                    df_tools = pd.read_excel(excel_file, sheet_name='Werkzeuge')
+                    for index, row in df_tools.iterrows():
+                        try:
+                            tool_data = row.to_dict()
+                            tool_data = fix_id_for_import(tool_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not tool_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Werkzeug ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('tools', {'barcode': tool_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('tools', tool_data)
+                                imported_count += 1
+                            else:
+                                # Update existierendes Werkzeug
+                                mongodb.update_one('tools', {'barcode': tool_data.get('barcode')}, {'$set': tool_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Werkzeug: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Werkzeuge-Tabelle: {str(e)}")
+            
+            # Importiere Mitarbeiter
+            if 'Mitarbeiter' in excel_file.sheet_names:
+                try:
+                    df_workers = pd.read_excel(excel_file, sheet_name='Mitarbeiter')
+                    for index, row in df_workers.iterrows():
+                        try:
+                            worker_data = row.to_dict()
+                            worker_data = fix_id_for_import(worker_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not worker_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Mitarbeiter ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('workers', {'barcode': worker_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('workers', worker_data)
+                                imported_count += 1
+                            else:
+                                # Update existierenden Mitarbeiter
+                                mongodb.update_one('workers', {'barcode': worker_data.get('barcode')}, {'$set': worker_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Mitarbeiter: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Mitarbeiter-Tabelle: {str(e)}")
+            
+            # Importiere Verbrauchsmaterial
+            if 'Verbrauchsmaterial' in excel_file.sheet_names:
+                try:
+                    df_consumables = pd.read_excel(excel_file, sheet_name='Verbrauchsmaterial')
+                    for index, row in df_consumables.iterrows():
+                        try:
+                            consumable_data = row.to_dict()
+                            consumable_data = fix_id_for_import(consumable_data)
+                            
+                            # Prüfe ob Barcode vorhanden ist
+                            if not consumable_data.get('barcode'):
+                                errors.append(f"Zeile {index + 2}: Verbrauchsmaterial ohne Barcode übersprungen")
+                                continue
+                            
+                            existing = mongodb.find_one('consumables', {'barcode': consumable_data.get('barcode')})
+                            if not existing:
+                                mongodb.insert_one('consumables', consumable_data)
+                                imported_count += 1
+                            else:
+                                # Update existierendes Verbrauchsmaterial
+                                mongodb.update_one('consumables', {'barcode': consumable_data.get('barcode')}, {'$set': consumable_data})
+                                imported_count += 1
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Verbrauchsmaterial: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Verbrauchsmaterial-Tabelle: {str(e)}")
+            
+            # Importiere Settings (Kategorien, Standorte, Abteilungen)
+            if 'Settings' in excel_file.sheet_names:
+                try:
+                    df_settings = pd.read_excel(excel_file, sheet_name='Settings')
+                    for index, row in df_settings.iterrows():
+                        try:
+                            setting_data = row.to_dict()
+                            setting_data = fix_id_for_import(setting_data)
+                            valid_settings = ['categories', 'locations', 'departments', 'ticket_categories', 
+                                            'label_tools_name', 'label_tools_icon', 'label_consumables_name', 
+                                            'label_consumables_icon', 'label_tickets_name', 'label_tickets_icon']
+                            
+                            if setting_data.get('key') in valid_settings:
+                                existing = mongodb.find_one('settings', {'key': setting_data.get('key')})
+                                if not existing:
+                                    mongodb.insert_one('settings', setting_data)
+                                    imported_count += 1
+                                else:
+                                    mongodb.update_one('settings', 
+                                                     {'key': setting_data.get('key')}, 
+                                                     {'$set': setting_data})
+                                    imported_count += 1
+                            else:
+                                errors.append(f"Zeile {index + 2}: Ungültige Setting '{setting_data.get('key')}' übersprungen")
+                        except Exception as e:
+                            errors.append(f"Zeile {index + 2}: Fehler bei Setting: {str(e)}")
+                except Exception as e:
+                    errors.append(f"Fehler beim Lesen der Settings-Tabelle: {str(e)}")
+            
+            # Zeige Erfolgsmeldung und eventuelle Fehler
+            if errors:
+                error_message = f'{imported_count} Datensätze importiert. {len(errors)} Fehler aufgetreten: ' + '; '.join(errors[:5])
+                if len(errors) > 5:
+                    error_message += f'... und {len(errors) - 5} weitere'
+                flash(error_message, 'warning')
+            else:
+                flash(f'{imported_count} Datensätze erfolgreich importiert', 'success')
+            
+        finally:
+            os.unlink(tmp_file_path)
+        
+        return redirect(url_for('admin.system'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Importieren der Daten: {str(e)}")
+        flash(f'Fehler beim Importieren: {str(e)}', 'error')
+        return redirect(url_for('admin.system'))
+
+@bp.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    """Passwort-Reset per E-Mail"""
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        
+        if not email:
+            flash('Bitte geben Sie eine E-Mail-Adresse ein.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Prüfe ob Benutzer mit dieser E-Mail existiert
+        user = mongodb.find_one('users', {'email': email})
+        if not user:
+            flash('Kein Benutzer mit dieser E-Mail-Adresse gefunden.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Generiere sicheres neues Passwort (wie bei add_user)
+        import secrets
+        import string
+        # Mindestens 1 von jeder Kategorie sicherstellen
+        password = (
+            secrets.choice(string.ascii_uppercase) +  # 1 Großbuchstabe
+            secrets.choice(string.ascii_lowercase) +  # 1 Kleinbuchstabe
+            secrets.choice(string.digits) +           # 1 Ziffer
+            secrets.choice("!@#$%^&*") +              # 1 Sonderzeichen
+            ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(8))  # 8 weitere zufällige Zeichen
+        )
+        # Passwort mischen
+        password_list = list(password)
+        secrets.SystemRandom().shuffle(password_list)
+        password = ''.join(password_list)
+        
+        # Hash das neue Passwort
+        from werkzeug.security import generate_password_hash
+        password_hash = generate_password_hash(password)
+        
+        # Aktualisiere das Passwort in der Datenbank
+        try:
+            result = mongodb.update_one('users', 
+                                     {'_id': convert_id_for_query(user['_id'])}, 
+                                     {'$set': {'password_hash': password_hash, 'updated_at': datetime.now()}})
+            
+            # Prüfe ob das Update erfolgreich war (result ist ein bool)
+            if not result:
+                logger.error(f"Fehler beim Aktualisieren des Passworts für Benutzer {user['username']} - Update fehlgeschlagen")
+                flash('Fehler beim Zurücksetzen des Passworts.', 'error')
+                return render_template('auth/reset_password.html')
+            
+            logger.info(f"Passwort erfolgreich zurückgesetzt für Benutzer {user['username']} ({email})")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren des Passworts in der Datenbank: {e}")
+            flash('Fehler beim Zurücksetzen des Passworts.', 'error')
+            return render_template('auth/reset_password.html')
+        
+        # Sende E-Mail mit neuem Passwort
+        try:
+            from app.utils.email_utils import send_password_reset_mail
+            send_result = send_password_reset_mail(email, password=password)
+            if send_result:
+                flash('Ein neues Passwort wurde an Ihre E-Mail-Adresse gesendet.', 'success')
+                logger.info(f"Passwort-Reset-E-Mail erfolgreich an {email} gesendet")
+            else:
+                flash('Passwort wurde zurückgesetzt, aber E-Mail konnte nicht versendet werden.', 'warning')
+                logger.warning(f"Passwort-Reset-E-Mail konnte nicht an {email} gesendet werden")
+        except Exception as e:
+            logger.error(f"Fehler beim Versenden der E-Mail: {e}")
+            flash('Passwort wurde zurückgesetzt, aber E-Mail konnte nicht versendet werden.', 'warning')
+        
+        return redirect(url_for('auth.login'))
+    
+    return render_template('auth/reset_password.html')
+
+
+
+@bp.route('/backup/auto/status')
+@login_required
+@admin_required
+def auto_backup_status():
+    """Gibt den Status des automatischen Backup-Systems zurück"""
+    try:
+        from app.utils.auto_backup import get_auto_backup_status
+        status = get_auto_backup_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen des Auto-Backup-Status: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Abrufen des Status: {str(e)}'
+        })
+
+@bp.route('/backup/auto/start', methods=['POST'])
+@login_required
+@admin_required
+def start_auto_backup():
+    """Startet das automatische Backup-System"""
+    try:
+        from app.utils.auto_backup import start_auto_backup
+        start_auto_backup()
+        return jsonify({
+            'success': True,
+            'message': 'Automatisches Backup-System gestartet'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Auto-Backup-Systems: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Starten: {str(e)}'
+        })
+
+@bp.route('/backup/auto/stop', methods=['POST'])
+@login_required
+@admin_required
+def stop_auto_backup():
+    """Stoppt das automatische Backup-System"""
+    try:
+        from app.utils.auto_backup import stop_auto_backup
+        stop_auto_backup()
+        return jsonify({
+            'success': True,
+            'message': 'Automatisches Backup-System gestoppt'
+        })
+    except Exception as e:
+        logger.error(f"Fehler beim Stoppen des Auto-Backup-Systems: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Stoppen: {str(e)}'
+        })
+
+@bp.route('/backup/auto/logs')
+@login_required
+@admin_required
+def auto_backup_logs():
+    """Gibt die Auto-Backup-Logs zurück"""
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        log_file = auto_backup_scheduler.log_file
+        
+        if log_file.exists():
+            with open(log_file, 'r', encoding='utf-8') as f:
+                logs = f.readlines()
+            # Letzte 50 Zeilen
+            recent_logs = logs[-50:] if len(logs) > 50 else logs
+            return jsonify({
+                'success': True,
+                'logs': recent_logs
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'logs': ['Keine Logs verfügbar']
+            })
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Auto-Backup-Logs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Abrufen der Logs: {str(e)}'
+        })
+
+@bp.route('/auto-backup', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def auto_backup():
+    """Automatisches Backup-System Verwaltungsseite"""
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        
+        if request.method == 'POST':
+            action = request.form.get('action')
+            
+            if action == 'save_times':
+                # Backup-Zeiten speichern
+                times_input = request.form.get('backup_times', '')
+                times_list = [t.strip() for t in times_input.split(',') if t.strip()]
+                
+                success, message = auto_backup_scheduler.save_backup_times(times_list)
+                
+                if success:
+                    flash('Backup-Zeiten erfolgreich gespeichert.', 'success')
+                else:
+                    flash(f'Fehler beim Speichern der Backup-Zeiten: {message}', 'error')
+            
+            elif action == 'save_weekly_time':
+                # Wöchentliche Backup-Zeit speichern
+                weekly_time = request.form.get('weekly_backup_time', '').strip()
+                
+                success, message = auto_backup_scheduler.save_weekly_backup_time(weekly_time)
+                
+                if success:
+                    flash('Wöchentliche Backup-Zeit erfolgreich gespeichert.', 'success')
+                else:
+                    flash(f'Fehler beim Speichern der wöchentlichen Backup-Zeit: {message}', 'error')
+            
+            elif action == 'save_weekly_email':
+                # E-Mail für wöchentliche Backups speichern
+                weekly_email = request.form.get('weekly_backup_email', '').strip()
+                
+                if weekly_email and '@' in weekly_email:
+                    try:
+                        from app.models.mongodb_database import mongodb
+                        mongodb.update_one('settings', 
+                                         {'key': 'weekly_backup_email'}, 
+                                         {'$set': {'value': weekly_email}}, 
+                                         upsert=True)
+                        flash('E-Mail-Adresse für wöchentliche Backups erfolgreich gespeichert.', 'success')
+                    except Exception as e:
+                        logger.error(f"Fehler beim Speichern der wöchentlichen Backup-E-Mail: {e}")
+                        flash(f'Fehler beim Speichern der E-Mail-Adresse: {str(e)}', 'error')
+                else:
+                    flash('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'error')
+        
+        # Lade aktuelle Einstellungen
+        current_times = auto_backup_scheduler.get_backup_times()
+        current_weekly_time = auto_backup_scheduler.get_weekly_backup_time()
+        current_weekly_email = auto_backup_scheduler._get_weekly_backup_email()
+        
+        return render_template('admin/auto_backup.html', 
+                             backup_times=current_times,
+                             weekly_backup_time=current_weekly_time,
+                             weekly_backup_email=current_weekly_email)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei Auto-Backup-Einstellungen: {e}")
+        flash('Fehler beim Laden der Auto-Backup-Einstellungen.', 'error')
+        return render_template('admin/auto_backup.html', 
+                             backup_times=['06:00', '18:00'],
+                             weekly_backup_time='17:00',
+                             weekly_backup_email='')
+
+@bp.route('/email_settings', methods=['GET', 'POST'])
+@admin_required
+def email_settings():
+    """E-Mail-Konfiguration verwalten"""
+    try:
+        # Session-Persistierung vor dem Speichern
+        current_user_id = session.get('user_id')
+        current_username = session.get('username')
+        current_role = session.get('role')
+        current_authenticated = session.get('is_authenticated', False)
+        
+        if request.method == 'POST':
+            action = request.form.get('action')
+            
+            if action == 'save':
+                # E-Mail-Konfiguration speichern
+                use_auth = request.form.get('use_auth') == 'on'
+                
+                if use_auth:
+                    # Mit Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('mail_username', ''),
+                        'mail_password': request.form.get('mail_password', ''),
+                        'test_email': request.form.get('test_email', ''),
+                        'use_auth': True
+                    }
+                else:
+                    # Ohne Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('sender_email', ''),  # Absender-E-Mail
+                        'mail_password': '',  # Kein Passwort
+                        'test_email': request.form.get('test_email', ''),
+                        'use_auth': False
+                    }
+                
+                success, message = AdminEmailService.save_email_config(config_data)
+                
+                # Session wiederherstellen nach dem Speichern
+                if current_user_id:
+                    session['user_id'] = current_user_id
+                if current_username:
+                    session['username'] = current_username
+                if current_role:
+                    session['role'] = current_role
+                if current_authenticated:
+                    session['is_authenticated'] = current_authenticated
+                
+                if success:
+                    flash(message, 'success')
+                else:
+                    flash(message, 'error')
+                    
+            elif action == 'test':
+                # E-Mail-Konfiguration testen
+                use_auth = request.form.get('use_auth') == 'on'
+                
+                if use_auth:
+                    # Mit Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('mail_username', ''),
+                        'mail_password': request.form.get('mail_password', ''),
+                        'test_email': request.form.get('test_email', '')
+                    }
+                else:
+                    # Ohne Authentifizierung
+                    config_data = {
+                        'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
+                        'mail_port': int(request.form.get('mail_port', 587)),
+                        'mail_use_tls': request.form.get('mail_use_tls') == 'on',
+                        'mail_username': request.form.get('sender_email', ''),  # Absender-E-Mail
+                        'mail_password': '',  # Kein Passwort
+                        'test_email': request.form.get('test_email', '')
+                    }
+                
+                success, message = AdminEmailService.test_email_config(config_data)
+                
+                # Session wiederherstellen nach dem Test
+                if current_user_id:
+                    session['user_id'] = current_user_id
+                if current_username:
+                    session['username'] = current_username
+                if current_role:
+                    session['role'] = current_role
+                if current_authenticated:
+                    session['is_authenticated'] = current_authenticated
+                
+                if success:
+                    flash(f'E-Mail-Test erfolgreich: {message}', 'success')
+                else:
+                    flash(f'E-Mail-Test fehlgeschlagen: {message}', 'error')
+        
+        # Lade aktuelle Konfiguration
+        config = AdminEmailService.get_email_config()
+        
+        return render_template('admin/email_settings.html', config=config)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei E-Mail-Einstellungen: {e}")
+        
+        # Session wiederherstellen bei Fehlern
+        if current_user_id:
+            session['user_id'] = current_user_id
+        if current_username:
+            session['username'] = current_username
+        if current_role:
+            session['role'] = current_role
+        if current_authenticated:
+            session['is_authenticated'] = current_authenticated
+        
+        flash('Fehler beim Laden der E-Mail-Einstellungen.', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@bp.route('/admin/email/diagnose', methods=['POST'])
+@login_required
+@admin_required
+def diagnose_email():
+    """Diagnostiziert die SMTP-Verbindung"""
+    try:
+        config_data = AdminEmailService.get_email_config()
+        if not config_data:
+            return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
+        
+        success, result = AdminEmailService.diagnose_smtp_connection(config_data)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'SMTP-Diagnose erfolgreich',
+                'diagnosis': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Diagnose-Fehler: {str(e)}'
+        })
+
+@bp.route('/admin/email/test-simple', methods=['POST'])
+@login_required
+@admin_required
+def test_email_simple():
+    """Einfacher E-Mail-Test"""
+    try:
+        config_data = AdminEmailService.get_email_config()
+        if not config_data:
+            return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
+        
+        success, message = AdminEmailService.test_email_config(config_data)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': message
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Test-Fehler: {str(e)}'
+        })
+
+@bp.route('/backup/weekly/test', methods=['POST'])
+@login_required
+@admin_required
+def test_weekly_backup():
+    """Sendet das wöchentliche Backup-Archiv manuell"""
+    try:
+        from app.utils.auto_backup import auto_backup_scheduler
+        
+        # Führe wöchentliches Backup-Archiv manuell aus
+        auto_backup_scheduler._create_weekly_backup_archive()
         
         return jsonify({
             'success': True,
-            'is_consistent': is_consistent,
-            'message': message,
-            'issues': issues
+            'message': 'Backup-Archiv erfolgreich erstellt, versendet und ZIP-Datei gelöscht'
         })
-        
     except Exception as e:
-        logger.error(f"Fehler bei der Konsistenzprüfung: {str(e)}")
+        logger.error(f"Fehler beim Versenden des Backup-Archivs: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'Fehler bei der Konsistenzprüfung: {str(e)}'
+            'message': f'Fehler beim Versenden: {str(e)}'
+        })
+
+@bp.route('/version/check', methods=['GET'])
+@login_required
+@admin_required
+def check_version():
+    """Prüft ob Updates verfügbar sind"""
+    try:
+        from app.utils.version_checker import check_version
+        
+        result = check_version()
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Versionscheck: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Versionscheck: {str(e)}'
         }), 500
+
+@bp.route('/version_check', methods=['GET'])
+@login_required
+def version_check():
+    """Prüft ob Updates verfügbar sind (für alle Benutzer)"""
+    try:
+        from app.utils.version_checker import check_version
+        
+        result = check_version()
+        
+        # Vereinfachte Antwort für das Menü
+        if result.get('status') == 'update_available':
+            return jsonify({
+                'update_available': True,
+                'current_version': result.get('current_version'),
+                'latest_version': result.get('latest_version')
+            })
+        else:
+            return jsonify({
+                'update_available': False,
+                'current_version': result.get('current_version')
+            })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Versionscheck: {str(e)}")
+        return jsonify({
+            'update_available': False,
+            'error': str(e)
+        })
+
+@bp.route('/version/info', methods=['GET'])
+@login_required
+@admin_required
+def get_version_info():
+    """Gibt detaillierte Versionsinformationen zurück"""
+    try:
+        from app.utils.version_checker import get_version_info
+        
+        info = get_version_info()
+        return jsonify(info)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Versionsinformationen: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Abrufen der Versionsinformationen: {str(e)}'
+        }), 500
+
+@bp.route('/version', methods=['GET'])
+@login_required
+@admin_required
+def version_check_page():
+    """Versionscheck-Seite"""
+    try:
+        return render_template('admin/version_check.html')
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Versionscheck-Seite: {str(e)}")
+        flash(f'Fehler beim Laden der Seite: {str(e)}', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+
+
+
+
+

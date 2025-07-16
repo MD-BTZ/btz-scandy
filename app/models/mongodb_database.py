@@ -95,7 +95,11 @@ class MongoDBDatabase:
     def find_one(self, collection_name: str, filter_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Findet ein Dokument in einer Collection"""
         collection = self.get_collection(collection_name)
-        result = collection.find_one(filter_dict)
+        
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        result = collection.find_one(processed_filter)
         
         if result:
             # ObjectId zu String konvertieren
@@ -111,7 +115,10 @@ class MongoDBDatabase:
         if filter_dict is None:
             filter_dict = {}
         
-        cursor = collection.find(filter_dict)
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        cursor = collection.find(processed_filter)
         
         if sort:
             cursor = cursor.sort(sort)
@@ -132,6 +139,9 @@ class MongoDBDatabase:
         """Aktualisiert ein Dokument in einer Collection"""
         collection = self.get_collection(collection_name)
         
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
         # Prüfe ob update_dict bereits MongoDB-Operatoren enthält
         has_operators = any(key.startswith('$') for key in update_dict.keys())
         
@@ -147,10 +157,13 @@ class MongoDBDatabase:
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
         try:
-            result = collection.update_one(filter_dict, update_dict, upsert=upsert)
+            result = collection.update_one(processed_filter, update_dict, upsert=upsert)
             
             # Debug-Logs für bessere Fehlerdiagnose
-            # logger.info(f"DEBUG: update_one Ergebnis - matched_count: {result.matched_count}, modified_count: {result.modified_count}, upserted_id: {result.upserted_id}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"DEBUG: update_one Ergebnis - matched_count: {result.matched_count}, modified_count: {result.modified_count}, upserted_id: {result.upserted_id}")
+            logger.info(f"DEBUG: update_one Filter: {processed_filter}")
             
             # Betrachte die Operation als erfolgreich, wenn:
             # 1. Ein Dokument modifiziert wurde, ODER
@@ -160,19 +173,42 @@ class MongoDBDatabase:
                       result.upserted_id is not None or 
                       result.matched_count > 0)
             
-            # logger.info(f"DEBUG: update_one Erfolg: {success}")
+            logger.info(f"DEBUG: update_one Erfolg: {success}")
             return success
             
         except Exception as e:
-            # logger.error(f"Fehler bei update_one: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Fehler bei update_one: {e}")
             return False
+    
+    def _process_filter_ids(self, filter_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Konvertiert String-IDs zu ObjectIds in Filter-Dictionaries"""
+        processed_filter = {}
+        
+        for key, value in filter_dict.items():
+            if key == '_id' and isinstance(value, str):
+                try:
+                    from bson import ObjectId
+                    processed_filter[key] = ObjectId(value)
+                except Exception:
+                    # Falls Konvertierung fehlschlägt, verwende Original-Wert
+                    processed_filter[key] = value
+            else:
+                processed_filter[key] = value
+        
+        return processed_filter
     
     def update_one_array(self, collection_name: str, filter_dict: Dict[str, Any], 
                         update_dict: Dict[str, Any], upsert: bool = False) -> bool:
         """Aktualisiert ein Dokument in einer Collection mit Array-Operationen ($push, $pull, etc.)
         Diese Methode fügt keine automatischen Timestamps hinzu, um Konflikte zu vermeiden."""
         collection = self.get_collection(collection_name)
-        result = collection.update_one(filter_dict, update_dict, upsert=upsert)
+        
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        result = collection.update_one(processed_filter, update_dict, upsert=upsert)
         return result.modified_count > 0 or result.upserted_id is not None
     
     def update_many(self, collection_name: str, filter_dict: Dict[str, Any], 
@@ -200,13 +236,21 @@ class MongoDBDatabase:
     def delete_one(self, collection_name: str, filter_dict: Dict[str, Any]) -> bool:
         """Löscht ein Dokument aus einer Collection"""
         collection = self.get_collection(collection_name)
-        result = collection.delete_one(filter_dict)
+        
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        result = collection.delete_one(processed_filter)
         return result.deleted_count > 0
     
     def delete_many(self, collection_name: str, filter_dict: Dict[str, Any]) -> int:
         """Löscht mehrere Dokumente aus einer Collection"""
         collection = self.get_collection(collection_name)
-        result = collection.delete_many(filter_dict)
+        
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        result = collection.delete_many(processed_filter)
         return result.deleted_count
     
     def count_documents(self, collection_name: str, filter_dict: Dict[str, Any] = None) -> int:
@@ -216,7 +260,10 @@ class MongoDBDatabase:
         if filter_dict is None:
             filter_dict = {}
         
-        return collection.count_documents(filter_dict)
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        return collection.count_documents(processed_filter)
     
     def aggregate(self, collection_name: str, pipeline: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Führt eine Aggregation-Pipeline aus"""

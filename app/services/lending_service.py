@@ -24,15 +24,31 @@ class LendingService:
             (success, message, result_data)
         """
         try:
-            item_barcode = data.get('item_barcode')
-            worker_barcode = data.get('worker_barcode')
-            action = data.get('action')  # 'lend', 'return', 'consume'
-            item_type = data.get('item_type')  # 'tool', 'consumable'
+            item_barcode = data.get('item_barcode', '').strip()
+            worker_barcode = data.get('worker_barcode', '').strip()
+            action = data.get('action', '').strip()
+            item_type = data.get('item_type', '').strip()
             quantity = data.get('quantity', 1)
             
-            # Validierung
-            if not all([item_barcode, worker_barcode, action, item_type]):
-                return False, 'Fehlende Parameter', {}
+            # Erweiterte Validierung
+            if not item_barcode:
+                return False, 'Item-Barcode ist erforderlich', {}
+            if not worker_barcode:
+                return False, 'Worker-Barcode ist erforderlich', {}
+            if not action:
+                return False, 'Aktion ist erforderlich', {}
+            if not item_type:
+                return False, 'Item-Typ ist erforderlich', {}
+            
+            # Validiere Aktionen
+            valid_actions = ['lend', 'return', 'consume']
+            if action not in valid_actions:
+                return False, f'Ungültige Aktion. Erlaubt: {", ".join(valid_actions)}', {}
+            
+            # Validiere Item-Typen
+            valid_types = ['tool', 'consumable']
+            if item_type not in valid_types:
+                return False, f'Ungültiger Item-Typ. Erlaubt: {", ".join(valid_types)}', {}
             
             # Prüfe ob Mitarbeiter existiert
             worker = mongodb.find_one('workers', {'barcode': worker_barcode, 'deleted': {'$ne': True}})
@@ -53,7 +69,7 @@ class LendingService:
     
     @staticmethod
     def _process_tool_lending(item_barcode: str, worker_barcode: str, action: str, worker: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
-        """Verarbeitet Werkzeug-Ausleihe/Rückgabe"""
+        """Verarbeitet Werkzeug-Ausleihe/Rückgabe mit verbesserter Konsistenz"""
         try:
             # Prüfe ob Werkzeug existiert
             tool = mongodb.find_one('tools', {'barcode': item_barcode, 'deleted': {'$ne': True}})
@@ -61,62 +77,9 @@ class LendingService:
                 return False, 'Werkzeug nicht gefunden', {}
             
             if action == 'lend':
-                # Prüfe ob bereits ausgeliehen
-                active_lending = mongodb.find_one('lendings', {
-                    'tool_barcode': item_barcode,
-                    'returned_at': None
-                })
-                
-                if active_lending:
-                    current_worker = mongodb.find_one('workers', {'barcode': active_lending['worker_barcode']})
-                    worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "Unbekannt"
-                    return False, f'Dieses Werkzeug ist bereits an {worker_name} ausgeliehen', {}
-                
-                if tool.get('status') == 'defekt':
-                    return False, 'Dieses Werkzeug ist als defekt markiert', {}
-                
-                # Neue Ausleihe erstellen
-                lending_data = {
-                    'tool_barcode': item_barcode,
-                    'worker_barcode': worker_barcode,
-                    'lent_at': datetime.now()
-                }
-                mongodb.insert_one('lendings', lending_data)
-                
-                # Status des Werkzeugs aktualisieren
-                mongodb.update_one('tools', 
-                                 {'barcode': item_barcode}, 
-                                 {'$set': {'status': 'ausgeliehen', 'modified_at': datetime.now()}})
-                
-                return True, f'Werkzeug {tool["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgeliehen', {
-                    'tool_name': tool['name'],
-                    'worker_name': f"{worker['firstname']} {worker['lastname']}"
-                }
-                
+                return LendingService._lend_tool(item_barcode, worker_barcode, tool, worker)
             elif action == 'return':
-                # Prüfe ob ausgeliehen
-                active_lending = mongodb.find_one('lendings', {
-                    'tool_barcode': item_barcode,
-                    'returned_at': None
-                })
-                
-                if not active_lending:
-                    return False, 'Dieses Werkzeug ist nicht ausgeliehen', {}
-                
-                # Rückgabe markieren
-                mongodb.update_one('lendings', 
-                                 {'_id': active_lending['_id']}, 
-                                 {'$set': {'returned_at': datetime.now()}})
-                
-                # Status des Werkzeugs aktualisieren
-                mongodb.update_one('tools', 
-                                 {'barcode': item_barcode}, 
-                                 {'$set': {'status': 'verfügbar', 'modified_at': datetime.now()}})
-                
-                return True, f'Werkzeug {tool["name"]} wurde erfolgreich zurückgegeben', {
-                    'tool_name': tool['name']
-                }
-            
+                return LendingService._return_tool(item_barcode, worker_barcode, tool, worker)
             else:
                 return False, 'Ungültige Aktion für Werkzeug', {}
                 
@@ -125,11 +88,199 @@ class LendingService:
             return False, f'Fehler bei der Werkzeug-Verarbeitung: {str(e)}', {}
     
     @staticmethod
+    def _lend_tool(item_barcode: str, worker_barcode: str, tool: Dict[str, Any], worker: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
+        """Verarbeitet Werkzeug-Ausleihe mit Konsistenzprüfung"""
+        try:
+            # Prüfe ob bereits ausgeliehen
+            active_lending = mongodb.find_one('lendings', {
+                'tool_barcode': item_barcode,
+                'returned_at': None
+            })
+            
+            if active_lending:
+                current_worker = mongodb.find_one('workers', {'barcode': active_lending['worker_barcode']})
+                worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "Unbekannt"
+                return False, f'Dieses Werkzeug ist bereits an {worker_name} ausgeliehen', {}
+            
+            # Prüfe Werkzeug-Status
+            if tool.get('status') == 'defekt':
+                return False, 'Dieses Werkzeug ist als defekt markiert', {}
+            
+            # Erstelle neue Ausleihe
+            lending_data = {
+                'tool_barcode': item_barcode,
+                'worker_barcode': worker_barcode,
+                'lent_at': datetime.now(),
+                'created_at': datetime.now(),
+                'sync_status': 'pending'
+            }
+            
+            lending_result = mongodb.insert_one('lendings', lending_data)
+            if not lending_result:
+                return False, 'Fehler beim Erstellen der Ausleihe', {}
+            
+            # Aktualisiere Werkzeug-Status
+            tool_update_result = mongodb.update_one('tools', 
+                                                 {'barcode': item_barcode}, 
+                                                 {
+                                                     '$set': {
+                                                         'status': 'ausgeliehen', 
+                                                         'modified_at': datetime.now(),
+                                                         'sync_status': 'pending'
+                                                     }
+                                                 })
+            
+            if not tool_update_result:
+                # Rollback: Lösche die Ausleihe wenn Werkzeug-Update fehlschlägt
+                mongodb.delete_one('lendings', {'_id': lending_result})
+                return False, 'Fehler beim Aktualisieren des Werkzeug-Status', {}
+            
+            logger.info(f"Werkzeug {tool['name']} erfolgreich an {worker['firstname']} {worker['lastname']} ausgeliehen")
+            
+            return True, f'Werkzeug {tool["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgeliehen', {
+                'tool_name': tool['name'],
+                'worker_name': f"{worker['firstname']} {worker['lastname']}",
+                'lending_id': str(lending_result)
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Werkzeug-Ausleihe: {str(e)}")
+            return False, f'Fehler bei der Ausleihe: {str(e)}', {}
+    
+    @staticmethod
+    def _return_tool(item_barcode: str, worker_barcode: str, tool: Dict[str, Any], worker: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
+        """Verarbeitet Werkzeug-Rückgabe mit Konsistenzprüfung"""
+        try:
+            logger.info(f"_return_tool aufgerufen: item_barcode={item_barcode}, worker_barcode={worker_barcode}")
+            
+            # Finde aktive Ausleihe
+            active_lending = mongodb.find_one('lendings', {
+                'tool_barcode': item_barcode,
+                'returned_at': None
+            })
+            
+            logger.info(f"Aktive Ausleihe gefunden: {active_lending}")
+            
+            if not active_lending:
+                logger.warning(f"Keine aktive Ausleihe für Werkzeug {item_barcode}")
+                return False, 'Dieses Werkzeug ist nicht ausgeliehen', {}
+            
+            # Prüfe Berechtigung (optional)
+            if worker_barcode and active_lending['worker_barcode'] != worker_barcode:
+                current_worker = mongodb.find_one('workers', {'barcode': active_lending['worker_barcode']})
+                worker_name = f"{current_worker['firstname']} {current_worker['lastname']}" if current_worker else "Unbekannt"
+                logger.warning(f"Berechtigungsfehler: Werkzeug wurde von {worker_name} ausgeliehen")
+                return False, f'Dieses Werkzeug wurde von {worker_name} ausgeliehen', {}
+            
+            # Markiere Ausleihe als zurückgegeben
+            try:
+                logger.info(f"Versuche Ausleihe zu markieren: {active_lending['_id']}")
+                
+                # Konvertiere String-ID zu ObjectId falls nötig
+                from bson import ObjectId
+                lending_id = active_lending['_id']
+                if isinstance(lending_id, str):
+                    try:
+                        lending_id = ObjectId(lending_id)
+                        logger.info(f"String-ID zu ObjectId konvertiert: {lending_id}")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Konvertieren der ID: {str(e)}")
+                        return False, f'Fehler beim Konvertieren der ID: {str(e)}', {}
+                
+                lending_update_result = mongodb.update_one('lendings', 
+                                                        {'_id': lending_id}, 
+                                                        {
+                                                            '$set': {
+                                                                'returned_at': datetime.now(),
+                                                                'updated_at': datetime.now(),
+                                                                'sync_status': 'pending'
+                                                            }
+                                                        })
+                
+                logger.info(f"Lending Update Result: {lending_update_result}")
+                
+                if not lending_update_result:
+                    logger.error(f"Fehler beim Markieren der Rückgabe für Ausleihe {active_lending['_id']}")
+                    return False, 'Fehler beim Markieren der Rückgabe', {}
+                else:
+                    logger.info(f"Ausleihe erfolgreich markiert als zurückgegeben")
+            except Exception as e:
+                logger.error(f"Exception beim Markieren der Rückgabe: {str(e)}")
+                return False, f'Fehler beim Markieren der Rückgabe: {str(e)}', {}
+            
+            # Aktualisiere Werkzeug-Status
+            try:
+                logger.info(f"Versuche Werkzeug-Status zu aktualisieren: {item_barcode}")
+                tool_update_result = mongodb.update_one('tools', 
+                                                     {'barcode': item_barcode}, 
+                                                     {
+                                                         '$set': {
+                                                             'status': 'verfügbar', 
+                                                             'modified_at': datetime.now(),
+                                                             'sync_status': 'pending'
+                                                         }
+                                                     })
+                
+                logger.info(f"Tool Update Result: {tool_update_result}")
+                
+                if not tool_update_result:
+                    # Rollback: Setze Ausleihe zurück wenn Werkzeug-Update fehlschlägt
+                    logger.warning(f"Tool Update fehlgeschlagen, führe Rollback durch")
+                    try:
+                        mongodb.update_one('lendings', 
+                                         {'_id': active_lending['_id']}, 
+                                         {
+                                             '$unset': {
+                                                 'returned_at': '',
+                                                 'updated_at': '',
+                                                 'sync_status': ''
+                                             }
+                                         })
+                    except Exception as rollback_error:
+                        logger.error(f"Rollback fehlgeschlagen: {str(rollback_error)}")
+                    
+                    return False, 'Fehler beim Aktualisieren des Werkzeug-Status', {}
+                else:
+                    logger.info(f"Werkzeug-Status erfolgreich aktualisiert")
+            except Exception as e:
+                logger.error(f"Exception beim Aktualisieren des Werkzeug-Status: {str(e)}")
+                # Rollback versuchen
+                try:
+                    mongodb.update_one('lendings', 
+                                     {'_id': active_lending['_id']}, 
+                                     {
+                                         '$unset': {
+                                             'returned_at': '',
+                                             'updated_at': '',
+                                             'sync_status': ''
+                                         }
+                                     })
+                except Exception as rollback_error:
+                    logger.error(f"Rollback fehlgeschlagen: {str(rollback_error)}")
+                
+                return False, f'Fehler beim Aktualisieren des Werkzeug-Status: {str(e)}', {}
+            
+            logger.info(f"Werkzeug {tool['name']} erfolgreich zurückgegeben")
+            
+            return True, f'Werkzeug {tool["name"]} wurde erfolgreich zurückgegeben', {
+                'tool_name': tool['name'],
+                'returned_at': datetime.now()
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Werkzeug-Rückgabe: {str(e)}", exc_info=True)
+            return False, f'Fehler bei der Rückgabe: {str(e)}', {}
+    
+    @staticmethod
     def _process_consumable_lending(item_barcode: str, worker_barcode: str, action: str, quantity: int, worker: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
-        """Verarbeitet Verbrauchsmaterial-Entnahme"""
+        """Verarbeitet Verbrauchsmaterial-Entnahme mit verbesserter Konsistenz"""
         try:
             if action != 'consume':
                 return False, 'Ungültige Aktion für Verbrauchsmaterial', {}
+            
+            # Validiere Menge
+            if not isinstance(quantity, (int, float)) or quantity <= 0:
+                return False, 'Ungültige Menge', {}
             
             # Prüfe ob Verbrauchsmaterial existiert
             consumable = mongodb.find_one('consumables', {'barcode': item_barcode, 'deleted': {'$ne': True}})
@@ -145,24 +296,43 @@ class LendingService:
             usage_data = {
                 'consumable_barcode': item_barcode,
                 'worker_barcode': worker_barcode,
-                'quantity': -abs(quantity),  # Negativ für Entnahme
+                'quantity': quantity,
                 'used_at': datetime.now(),
+                'created_at': datetime.now(),
                 'consumable_name': consumable.get('name', ''),
                 'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip(),
-                'direction': 'out'
+                'direction': 'out',
+                'sync_status': 'pending'
             }
-            mongodb.insert_one('consumable_usages', usage_data)
+            
+            usage_result = mongodb.insert_one('consumable_usages', usage_data)
+            if not usage_result:
+                return False, 'Fehler beim Erstellen des Verbrauchseintrags', {}
             
             # Reduziere verfügbare Menge
             new_quantity = current_quantity - quantity
-            mongodb.update_one('consumables', 
-                              {'barcode': item_barcode}, 
-                              {'$set': {'quantity': new_quantity}})
+            consumable_update_result = mongodb.update_one('consumables', 
+                                                        {'barcode': item_barcode}, 
+                                                        {
+                                                            '$set': {
+                                                                'quantity': new_quantity,
+                                                                'updated_at': datetime.now(),
+                                                                'sync_status': 'pending'
+                                                            }
+                                                        })
+            
+            if not consumable_update_result:
+                # Rollback: Lösche Verbrauchseintrag wenn Update fehlschlägt
+                mongodb.delete_one('consumable_usages', {'_id': usage_result})
+                return False, 'Fehler beim Aktualisieren des Bestands', {}
+            
+            logger.info(f"{quantity}x {consumable.get('name', '')} erfolgreich an {worker.get('firstname', '')} {worker.get('lastname', '')} ausgegeben")
             
             return True, f'{quantity}x {consumable.get("name", "")} erfolgreich an {worker.get("firstname", "")} {worker.get("lastname", "")} ausgegeben', {
                 'consumable_name': consumable.get('name', ''),
                 'quantity': quantity,
-                'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip()
+                'worker_name': f"{worker.get('firstname', '')} {worker.get('lastname', '')}".strip(),
+                'usage_id': str(usage_result)
             }
             
         except Exception as e:
@@ -226,7 +396,8 @@ class LendingService:
             logger.error(f"Fehler beim Laden der Verbrauchsmaterial-Entnahmen: {str(e)}")
             return []
     
-    def get_current_lending(self, tool_barcode: str) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def get_current_lending(tool_barcode: str) -> Optional[Dict[str, Any]]:
         """
         Holt die aktuelle Ausleihe für ein Werkzeug
         
@@ -248,20 +419,19 @@ class LendingService:
                 if worker:
                     current_lending['worker_name'] = f"{worker['firstname']} {worker['lastname']}"
                 
-                # Datetime-Felder konvertieren
-                if isinstance(current_lending.get('lent_at'), str):
-                    try:
-                        current_lending['lent_at'] = datetime.strptime(current_lending['lent_at'], '%Y-%m-%d %H:%M:%S')
-                    except (ValueError, TypeError):
-                        current_lending['lent_at'] = datetime.now()
+                # Tool-Informationen hinzufügen
+                tool = mongodb.find_one('tools', {'barcode': tool_barcode})
+                if tool:
+                    current_lending['tool_name'] = tool['name']
             
             return current_lending
             
         except Exception as e:
-            logger.error(f"Fehler beim Laden der aktuellen Ausleihe für {tool_barcode}: {str(e)}")
+            logger.error(f"Fehler beim Laden der aktuellen Ausleihe: {str(e)}")
             return None
     
-    def get_tool_lending_history(self, tool_barcode: str) -> List[Dict[str, Any]]:
+    @staticmethod
+    def get_tool_lending_history(tool_barcode: str) -> List[Dict[str, Any]]:
         """
         Holt die Ausleihhistorie für ein Werkzeug
         
@@ -269,12 +439,21 @@ class LendingService:
             tool_barcode: Barcode des Werkzeugs
             
         Returns:
-            List: Liste der Ausleihen
+            List[Dict]: Liste der Ausleihen
         """
         try:
-            lendings = list(mongodb.find('lendings', {'tool_barcode': tool_barcode}))
+            lendings = mongodb.find('lendings', {'tool_barcode': tool_barcode})
             
-            # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
+            # Erweitere mit Worker-Informationen
+            enriched_lendings = []
+            for lending in lendings:
+                worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+                if worker:
+                    lending['worker_name'] = f"{worker['firstname']} {worker['lastname']}"
+                
+                enriched_lendings.append(lending)
+            
+            # Sortiere nach Datum (neueste zuerst)
             def safe_date_key(lending):
                 lent_at = lending.get('lent_at')
                 if isinstance(lent_at, str):
@@ -287,32 +466,237 @@ class LendingService:
                 else:
                     return datetime.min
             
-            lendings.sort(key=safe_date_key, reverse=True)
-            
-            # Erstelle Verlaufsliste
-            history = []
-            for lending in lendings:
-                worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
-                worker_name = f"{worker['firstname']} {worker['lastname']}" if worker else "Unbekannt"
-                
-                # Stelle sicher, dass das Datum korrekt formatiert wird
-                action_date = lending['lent_at']
-                if isinstance(action_date, str):
-                    try:
-                        action_date = datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
-                    except (ValueError, TypeError):
-                        action_date = datetime.now()
-                
-                history.append({
-                    'lent_at': action_date,
-                    'worker_name': worker_name,
-                    'worker_barcode': lending['worker_barcode'],
-                    'returned_at': lending.get('returned_at'),
-                    'status': 'Zurückgegeben' if lending.get('returned_at') else 'Ausgeliehen'
-                })
-            
-            return history
+            enriched_lendings.sort(key=safe_date_key, reverse=True)
+            return enriched_lendings
             
         except Exception as e:
-            logger.error(f"Fehler beim Laden der Ausleihhistorie für {tool_barcode}: {str(e)}")
-            return [] 
+            logger.error(f"Fehler beim Laden der Ausleihhistorie: {str(e)}")
+            return []
+    
+    @staticmethod
+    def validate_lending_consistency() -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Validiert die Konsistenz der Ausleihdaten
+        
+        Returns:
+            (is_consistent, message, issues)
+        """
+        try:
+            issues = []
+            
+            # 1. Prüfe Werkzeuge mit falschem Status
+            tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+            for tool in tools:
+                barcode = tool.get('barcode')
+                status = tool.get('status')
+                
+                # Prüfe aktive Ausleihe
+                active_lending = mongodb.find_one('lendings', {
+                    'tool_barcode': barcode,
+                    'returned_at': None
+                })
+                
+                if active_lending and status != 'ausgeliehen':
+                    issues.append({
+                        'type': 'tool_status_mismatch',
+                        'tool_barcode': barcode,
+                        'tool_name': tool.get('name', ''),
+                        'current_status': status,
+                        'expected_status': 'ausgeliehen',
+                        'message': f'Werkzeug {tool.get("name", "")} ist ausgeliehen aber Status ist "{status}"'
+                    })
+                elif not active_lending and status == 'ausgeliehen':
+                    issues.append({
+                        'type': 'tool_status_mismatch',
+                        'tool_barcode': barcode,
+                        'tool_name': tool.get('name', ''),
+                        'current_status': status,
+                        'expected_status': 'verfügbar',
+                        'message': f'Werkzeug {tool.get("name", "")} ist nicht ausgeliehen aber Status ist "ausgeliehen"'
+                    })
+            
+            # 2. Prüfe verwaiste Ausleihen
+            orphaned_lendings = list(mongodb.find('lendings', {
+                'returned_at': None,
+                'tool_barcode': {'$exists': True}
+            }))
+            
+            for lending in orphaned_lendings:
+                tool_barcode = lending.get('tool_barcode')
+                tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+                
+                if not tool:
+                    issues.append({
+                        'type': 'orphaned_lending',
+                        'lending_id': str(lending.get('_id')),
+                        'tool_barcode': tool_barcode,
+                        'message': f'Verwaiste Ausleihe für nicht existierendes Werkzeug {tool_barcode}'
+                    })
+            
+            # 3. Prüfe doppelte aktive Ausleihen
+            tool_barcodes = [lending['tool_barcode'] for lending in orphaned_lendings]
+            for barcode in set(tool_barcodes):
+                count = tool_barcodes.count(barcode)
+                if count > 1:
+                    issues.append({
+                        'type': 'duplicate_active_lending',
+                        'tool_barcode': barcode,
+                        'count': count,
+                        'message': f'Mehrere aktive Ausleihen für Werkzeug {barcode} gefunden'
+                    })
+            
+            is_consistent = len(issues) == 0
+            message = f'Konsistenzprüfung abgeschlossen: {len(issues)} Probleme gefunden' if issues else 'Alle Daten sind konsistent'
+            
+            return is_consistent, message, {
+                'total_issues': len(issues),
+                'issues': issues
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler bei der Konsistenzprüfung: {str(e)}")
+            return False, f'Fehler bei der Konsistenzprüfung: {str(e)}', {}
+    
+    @staticmethod
+    def fix_lending_inconsistencies() -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Behebt Inkonsistenzen in den Ausleihdaten
+        
+        Returns:
+            (success, message, statistics)
+        """
+        try:
+            fixed_count = 0
+            cleaned_count = 0
+            
+            # 1. Werkzeuge mit falschem Status korrigieren
+            tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+            
+            for tool in tools:
+                barcode = tool.get('barcode')
+                status = tool.get('status')
+                
+                # Prüfe aktive Ausleihe
+                active_lending = mongodb.find_one('lendings', {
+                    'tool_barcode': barcode,
+                    'returned_at': None
+                })
+                
+                if active_lending and status != 'ausgeliehen':
+                    # Werkzeug ist ausgeliehen aber Status ist falsch
+                    mongodb.update_one('tools', 
+                                     {'barcode': barcode}, 
+                                     {'$set': {'status': 'ausgeliehen'}})
+                    fixed_count += 1
+                elif not active_lending and status == 'ausgeliehen':
+                    # Werkzeug ist nicht ausgeliehen aber Status ist falsch
+                    mongodb.update_one('tools', 
+                                     {'barcode': barcode}, 
+                                     {'$set': {'status': 'verfügbar'}})
+                    fixed_count += 1
+            
+            # 2. Verwaiste Ausleihen bereinigen
+            orphaned_lendings = list(mongodb.find('lendings', {
+                'returned_at': None,
+                'tool_barcode': {'$exists': True}
+            }))
+            
+            for lending in orphaned_lendings:
+                tool_barcode = lending.get('tool_barcode')
+                tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+                
+                if not tool:
+                    # Werkzeug existiert nicht mehr, Ausleihe löschen
+                    mongodb.delete_one('lendings', {'_id': lending['_id']})
+                    cleaned_count += 1
+            
+            # 3. Doppelte aktive Ausleihen bereinigen (behalte die neueste)
+            tool_barcodes = [lending['tool_barcode'] for lending in orphaned_lendings]
+            for barcode in set(tool_barcodes):
+                count = tool_barcodes.count(barcode)
+                if count > 1:
+                    # Finde alle aktiven Ausleihen für dieses Werkzeug
+                    duplicate_lendings = list(mongodb.find('lendings', {
+                        'tool_barcode': barcode,
+                        'returned_at': None
+                    }))
+                    
+                    # Sortiere nach Datum (neueste zuerst)
+                    duplicate_lendings.sort(key=lambda x: x.get('lent_at', datetime.min), reverse=True)
+                    
+                    # Behalte nur die neueste, markiere die anderen als zurückgegeben
+                    for lending in duplicate_lendings[1:]:
+                        mongodb.update_one('lendings', 
+                                         {'_id': lending['_id']}, 
+                                         {'$set': {'returned_at': datetime.now()}})
+                        cleaned_count += 1
+            
+            return True, f'Inkonsistenzen behoben: {fixed_count} Werkzeug-Status korrigiert, {cleaned_count} Ausleihen bereinigt', {
+                'fixed_status_count': fixed_count,
+                'cleaned_lendings_count': cleaned_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Beheben der Inkonsistenzen: {str(e)}")
+            return False, f'Fehler beim Beheben der Inkonsistenzen: {str(e)}', {}
+    
+    @staticmethod
+    def return_tool_centralized(tool_barcode: str, worker_barcode: str = None) -> Tuple[bool, str]:
+        """
+        Zentrale Rückgabe-Funktion für Werkzeuge
+        
+        Args:
+            tool_barcode: Barcode des Werkzeugs
+            worker_barcode: Optional - Barcode des Mitarbeiters
+            
+        Returns:
+            (success, message)
+        """
+        try:
+            logger.info(f"return_tool_centralized aufgerufen: tool_barcode={tool_barcode}, worker_barcode={worker_barcode}")
+            
+            # Finde aktive Ausleihe
+            if worker_barcode:
+                # Spezifischer Mitarbeiter
+                lending = mongodb.find_one('lendings', {
+                    'tool_barcode': tool_barcode,
+                    'worker_barcode': worker_barcode,
+                    'returned_at': None
+                })
+                logger.info(f"Suche nach spezifischer Ausleihe: {lending}")
+            else:
+                # Beliebiger Mitarbeiter
+                lending = mongodb.find_one('lendings', {
+                    'tool_barcode': tool_barcode,
+                    'returned_at': None
+                })
+                logger.info(f"Suche nach beliebiger Ausleihe: {lending}")
+            
+            if not lending:
+                logger.warning(f"Keine aktive Ausleihe für Werkzeug {tool_barcode} gefunden")
+                return False, 'Keine aktive Ausleihe für dieses Werkzeug gefunden'
+            
+            # Werkzeug-Informationen holen
+            tool = mongodb.find_one('tools', {'barcode': tool_barcode, 'deleted': {'$ne': True}})
+            if not tool:
+                logger.warning(f"Werkzeug {tool_barcode} nicht gefunden")
+                return False, 'Werkzeug nicht gefunden'
+            
+            # Worker-Informationen holen
+            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode'], 'deleted': {'$ne': True}})
+            worker_name = f"{worker['firstname']} {worker['lastname']}" if worker else "Unbekannt"
+            logger.info(f"Worker gefunden: {worker_name}")
+            
+            # Verwende die zentrale Rückgabe-Funktion
+            success, message, _ = LendingService._return_tool(tool_barcode, lending['worker_barcode'], tool, worker or {})
+            
+            if success:
+                logger.info(f"Rückgabe erfolgreich: {message}")
+                return True, f'Werkzeug {tool["name"]} wurde von {worker_name} erfolgreich zurückgegeben'
+            else:
+                logger.warning(f"Rückgabe fehlgeschlagen: {message}")
+                return False, message
+                
+        except Exception as e:
+            logger.error(f"Fehler bei der zentralen Rückgabe: {str(e)}", exc_info=True)
+            return False, f'Fehler bei der Rückgabe: {str(e)}' 
