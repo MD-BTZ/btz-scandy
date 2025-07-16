@@ -179,7 +179,14 @@
                     <label class="label">
                         <span class="label-text">Lagerort</span>
                     </label>
-                    <input type="text" name="location" class="input input-bordered" value="{{ tool.location }}">
+                    <select name="location" class="select select-bordered">
+                        <option value="">Kein Standort</option>
+                        {% for location in locations %}
+                        <option value="{{ location }}" {% if tool and tool.location == location %}selected{% endif %}>
+                            {{ location }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="form-control">
                     <label class="label">

@@ -33,36 +33,24 @@
                 <label class="label">
                     <span class="label-text">Kategorie</span>
                 </label>
-                <input 
-                    type="text" 
-                    name="category" 
-                    list="category-list" 
-                    class="input input-bordered" 
-                    required
-                >
-                <datalist id="category-list">
+                <select name="category" class="select select-bordered" required>
+                    <option value="">Bitte wählen...</option>
                     {% for category in categories %}
-                        <option value="{{ category }}">
+                        <option value="{{ category }}">{{ category }}</option>
                     {% endfor %}
-                </datalist>
+                </select>
             </div>
 
             <div class="form-control mb-4">
                 <label class="label">
                     <span class="label-text">Ort</span>
                 </label>
-                <input 
-                    type="text" 
-                    name="location" 
-                    list="location-list" 
-                    class="input input-bordered" 
-                    required
-                >
-                <datalist id="location-list">
+                <select name="location" class="select select-bordered" required>
+                    <option value="">Bitte wählen...</option>
                     {% for location in locations %}
-                        <option value="{{ location }}">
+                        <option value="{{ location }}">{{ location }}</option>
                     {% endfor %}
-                </datalist>
+                </select>
             </div>
 
             <div class="form-control">
