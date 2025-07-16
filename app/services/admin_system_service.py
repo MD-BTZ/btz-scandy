@@ -473,19 +473,19 @@ class AdminSystemService:
             # Hole alle Systemeinstellungen
             settings = AdminSystemService.get_system_settings()
             
-            # Hole App-Labels
+            # Hole App-Labels (beide Systeme berücksichtigen)
             app_labels = {
                 'tools': {
-                    'name': settings.get('app_label_tools_name', 'Werkzeuge'),
-                    'icon': settings.get('app_label_tools_icon', 'fas fa-tools')
+                    'name': settings.get('app_label_tools_name') or settings.get('label_tools_name', 'Werkzeuge'),
+                    'icon': settings.get('app_label_tools_icon') or settings.get('label_tools_icon', 'fas fa-tools')
                 },
                 'consumables': {
-                    'name': settings.get('app_label_consumables_name', 'Verbrauchsmaterial'),
-                    'icon': settings.get('app_label_consumables_icon', 'fas fa-box')
+                    'name': settings.get('app_label_consumables_name') or settings.get('label_consumables_name', 'Verbrauchsmaterial'),
+                    'icon': settings.get('app_label_consumables_icon') or settings.get('label_consumables_icon', 'fas fa-box')
                 },
                 'tickets': {
-                    'name': settings.get('app_label_tickets_name', 'Tickets'),
-                    'icon': settings.get('app_label_tickets_icon', 'fas fa-ticket-alt')
+                    'name': settings.get('app_label_tickets_name') or settings.get('label_tickets_name', 'Tickets'),
+                    'icon': settings.get('app_label_tickets_icon') or settings.get('label_tickets_icon', 'fas fa-ticket-alt')
                 }
             }
             
@@ -511,14 +511,20 @@ class AdminSystemService:
             (success, message)
         """
         try:
-            # Mappe App-Labels auf Datenbankfelder
+            # Mappe App-Labels auf Datenbankfelder (beide Systeme synchron halten)
             settings_data = {}
             
             for category, data in app_labels.items():
                 if 'name' in data:
+                    # Neue Keys für Systemeinstellungen
                     settings_data[f'app_label_{category}_name'] = data['name']
+                    # Alte Keys für Kompatibilität
+                    settings_data[f'label_{category}_name'] = data['name']
                 if 'icon' in data:
+                    # Neue Keys für Systemeinstellungen
                     settings_data[f'app_label_{category}_icon'] = data['icon']
+                    # Alte Keys für Kompatibilität
+                    settings_data[f'label_{category}_icon'] = data['icon']
             
             success, message = AdminSystemService.update_system_settings(settings_data)
             return success, message
