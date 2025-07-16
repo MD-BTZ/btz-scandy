@@ -447,7 +447,7 @@ const ManualLending = {
             const data = {
                 item_barcode: this.selectedItem.barcode,
                 worker_barcode: this.selectedWorker.barcode,
-                action: 'lend',
+                action: this.selectedItem.type === 'consumable' ? 'consume' : 'lend',
                 item_type: this.selectedItem.type
             };
             

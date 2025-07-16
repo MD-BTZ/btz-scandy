@@ -4,6 +4,7 @@ from app.models.mongodb_models import MongoDBTool, MongoDBWorker
 from app.models.mongodb_database import mongodb
 from datetime import datetime
 from app.utils.decorators import not_teilnehmer_required
+from app.services.lending_service import LendingService
 import logging
 
 bp = Blueprint('quick_scan', __name__, url_prefix='/quick_scan')
@@ -113,27 +114,23 @@ def process():
             
             if consumable:
                 if action == 'use':
-                    # Verbrauchsmaterial-Logik
-                    if consumable['quantity'] <= 0:
-                        return jsonify({'error': 'Kein Bestand verfügbar'}), 400
-                        
-                    # Verbrauchsmaterial-Ausgabe erstellen
-                    usage_data = {
-                        'consumable_barcode': item_barcode,
+                    # Verwende den LendingService für Verbrauchsmaterial-Ausgaben
+                    service_data = {
+                        'item_barcode': item_barcode,
                         'worker_barcode': worker_barcode,
-                        'quantity': -1,
-                        'used_at': datetime.now()
+                        'action': 'consume',  # Korrekte Aktion für LendingService
+                        'item_type': 'consumable',
+                        'quantity': 1
                     }
-                    mongodb.insert_one('consumable_usages', usage_data)
                     
-                    # Bestand aktualisieren
-                    mongodb.update_one('consumables', 
-                                     {'barcode': item_barcode}, 
-                                     {'$inc': {'quantity': -1}, '$set': {'modified_at': datetime.now()}})
+                    success, message, result_data = LendingService.process_lending_request(service_data)
                     
-                    return jsonify({
-                        'message': f'Verbrauchsmaterial {consumable["name"]} wurde an {worker["firstname"]} {worker["lastname"]} ausgegeben'
-                    })
+                    if success:
+                        return jsonify({
+                            'message': message
+                        })
+                    else:
+                        return jsonify({'error': message}), 400
                 else:
                     return jsonify({'error': 'Ungültige Aktion für Verbrauchsmaterial'}), 400
             else:

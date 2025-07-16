@@ -409,7 +409,7 @@ def manual_lending():
         thirty_days_ago = datetime.now() - timedelta(days=30)
         recent_consumable_usages = mongodb.find('consumable_usages', {
             'used_at': {'$gte': thirty_days_ago},
-            'quantity': {'$gt': 0}  # Nur Ausgaben, nicht Entnahmen
+            'quantity': {'$lt': 0}  # Nur Ausgaben (negative Werte), nicht Entnahmen
         })
         
         for usage in recent_consumable_usages:

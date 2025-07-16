@@ -292,11 +292,11 @@ class LendingService:
             if current_quantity < quantity:
                 return False, f'Nicht genügend {consumable.get("name", "")} verfügbar (verfügbar: {current_quantity}, benötigt: {quantity})', {}
             
-            # Erstelle Verbrauchseintrag
+            # Erstelle Verbrauchseintrag mit negativer Menge für Ausgaben
             usage_data = {
                 'consumable_barcode': item_barcode,
                 'worker_barcode': worker_barcode,
-                'quantity': quantity,
+                'quantity': -quantity,  # Negative Menge für Ausgaben
                 'used_at': datetime.now(),
                 'created_at': datetime.now(),
                 'consumable_name': consumable.get('name', ''),
@@ -394,6 +394,50 @@ class LendingService:
             
         except Exception as e:
             logger.error(f"Fehler beim Laden der Verbrauchsmaterial-Entnahmen: {str(e)}")
+            return []
+    
+    @staticmethod
+    def get_worker_consumable_history(worker_barcode: str) -> List[Dict[str, Any]]:
+        """
+        Holt die Verbrauchsmaterial-Historie für einen Mitarbeiter
+        
+        Args:
+            worker_barcode: Barcode des Mitarbeiters
+            
+        Returns:
+            List[Dict]: Liste der Verbrauchsmaterial-Ausgaben
+        """
+        try:
+            # Hole alle Verbrauchsmaterial-Ausgaben des Mitarbeiters
+            usages = mongodb.find('consumable_usages', {'worker_barcode': worker_barcode})
+            
+            # Erweitere mit Consumable-Informationen
+            enriched_usages = []
+            for usage in usages:
+                consumable = mongodb.find_one('consumables', {'barcode': usage['consumable_barcode']})
+                if consumable:
+                    usage['consumable_name'] = consumable.get('name', '')
+                    usage['consumable_barcode'] = usage['consumable_barcode']
+                    enriched_usages.append(usage)
+            
+            # Sortiere nach Datum (neueste zuerst)
+            def safe_date_key(usage):
+                used_at = usage.get('used_at')
+                if isinstance(used_at, str):
+                    try:
+                        return datetime.strptime(used_at, '%Y-%m-%d %H:%M:%S')
+                    except (ValueError, TypeError):
+                        return datetime.min
+                elif isinstance(used_at, datetime):
+                    return used_at
+                else:
+                    return datetime.min
+            
+            enriched_usages.sort(key=safe_date_key, reverse=True)
+            return enriched_usages
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Verbrauchsmaterial-Historie: {str(e)}")
             return []
     
     @staticmethod

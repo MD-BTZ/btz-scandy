@@ -245,20 +245,70 @@ def details(original_barcode):
         all_lendings = mongodb.find('lendings', {'worker_barcode': original_barcode})
         all_lendings = list(all_lendings)
         
-        # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
-        def safe_date_key(lending):
-            lent_at = lending.get('lent_at')
-            if isinstance(lent_at, str):
+        # Hole Verbrauchsmaterial-Ausgaben des Mitarbeiters
+        from app.services.lending_service import LendingService
+        consumable_usages = LendingService.get_worker_consumable_history(original_barcode)
+        
+        # Kombiniere Ausleihen und Verbrauchsmaterial-Ausgaben für eine vollständige Historie
+        combined_history = []
+        
+        # Füge Ausleihen hinzu
+        for lending in all_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
+            if tool:
+                lending['tool_name'] = tool['name']
+            
+            # Stelle sicher, dass die Datumsfelder korrekt formatiert sind
+            if isinstance(lending.get('lent_at'), str):
                 try:
-                    return datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+                    lending['lent_at'] = datetime.strptime(lending['lent_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending['lent_at'] = datetime.now()
+            
+            if isinstance(lending.get('returned_at'), str):
+                try:
+                    lending['returned_at'] = datetime.strptime(lending['returned_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    lending['returned_at'] = None
+            
+            # Füge Typ-Information hinzu
+            lending['type'] = 'tool'
+            lending['action_type'] = 'Ausleihe/Rückgabe'
+            lending['action_date'] = lending.get('lent_at')
+            
+            combined_history.append(lending)
+        
+        # Füge Verbrauchsmaterial-Ausgaben hinzu
+        for usage in consumable_usages:
+            # Stelle sicher, dass das Datum korrekt formatiert ist
+            if isinstance(usage.get('used_at'), str):
+                try:
+                    usage['used_at'] = datetime.strptime(usage['used_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    usage['used_at'] = datetime.now()
+            
+            # Füge Typ-Information hinzu
+            usage['type'] = 'consumable'
+            usage['action_type'] = 'Verbrauchsmaterial-Ausgabe'
+            usage['action_date'] = usage.get('used_at')
+            usage['quantity_abs'] = abs(usage.get('quantity', 0))
+            
+            combined_history.append(usage)
+        
+        # Sortiere nach Datum (neueste zuerst) - sicherer Vergleich
+        def safe_date_key(item):
+            action_date = item.get('action_date')
+            if isinstance(action_date, str):
+                try:
+                    return datetime.strptime(action_date, '%Y-%m-%d %H:%M:%S')
                 except (ValueError, TypeError):
                     return datetime.min
-            elif isinstance(lent_at, datetime):
-                return lent_at
+            elif isinstance(action_date, datetime):
+                return action_date
             else:
                 return datetime.min
         
-        all_lendings.sort(key=safe_date_key, reverse=True)
+        combined_history.sort(key=safe_date_key, reverse=True)
         
         # Sortiere auch aktive Ausleihen nach Datum
         active_lendings.sort(key=safe_date_key, reverse=True)
@@ -286,7 +336,7 @@ def details(original_barcode):
                              worker=worker,
                              departments=departments,
                              current_lendings=active_lendings,
-                             lending_history=all_lendings,
+                             lending_history=combined_history,
                              is_admin=current_user.is_admin)
 
     except Exception as e:

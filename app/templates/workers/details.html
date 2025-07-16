@@ -95,21 +95,60 @@
                 <table class="table table-zebra w-full">
                     <thead>
                         <tr>
-                            <th>{{ app_labels.tools.name }}</th>
-                            <th>Ausgeliehen</th>
-                            <th>Zurückgegeben</th>
+                            <th>Typ</th>
+                            <th>Artikel</th>
+                            <th>Datum</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for lending in lending_history %}
+                        {% for item in lending_history %}
                         <tr>
                             <td>
-                                <a href="{{ url_for('tools.detail', barcode=lending.tool_barcode) }}" class="link link-primary">
-                                    {{ lending.tool_name }}
-                                </a>
+                                {% if item.type == 'tool' %}
+                                    <span class="badge badge-primary">{{ app_labels.tools.name }}</span>
+                                {% elif item.type == 'consumable' %}
+                                    <span class="badge badge-secondary">{{ app_labels.consumables.name }}</span>
+                                {% else %}
+                                    <span class="badge badge-neutral">Unbekannt</span>
+                                {% endif %}
                             </td>
-                            <td>{{ lending.lent_at|format_datetime }}</td>
-                            <td>{{ lending.returned_at|format_datetime if lending.returned_at else '-' }}</td>
+                            <td>
+                                {% if item.type == 'tool' %}
+                                    <a href="{{ url_for('tools.detail', barcode=item.tool_barcode) }}" class="link link-primary">
+                                        {{ item.tool_name }}
+                                    </a>
+                                {% elif item.type == 'consumable' %}
+                                    <a href="{{ url_for('consumables.detail', barcode=item.consumable_barcode) }}" class="link link-primary">
+                                        {{ item.consumable_name }}
+                                    </a>
+                                {% else %}
+                                    Unbekannt
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.type == 'tool' %}
+                                    {{ item.lent_at|format_datetime }}
+                                {% elif item.type == 'consumable' %}
+                                    {{ item.used_at|format_datetime }}
+                                {% else %}
+                                    Unbekannt
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.type == 'tool' %}
+                                    {% if item.returned_at %}
+                                        <span class="badge badge-success">Zurückgegeben</span>
+                                        <br><small>{{ item.returned_at|format_datetime }}</small>
+                                    {% else %}
+                                        <span class="badge badge-warning">Ausgeliehen</span>
+                                    {% endif %}
+                                {% elif item.type == 'consumable' %}
+                                    <span class="badge badge-info">{{ item.quantity_abs }} Stück ausgegeben</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
