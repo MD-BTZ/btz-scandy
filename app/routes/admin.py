@@ -1526,8 +1526,8 @@ def edit_user(user_id):
         
         if success:
             flash(message, 'success')
-        return redirect(url_for('admin.manage_users'))
-        if not success:
+            return redirect(url_for('admin.manage_users'))
+        else:
             flash(message, 'error')
             return render_template('admin/user_form.html', 
                                  user=user,

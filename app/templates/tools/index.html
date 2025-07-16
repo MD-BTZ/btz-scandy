@@ -47,22 +47,26 @@
 {% block table_rows %}
 {% for tool in tools %}
 <tr class="hover data-row" 
-    data-category="{{ tool.category }}" 
-    data-location="{{ tool.location }}"
-    data-status="{{ tool.status }}">
+    data-category="{{ tool.category or '' }}" 
+    data-location="{{ tool.location or '' }}"
+    data-status="{{ tool.status or '' }}">
     <td>
-        <div class="badge badge-outline">{{ tool.barcode }}</div>
+        <div class="badge badge-outline">{{ tool.barcode or 'Kein Barcode' }}</div>
     </td>
     <td>
+        {% if tool.barcode %}
         <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="link link-hover font-medium">
             {{ tool.name }}
         </a>
+        {% else %}
+        <span class="font-medium">{{ tool.name }}</span>
+        {% endif %}
     </td>
     <td>
-        <div class="badge badge-primary badge-outline">{{ tool.category }}</div>
+        <div class="badge badge-primary badge-outline">{{ tool.category or 'Keine Kategorie' }}</div>
     </td>
     <td>
-        <div class="badge badge-secondary badge-outline">{{ tool.location }}</div>
+        <div class="badge badge-secondary badge-outline">{{ tool.location or 'Kein Standort' }}</div>
     </td>
     <td>
         {% if tool.status == 'verfügbar' %}
@@ -86,12 +90,16 @@
     </td>
     <td class="text-right">
         <div class="btn-group">
+            {% if tool.barcode %}
             <a href="{{ url_for('tools.detail', barcode=tool.barcode) }}" class="btn btn-sm btn-ghost">
                 <i class="fas fa-edit"></i>
             </a>
             <button class="btn btn-sm btn-ghost btn-error" onclick="deleteItem('tool', '{{ tool.barcode }}')">
                 <i class="fas fa-trash"></i>
             </button>
+            {% else %}
+            <span class="text-sm text-gray-500">Kein Barcode</span>
+            {% endif %}
         </div>
     </td>
 </tr>

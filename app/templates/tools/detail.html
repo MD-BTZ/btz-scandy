@@ -148,7 +148,7 @@
 <dialog id="editModal" class="modal">
     <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
-        <form method="POST" id="editForm">
+        <form method="POST" id="editForm" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
             <div class="space-y-4">
                 <div class="form-control">
                     <label class="label">
@@ -180,6 +180,16 @@
                         <span class="label-text">Lagerort</span>
                     </label>
                     <input type="text" name="location" class="input input-bordered" value="{{ tool.location }}">
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Status</span>
+                    </label>
+                    <select name="status" class="select select-bordered">
+                        <option value="verfügbar" {% if tool.status == 'verfügbar' %}selected{% endif %}>Verfügbar</option>
+                        <option value="defekt" {% if tool.status == 'defekt' %}selected{% endif %}>Defekt</option>
+                        <option value="ausgeliehen" {% if tool.status == 'ausgeliehen' %}selected{% endif %}>Ausgeliehen</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-action">
@@ -248,15 +258,22 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
     
-    fetch(window.location.pathname, {
+    fetch(this.action, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            showToast('success', data.message);
             document.getElementById('editModal').close();
-            window.location.reload();
+            // Kurze Verzögerung, dann zur Detail-Seite weiterleiten
+            setTimeout(() => {
+                window.location.href = data.redirect;
+            }, 1000);
         } else {
             showToast('error', data.message || 'Ein Fehler ist aufgetreten');
         }

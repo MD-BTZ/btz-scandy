@@ -294,51 +294,67 @@ def details(original_barcode):
         flash('Fehler beim Laden der Mitarbeiterdetails', 'error')
         return redirect(url_for('workers.index'))
 
-@bp.route('/<barcode>/edit', methods=['GET', 'POST'])
+@bp.route('/<barcode>/edit', methods=['POST'])
 @mitarbeiter_required
 def edit(barcode):
-    """Bearbeitet einen Mitarbeiter"""
+    """Bearbeitet einen Mitarbeiter über Modal"""
     try:
-        if request.method == 'POST':
-            firstname = request.form.get('firstname')
-            lastname = request.form.get('lastname')
-            department = request.form.get('department')
-            email = request.form.get('email')
-            phone = request.form.get('phone')
-            new_barcode = request.form.get('barcode')  # Neuer Barcode aus dem Formular
+        firstname = request.form.get('firstname')
+        lastname = request.form.get('lastname')
+        department = request.form.get('department')
+        email = request.form.get('email')
+        new_barcode = request.form.get('barcode')
+        
+        if not all([firstname, lastname]):
+            return jsonify({'success': False, 'message': 'Vor- und Nachname sind erforderlich'}), 400
             
-            if not all([firstname, lastname]):
-                flash('Vor- und Nachname sind erforderlich', 'error')
-                return redirect(url_for('workers.edit', barcode=barcode))
-                
-            # Prüfen, ob der Mitarbeiter existiert
-            worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
-            if not worker:
-                flash('Mitarbeiter nicht gefunden', 'error')
-                return redirect(url_for('workers.index'))
+        # Prüfen, ob der Mitarbeiter existiert
+        worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
+        if not worker:
+            return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
 
-            # Update der Mitarbeiterdaten
-            update_data = {
-                'barcode': new_barcode,
-                'firstname': firstname,
-                'lastname': lastname,
-                'department': department,
-                'email': email,
-                'phone': phone,
-                'modified_at': datetime.now()
-            }
+        # Barcode-Änderung prüfen
+        barcode_changed = (new_barcode != barcode)
+        if barcode_changed:
+            # Prüfen, ob der neue Barcode bereits existiert
+            existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
+            existing_consumable = mongodb.find_one('consumables', {'barcode': new_barcode, 'deleted': {'$ne': True}})
+            existing_worker = mongodb.find_one('workers', {'barcode': new_barcode, 'deleted': {'$ne': True}})
             
-            mongodb.update_one('workers', 
-                             {'barcode': barcode}, 
-                             {'$set': update_data})
+            if existing_tool or existing_consumable or existing_worker:
+                return jsonify({'success': False, 'message': f'Der Barcode "{new_barcode}" existiert bereits'}), 400
             
-            flash('Mitarbeiter erfolgreich aktualisiert', 'success')
-            return redirect(url_for('workers.details', original_barcode=new_barcode))
-            
+            # Update Barcode in referenzierenden Tabellen
+            mongodb.update_many('lendings', 
+                              {'worker_barcode': barcode}, 
+                              {'$set': {'worker_barcode': new_barcode}})
+            mongodb.update_many('consumable_usages', 
+                              {'worker_barcode': barcode}, 
+                              {'$set': {'worker_barcode': new_barcode}})
+
+        # Update der Mitarbeiterdaten
+        update_data = {
+            'barcode': new_barcode,
+            'firstname': firstname,
+            'lastname': lastname,
+            'department': department,
+            'email': email,
+            'modified_at': datetime.now()
+        }
+        
+        mongodb.update_one('workers', 
+                         {'barcode': barcode}, 
+                         {'$set': update_data})
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Mitarbeiter erfolgreich aktualisiert',
+            'redirect': url_for('workers.details', original_barcode=new_barcode)
+        })
+        
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Mitarbeiters: {str(e)}", exc_info=True)
-        flash('Fehler beim Aktualisieren des Mitarbeiters', 'error')
-        return redirect(url_for('workers.details', barcode=barcode))
+        return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Mitarbeiters'}), 500
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required

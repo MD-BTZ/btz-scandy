@@ -127,6 +127,45 @@ class ConsumableService:
             return False, 'Fehler beim Löschen'
     
     @staticmethod
+    def adjust_stock(barcode: str, quantity_change: int, reason: str) -> Tuple[bool, str]:
+        """Passt den Bestand eines Verbrauchsmaterials an"""
+        try:
+            # Verbrauchsmaterial finden
+            consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
+            if not consumable:
+                return False, 'Verbrauchsmaterial nicht gefunden'
+            
+            # Neuen Bestand berechnen
+            current_quantity = consumable.get('quantity', 0)
+            new_quantity = current_quantity + quantity_change
+            
+            # Negativen Bestand verhindern
+            if new_quantity < 0:
+                return False, f'Bestand kann nicht unter 0 fallen. Aktueller Bestand: {current_quantity}'
+            
+            # Bestand aktualisieren
+            mongodb.update_one('consumables', 
+                             {'barcode': barcode}, 
+                             {'$set': {'quantity': new_quantity, 'updated_at': datetime.now()}})
+            
+            # Verwendung protokollieren
+            usage_data = {
+                'consumable_barcode': barcode,
+                'worker_barcode': 'admin',  # TODO: Aktuellen Benutzer verwenden
+                'quantity': quantity_change,  # Positiv für Hinzufügung, negativ für Entnahme
+                'reason': reason,
+                'used_at': datetime.now()
+            }
+            mongodb.insert_one('consumable_usages', usage_data)
+            
+            action = "hinzugefügt" if quantity_change > 0 else "entnommen"
+            return True, f'{abs(quantity_change)} Stück {action}. Neuer Bestand: {new_quantity}'
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Anpassen des Bestands: {str(e)}")
+            return False, f'Fehler beim Anpassen des Bestands: {str(e)}'
+    
+    @staticmethod
     def get_statistics() -> Dict[str, Any]:
         """Holt Statistiken für Verbrauchsmaterialien"""
         try:

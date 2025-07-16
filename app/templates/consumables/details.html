@@ -67,17 +67,11 @@
                     <tbody>
                         {% for entry in history %}
                         <tr>
-                            <td>{{ entry.action_date | datetime if entry.action_date else 'Unbekannt' }}</td>
-                            <td>
-                                {% if entry.worker != 'Admin' %}
-                                {{ entry.worker }}
-                                {% else %}
-                                {{ entry.worker }}
-                                {% endif %}
-                            </td>
+                            <td>{{ entry.date | datetime if entry.date else 'Unbekannt' }}</td>
+                            <td>{{ entry.worker_name }}</td>
                             <td>
                                 <span class="badge {{ 'badge-success' if 'Hinzugefügt' in entry.action else 'badge-error' }}">
-                                    {{ entry.action }}
+                                    {{ entry.action }} ({{ entry.quantity }} Stück)
                                 </span>
                             </td>
                         </tr>
@@ -285,11 +279,21 @@ const stockForm = document.getElementById('stockForm');
 if (stockForm) {
     stockForm.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
+        // FormData zu JSON konvertieren
         const formData = new FormData(this);
+        const jsonData = {
+            quantity: parseInt(formData.get('quantity')),
+            reason: formData.get('reason')
+        };
+        
         try {
             const response = await fetch(this.action, {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(jsonData)
             });
             const result = await response.json();
             if (result.success) {

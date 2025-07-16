@@ -133,55 +133,48 @@ def detail(barcode):
         flash('Fehler beim Laden der Werkzeug-Details', 'error')
         return redirect(url_for('tools.index'))
 
-@bp.route('/<barcode>/edit', methods=['GET', 'POST'])
+@bp.route('/<barcode>/edit', methods=['POST'])
 @login_required
 def edit(barcode):
-    """Bearbeitet ein Werkzeug"""
+    """Bearbeitet ein Werkzeug über Modal"""
     try:
-        if request.method == 'POST':
-            # Formulardaten sammeln
-            tool_data = {
-                'name': request.form.get('name'),
-                'description': request.form.get('description'),
-                'category': request.form.get('category'),
-                'location': request.form.get('location'),
-                'barcode': request.form.get('barcode'),
-                'status': request.form.get('status')
-            }
-            
-            # Werkzeug über Service aktualisieren
-            tool_service = get_tool_service()
-            success, message, new_barcode = tool_service.update_tool(barcode, tool_data)
-            
-            if success:
-                flash(message, 'success')
-                return redirect(url_for('tools.detail', barcode=new_barcode))
-            else:
-                flash(message, 'error')
-                return redirect(url_for('tools.edit', barcode=barcode))
-            
-        else:
-            # GET: Zeige Bearbeitungsformular
-            tool_service = get_tool_service()
-            tool = tool_service.get_tool_by_barcode(barcode)
-            
-            if not tool:
-                flash('Werkzeug nicht gefunden', 'error')
-                return redirect(url_for('tools.index'))
-            
-            # Hole Kategorien und Standorte
-            categories = get_categories_from_settings()
-            locations = get_locations_from_settings()
-            
-            return render_template('tools/edit.html',
-                               tool=tool,
-                               categories=categories,
-                               locations=locations)
-                               
+        # Formulardaten sammeln
+        tool_data = {
+            'name': request.form.get('name'),
+            'description': request.form.get('description'),
+            'category': request.form.get('category'),
+            'location': request.form.get('location')
+        }
+        
+        # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
+        form_status = request.form.get('status')
+        if form_status and form_status.strip():
+            tool_data['status'] = form_status
+        
+        # Barcode nur hinzufügen, wenn er explizit im Formular angegeben wurde
+        form_barcode = request.form.get('barcode')
+        if form_barcode and form_barcode.strip():
+            tool_data['barcode'] = form_barcode
+        
+        # Werkzeug über Service aktualisieren
+        tool_service = get_tool_service()
+        success, message, new_barcode = tool_service.update_tool(barcode, tool_data)
+        
+        # Verwende den neuen Barcode oder den alten, falls new_barcode None ist
+        redirect_barcode = new_barcode if new_barcode else barcode
+        
+        return jsonify({
+            'success': success, 
+            'message': message, 
+            'redirect': url_for('tools.detail', barcode=redirect_barcode)
+        })
+        
     except Exception as e:
         logger.error(f"Fehler beim Bearbeiten des Werkzeugs: {str(e)}", exc_info=True)
-        flash('Fehler beim Bearbeiten des Werkzeugs', 'error')
-        return redirect(url_for('tools.index'))
+        return jsonify({
+            'success': False, 
+            'message': 'Fehler beim Bearbeiten des Werkzeugs'
+        }), 500
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required

@@ -43,19 +43,26 @@ class ToolService:
             tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
             
             # Datetime-Felder konvertieren und zusätzliche Informationen hinzufügen
+            processed_tools = []
             for tool in tools:
-                tool = self._convert_datetime_fields(tool)
-                tool['id'] = str(tool['_id'])
-                
-                # Aktuelle Ausleihe hinzufügen
-                current_lending = self._get_lending_service().get_current_lending(tool['barcode'])
-                if current_lending:
-                    tool['is_borrowed'] = True
-                    tool['current_borrower'] = current_lending.get('worker_name', 'Unbekannt')
-                else:
-                    tool['is_borrowed'] = False
+                try:
+                    tool = self._convert_datetime_fields(tool)
+                    tool['id'] = str(tool['_id'])
+                    
+                    # Aktuelle Ausleihe hinzufügen
+                    current_lending = self._get_lending_service().get_current_lending(tool['barcode'])
+                    if current_lending:
+                        tool['is_borrowed'] = True
+                        tool['current_borrower'] = current_lending.get('worker_name', 'Unbekannt')
+                    else:
+                        tool['is_borrowed'] = False
+                    
+                    processed_tools.append(tool)
+                except Exception as tool_error:
+                    logger.error(f"Fehler beim Verarbeiten von Werkzeug {tool.get('barcode', 'unbekannt')}: {str(tool_error)}")
+                    continue
             
-            return tools
+            return processed_tools
             
         except Exception as e:
             logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
@@ -144,22 +151,30 @@ class ToolService:
         try:
             tool = self.get_tool_by_barcode(barcode)
             if not tool:
-                return False, 'Werkzeug nicht gefunden', None
+                return False, 'Werkzeug nicht gefunden', barcode
             
-            new_barcode = tool_data.get('barcode', barcode)
-            
-            # Prüfe ob der neue Barcode bereits existiert (wenn er sich geändert hat)
-            if new_barcode != barcode:
+            # Nur dann Barcode ändern, wenn er explizit angegeben wurde und sich unterscheidet
+            new_barcode = tool_data.get('barcode')
+            if new_barcode and new_barcode != barcode:
+                # Prüfe ob der neue Barcode bereits existiert
                 existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
                 if existing_tool:
-                    return False, f'Der Barcode "{new_barcode}" existiert bereits', None
+                    return False, f'Der Barcode "{new_barcode}" existiert bereits', barcode
+            else:
+                # Barcode bleibt unverändert
+                new_barcode = barcode
             
             # Prüfe ob das Werkzeug ausgeliehen ist
             current_lending = self._get_lending_service().get_current_lending(barcode)
-            new_status = tool_data.get('status', tool['status'])
+            new_status = tool_data.get('status')
             
-            if current_lending and new_status == 'defekt':
-                return False, 'Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden', None
+            # Status nur ändern, wenn er explizit angegeben wurde
+            if new_status:
+                if current_lending and new_status == 'defekt':
+                    return False, 'Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden', barcode
+            else:
+                # Status bleibt unverändert
+                new_status = tool.get('status', 'verfügbar')
             
             # Update-Daten vorbereiten
             update_data = {
@@ -182,7 +197,7 @@ class ToolService:
             
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren des Werkzeugs: {str(e)}")
-            return False, f'Fehler beim Aktualisieren: {str(e)}', None
+            return False, f'Fehler beim Aktualisieren: {str(e)}', barcode
     
     def delete_tool(self, barcode: str, permanent: bool = False) -> Tuple[bool, str]:
         """
