@@ -141,7 +141,7 @@ class AdminBackupService:
             logger.info(f"Backup-Wiederherstellung: Aktuelles Backup erstellt: {current_backup}")
             
             # Stelle das Backup wieder her
-            success = backup_manager.restore_from_file(str(backup_path))
+            success = backup_manager.restore_backup_by_filename(filename)
             
             if success:
                 # Korrigiere fehlende created_at Felder

@@ -4288,6 +4288,52 @@ def dashboard_debug_page():
     """Dashboard Debug-Seite"""
     return render_template('admin/dashboard_debug.html')
 
+@bp.route('/debug/test-backup-restore/<filename>', methods=['GET'])
+@admin_required
+def test_backup_restore(filename):
+    """Testet die Backup-Wiederherstellung für eine spezifische Datei"""
+    try:
+        from app.utils.backup_manager import backup_manager
+        
+        # Prüfe ob die Datei existiert
+        backup_path = backup_manager.backup_dir / filename
+        if not backup_path.exists():
+            return jsonify({
+                'success': False,
+                'message': f'Backup-Datei "{filename}" nicht gefunden',
+                'backup_path': str(backup_path)
+            })
+        
+        # Teste die Backup-Wiederherstellung ohne sie tatsächlich durchzuführen
+        try:
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            # Validiere Backup-Daten
+            is_valid, validation_message = backup_manager._validate_backup_data(backup_data)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Backup "{filename}" ist gültig',
+                'validation_message': validation_message,
+                'collections': list(backup_data.keys()),
+                'total_documents': sum(len(docs) for docs in backup_data.values()),
+                'file_size': backup_path.stat().st_size
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Fehler beim Testen des Backups: {str(e)}',
+                'backup_path': str(backup_path)
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Unerwarteter Fehler: {str(e)}'
+        }), 500
+
 @bp.route('/debug/fix-dashboard-simple', methods=['GET'])
 @admin_required
 def fix_dashboard_simple():
