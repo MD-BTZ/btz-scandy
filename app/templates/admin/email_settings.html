@@ -108,11 +108,17 @@
                         <label class="label">
                             <span class="label-text font-medium">Passwort/App-Passwort</span>
                         </label>
-                        <input type="password" name="mail_password" value="{{ config.mail_password }}" 
+                        <input type="password" name="mail_password" value="" 
                                class="input input-bordered" placeholder="Ihr Passwort">
                         <label class="label">
                             <span class="label-text-alt text-info">Für Gmail: App-Passwort verwenden</span>
                         </label>
+                        {% if config.mail_password %}
+                        <div class="alert alert-info mt-2">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Ein Passwort ist bereits gespeichert. Lassen Sie das Feld leer, um es beizubehalten, oder geben Sie ein neues Passwort ein.</span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 

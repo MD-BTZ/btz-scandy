@@ -68,16 +68,19 @@ class AdminEmailService:
             (success, message)
         """
         try:
-            # Hole E-Mail-Einstellungen
-            settings = AdminEmailService.get_email_settings()
+            # Hole E-Mail-Konfiguration aus dem neuen System
+            config = AdminEmailService.get_email_config()
+            
+            if not config:
+                return False, "Keine E-Mail-Konfiguration gefunden"
             
             # Prüfe ob alle erforderlichen Einstellungen vorhanden sind
-            required_settings = ['email_smtp_server', 'email_smtp_port', 'email_username', 'email_password']
+            required_settings = ['mail_server', 'mail_port', 'mail_username', 'mail_password']
             missing_settings = []
             
             for setting in required_settings:
-                if setting not in settings or not settings[setting]:
-                    missing_settings.append(setting.replace('email_', ''))
+                if setting not in config or not config[setting]:
+                    missing_settings.append(setting.replace('mail_', ''))
             
             if missing_settings:
                 return False, f"Fehlende E-Mail-Einstellungen: {', '.join(missing_settings)}"
@@ -274,15 +277,15 @@ class AdminEmailService:
     def get_email_statistics() -> Dict[str, Any]:
         """Hole E-Mail-Statistiken"""
         try:
-            # Zähle E-Mail-Einstellungen
-            email_settings = AdminEmailService.get_email_settings()
+            # Zähle E-Mail-Einstellungen aus dem neuen System
+            email_config = AdminEmailService.get_email_config()
             
             # Prüfe ob E-Mail konfiguriert ist
             smtp_configured = all([
-                'email_smtp_server' in email_settings and email_settings['email_smtp_server'],
-                'email_smtp_port' in email_settings and email_settings['email_smtp_port'],
-                'email_username' in email_settings and email_settings['email_username'],
-                'email_password' in email_settings and email_settings['email_password']
+                'mail_server' in email_config and email_config['mail_server'],
+                'mail_port' in email_config and email_config['mail_port'],
+                'mail_username' in email_config and email_config['mail_username'],
+                'mail_password' in email_config and email_config['mail_password']
             ])
             
             # Zähle Benutzer mit E-Mail-Adressen
@@ -383,15 +386,10 @@ class AdminEmailService:
             (success, message)
         """
         try:
-            # Temporär die Konfiguration speichern
-            original_config = AdminEmailService.get_email_config()
-            AdminEmailService.save_email_config(config_data)
+            from app.utils.email_utils import test_email_config as test_config
             
-            # Teste die Konfiguration
-            success, message = AdminEmailService.test_email_configuration()
-            
-            # Stelle die ursprüngliche Konfiguration wieder her
-            AdminEmailService.save_email_config(original_config)
+            # Verwende die test_email_config aus email_utils
+            success, message = test_config(config_data)
             
             return success, message
             

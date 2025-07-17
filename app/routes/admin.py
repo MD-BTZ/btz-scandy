@@ -3439,12 +3439,20 @@ def email_settings():
                 
                 if use_auth:
                     # Mit Authentifizierung
+                    new_password = request.form.get('mail_password', '').strip()
+                    
+                    # Wenn kein neues Passwort eingegeben wurde, verwende das gespeicherte
+                    if not new_password:
+                        stored_config = AdminEmailService.get_email_config()
+                        if stored_config and stored_config.get('mail_password'):
+                            new_password = stored_config['mail_password']
+                    
                     config_data = {
                         'mail_server': request.form.get('mail_server', 'smtp.gmail.com'),
                         'mail_port': int(request.form.get('mail_port', 587)),
                         'mail_use_tls': request.form.get('mail_use_tls') == 'on',
                         'mail_username': request.form.get('mail_username', ''),
-                        'mail_password': request.form.get('mail_password', ''),
+                        'mail_password': new_password,
                         'test_email': request.form.get('test_email', ''),
                         'use_auth': True
                     }
@@ -3491,6 +3499,12 @@ def email_settings():
                         'mail_password': request.form.get('mail_password', ''),
                         'test_email': request.form.get('test_email', '')
                     }
+                    
+                    # Wenn kein neues Passwort eingegeben wurde, verwende das gespeicherte
+                    if not config_data['mail_password']:
+                        stored_config = AdminEmailService.get_email_config()
+                        if stored_config and stored_config.get('mail_password'):
+                            config_data['mail_password'] = stored_config['mail_password']
                 else:
                     # Ohne Authentifizierung
                     config_data = {
@@ -3521,6 +3535,10 @@ def email_settings():
         
         # Lade aktuelle Konfiguration
         config = AdminEmailService.get_email_config()
+        
+        # Entferne das Passwort aus der Konfiguration für das Template
+        if config and 'mail_password' in config:
+            config['mail_password'] = ''  # Leeres Feld, da Passwort verschlüsselt ist
         
         return render_template('admin/email_settings.html', config=config)
         
@@ -3580,7 +3598,33 @@ def test_email_simple():
         if not config_data:
             return jsonify({'success': False, 'message': 'Keine E-Mail-Konfiguration gefunden'})
         
-        success, message = AdminEmailService.test_email_config(config_data)
+        # Verwende die gleiche Logik wie im Debug-Tool
+        from app.utils.email_utils import _decrypt_password
+        
+        # Erstelle Test-Konfiguration mit entschlüsseltem Passwort
+        test_config = config_data.copy()
+        
+        # Entschlüssele Passwort falls verschlüsselt
+        if test_config.get('mail_password') and test_config['mail_password'].startswith('gAAAAA'):
+            try:
+                decrypted_password = _decrypt_password(test_config['mail_password'])
+                if decrypted_password:
+                    test_config['mail_password'] = decrypted_password
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Passwort konnte nicht entschlüsselt werden'
+                    })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'message': f'Fehler beim Entschlüsseln des Passworts: {str(e)}'
+                })
+        
+        # Verwende die test_email_config aus email_utils direkt
+        from app.utils.email_utils import test_email_config
+        
+        success, message = test_email_config(test_config)
         
         if success:
             return jsonify({
@@ -4332,6 +4376,213 @@ def test_backup_restore(filename):
         return jsonify({
             'success': False,
             'message': f'Unerwarteter Fehler: {str(e)}'
+        }), 500
+
+@bp.route('/debug/email-debug-page')
+@admin_required
+def email_debug_page():
+    """E-Mail Debug-Seite"""
+    return render_template('admin/email_debug.html')
+
+@bp.route('/debug/test-email-config', methods=['GET'])
+@admin_required
+def test_email_config_debug():
+    """Testet die E-Mail-Konfiguration mit detaillierten Informationen"""
+    try:
+        from app.utils.email_utils import get_email_config, test_email_config, _decrypt_password
+        
+        result = {
+            'success': False,
+            'message': '',
+            'config_loaded': False,
+            'config_details': {},
+            'test_result': {},
+            'errors': []
+        }
+        
+        # 1. Lade E-Mail-Konfiguration
+        try:
+            config = get_email_config()
+            if config:
+                result['config_loaded'] = True
+                result['config_details'] = {
+                    'mail_server': config.get('mail_server'),
+                    'mail_port': config.get('mail_port'),
+                    'mail_use_tls': config.get('mail_use_tls'),
+                    'mail_username': config.get('mail_username'),
+                    'mail_password_length': len(config.get('mail_password', '')),
+                    'mail_password_encrypted': config.get('mail_password', '').startswith('gAAAAA'),
+                    'test_email': config.get('test_email'),
+                    'use_auth': config.get('use_auth')
+                }
+            else:
+                result['errors'].append("E-Mail-Konfiguration konnte nicht geladen werden")
+        except Exception as e:
+            result['errors'].append(f"Fehler beim Laden der Konfiguration: {str(e)}")
+        
+        # 2. Teste E-Mail-Konfiguration
+        if config:
+            try:
+                # Erstelle Test-Konfiguration mit entschlüsseltem Passwort
+                test_config = config.copy()
+                
+                # Entschlüssele Passwort falls verschlüsselt
+                if test_config.get('mail_password') and test_config['mail_password'].startswith('gAAAAA'):
+                    try:
+                        decrypted_password = _decrypt_password(test_config['mail_password'])
+                        if decrypted_password:
+                            test_config['mail_password'] = decrypted_password
+                            result['config_details']['password_decrypted'] = True
+                        else:
+                            result['errors'].append("Passwort konnte nicht entschlüsselt werden")
+                    except Exception as e:
+                        result['errors'].append(f"Fehler beim Entschlüsseln des Passworts: {str(e)}")
+                
+                # Teste E-Mail-Konfiguration
+                success, message = test_email_config(test_config)
+                
+                result['test_result'] = {
+                    'success': success,
+                    'message': message,
+                    'config_used': {
+                        'mail_server': test_config.get('mail_server'),
+                        'mail_port': test_config.get('mail_port'),
+                        'mail_use_tls': test_config.get('mail_use_tls'),
+                        'mail_username': test_config.get('mail_username'),
+                        'mail_password_length': len(test_config.get('mail_password', '')),
+                        'test_email': test_config.get('test_email')
+                    }
+                }
+                
+                if success:
+                    result['success'] = True
+                    result['message'] = "E-Mail-Konfiguration funktioniert korrekt!"
+                else:
+                    result['message'] = f"E-Mail-Test fehlgeschlagen: {message}"
+                    
+            except Exception as e:
+                result['errors'].append(f"Fehler beim E-Mail-Test: {str(e)}")
+                result['message'] = f"Fehler beim E-Mail-Test: {str(e)}"
+        else:
+            result['message'] = "Keine E-Mail-Konfiguration verfügbar"
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim E-Mail-Konfigurations-Test: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Kritischer Fehler: {str(e)}',
+            'config_loaded': False,
+            'config_details': {},
+            'test_result': {},
+            'errors': [f"Unerwarteter Fehler: {str(e)}"]
+        }), 500
+
+@bp.route('/debug/fix-email-config', methods=['GET'])
+@admin_required
+def fix_email_config():
+    """Korrigiert E-Mail-Konfigurationsprobleme nach Backup-Restore"""
+    try:
+        result = {
+            'success': False,
+            'message': '',
+            'fixes_applied': 0,
+            'old_settings': {},
+            'new_config': {},
+            'errors': []
+        }
+        
+        # 1. Prüfe alte E-Mail-Einstellungen in settings Collection
+        try:
+            old_settings = {}
+            settings_docs = mongodb.find('settings', {'key': {'$regex': '^email_'}})
+            
+            for doc in settings_docs:
+                old_settings[doc['key']] = doc.get('value', '')
+            
+            result['old_settings'] = old_settings
+            
+            # 2. Prüfe neue E-Mail-Konfiguration in email_config Collection
+            try:
+                new_config_doc = mongodb.find_one('email_config', {'_id': 'email_config'})
+                if new_config_doc:
+                    result['new_config'] = {k: v for k, v in new_config_doc.items() if k != '_id'}
+            except Exception as e:
+                result['errors'].append(f"Neue E-Mail-Konfiguration prüfen: {str(e)}")
+            
+            # 3. Migriere alte Einstellungen zu neuem Format
+            if old_settings and not result['new_config']:
+                try:
+                    # Konvertiere alte Einstellungen zu neuem Format
+                    new_config = {
+                        'mail_server': old_settings.get('email_smtp_server', 'smtp.gmail.com'),
+                        'mail_port': int(old_settings.get('email_smtp_port', 587)),
+                        'mail_use_tls': old_settings.get('email_use_tls', 'true').lower() == 'true',
+                        'mail_username': old_settings.get('email_username', ''),
+                        'mail_password': old_settings.get('email_password', ''),
+                        'test_email': old_settings.get('email_test_email', ''),
+                        'use_auth': old_settings.get('email_use_auth', 'true').lower() == 'true'
+                    }
+                    
+                    # Speichere neue Konfiguration
+                    mongodb.update_one('email_config', 
+                                     {'_id': 'email_config'}, 
+                                     {'$set': new_config}, 
+                                     upsert=True)
+                    
+                    result['new_config'] = new_config
+                    result['fixes_applied'] += 1
+                    result['message'] += "E-Mail-Konfiguration von altem Format migriert. "
+                    
+                except Exception as e:
+                    result['errors'].append(f"Migration fehlgeschlagen: {str(e)}")
+            
+            # 4. Prüfe ob Admin-Benutzer E-Mail-Adresse hat
+            try:
+                admin_users = list(mongodb.find('users', {'role': 'admin'}))
+                admin_without_email = 0
+                
+                for admin in admin_users:
+                    if not admin.get('email'):
+                        admin_without_email += 1
+                        # Setze Standard-E-Mail für Admin ohne E-Mail
+                        mongodb.update_one('users', 
+                                         {'_id': admin['_id']}, 
+                                         {'$set': {'email': 'admin@scandy.local'}})
+                
+                if admin_without_email > 0:
+                    result['fixes_applied'] += admin_without_email
+                    result['message'] += f"{admin_without_email} Admin-Benutzer ohne E-Mail-Adresse korrigiert. "
+                    
+            except Exception as e:
+                result['errors'].append(f"Admin-E-Mail prüfen: {str(e)}")
+            
+            # 5. Bewerte das Ergebnis
+            if result['fixes_applied'] > 0 and not result['errors']:
+                result['success'] = True
+                result['message'] += "E-Mail-Konfiguration erfolgreich repariert!"
+            elif result['fixes_applied'] > 0:
+                result['success'] = True
+                result['message'] += "E-Mail-Konfiguration teilweise repariert."
+            else:
+                result['message'] = "Keine E-Mail-Konfigurationsprobleme gefunden."
+            
+        except Exception as e:
+            result['errors'].append(f"Allgemeiner Fehler: {str(e)}")
+            result['message'] = "Fehler beim Prüfen der E-Mail-Konfiguration."
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei E-Mail-Konfigurations-Fix: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Kritischer Fehler: {str(e)}',
+            'fixes_applied': 0,
+            'errors': [f"Unerwarteter Fehler: {str(e)}"],
+            'old_settings': {},
+            'new_config': {}
         }), 500
 
 @bp.route('/debug/fix-dashboard-simple', methods=['GET'])
