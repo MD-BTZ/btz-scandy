@@ -144,15 +144,19 @@ class AdminBackupService:
             success = backup_manager.restore_from_file(str(backup_path))
             
             if success:
+                # Korrigiere fehlende created_at Felder
+                fixed_count = AdminBackupService._fix_missing_created_at_fields()
+                
                 # Validiere das wiederhergestellte Backup
                 validation_info = {
                     'filename': filename,
                     'restored_at': datetime.now(),
                     'previous_backup': current_backup,
-                    'collections_restored': ['tools', 'workers', 'consumables', 'users', 'lendings', 'tickets', 'settings']
+                    'collections_restored': ['tools', 'workers', 'consumables', 'users', 'lendings', 'tickets', 'settings'],
+                    'fixed_created_at_fields': fixed_count
                 }
                 
-                logger.info(f"Backup erfolgreich wiederhergestellt: {filename}")
+                logger.info(f"Backup erfolgreich wiederhergestellt: {filename} (erganzte Felder: {fixed_count})")
                 return True, f"Backup '{filename}' erfolgreich wiederhergestellt", validation_info
             else:
                 return False, "Fehler beim Wiederherstellen des Backups", None
@@ -307,3 +311,158 @@ class AdminBackupService:
         except Exception as e:
             logger.error(f"Fehler beim Testen des Backups {filename}: {str(e)}")
             return False, f"Fehler beim Testen des Backups: {str(e)}" 
+
+    @staticmethod
+    def _fix_missing_created_at_fields():
+        """
+        Ergänzt fehlende created_at Felder und andere Standardfelder in Tools und anderen Collections
+        """
+        try:
+            from datetime import datetime
+            
+            fixed_count = 0
+            
+            # Tools ohne created_at Feld finden und ergänzen
+            tools_without_created_at = mongodb.find('tools', {
+                'created_at': {'$exists': False}
+            })
+            
+            for tool in tools_without_created_at:
+                # Verwende updated_at als created_at, falls vorhanden
+                created_at = tool.get('updated_at') or tool.get('modified_at') or datetime.now()
+                
+                # Konvertiere String zu datetime falls nötig
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
+                            except ValueError:
+                                created_at = datetime.now()
+                
+                # Ergänze created_at Feld
+                mongodb.update_one('tools', 
+                                 {'_id': tool['_id']}, 
+                                 {'$set': {'created_at': created_at}})
+                fixed_count += 1
+            
+            # Workers ohne created_at Feld finden und ergänzen
+            workers_without_created_at = mongodb.find('workers', {
+                'created_at': {'$exists': False}
+            })
+            
+            for worker in workers_without_created_at:
+                created_at = worker.get('updated_at') or worker.get('modified_at') or datetime.now()
+                
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
+                            except ValueError:
+                                created_at = datetime.now()
+                
+                mongodb.update_one('workers', 
+                                 {'_id': worker['_id']}, 
+                                 {'$set': {'created_at': created_at}})
+                fixed_count += 1
+            
+            # Consumables ohne created_at Feld finden und ergänzen
+            consumables_without_created_at = mongodb.find('consumables', {
+                'created_at': {'$exists': False}
+            })
+            
+            for consumable in consumables_without_created_at:
+                created_at = consumable.get('updated_at') or datetime.now()
+                
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
+                            except ValueError:
+                                created_at = datetime.now()
+                
+                # Ergänze created_at und unit Feld falls fehlend
+                update_data = {'created_at': created_at}
+                
+                # Ergänze unit Feld falls nicht vorhanden
+                if 'unit' not in consumable:
+                    update_data['unit'] = 'Stück'
+                
+                mongodb.update_one('consumables', 
+                                 {'_id': consumable['_id']}, 
+                                 {'$set': update_data})
+                fixed_count += 1
+            
+            # Ergänze unit Feld für alle Consumables die es nicht haben
+            consumables_without_unit = mongodb.find('consumables', {
+                'unit': {'$exists': False}
+            })
+            
+            for consumable in consumables_without_unit:
+                mongodb.update_one('consumables', 
+                                 {'_id': consumable['_id']}, 
+                                 {'$set': {'unit': 'Stück'}})
+                fixed_count += 1
+            
+            # Ergänze sync_status Feld für alle Collections falls fehlend
+            collections_to_check = ['tools', 'workers', 'consumables']
+            for collection in collections_to_check:
+                docs_without_sync = mongodb.find(collection, {
+                    'sync_status': {'$exists': False}
+                })
+                
+                for doc in docs_without_sync:
+                    mongodb.update_one(collection, 
+                                     {'_id': doc['_id']}, 
+                                     {'$set': {'sync_status': 'synced'}})
+                    fixed_count += 1
+            
+            # Ergänze deleted_at Feld für alle Collections falls fehlend (für Soft-Delete)
+            for collection in collections_to_check:
+                docs_without_deleted_at = mongodb.find(collection, {
+                    'deleted': True,
+                    'deleted_at': {'$exists': False}
+                })
+                
+                for doc in docs_without_deleted_at:
+                    deleted_at = doc.get('updated_at') or datetime.now()
+                    
+                    if isinstance(deleted_at, str):
+                        try:
+                            deleted_at = datetime.strptime(deleted_at, '%Y-%m-%d %H:%M:%S.%f')
+                        except ValueError:
+                            try:
+                                deleted_at = datetime.strptime(deleted_at, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                try:
+                                    deleted_at = datetime.strptime(deleted_at, '%Y-%m-%d')
+                                except ValueError:
+                                    deleted_at = datetime.now()
+                    
+                    mongodb.update_one(collection, 
+                                     {'_id': doc['_id']}, 
+                                     {'$set': {'deleted_at': deleted_at}})
+                    fixed_count += 1
+            
+            if fixed_count > 0:
+                logger.info(f"Fehlende Felder ergänzt: {fixed_count} Dokumente")
+            
+            return fixed_count
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Ergänzen fehlender Felder: {str(e)}")
+            return 0 

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Debug{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-bug"></i> Dashboard Debug & Reparatur
+            </h1>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                Diese Seite hilft bei der Diagnose und Reparatur von Dashboard-Problemen nach Backup-Restores.
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-tools"></i> Reparatur-Tools</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <button id="fixDashboardSimple" class="btn btn-primary btn-block">
+                            <i class="fas fa-magic"></i> Dashboard einfach reparieren
+                        </button>
+                        <small class="text-muted">Korrigiert fehlende Felder und testet Services</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button id="fixBackupFields" class="btn btn-warning btn-block">
+                            <i class="fas fa-database"></i> Backup-Felder korrigieren
+                        </button>
+                        <small class="text-muted">Ergänzt fehlende created_at Felder</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button id="fixDashboardComplete" class="btn btn-danger btn-block">
+                            <i class="fas fa-wrench"></i> Umfassende Reparatur
+                        </button>
+                        <small class="text-muted">Behebt alle bekannten Probleme</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button id="testDashboard" class="btn btn-info btn-block">
+                            <i class="fas fa-vial"></i> Dashboard testen
+                        </button>
+                        <small class="text-muted">Testet alle Dashboard-Services</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-line"></i> Status-Übersicht</h5>
+                </div>
+                <div class="card-body">
+                    <div id="statusOverview">
+                        <p class="text-muted">Klicken Sie auf einen Button, um den Status zu prüfen.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-list"></i> Ergebnisse</h5>
+                </div>
+                <div class="card-body">
+                    <div id="results">
+                        <p class="text-muted">Hier werden die Ergebnisse der Debug-Operationen angezeigt.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const buttons = {
+        fixDashboardSimple: { url: '/admin/debug/fix-dashboard-simple', method: 'GET' },
+        fixBackupFields: { url: '/admin/debug/fix-backup-fields', method: 'POST' },
+        fixDashboardComplete: { url: '/admin/debug/fix-dashboard-complete', method: 'POST' },
+        testDashboard: { url: '/admin/debug/test-dashboard-fix', method: 'GET' }
+    };
+
+    function showLoading(buttonId) {
+        const button = document.getElementById(buttonId);
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Wird ausgeführt...';
+        button.disabled = true;
+        return originalText;
+    }
+
+    function restoreButton(buttonId, originalText) {
+        const button = document.getElementById(buttonId);
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+
+    function showResult(data, operation) {
+        const resultsDiv = document.getElementById('results');
+        let html = `<div class="alert alert-${data.success ? 'success' : 'danger'}">`;
+        html += `<h6><i class="fas fa-${data.success ? 'check' : 'times'}"></i> ${operation}</h6>`;
+        html += `<p><strong>${data.message}</strong></p>`;
+        
+        if (data.fixes_applied !== undefined) {
+            html += `<p><strong>Korrigierte Felder:</strong> ${data.fixes_applied}</p>`;
+        }
+        
+        if (data.errors && data.errors.length > 0) {
+            html += `<div class="mt-2"><strong>Fehler:</strong><ul>`;
+            data.errors.forEach(error => {
+                html += `<li>${error}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+        
+        if (data.tests && Object.keys(data.tests).length > 0) {
+            html += `<div class="mt-2"><strong>Service-Tests:</strong><ul>`;
+            Object.entries(data.tests).forEach(([service, result]) => {
+                html += `<li><strong>${service}:</strong> ${result}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+        
+        if (data.database_info && Object.keys(data.database_info).length > 0) {
+            html += `<div class="mt-2"><strong>Datenbank-Info:</strong><ul>`;
+            Object.entries(data.database_info).forEach(([collection, count]) => {
+                html += `<li><strong>${collection}:</strong> ${count}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+        
+        html += `</div>`;
+        resultsDiv.innerHTML = html + resultsDiv.innerHTML;
+    }
+
+    function updateStatus(data) {
+        const statusDiv = document.getElementById('statusOverview');
+        let statusHtml = '';
+        
+        if (data.success) {
+            statusHtml = `<div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> Dashboard funktioniert
+            </div>`;
+        } else {
+            statusHtml = `<div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i> Dashboard hat Probleme
+            </div>`;
+        }
+        
+        if (data.database_info) {
+            statusHtml += `<div class="mt-2">
+                <small><strong>Datenbank:</strong> ${data.database_info.tools_count || 0} Tools, 
+                ${data.database_info.consumables_count || 0} Verbrauchsmaterialien, 
+                ${data.database_info.workers_count || 0} Mitarbeiter</small>
+            </div>`;
+        }
+        
+        statusDiv.innerHTML = statusHtml;
+    }
+
+    Object.entries(buttons).forEach(([buttonId, config]) => {
+        document.getElementById(buttonId).addEventListener('click', async function() {
+            const originalText = showLoading(buttonId);
+            
+            try {
+                const response = await fetch(config.url, {
+                    method: config.method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(data, buttonId.replace(/([A-Z])/g, ' $1').trim());
+                    updateStatus(data);
+                } else {
+                    showResult({
+                        success: false,
+                        message: `HTTP ${response.status}: ${data.message || 'Unbekannter Fehler'}`
+                    }, buttonId.replace(/([A-Z])/g, ' $1').trim());
+                }
+            } catch (error) {
+                showResult({
+                    success: false,
+                    message: `Netzwerkfehler: ${error.message}`,
+                    errors: [error.toString()]
+                }, buttonId.replace(/([A-Z])/g, ' $1').trim());
+            } finally {
+                restoreButton(buttonId, originalText);
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

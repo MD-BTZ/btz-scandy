@@ -217,6 +217,19 @@ def dashboard():
             worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
             
             if tool and worker:
+                # Sichere Datumsbehandlung für created_at
+                created_at = tool.get('created_at')
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            created_at = datetime.now()  # Fallback
+                elif not isinstance(created_at, datetime):
+                    created_at = datetime.now()  # Fallback wenn kein created_at vorhanden
+                
                 processed_lendings.append({
                     'tool_name': tool['name'],
                     'worker_name': f"{worker['firstname']} {worker['lastname']}",
@@ -3734,4 +3747,632 @@ def validate_lending_consistency():
         return jsonify({
             'success': False,
             'message': f'Fehler bei der Konsistenzprüfung: {str(e)}'
+        }), 500
+
+@bp.route('/debug/fix-missing-created-at', methods=['POST'])
+@admin_required
+def fix_missing_created_at():
+    """Korrigiert fehlende created_at Felder in der Datenbank"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        fixed_count = AdminBackupService._fix_missing_created_at_fields()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{fixed_count} fehlende created_at Felder wurden ergänzt',
+            'fixed_count': fixed_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Korrigieren fehlender created_at Felder: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Korrigieren: {str(e)}'
+        }), 500
+
+@bp.route('/debug/fix-backup-fields', methods=['GET', 'POST'])
+@admin_required
+def fix_backup_fields():
+    """Korrigiert fehlende Felder in der Datenbank nach Backup-Restore"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        # Führe die Korrektur aus
+        fixed_count = AdminBackupService._fix_missing_created_at_fields()
+        
+        # Zusätzliche Korrekturen für Dashboard-Probleme
+        dashboard_fixes = 0
+        
+        # Stelle sicher, dass alle Tools ein gültiges created_at Feld haben
+        all_tools = mongodb.find('tools', {})
+        for tool in all_tools:
+            created_at = tool.get('created_at')
+            if created_at is None:
+                # Verwende updated_at oder aktuelles Datum
+                fallback_date = tool.get('updated_at') or datetime.now()
+                if isinstance(fallback_date, str):
+                    try:
+                        fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            fallback_date = datetime.now()
+                
+                mongodb.update_one('tools', 
+                                 {'_id': tool['_id']}, 
+                                 {'$set': {'created_at': fallback_date}})
+                dashboard_fixes += 1
+        
+        # Stelle sicher, dass alle Workers ein gültiges created_at Feld haben
+        all_workers = mongodb.find('workers', {})
+        for worker in all_workers:
+            created_at = worker.get('created_at')
+            if created_at is None:
+                fallback_date = worker.get('updated_at') or datetime.now()
+                if isinstance(fallback_date, str):
+                    try:
+                        fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            fallback_date = datetime.now()
+                
+                mongodb.update_one('workers', 
+                                 {'_id': worker['_id']}, 
+                                 {'$set': {'created_at': fallback_date}})
+                dashboard_fixes += 1
+        
+        total_fixes = fixed_count + dashboard_fixes
+        
+        return jsonify({
+            'success': True,
+            'message': f'{total_fixes} fehlende Felder wurden ergänzt (Backup-Service: {fixed_count}, Dashboard-Fixes: {dashboard_fixes})',
+            'fixed_count': total_fixes,
+            'backup_service_fixes': fixed_count,
+            'dashboard_fixes': dashboard_fixes
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Korrigieren der Backup-Felder: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Korrigieren: {str(e)}'
+        }), 500
+
+@bp.route('/debug/test-dashboard-fix', methods=['GET'])
+@admin_required
+def test_dashboard_fix():
+    """Testet und behebt Dashboard-Probleme nach Backup-Restore"""
+    try:
+        # Teste ob das Dashboard geladen werden kann
+        from app.services.admin_dashboard_service import AdminDashboardService
+        
+        result = {
+            'success': False,
+            'message': '',
+            'tests': {},
+            'errors': []
+        }
+        
+        # Teste alle Dashboard-Services
+        services_to_test = [
+            ('recent_activity', AdminDashboardService.get_recent_activity),
+            ('material_usage', AdminDashboardService.get_material_usage),
+            ('warnings', AdminDashboardService.get_warnings),
+            ('consumables_forecast', AdminDashboardService.get_consumables_forecast),
+            ('consumable_trend', AdminDashboardService.get_consumable_trend)
+        ]
+        
+        working_services = 0
+        for service_name, service_func in services_to_test:
+            try:
+                data = service_func()
+                if data is not None:
+                    if isinstance(data, list):
+                        result['tests'][service_name] = len(data)
+                    elif isinstance(data, dict):
+                        result['tests'][service_name] = len(data.get('usage_data', [])) if 'usage_data' in data else len(data)
+                    else:
+                        result['tests'][service_name] = 'OK'
+                    working_services += 1
+                else:
+                    result['tests'][service_name] = 'Keine Daten'
+            except Exception as e:
+                error_msg = f"{str(e)}"
+                result['tests'][service_name] = f"Fehler: {error_msg}"
+                result['errors'].append(f"{service_name}: {error_msg}")
+        
+        # Bewerte das Ergebnis
+        if working_services == len(services_to_test) and not result['errors']:
+            result['success'] = True
+            result['message'] = 'Dashboard funktioniert einwandfrei!'
+        elif working_services > 0:
+            result['success'] = True
+            result['message'] = f'Dashboard teilweise funktional. {working_services}/{len(services_to_test)} Services funktionieren.'
+        else:
+            result['message'] = 'Dashboard hat Probleme. Keine Services funktionieren.'
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Testen des Dashboard-Fixes: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Testen: {str(e)}',
+            'errors': [f"Unerwarteter Fehler: {str(e)}"],
+            'tests': {}
+        }), 500
+
+@bp.route('/debug/fix-dashboard-complete', methods=['GET', 'POST'])
+@admin_required
+def fix_dashboard_complete():
+    """Behebt alle Dashboard-Probleme umfassend"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        from app.services.admin_dashboard_service import AdminDashboardService
+        
+        result = {
+            'success': False,
+            'message': '',
+            'fixes': {
+                'backup_fields': 0,
+                'data_consistency': 0,
+                'missing_relations': 0,
+                'date_fixes': 0
+            },
+            'dashboard_tests': {},
+            'errors': []
+        }
+        
+        # 1. Backup-Felder korrigieren
+        try:
+            result['fixes']['backup_fields'] = AdminBackupService._fix_missing_created_at_fields()
+        except Exception as e:
+            result['errors'].append(f"Backup-Felder: {str(e)}")
+        
+        # 2. Datenkonsistenz prüfen und korrigieren
+        collections_to_check = ['tools', 'workers', 'consumables', 'lendings', 'consumable_usages']
+        
+        for collection in collections_to_check:
+            try:
+                # Prüfe auf ungültige Datumsfelder
+                date_fields = ['created_at', 'updated_at', 'lent_at', 'returned_at', 'used_at']
+                for field in date_fields:
+                    docs_with_invalid_dates = mongodb.find(collection, {
+                        field: {'$exists': True, '$type': 'string'}
+                    })
+                    
+                    for doc in docs_with_invalid_dates:
+                        date_value = doc.get(field)
+                        if isinstance(date_value, str):
+                            try:
+                                # Versuche verschiedene Datumsformate
+                                if '.' in date_value:
+                                    parsed_date = datetime.strptime(date_value, '%Y-%m-%d %H:%M:%S.%f')
+                                elif 'T' in date_value:
+                                    parsed_date = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+                                else:
+                                    parsed_date = datetime.strptime(date_value, '%Y-%m-%d %H:%M:%S')
+                                
+                                mongodb.update_one(collection, 
+                                                 {'_id': doc['_id']}, 
+                                                 {'$set': {field: parsed_date}})
+                                result['fixes']['date_fixes'] += 1
+                            except ValueError:
+                                # Ungültiges Datum - setze auf aktuelles Datum
+                                mongodb.update_one(collection, 
+                                                 {'_id': doc['_id']}, 
+                                                 {'$set': {field: datetime.now()}})
+                                result['fixes']['date_fixes'] += 1
+            except Exception as e:
+                result['errors'].append(f"{collection} Datumsfelder: {str(e)}")
+        
+        # 3. Teste Dashboard-Services
+        dashboard_services = [
+            ('recent_activity', AdminDashboardService.get_recent_activity),
+            ('material_usage', AdminDashboardService.get_material_usage),
+            ('warnings', AdminDashboardService.get_warnings),
+            ('consumables_forecast', AdminDashboardService.get_consumables_forecast),
+            ('consumable_trend', AdminDashboardService.get_consumable_trend)
+        ]
+        
+        working_services = 0
+        for service_name, service_func in dashboard_services:
+            try:
+                data = service_func()
+                if data is not None:
+                    if isinstance(data, list):
+                        result['dashboard_tests'][service_name] = len(data)
+                    elif isinstance(data, dict):
+                        result['dashboard_tests'][service_name] = len(data.get('usage_data', [])) if 'usage_data' in data else len(data)
+                    else:
+                        result['dashboard_tests'][service_name] = 'OK'
+                    working_services += 1
+                else:
+                    result['dashboard_tests'][service_name] = 'Keine Daten'
+            except Exception as e:
+                error_msg = f"{str(e)}"
+                result['dashboard_tests'][service_name] = f"Fehler: {error_msg}"
+                result['errors'].append(f"{service_name}: {error_msg}")
+        
+        # 4. Bewerte das Ergebnis
+        total_fixes = sum(result['fixes'].values())
+        
+        if working_services == len(dashboard_services) and not result['errors']:
+            result['success'] = True
+            result['message'] = f'Dashboard-Korrektur abgeschlossen: {total_fixes} Probleme behoben'
+        elif working_services > 0:
+            result['success'] = True
+            result['message'] = f'Dashboard teilweise repariert: {total_fixes} Probleme behoben, {working_services}/{len(dashboard_services)} Services funktionieren'
+        else:
+            result['message'] = f'Dashboard konnte nicht repariert werden: {total_fixes} Probleme behoben, aber Services funktionieren nicht'
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der umfassenden Dashboard-Korrektur: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler bei der Dashboard-Korrektur: {str(e)}',
+            'errors': [f"Unerwarteter Fehler: {str(e)}"],
+            'fixes': {'backup_fields': 0, 'data_consistency': 0, 'missing_relations': 0, 'date_fixes': 0},
+            'dashboard_tests': {}
+        }), 500
+
+@bp.route('/debug/dashboard-status', methods=['GET'])
+@admin_required
+def dashboard_status():
+    """Zeigt den aktuellen Dashboard-Status und behebt Probleme automatisch"""
+    try:
+        from app.services.admin_dashboard_service import AdminDashboardService
+        
+        status = {
+            'dashboard_working': False,
+            'errors': [],
+            'fixes_applied': 0,
+            'data_counts': {}
+        }
+        
+        # Teste Dashboard-Services
+        try:
+            recent_activity = AdminDashboardService.get_recent_activity()
+            status['data_counts']['recent_activity'] = len(recent_activity)
+        except Exception as e:
+            status['errors'].append(f"Recent Activity: {str(e)}")
+        
+        try:
+            material_usage = AdminDashboardService.get_material_usage()
+            status['data_counts']['material_usage'] = len(material_usage.get('usage_data', []))
+        except Exception as e:
+            status['errors'].append(f"Material Usage: {str(e)}")
+        
+        try:
+            warnings = AdminDashboardService.get_warnings()
+            status['data_counts']['warnings'] = sum(len(w) for w in warnings.values())
+        except Exception as e:
+            status['errors'].append(f"Warnings: {str(e)}")
+        
+        try:
+            consumables_forecast = AdminDashboardService.get_consumables_forecast()
+            status['data_counts']['consumables_forecast'] = len(consumables_forecast)
+        except Exception as e:
+            status['errors'].append(f"Consumables Forecast: {str(e)}")
+        
+        try:
+            consumable_trend = AdminDashboardService.get_consumable_trend()
+            status['data_counts']['consumable_trend'] = len(consumable_trend.get('labels', []))
+        except Exception as e:
+            status['errors'].append(f"Consumable Trend: {str(e)}")
+        
+        # Prüfe Datenbank-Zugriff
+        try:
+            total_tools = mongodb.count_documents('tools', {'deleted': {'$ne': True}})
+            total_consumables = mongodb.count_documents('consumables', {'deleted': {'$ne': True}})
+            total_workers = mongodb.count_documents('workers', {'deleted': {'$ne': True}})
+            total_lendings = mongodb.count_documents('lendings', {})
+            
+            status['data_counts'].update({
+                'tools': total_tools,
+                'consumables': total_consumables,
+                'workers': total_workers,
+                'lendings': total_lendings
+            })
+        except Exception as e:
+            status['errors'].append(f"Database Access: {str(e)}")
+        
+        # Wenn es Fehler gibt, versuche automatische Korrektur
+        if status['errors']:
+            try:
+                from app.services.admin_backup_service import AdminBackupService
+                
+                # Führe Backup-Feld-Korrektur aus
+                fixed_count = AdminBackupService._fix_missing_created_at_fields()
+                status['fixes_applied'] = fixed_count
+                
+                # Teste erneut nach der Korrektur
+                retry_success = True
+                for error in status['errors'][:]:  # Kopie für Iteration
+                    if 'Recent Activity' in error:
+                        try:
+                            recent_activity = AdminDashboardService.get_recent_activity()
+                            status['data_counts']['recent_activity'] = len(recent_activity)
+                            status['errors'].remove(error)
+                        except:
+                            retry_success = False
+                
+                if retry_success and not status['errors']:
+                    status['dashboard_working'] = True
+                    status['message'] = f'Dashboard repariert! {fixed_count} Felder korrigiert'
+                else:
+                    status['message'] = f'Teilweise repariert. {fixed_count} Felder korrigiert, aber {len(status["errors"])} Fehler verbleiben'
+            except Exception as fix_error:
+                status['errors'].append(f"Auto-Fix failed: {str(fix_error)}")
+                status['message'] = 'Automatische Reparatur fehlgeschlagen'
+        else:
+            status['dashboard_working'] = True
+            status['message'] = 'Dashboard funktioniert einwandfrei'
+        
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Prüfen des Dashboard-Status: {str(e)}")
+        return jsonify({
+            'dashboard_working': False,
+            'errors': [f"Status check failed: {str(e)}"],
+            'fixes_applied': 0,
+            'data_counts': {},
+            'message': 'Fehler beim Prüfen des Dashboard-Status'
+        }), 500
+
+@bp.route('/debug/dashboard-details', methods=['GET'])
+@admin_required
+def dashboard_details():
+    """Zeigt detaillierte Informationen über Dashboard-Probleme"""
+    try:
+        from app.services.admin_dashboard_service import AdminDashboardService
+        
+        details = {
+            'database_counts': {},
+            'service_tests': {},
+            'template_variables': {},
+            'errors': []
+        }
+        
+        # Datenbank-Zählungen
+        try:
+            details['database_counts'] = {
+                'tools': mongodb.count_documents('tools', {'deleted': {'$ne': True}}),
+                'consumables': mongodb.count_documents('consumables', {'deleted': {'$ne': True}}),
+                'workers': mongodb.count_documents('workers', {'deleted': {'$ne': True}}),
+                'lendings': mongodb.count_documents('lendings', {}),
+                'consumable_usages': mongodb.count_documents('consumable_usages', {}),
+                'tickets': mongodb.count_documents('tickets', {})
+            }
+        except Exception as e:
+            details['errors'].append(f"Database counts: {str(e)}")
+        
+        # Service-Tests
+        try:
+            recent_activity = AdminDashboardService.get_recent_activity()
+            details['service_tests']['recent_activity'] = {
+                'count': len(recent_activity),
+                'sample': recent_activity[:2] if recent_activity else []
+            }
+        except Exception as e:
+            details['service_tests']['recent_activity'] = {'error': str(e)}
+        
+        try:
+            material_usage = AdminDashboardService.get_material_usage()
+            details['service_tests']['material_usage'] = {
+                'count': len(material_usage.get('usage_data', [])),
+                'period_days': material_usage.get('period_days', 0)
+            }
+        except Exception as e:
+            details['service_tests']['material_usage'] = {'error': str(e)}
+        
+        try:
+            warnings = AdminDashboardService.get_warnings()
+            details['service_tests']['warnings'] = {
+                'defect_tools': len(warnings.get('defect_tools', [])),
+                'overdue_lendings': len(warnings.get('overdue_lendings', [])),
+                'low_stock_consumables': len(warnings.get('low_stock_consumables', []))
+            }
+        except Exception as e:
+            details['service_tests']['warnings'] = {'error': str(e)}
+        
+        try:
+            consumables_forecast = AdminDashboardService.get_consumables_forecast()
+            details['service_tests']['consumables_forecast'] = {
+                'count': len(consumables_forecast)
+            }
+        except Exception as e:
+            details['service_tests']['consumables_forecast'] = {'error': str(e)}
+        
+        try:
+            consumable_trend = AdminDashboardService.get_consumable_trend()
+            details['service_tests']['consumable_trend'] = {
+                'labels_count': len(consumable_trend.get('labels', [])),
+                'datasets_count': len(consumable_trend.get('datasets', []))
+            }
+        except Exception as e:
+            details['service_tests']['consumable_trend'] = {'error': str(e)}
+        
+        # Template-Variablen simulieren
+        try:
+            # Simuliere Dashboard-Route Logik
+            total_tools = mongodb.count_documents('tools', {'deleted': {'$ne': True}})
+            total_consumables = mongodb.count_documents('consumables', {'deleted': {'$ne': True}})
+            total_workers = mongodb.count_documents('workers', {'deleted': {'$ne': True}})
+            total_tickets = mongodb.count_documents('tickets', {})
+            
+            # Tool-Statistiken
+            tool_stats = {
+                'total': total_tools,
+                'available': mongodb.count_documents('tools', {'status': 'verfügbar', 'deleted': {'$ne': True}}),
+                'lent': mongodb.count_documents('tools', {'status': 'ausgeliehen', 'deleted': {'$ne': True}}),
+                'defect': mongodb.count_documents('tools', {'status': 'defekt', 'deleted': {'$ne': True}})
+            }
+            
+            # Consumable-Statistiken
+            consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+            sufficient = 0
+            warning = 0
+            critical = 0
+            
+            for consumable in consumables:
+                if consumable['quantity'] >= consumable.get('warning_threshold', 10):
+                    sufficient += 1
+                elif consumable['quantity'] >= consumable.get('critical_threshold', 5):
+                    warning += 1
+                else:
+                    critical += 1
+            
+            consumable_stats = {
+                'total': total_consumables,
+                'sufficient': sufficient,
+                'warning': warning,
+                'critical': critical
+            }
+            
+            # Worker-Statistiken
+            workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
+            worker_stats = {
+                'total': total_workers,
+                'by_department': []
+            }
+            
+            # Gruppiere nach Abteilung
+            dept_counts = {}
+            for worker in workers:
+                dept = worker.get('department', 'Ohne Abteilung')
+                dept_counts[dept] = dept_counts.get(dept, 0) + 1
+            
+            for dept, count in dept_counts.items():
+                worker_stats['by_department'].append({
+                    'name': dept,
+                    'count': count
+                })
+            
+            details['template_variables'] = {
+                'total_tools': total_tools,
+                'total_consumables': total_consumables,
+                'total_workers': total_workers,
+                'total_tickets': total_tickets,
+                'tool_stats': tool_stats,
+                'consumable_stats': consumable_stats,
+                'worker_stats': worker_stats
+            }
+            
+        except Exception as e:
+            details['errors'].append(f"Template variables: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'details': details,
+            'message': 'Dashboard-Details erfolgreich geladen'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Dashboard-Details: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Laden der Dashboard-Details: {str(e)}'
+        }), 500
+
+@bp.route('/debug/dashboard-page')
+@admin_required
+def dashboard_debug_page():
+    """Dashboard Debug-Seite"""
+    return render_template('admin/dashboard_debug.html')
+
+@bp.route('/debug/fix-dashboard-simple', methods=['GET'])
+@admin_required
+def fix_dashboard_simple():
+    """Einfache Dashboard-Korrektur mit detaillierten Informationen"""
+    try:
+        import traceback
+        from app.services.admin_backup_service import AdminBackupService
+        from app.services.admin_dashboard_service import AdminDashboardService
+        
+        result = {
+            'success': False,
+            'message': '',
+            'fixes_applied': 0,
+            'errors': [],
+            'tests': {},
+            'database_info': {}
+        }
+        
+        # 1. Sammle Datenbank-Informationen
+        try:
+            result['database_info'] = {
+                'tools_count': mongodb.count_documents('tools', {'deleted': {'$ne': True}}),
+                'consumables_count': mongodb.count_documents('consumables', {'deleted': {'$ne': True}}),
+                'workers_count': mongodb.count_documents('workers', {'deleted': {'$ne': True}}),
+                'lendings_count': mongodb.count_documents('lendings', {}),
+                'tickets_count': mongodb.count_documents('tickets', {})
+            }
+        except Exception as e:
+            result['errors'].append(f"Datenbank-Zugriff: {str(e)}")
+        
+        # 2. Führe Backup-Feld-Korrektur aus
+        try:
+            fixed_count = AdminBackupService._fix_missing_created_at_fields()
+            result['fixes_applied'] = fixed_count
+            result['message'] += f"{fixed_count} fehlende Felder korrigiert. "
+        except Exception as e:
+            result['errors'].append(f"Backup-Feld-Korrektur: {str(e)}")
+        
+        # 3. Teste Dashboard-Services
+        dashboard_services = [
+            ('recent_activity', AdminDashboardService.get_recent_activity),
+            ('material_usage', AdminDashboardService.get_material_usage),
+            ('warnings', AdminDashboardService.get_warnings),
+            ('consumables_forecast', AdminDashboardService.get_consumables_forecast),
+            ('consumable_trend', AdminDashboardService.get_consumable_trend)
+        ]
+        
+        working_services = 0
+        for service_name, service_func in dashboard_services:
+            try:
+                data = service_func()
+                if data is not None:
+                    if isinstance(data, list):
+                        result['tests'][service_name] = len(data)
+                    elif isinstance(data, dict):
+                        result['tests'][service_name] = len(data.get('usage_data', [])) if 'usage_data' in data else len(data)
+                    else:
+                        result['tests'][service_name] = 'OK'
+                    working_services += 1
+                else:
+                    result['tests'][service_name] = 'Keine Daten'
+            except Exception as e:
+                error_msg = f"{str(e)}"
+                result['tests'][service_name] = f"Fehler: {error_msg}"
+                result['errors'].append(f"{service_name}: {error_msg}")
+        
+        # 4. Bewerte das Ergebnis
+        if working_services == len(dashboard_services) and not result['errors']:
+            result['success'] = True
+            result['message'] += "Dashboard funktioniert einwandfrei!"
+        elif working_services > 0:
+            result['success'] = True
+            result['message'] += f"Dashboard teilweise repariert. {working_services}/{len(dashboard_services)} Services funktionieren."
+        else:
+            result['message'] += "Dashboard konnte nicht repariert werden."
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der einfachen Dashboard-Korrektur: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Kritischer Fehler: {str(e)}',
+            'fixes_applied': 0,
+            'errors': [f"Unerwarteter Fehler: {str(e)}"],
+            'tests': {},
+            'database_info': {}
         }), 500

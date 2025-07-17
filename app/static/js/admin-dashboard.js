@@ -5,25 +5,59 @@ console.log('Admin Dashboard Script geladen');
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Starte initiales Laden...');
     
-    // Lade Abteilungen
-    loadDepartments();
+    // Prüfe ob wir auf der Dashboard-Seite sind
+    const isDashboardPage = document.querySelector('.container') !== null;
     
-    // Lade Standorte
-    loadLocations();
-    
-    // Lade Kategorien
-    loadCategories();
-    
-    // Lade Ticket-Kategorien (falls verfügbar)
-    loadTicketCategories();
+    if (isDashboardPage) {
+        console.log('Dashboard-Seite erkannt - lade Dashboard-Funktionen');
+        
+        // Lade Abteilungen nur wenn das Element existiert
+        const departmentsList = document.getElementById('departmentsList');
+        if (departmentsList) {
+            console.log('Lade Abteilungen...');
+            loadDepartments();
+        } else {
+            console.log('DepartmentsList Element nicht gefunden');
+        }
+        
+        // Lade Standorte nur wenn das Element existiert
+        const locationsList = document.getElementById('locationsList');
+        if (locationsList) {
+            console.log('Lade Standorte...');
+            loadLocations();
+        } else {
+            console.log('LocationsList Element nicht gefunden');
+        }
+        
+        // Lade Kategorien nur wenn das Element existiert
+        const categoriesList = document.getElementById('categoriesList');
+        if (categoriesList) {
+            console.log('Lade Kategorien...');
+            loadCategories();
+        } else {
+            console.log('CategoriesList Element nicht gefunden');
+        }
+        
+        // Lade Ticket-Kategorien nur wenn das Element existiert
+        const ticketCategoriesList = document.getElementById('ticketCategoriesList');
+        if (ticketCategoriesList) {
+            console.log('Lade Ticket-Kategorien...');
+            loadTicketCategories();
+        } else {
+            console.log('TicketCategoriesList Element nicht gefunden');
+        }
+    } else {
+        console.log('Nicht auf Dashboard-Seite - überspringe Dashboard-Funktionen');
+    }
 
-    // Event Listener für Formulare
+    // Event Listener für Formulare - nur wenn sie existieren
     const addDepartmentForm = document.getElementById('addDepartmentForm');
     const addLocationForm = document.getElementById('addLocationForm');
     const addCategoryForm = document.getElementById('addCategoryForm');
     const addTicketCategoryForm = document.getElementById('addTicketCategoryForm');
 
     if (addDepartmentForm) {
+        console.log('Department Form gefunden - Event Listener hinzugefügt');
         addDepartmentForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const submitButton = this.querySelector('button[type="submit"]');
@@ -55,9 +89,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = originalText;
             }
         });
+    } else {
+        console.log('Department Form nicht gefunden');
     }
 
     if (addLocationForm) {
+        console.log('Location Form gefunden - Event Listener hinzugefügt');
         addLocationForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const submitButton = this.querySelector('button[type="submit"]');
@@ -89,9 +126,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = originalText;
             }
         });
+    } else {
+        console.log('Location Form nicht gefunden');
     }
 
     if (addCategoryForm) {
+        console.log('Category Form gefunden - Event Listener hinzugefügt');
         addCategoryForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const submitButton = this.querySelector('button[type="submit"]');
@@ -123,9 +163,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = originalText;
             }
         });
+    } else {
+        console.log('Category Form nicht gefunden');
     }
 
     if (addTicketCategoryForm) {
+        console.log('Ticket Category Form gefunden - Event Listener hinzugefügt');
         addTicketCategoryForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const submitButton = this.querySelector('button[type="submit"]');
@@ -157,18 +200,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = originalText;
             }
         });
+    } else {
+        console.log('Ticket Category Form nicht gefunden');
     }
 });
 
 // Lade Abteilungen
 async function loadDepartments() {
     const tbody = document.getElementById('departmentsList');
-    if (!tbody) return;
+    if (!tbody) {
+        console.log('departmentsList Element nicht gefunden');
+        return;
+    }
 
     try {
+        console.log('Lade Abteilungen von /admin/departments');
         const response = await fetch('/admin/departments');
         const data = await response.json();
         if (data.success) {
+            console.log('Abteilungen geladen:', data.departments);
             tbody.innerHTML = data.departments.map(dept => `
                 <tr>
                     <td>${dept.name}</td>
@@ -191,12 +241,17 @@ async function loadDepartments() {
 // Lade Standorte
 async function loadLocations() {
     const tbody = document.getElementById('locationsList');
-    if (!tbody) return;
+    if (!tbody) {
+        console.log('locationsList Element nicht gefunden');
+        return;
+    }
 
     try {
+        console.log('Lade Standorte von /admin/locations');
         const response = await fetch('/admin/locations');
         const data = await response.json();
         if (data.success) {
+            console.log('Standorte geladen:', data.locations);
             tbody.innerHTML = data.locations.map(loc => `
                 <tr>
                     <td>${loc.name}</td>
