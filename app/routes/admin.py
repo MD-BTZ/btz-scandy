@@ -123,6 +123,13 @@ def index():
 def dashboard():
     """Admin-Dashboard"""
     try:
+        # Automatische Reparatur beim Dashboard-Aufruf
+        try:
+            AdminDebugService.fix_missing_created_at_fields()
+            logger.info("Automatische Dashboard-Reparatur durchgeführt")
+        except Exception as e:
+            logger.warning(f"Automatische Dashboard-Reparatur fehlgeschlagen: {e}")
+        
         # Verwende den AdminDashboardService für alle Dashboard-Daten
         recent_activity = AdminDashboardService.get_recent_activity()
         material_usage = AdminDashboardService.get_material_usage()
@@ -3424,6 +3431,13 @@ def auto_backup():
 def email_settings():
     """E-Mail-Konfiguration verwalten"""
     try:
+        # Automatische E-Mail-Reparatur beim Aufruf der E-Mail-Einstellungen
+        try:
+            AdminDebugService.fix_email_configuration()
+            logger.info("Automatische E-Mail-Reparatur durchgeführt")
+        except Exception as e:
+            logger.warning(f"Automatische E-Mail-Reparatur fehlgeschlagen: {e}")
+        
         # Session-Persistierung vor dem Speichern
         current_user_id = session.get('user_id')
         current_username = session.get('username')

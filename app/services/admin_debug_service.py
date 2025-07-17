@@ -461,4 +461,80 @@ class AdminDebugService:
             
         except Exception as e:
             logger.error(f"Fehler beim System-Health-Check: {str(e)}")
-            return {'overall_status': 'error', 'error': str(e)} 
+            return {'overall_status': 'error', 'error': str(e)}
+
+    @staticmethod
+    def fix_email_configuration() -> Tuple[bool, str]:
+        """
+        Repariert die E-Mail-Konfiguration automatisch
+        
+        Returns:
+            (success, message)
+        """
+        try:
+            from app.services.admin_email_service import AdminEmailService
+            from app.utils.email_utils import _decrypt_password
+            
+            # Prüfe ob alte E-Mail-Einstellungen vorhanden sind
+            old_settings = mongodb.find_one('settings', {'key': 'email_smtp_server'})
+            
+            if old_settings:
+                logger.info("Alte E-Mail-Einstellungen gefunden, migriere zu neuem System")
+                
+                # Sammle alle alten E-Mail-Einstellungen
+                old_email_settings = {}
+                old_keys = [
+                    'email_smtp_server', 'email_smtp_port', 'email_username', 
+                    'email_password', 'email_use_tls', 'email_sender_email'
+                ]
+                
+                for key in old_keys:
+                    setting = mongodb.find_one('settings', {'key': key})
+                    if setting:
+                        old_email_settings[key] = setting.get('value', '')
+                
+                # Konvertiere zu neuem Format
+                if old_email_settings.get('email_smtp_server'):
+                    new_config = {
+                        'mail_server': old_email_settings.get('email_smtp_server', ''),
+                        'mail_port': int(old_email_settings.get('email_smtp_port', 587)),
+                        'mail_use_tls': old_email_settings.get('email_use_tls', 'true').lower() == 'true',
+                        'mail_username': old_email_settings.get('email_username', ''),
+                        'mail_password': old_email_settings.get('email_password', ''),
+                        'test_email': old_email_settings.get('email_sender_email', ''),
+                        'use_auth': True
+                    }
+                    
+                    # Speichere neue Konfiguration
+                    AdminEmailService.save_email_config(new_config)
+                    
+                    # Lösche alte Einstellungen
+                    for key in old_keys:
+                        mongodb.delete_one('settings', {'key': key})
+                    
+                    logger.info("E-Mail-Konfiguration erfolgreich migriert")
+                    return True, "E-Mail-Konfiguration erfolgreich migriert"
+            
+            # Prüfe ob Admin-Benutzer ohne E-Mail-Adresse existieren
+            admin_users = list(mongodb.find('users', {'role': 'admin'}))
+            fixed_users = 0
+            
+            for user in admin_users:
+                if not user.get('email'):
+                    # Setze Standard-E-Mail-Adresse
+                    mongodb.update_one(
+                        'users',
+                        {'_id': user['_id']},
+                        {'$set': {'email': 'admin@example.com'}}
+                    )
+                    fixed_users += 1
+            
+            if fixed_users > 0:
+                logger.info(f"{fixed_users} Admin-Benutzer ohne E-Mail-Adresse korrigiert")
+                return True, f"E-Mail-Konfiguration repariert: {fixed_users} Admin-Benutzer korrigiert"
+            
+            return True, "E-Mail-Konfiguration ist bereits korrekt"
+            
+        except Exception as e:
+            logger.error(f"Fehler bei der E-Mail-Konfigurations-Reparatur: {str(e)}")
+            return False, f"Fehler bei der E-Mail-Reparatur: {str(e)}" 
