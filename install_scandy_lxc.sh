@@ -13,25 +13,28 @@ apt update && apt upgrade -y
 # 2. Basis-Pakete installieren (ohne mongodb)
 apt install -y python3 python3-pip python3-venv git nginx curl gnupg lsb-release
 
-# 3. Offizielles MongoDB-Repository hinzufügen (Version 7.x, focal-Workaround für noble)
+# 3. MongoDB installieren
 UBUNTU_CODENAME=$(lsb_release -cs)
-MONGO_REPO_CODENAME=$UBUNTU_CODENAME
 if [ "$UBUNTU_CODENAME" = "noble" ]; then
-    echo -e "${GREEN}Ubuntu 24.04 erkannt – focal-Repo für MongoDB wird verwendet!${NC}"
-    MONGO_REPO_CODENAME="focal"
+    echo -e "${GREEN}Ubuntu 24.04 erkannt – installiere Standard-MongoDB aus Ubuntu-Repo!${NC}"
+    apt install -y mongodb
+    MONGOD_SERVICE="mongodb"
+else
+    # Offizielles MongoDB-Repository hinzufügen (Version 7.x, focal-Workaround für noble)
+    MONGO_REPO_CODENAME=$UBUNTU_CODENAME
+    if [ "$UBUNTU_CODENAME" = "noble" ]; then
+        MONGO_REPO_CODENAME="focal"
+    fi
+    if ! curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o /tmp/server-7.0.asc; then
+        echo "Fehler: Konnte den MongoDB GPG-Key nicht herunterladen! Prüfe Internet und DNS."
+        exit 1
+    fi
+    gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg /tmp/server-7.0.asc
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $MONGO_REPO_CODENAME/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list
+    apt update
+    apt install -y mongodb-org
+    MONGOD_SERVICE="mongod"
 fi
-
-# GPG-Key robust laden
-if ! curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o /tmp/server-7.0.asc; then
-    echo "Fehler: Konnte den MongoDB GPG-Key nicht herunterladen! Prüfe Internet und DNS."
-    exit 1
-fi
-gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg /tmp/server-7.0.asc
-
-# Repo eintragen
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $MONGO_REPO_CODENAME/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list
-apt update
-apt install -y mongodb-org
 
 # 4. Benutzer und Verzeichnis anlegen
 useradd -m -s /bin/bash scandy || true
@@ -51,8 +54,8 @@ sudo -u scandy /opt/scandy/venv/bin/pip install --upgrade pip
 sudo -u scandy /opt/scandy/venv/bin/pip install -r /opt/scandy/requirements.txt
 
 # 7. MongoDB einrichten
-systemctl enable mongod
-systemctl start mongod
+systemctl enable $MONGOD_SERVICE
+systemctl start $MONGOD_SERVICE
 
 # 8. .env-Datei anlegen (ggf. anpassen)
 cat > /opt/scandy/.env <<EOF
@@ -67,7 +70,7 @@ chown scandy:scandy /opt/scandy/.env
 cat > /etc/systemd/system/scandy.service <<EOF
 [Unit]
 Description=Scandy Flask App
-After=network.target mongod.service
+After=network.target $MONGOD_SERVICE.service
 
 [Service]
 User=scandy
