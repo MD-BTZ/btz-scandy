@@ -16,8 +16,8 @@ apt install -y python3 python3-pip python3-venv git nginx curl gnupg lsb-release
 # 3. MongoDB installieren
 UBUNTU_CODENAME=$(lsb_release -cs)
 if [ "$UBUNTU_CODENAME" = "noble" ]; then
-    echo -e "${GREEN}Ubuntu 24.04 erkannt – installiere Standard-MongoDB aus Ubuntu-Repo!${NC}"
-    apt install -y mongodb
+    echo -e "${GREEN}Ubuntu 24.04 erkannt – installiere mongodb-server aus Ubuntu-Repo!${NC}"
+    apt install -y mongodb-server mongodb-clients
     MONGOD_SERVICE="mongodb"
 else
     # Offizielles MongoDB-Repository hinzufügen (Version 7.x, focal-Workaround für noble)
@@ -90,7 +90,7 @@ systemctl enable scandy
 systemctl restart scandy
 
 # 10. Nginx als Reverse Proxy einrichten
-cat > /etc/nginx/sites-available/scandy <<EOF
+cat > /etc/nginx/sites-available/scandy <<'EOF'
 server {
     listen 80;
     server_name _;

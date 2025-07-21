@@ -13,7 +13,7 @@ os.environ['FLASK_CONFIG'] = 'production'
 
 # Importiere und erstelle die Flask-App
 from app import create_app
-application = create_app()
+app = create_app()
 
 if __name__ == '__main__':
     # Für Entwicklung: Flask-Entwicklungsserver
@@ -21,13 +21,13 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--dev':
         # Entwicklungsserver
-        application.run(host='0.0.0.0', port=5000, debug=False)
+        app.run(host='0.0.0.0', port=5000, debug=False)
     else:
         # Produktionsserver (Waitress als Fallback)
         try:
             from waitress import serve
             print("Starting with Waitress production server...")
-            serve(application, host='0.0.0.0', port=5000, threads=4)
+            serve(app, host='0.0.0.0', port=5000, threads=4)
         except ImportError:
             print("Waitress not available, falling back to Flask development server...")
-            application.run(host='0.0.0.0', port=5000, debug=False) 
+            app.run(host='0.0.0.0', port=5000, debug=False) 
