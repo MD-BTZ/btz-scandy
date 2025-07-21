@@ -11,13 +11,25 @@ echo -e "${GREEN}==== Scandy LXC-Installationsskript ====${NC}"
 apt update && apt upgrade -y
 
 # 2. Basis-Pakete installieren (ohne mongodb)
-apt install -y python3 python3-pip python3-venv git nginx curl gnupg
+apt install -y python3 python3-pip python3-venv git nginx curl gnupg lsb-release
 
-# 3. Offizielles MongoDB-Repository hinzufügen (Version 7.x)
-if ! apt-key list | grep -q "MongoDB 7.0 Release Signing Key"; then
-    curl -fsSL https://pgp.mongodb.com/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+# 3. Offizielles MongoDB-Repository hinzufügen (Version 7.x, focal-Workaround für noble)
+UBUNTU_CODENAME=$(lsb_release -cs)
+MONGO_REPO_CODENAME=$UBUNTU_CODENAME
+if [ "$UBUNTU_CODENAME" = "noble" ]; then
+    echo -e "${GREEN}Ubuntu 24.04 erkannt – focal-Repo für MongoDB wird verwendet!${NC}"
+    MONGO_REPO_CODENAME="focal"
 fi
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list
+
+# GPG-Key robust laden
+if ! curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o /tmp/server-7.0.asc; then
+    echo "Fehler: Konnte den MongoDB GPG-Key nicht herunterladen! Prüfe Internet und DNS."
+    exit 1
+fi
+gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg /tmp/server-7.0.asc
+
+# Repo eintragen
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $MONGO_REPO_CODENAME/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list
 apt update
 apt install -y mongodb-org
 
