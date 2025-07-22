@@ -44,7 +44,8 @@ class MongoDBDatabase:
                 uri += '?authSource=admin'
         for attempt in range(10):
             try:
-                safe_uri = uri.replace(os.environ.get("MONGO_INITDB_ROOT_PASSWORD", ""), "***")
+                password = os.environ.get("MONGO_INITDB_ROOT_PASSWORD", "")
+                safe_uri = uri.replace(password, "***") if password and uri else uri
                 print(f"[MongoDB] Verbindungsversuch {attempt+1}/10 zu {safe_uri}")
                 self._client = MongoClient(uri, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000, retryWrites=True, w='majority')
                 self._client.admin.command('ping')

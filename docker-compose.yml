@@ -11,6 +11,7 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data_scandy:/data/db
+      - app_backups_scandy:/backup
       - ./mongo-init:/docker-entrypoint-initdb.d
     networks:
       - scandy-network-scandy

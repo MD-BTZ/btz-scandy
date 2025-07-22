@@ -15,6 +15,9 @@ os.environ['FLASK_CONFIG'] = 'production'
 from app import create_app
 app = create_app()
 
+# Gunicorn erwartet eine 'application' Variable
+application = app
+
 if __name__ == '__main__':
     # Für Entwicklung: Flask-Entwicklungsserver
     # Für Produktion: Verwende Gunicorn oder Waitress

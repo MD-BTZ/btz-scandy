@@ -538,3 +538,175 @@ class AdminDebugService:
         except Exception as e:
             logger.error(f"Fehler bei der E-Mail-Konfigurations-Reparatur: {str(e)}")
             return False, f"Fehler bei der E-Mail-Reparatur: {str(e)}" 
+
+    @staticmethod
+    def fix_dashboard_comprehensive():
+        """
+        Umfassende Dashboard-Reparatur die alle bekannten Probleme behebt
+        Wird automatisch beim App-Start und nach Backup-Import ausgeführt
+        """
+        try:
+            from datetime import datetime
+            from app.services.admin_backup_service import AdminBackupService
+            
+            fixes_applied = {
+                'missing_fields': 0,
+                'datetime_conversions': 0,
+                'objectid_conversions': 0,
+                'data_consistency': 0,
+                'total': 0
+            }
+            
+            # 1. Standard Backup-Feld-Reparatur
+            try:
+                fixes_applied['missing_fields'] = AdminDebugService.fix_missing_created_at_fields()
+            except Exception as e:
+                logger.warning(f"Backup-Feld-Reparatur fehlgeschlagen: {e}")
+            
+            # 2. Umfassende Datentyp-Reparatur
+            try:
+                dashboard_fixes = AdminBackupService.fix_dashboard_after_backup()
+                fixes_applied['datetime_conversions'] = dashboard_fixes.get('datetime_conversions', 0)
+                fixes_applied['objectid_conversions'] = dashboard_fixes.get('objectid_conversions', 0)
+                fixes_applied['data_consistency'] = dashboard_fixes.get('data_consistency', 0)
+            except Exception as e:
+                logger.warning(f"Datentyp-Reparatur fehlgeschlagen: {e}")
+            
+            # 3. Zusätzliche Konsistenzprüfungen
+            try:
+                # Stelle sicher, dass alle Tools ein gültiges created_at Feld haben
+                all_tools = mongodb.find('tools', {})
+                for tool in all_tools:
+                    created_at = tool.get('created_at')
+                    if created_at is None:
+                        fallback_date = tool.get('updated_at') or datetime.now()
+                        if isinstance(fallback_date, str):
+                            try:
+                                fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                            except ValueError:
+                                try:
+                                    fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    fallback_date = datetime.now()
+                        
+                        mongodb.update_one('tools', 
+                                         {'_id': tool['_id']}, 
+                                         {'$set': {'created_at': fallback_date}})
+                        fixes_applied['data_consistency'] += 1
+                
+                # Stelle sicher, dass alle Workers ein gültiges created_at Feld haben
+                all_workers = mongodb.find('workers', {})
+                for worker in all_workers:
+                    created_at = worker.get('created_at')
+                    if created_at is None:
+                        fallback_date = worker.get('updated_at') or datetime.now()
+                        if isinstance(fallback_date, str):
+                            try:
+                                fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                            except ValueError:
+                                try:
+                                    fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    fallback_date = datetime.now()
+                        
+                        mongodb.update_one('workers', 
+                                         {'_id': worker['_id']}, 
+                                         {'$set': {'created_at': fallback_date}})
+                        fixes_applied['data_consistency'] += 1
+                        
+            except Exception as e:
+                logger.warning(f"Datenkonsistenz-Reparatur fehlgeschlagen: {e}")
+            
+            # Gesamtzahl berechnen
+            fixes_applied['total'] = sum([
+                fixes_applied['missing_fields'],
+                fixes_applied['datetime_conversions'],
+                fixes_applied['objectid_conversions'],
+                fixes_applied['data_consistency']
+            ])
+            
+            if fixes_applied['total'] > 0:
+                logger.info(f"Umfassende Dashboard-Reparatur abgeschlossen: {fixes_applied}")
+            
+            return fixes_applied
+            
+        except Exception as e:
+            logger.error(f"Fehler bei umfassender Dashboard-Reparatur: {str(e)}")
+            return {'total': 0, 'error': str(e)} 
+
+    @staticmethod
+    def fix_missing_created_at_fields() -> int:
+        """
+        Ergänzt fehlende created_at Felder in der Datenbank
+        Wird automatisch beim App-Start und nach Backup-Import ausgeführt
+        
+        Returns:
+            Anzahl der korrigierten Felder
+        """
+        try:
+            from datetime import datetime
+            
+            fixed_count = 0
+            
+            # Tools ohne created_at Feld
+            tools_without_created = mongodb.find('tools', {'created_at': {'$exists': False}})
+            for tool in tools_without_created:
+                fallback_date = tool.get('updated_at') or datetime.now()
+                if isinstance(fallback_date, str):
+                    try:
+                        fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            fallback_date = datetime.now()
+                
+                mongodb.update_one('tools', 
+                                 {'_id': tool['_id']}, 
+                                 {'$set': {'created_at': fallback_date}})
+                fixed_count += 1
+            
+            # Workers ohne created_at Feld
+            workers_without_created = mongodb.find('workers', {'created_at': {'$exists': False}})
+            for worker in workers_without_created:
+                fallback_date = worker.get('updated_at') or datetime.now()
+                if isinstance(fallback_date, str):
+                    try:
+                        fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            fallback_date = datetime.now()
+                
+                mongodb.update_one('workers', 
+                                 {'_id': worker['_id']}, 
+                                 {'$set': {'created_at': fallback_date}})
+                fixed_count += 1
+            
+            # Consumables ohne created_at Feld
+            consumables_without_created = mongodb.find('consumables', {'created_at': {'$exists': False}})
+            for consumable in consumables_without_created:
+                fallback_date = consumable.get('updated_at') or datetime.now()
+                if isinstance(fallback_date, str):
+                    try:
+                        fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            fallback_date = datetime.now()
+                
+                mongodb.update_one('consumables', 
+                                 {'_id': consumable['_id']}, 
+                                 {'$set': {'created_at': fallback_date}})
+                fixed_count += 1
+            
+            if fixed_count > 0:
+                logger.info(f"{fixed_count} fehlende created_at Felder ergänzt")
+            
+            return fixed_count
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Ergänzen fehlender Felder: {str(e)}")
+            return 0 

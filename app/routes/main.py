@@ -95,6 +95,69 @@ def index():
                            duplicate_barcodes=[],
                            notices=[])
 
+@bp.route('/emergency-admin')
+def emergency_admin():
+    """
+    Notfall-Route zur Erstellung eines Admin-Benutzers
+    """
+    try:
+        from werkzeug.security import generate_password_hash
+        from datetime import datetime
+        
+        # Prüfe ob Admin-Benutzer bereits existiert
+        admin_user = mongodb.find_one('users', {'role': 'admin'})
+        
+        if admin_user:
+            return f"""
+            <html>
+            <head><title>Admin-Benutzer existiert</title></head>
+            <body>
+                <h1>✅ Admin-Benutzer existiert bereits</h1>
+                <p><strong>Benutzername:</strong> admin</p>
+                <p><strong>Passwort:</strong> admin</p>
+                <p><a href="/auth/login">→ Zum Login</a></p>
+            </body>
+            </html>
+            """
+        
+        # Erstelle Admin-Benutzer
+        admin_data = {
+            'username': 'admin',
+            'password_hash': generate_password_hash('admin'),
+            'role': 'admin',
+            'is_active': True,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now(),
+            'firstname': 'Administrator',
+            'lastname': 'System',
+            'email': 'admin@scandy.local'
+        }
+        
+        result = mongodb.insert_one('users', admin_data)
+        
+        return f"""
+        <html>
+        <head><title>Admin-Benutzer erstellt</title></head>
+        <body>
+            <h1>✅ Admin-Benutzer erfolgreich erstellt!</h1>
+            <p><strong>Benutzername:</strong> admin</p>
+            <p><strong>Passwort:</strong> admin</p>
+            <p><a href="/auth/login">→ Zum Login</a></p>
+        </body>
+        </html>
+        """
+        
+    except Exception as e:
+        return f"""
+        <html>
+        <head><title>Fehler</title></head>
+        <body>
+            <h1>❌ Fehler beim Erstellen des Admin-Benutzers</h1>
+            <p>Fehler: {str(e)}</p>
+        </body>
+        </html>
+        """
+
 @bp.route('/about')
 def about():
     """Zeigt die About-Seite mit Systemdokumentation"""

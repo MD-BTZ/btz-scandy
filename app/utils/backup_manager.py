@@ -18,7 +18,12 @@ class BackupManager:
         """
         Wandelt das _id-Feld in einen echten ObjectId um, wenn möglich.
         Wichtig für Backup-Wiederherstellung, da JSON-Export IDs als String speichert.
+        Unterstützt auch andere Datentyp-Konvertierungen für alte Backups.
         """
+        if not isinstance(doc, dict):
+            return doc
+            
+        # _id Konvertierung
         if '_id' in doc:
             # Falls _id ein String ist und wie eine ObjectId aussieht
             if isinstance(doc['_id'], str) and len(doc['_id']) == 24:
@@ -34,6 +39,22 @@ class BackupManager:
             # Falls _id ein anderer Typ ist, entferne es
             else:
                 del doc['_id']
+        
+        # Datetime-Felder konvertieren (für alte Backups)
+        datetime_fields = ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp']
+        for field in datetime_fields:
+            if field in doc and isinstance(doc[field], str):
+                try:
+                    # Versuche verschiedene Datetime-Formate
+                    for fmt in ['%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S']:
+                        try:
+                            doc[field] = datetime.strptime(doc[field], fmt)
+                            break
+                        except ValueError:
+                            continue
+                except:
+                    pass  # Belasse als String wenn Konvertierung fehlschlägt
+        
         return doc
     
     def _validate_backup_data(self, backup_data):
@@ -43,20 +64,116 @@ class BackupManager:
         if not isinstance(backup_data, dict):
             return False, "Backup-Daten sind kein gültiges Dictionary"
         
+        # Prüfe ob es das neue Format ist
+        if 'data' in backup_data:
+            data_section = backup_data['data']
+        else:
+            # Altes Format
+            data_section = backup_data
+        
         required_collections = ['tools', 'workers', 'consumables', 'settings']
-        missing_collections = [coll for coll in required_collections if coll not in backup_data]
+        missing_collections = [coll for coll in required_collections if coll not in data_section]
         
         if missing_collections:
             return False, f"Fehlende Collections im Backup: {missing_collections}"
         
-        total_docs = sum(len(docs) for docs in backup_data.values())
+        total_docs = sum(len(docs) for docs in data_section.values())
         if total_docs == 0:
             return False, "Backup enthält keine Dokumente"
         
-        return True, f"Backup ist gültig mit {total_docs} Dokumenten in {len(backup_data)} Collections"
+        return True, f"Backup ist gültig mit {total_docs} Dokumenten in {len(data_section)} Collections"
         
+    def _serialize_for_backup(self, obj):
+        """
+        Serialisiert Python-Objekte für JSON-Export mit Datentyp-Erhaltung
+        """
+        if isinstance(obj, datetime):
+            return {
+                '__type__': 'datetime',
+                'value': obj.isoformat()
+            }
+        elif isinstance(obj, ObjectId):
+            return {
+                '__type__': 'ObjectId',
+                'value': str(obj)
+            }
+        elif isinstance(obj, dict):
+            return {k: self._serialize_for_backup(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._serialize_for_backup(item) for item in obj]
+        else:
+            return obj
+
+    def _deserialize_from_backup(self, obj):
+        """
+        Deserialisiert Objekte aus Backup mit Datentyp-Wiederherstellung
+        Unterstützt sowohl neue (mit __type__) als auch alte Backup-Formate
+        """
+        if isinstance(obj, dict):
+            # Neues Format mit __type__ Markierungen
+            if '__type__' in obj:
+                if obj['__type__'] == 'datetime':
+                    try:
+                        return datetime.fromisoformat(obj['value'])
+                    except ValueError:
+                        return datetime.now()
+                elif obj['__type__'] == 'ObjectId':
+                    try:
+                        return ObjectId(obj['value'])
+                    except:
+                        return obj['value']  # Fallback zu String
+                else:
+                    return obj['value']
+            else:
+                # Altes Format - konvertiere bekannte Felder
+                result = {}
+                for k, v in obj.items():
+                    # _id Felder als ObjectId konvertieren
+                    if k == '_id' and isinstance(v, str) and len(v) == 24:
+                        try:
+                            result[k] = ObjectId(v)
+                        except:
+                            result[k] = v  # Fallback zu String
+                    # Datetime-Felder konvertieren - ERWEITERTE LISTE
+                    elif k in ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp', 
+                              'lent_at', 'returned_at', 'due_date', 'resolved_at', 'used_at', 'start_date', 
+                              'end_date', 'created', 'modified', 'last_updated'] and isinstance(v, str):
+                        try:
+                            # Versuche verschiedene Datetime-Formate
+                            formats = [
+                                '%Y-%m-%d %H:%M:%S.%f',  # 2025-06-27 14:13:12.387000
+                                '%Y-%m-%d %H:%M:%S',     # 2025-06-27 14:13:12
+                                '%Y-%m-%d',              # 2025-06-27
+                                '%Y-%m-%dT%H:%M:%S.%f',  # 2025-06-27T14:13:12.387000
+                                '%Y-%m-%dT%H:%M:%S',     # 2025-06-27T14:13:12
+                                '%Y-%m-%dT%H:%M:%S.%fZ', # ISO mit Z
+                                '%Y-%m-%dT%H:%M:%SZ'     # ISO mit Z
+                            ]
+                            
+                            for fmt in formats:
+                                try:
+                                    result[k] = datetime.strptime(v, fmt)
+                                    break
+                                except ValueError:
+                                    continue
+                            else:
+                                # Fallback: Versuche ISO-Format
+                                try:
+                                    result[k] = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                                except ValueError:
+                                    result[k] = v  # Fallback zu String
+                        except:
+                            result[k] = v
+                    else:
+                        result[k] = self._deserialize_from_backup(v)
+                return result
+        elif isinstance(obj, list):
+            return [self._deserialize_from_backup(item) for item in obj]
+        else:
+            return obj
+
     def create_backup(self):
-        """Erstellt ein Backup aller Collections"""
+        """Erstellt ein Backup aller Collections mit Datentyp-Erhaltung"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_filename = f"scandy_backup_{timestamp}.json"
@@ -73,16 +190,29 @@ class BackupManager:
             for collection in collections_to_backup:
                 try:
                     documents = list(mongodb.find(collection, {}))
-                    backup_data[collection] = documents
+                    # Serialisiere Dokumente mit Datentyp-Erhaltung
+                    serialized_docs = [self._serialize_for_backup(doc) for doc in documents]
+                    backup_data[collection] = serialized_docs
                 except Exception as e:
                     print(f"Fehler beim Sichern von {collection}: {e}")
                     backup_data[collection] = []
             
-            # Backup-Datei speichern
+            # Backup-Datei mit Metadaten speichern
+            backup_with_metadata = {
+                'metadata': {
+                    'version': '2.0',
+                    'created_at': datetime.now().isoformat(),
+                    'datatype_preservation': True,
+                    'collections': list(backup_data.keys())
+                },
+                'data': backup_data
+            }
+            
             with open(backup_path, 'w', encoding='utf-8') as f:
-                json.dump(backup_data, f, ensure_ascii=False, indent=2, default=str)
+                json.dump(backup_with_metadata, f, ensure_ascii=False, indent=2, default=str)
             
             print(f"Backup erstellt: {backup_filename} mit {sum(len(docs) for docs in backup_data.values())} Dokumenten")
+            print("Datentyp-Erhaltung aktiviert")
             
             # Alte Backups aufräumen
             self._cleanup_old_backups()
@@ -155,7 +285,7 @@ class BackupManager:
             return False
     
     def _restore_from_file(self, backup_path):
-        """Stellt ein Backup aus einer Datei wieder her"""
+        """Stellt ein Backup aus einer Datei wieder her mit verbesserter Datentyp-Behandlung"""
         try:
             # Prüfe Dateigröße
             file_size = backup_path.stat().st_size
@@ -166,8 +296,18 @@ class BackupManager:
             with open(backup_path, 'r', encoding='utf-8') as f:
                 backup_data = json.load(f)
             
+            # Prüfe Backup-Format (alt vs. neu)
+            if 'metadata' in backup_data and 'data' in backup_data:
+                # Neues Format mit Datentyp-Informationen
+                print("Erkennung: Neues Backup-Format mit Datentyp-Informationen")
+                data_section = backup_data['data']
+            else:
+                # Altes Format - verwende direkt
+                print("Erkennung: Altes Backup-Format - Konvertierung erforderlich")
+                data_section = backup_data
+            
             # Backup-Daten validieren
-            is_valid, validation_message = self._validate_backup_data(backup_data)
+            is_valid, validation_message = self._validate_backup_data({'data': data_section})
             if not is_valid:
                 print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
                 return False
@@ -175,22 +315,47 @@ class BackupManager:
             print(f"Backup-Validierung erfolgreich: {validation_message}")
             
             # Collections wiederherstellen
-            for collection, documents in backup_data.items():
+            for collection, documents in data_section.items():
                 try:
                     # Collection leeren
                     mongodb.db[collection].delete_many({})
                     
-                    # Dokumente wiederherstellen mit ID-Korrektur
+                    # Dokumente wiederherstellen mit Datentyp-Wiederherstellung
                     if documents:
-                        # IDs für alle Dokumente korrigieren
-                        fixed_documents = []
+                        restored_documents = []
+                        conversion_stats = {'total': 0, 'id_converted': 0, 'datetime_converted': 0, 'errors': 0}
+                        
                         for doc in documents:
-                            fixed_doc = self._fix_id_for_restore(doc)
-                            fixed_documents.append(fixed_doc)
+                            try:
+                                # Deserialisiere mit Datentyp-Wiederherstellung
+                                restored_doc = self._deserialize_from_backup(doc)
+                                # IDs korrigieren
+                                fixed_doc = self._fix_id_for_restore(restored_doc)
+                                restored_documents.append(fixed_doc)
+                                conversion_stats['total'] += 1
+                                
+                                # Statistiken sammeln
+                                if '_id' in fixed_doc and isinstance(fixed_doc['_id'], ObjectId):
+                                    conversion_stats['id_converted'] += 1
+                                
+                                datetime_fields = ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp']
+                                for field in datetime_fields:
+                                    if field in fixed_doc and isinstance(fixed_doc[field], datetime):
+                                        conversion_stats['datetime_converted'] += 1
+                                        break
+                                        
+                            except Exception as e:
+                                print(f"Fehler bei Dokument-Konvertierung: {e}")
+                                conversion_stats['errors'] += 1
+                                # Versuche das ursprüngliche Dokument zu verwenden
+                                restored_documents.append(doc)
                         
                         # Dokumente in die Datenbank einfügen
-                        mongodb.db[collection].insert_many(fixed_documents)
-                        print(f"Collection {collection}: {len(fixed_documents)} Dokumente wiederhergestellt")
+                        mongodb.db[collection].insert_many(restored_documents)
+                        print(f"Collection {collection}: {len(restored_documents)} Dokumente wiederhergestellt")
+                        print(f"  - Konvertierungen: {conversion_stats['id_converted']} IDs, {conversion_stats['datetime_converted']} Datetimes")
+                        if conversion_stats['errors'] > 0:
+                            print(f"  - Fehler: {conversion_stats['errors']}")
                         
                 except Exception as e:
                     print(f"Fehler beim Wiederherstellen von {collection}: {e}")
@@ -203,6 +368,18 @@ class BackupManager:
             
             # Nach der Wiederherstellung: Kategorien-Inkonsistenz beheben
             self._fix_category_inconsistency()
+            
+            # Verbrauchsgüter-Inkonsistenzen beheben
+            self._fix_consumable_inconsistencies()
+            
+            # Automatische Dashboard-Fixes nach Backup-Import
+            try:
+                from app.services.admin_debug_service import AdminDebugService
+                fixes = AdminDebugService.fix_dashboard_comprehensive()
+                print(f"Umfassende Dashboard-Reparatur nach Backup angewendet: {fixes}")
+                
+            except Exception as e:
+                print(f"Fehler bei automatischen Dashboard-Fixes: {e}")
             
             return True
             
@@ -282,6 +459,118 @@ class BackupManager:
             
         except Exception as e:
             print(f"Fehler beim Beheben der Kategorien-Inkonsistenz: {e}")
+
+    def _fix_consumable_inconsistencies(self):
+        """Behebt Inkonsistenzen bei Verbrauchsgütern nach Backup-Import"""
+        try:
+            print("Behebe Verbrauchsgüter-Inkonsistenzen...")
+            
+            # 1. Prüfe und korrigiere negative Bestände
+            consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+            fixed_negative = 0
+            
+            for consumable in consumables:
+                quantity = consumable.get('quantity', 0)
+                
+                # Konvertiere zu int falls nötig
+                if isinstance(quantity, str):
+                    try:
+                        quantity = int(quantity)
+                    except (ValueError, TypeError):
+                        quantity = 0
+                
+                # Korrigiere negative Bestände
+                if quantity < 0:
+                    mongodb.update_one('consumables', 
+                                     {'_id': consumable['_id']}, 
+                                     {'$set': {'quantity': 0}})
+                    print(f"  ✅ {consumable.get('name', 'Unbekannt')}: Negativen Bestand korrigiert ({quantity} → 0)")
+                    fixed_negative += 1
+            
+            # 2. Prüfe und korrigiere fehlende min_quantity Felder
+            fixed_min_quantity = 0
+            for consumable in consumables:
+                if 'min_quantity' not in consumable:
+                    mongodb.update_one('consumables', 
+                                     {'_id': consumable['_id']}, 
+                                     {'$set': {'min_quantity': 5}})  # Standard-Wert
+                    print(f"  ✅ {consumable.get('name', 'Unbekannt')}: min_quantity hinzugefügt (5)")
+                    fixed_min_quantity += 1
+            
+            # 3. Prüfe und korrigiere Datetime-Felder
+            fixed_datetime = 0
+            for consumable in consumables:
+                updated = False
+                update_data = {}
+                
+                # created_at korrigieren
+                created_at = consumable.get('created_at')
+                if isinstance(created_at, str):
+                    try:
+                        created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        update_data['created_at'] = created_at_dt
+                        updated = True
+                    except:
+                        pass
+                
+                # updated_at korrigieren
+                updated_at = consumable.get('updated_at')
+                if isinstance(updated_at, str):
+                    try:
+                        updated_at_dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                        update_data['updated_at'] = updated_at_dt
+                        updated = True
+                    except:
+                        pass
+                
+                if updated:
+                    mongodb.update_one('consumables', 
+                                     {'_id': consumable['_id']}, 
+                                     {'$set': update_data})
+                    fixed_datetime += 1
+            
+            # 4. Prüfe und korrigiere consumable_usages Inkonsistenzen
+            usages = list(mongodb.find('consumable_usages', {}))
+            fixed_usages = 0
+            
+            for usage in usages:
+                updated = False
+                update_data = {}
+                
+                # used_at korrigieren
+                used_at = usage.get('used_at')
+                if isinstance(used_at, str):
+                    try:
+                        used_at_dt = datetime.fromisoformat(used_at.replace('Z', '+00:00'))
+                        update_data['used_at'] = used_at_dt
+                        updated = True
+                    except:
+                        pass
+                
+                # created_at korrigieren
+                created_at = usage.get('created_at')
+                if isinstance(created_at, str):
+                    try:
+                        created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        update_data['created_at'] = created_at_dt
+                        updated = True
+                    except:
+                        pass
+                
+                if updated:
+                    mongodb.update_one('consumable_usages', 
+                                     {'_id': usage['_id']}, 
+                                     {'$set': update_data})
+                    fixed_usages += 1
+            
+            print(f"Verbrauchsgüter-Inkonsistenzen behoben:")
+            print(f"  - Negative Bestände korrigiert: {fixed_negative}")
+            print(f"  - min_quantity Felder hinzugefügt: {fixed_min_quantity}")
+            print(f"  - Datetime-Felder korrigiert: {fixed_datetime}")
+            print(f"  - Verbrauchseinträge korrigiert: {fixed_usages}")
+            
+        except Exception as e:
+            print(f"Fehler beim Beheben der Verbrauchsgüter-Inkonsistenzen: {e}")
     
     def get_backup_path(self, filename):
         """Gibt den Pfad zu einer Backup-Datei zurück"""
@@ -353,6 +642,212 @@ class BackupManager:
                     
         except Exception as e:
             print(f"Fehler beim Aufräumen alter Backups: {e}")
+
+    def create_native_backup(self):
+        """
+        Erstellt ein verbessertes Backup mit Datentyp-Erhaltung
+        (Alias für create_backup für Kompatibilität)
+        """
+        return self.create_backup()
+    
+    def restore_native_backup(self, backup_filename):
+        """
+        Stellt ein verbessertes Backup wieder her
+        (Alias für restore_backup_by_filename für Kompatibilität)
+        """
+        return self.restore_backup_by_filename(backup_filename)
+    
+    def list_native_backups(self):
+        """Listet alle nativen MongoDB-Backups auf"""
+        try:
+            backups = []
+            
+            for item in self.backup_dir.iterdir():
+                if item.is_dir() and item.name.startswith('scandy_native_backup_'):
+                    stat = item.stat()
+                    backups.append({
+                        'name': item.name,
+                        'type': 'native',
+                        'size': stat.st_size,
+                        'created': stat.st_mtime,
+                        'modified': datetime.fromtimestamp(stat.st_mtime),
+                        'modified_str': datetime.fromtimestamp(stat.st_mtime).strftime('%d.%m.%Y %H:%M:%S')
+                    })
+            
+            # Sortiere nach Änderungsdatum (neueste zuerst)
+            backups.sort(key=lambda x: x['created'], reverse=True)
+            
+            return backups
+            
+        except Exception as e:
+            print(f"Fehler beim Auflisten der nativen Backups: {e}")
+            return []
+    
+    def create_hybrid_backup(self):
+        """
+        Erstellt ein hybrides Backup: Native MongoDB + JSON für Kompatibilität
+        """
+        try:
+            # Erstelle natives Backup
+            native_backup = self.create_native_backup()
+            if not native_backup:
+                return None
+            
+            # Erstelle zusätzlich JSON-Backup für Kompatibilität
+            json_backup = self.create_backup()
+            
+            print(f"✅ Hybrides Backup erstellt:")
+            print(f"  - Native: {native_backup}")
+            print(f"  - JSON: {json_backup}")
+            
+            return {
+                'native': native_backup,
+                'json': json_backup
+            }
+            
+        except Exception as e:
+            print(f"Fehler beim Erstellen des hybriden Backups: {e}")
+            return None
+
+    def convert_old_backup(self, old_backup_filename):
+        """
+        Konvertiert ein altes Backup in das neue Format mit Datentyp-Erhaltung
+        """
+        try:
+            old_backup_path = self.backup_dir / old_backup_filename
+            
+            if not old_backup_path.exists():
+                print(f"Altes Backup nicht gefunden: {old_backup_path}")
+                return None
+            
+            print(f"Konvertiere altes Backup: {old_backup_filename}")
+            
+            # Lade altes Backup
+            with open(old_backup_path, 'r', encoding='utf-8') as f:
+                old_backup_data = json.load(f)
+            
+            # Prüfe Backup-Format
+            if 'metadata' in old_backup_data and old_backup_data['metadata'].get('datatype_preservation'):
+                print("Backup ist bereits im neuen Format")
+                return old_backup_filename
+            
+            # Erstelle neues Backup-Format
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            new_backup_filename = f"converted_backup_{timestamp}.json"
+            new_backup_path = self.backup_dir / new_backup_filename
+            
+            # Konvertiere Daten mit Datentyp-Erhaltung
+            converted_data = {
+                'metadata': {
+                    'version': '2.0',
+                    'created_at': datetime.now().isoformat(),
+                    'datatype_preservation': True,
+                    'original_backup': old_backup_filename,
+                    'converted_at': datetime.now().isoformat(),
+                    'collections': list(old_backup_data.keys()) if isinstance(old_backup_data, dict) else []
+                },
+                'data': {}
+            }
+            
+            # Konvertiere jede Collection
+            total_documents = 0
+            for collection_name, documents in old_backup_data.items():
+                if isinstance(documents, list):
+                    converted_docs = []
+                    for doc in documents:
+                        # Konvertiere Dokument mit Datentyp-Erhaltung
+                        converted_doc = self._fix_id_for_restore(doc)
+                        converted_docs.append(converted_doc)
+                    
+                    converted_data['data'][collection_name] = converted_docs
+                    total_documents += len(converted_docs)
+                    print(f"  ✅ Collection '{collection_name}': {len(converted_docs)} Dokumente konvertiert")
+            
+            # Speichere konvertiertes Backup
+            with open(new_backup_path, 'w', encoding='utf-8') as f:
+                json.dump(converted_data, f, ensure_ascii=False, indent=2)
+            
+            backup_size = new_backup_path.stat().st_size
+            backup_size_kb = backup_size / 1024
+            
+            print(f"✅ Backup erfolgreich konvertiert: {new_backup_filename}")
+            print(f"📊 Konvertierungs-Statistiken:")
+            print(f"   - Collections: {len(converted_data['data'])}")
+            print(f"   - Dokumente: {total_documents}")
+            print(f"   - Größe: {backup_size_kb:.1f} KB")
+            
+            return new_backup_filename
+                
+        except Exception as e:
+            print(f"Fehler beim Konvertieren des Backups: {e}")
+            return None
+
+    def list_old_backups(self):
+        """
+        Listet alle Backups auf, die noch im alten Format sind
+        """
+        try:
+            old_backups = []
+            
+            for backup_file in self.backup_dir.glob('*.json'):
+                try:
+                    with open(backup_file, 'r', encoding='utf-8') as f:
+                        backup_data = json.load(f)
+                    
+                    # Prüfe ob Backup im alten Format ist
+                    if 'metadata' not in backup_data or not backup_data['metadata'].get('datatype_preservation'):
+                        old_backups.append({
+                            'filename': backup_file.name,
+                            'size': backup_file.stat().st_size,
+                            'created': backup_file.stat().st_mtime,
+                            'collections': list(backup_data.keys()) if isinstance(backup_data, dict) else []
+                        })
+                        
+                except Exception as e:
+                    print(f"Fehler beim Lesen von {backup_file.name}: {e}")
+            
+            return old_backups
+            
+        except Exception as e:
+            print(f"Fehler beim Auflisten alter Backups: {e}")
+            return []
+
+    def convert_all_old_backups(self):
+        """
+        Konvertiert alle alten Backups automatisch
+        """
+        try:
+            old_backups = self.list_old_backups()
+            
+            if not old_backups:
+                print("Keine alten Backups gefunden")
+                return []
+            
+            print(f"Gefunden: {len(old_backups)} alte Backups")
+            converted_backups = []
+            
+            for old_backup in old_backups:
+                print(f"\nKonvertiere: {old_backup['filename']}")
+                converted_filename = self.convert_old_backup(old_backup['filename'])
+                
+                if converted_filename:
+                    converted_backups.append({
+                        'original': old_backup['filename'],
+                        'converted': converted_filename
+                    })
+                    print(f"✅ Konvertiert: {old_backup['filename']} → {converted_filename}")
+                else:
+                    print(f"❌ Fehler bei: {old_backup['filename']}")
+            
+            print(f"\n📊 Konvertierung abgeschlossen:")
+            print(f"   - Erfolgreich konvertiert: {len(converted_backups)}")
+            print(f"   - Fehler: {len(old_backups) - len(converted_backups)}")
+            
+            return converted_backups
+            
+        except Exception as e:
+            print(f"Fehler bei der Massenkonvertierung: {e}")
+            return []
 
 # Globale Instanz
 backup_manager = BackupManager() 

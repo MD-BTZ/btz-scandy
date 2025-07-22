@@ -52,11 +52,46 @@
 
                         <!-- Backup erstellen -->
                         <div class="mb-6">
-                            <div class="flex justify-between items-center">
-                                <span class="font-medium">Neues Backup erstellen</span>
-                                <button id="createBackupBtn" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-plus mr-2"></i>Backup erstellen
-                                </button>
+                            <h4 class="text-lg font-semibold mb-3">Backup erstellen</h4>
+                            <div class="space-y-3">
+                                <!-- JSON Backup -->
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">JSON Backup</span>
+                                        <div class="text-xs text-base-content/60">
+                                            Kompatibel mit alten Backups, Datentyp-Konvertierung
+                                        </div>
+                                    </div>
+                                    <button id="createBackupBtn" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-plus mr-2"></i>JSON Backup
+                                    </button>
+                                </div>
+                                
+                                <!-- Native Backup -->
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">Native MongoDB Backup</span>
+                                        <div class="text-xs text-base-content/60">
+                                            Behält alle Datentypen 1:1 bei (empfohlen)
+                                        </div>
+                                    </div>
+                                    <button id="createNativeBackupBtn" class="btn btn-success btn-sm">
+                                        <i class="fas fa-database mr-2"></i>Native Backup
+                                    </button>
+                                </div>
+                                
+                                <!-- Hybrid Backup -->
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">Hybrides Backup</span>
+                                        <div class="text-xs text-base-content/60">
+                                            Erstellt beide Backup-Typen für maximale Sicherheit
+                                        </div>
+                                    </div>
+                                    <button id="createHybridBackupBtn" class="btn btn-accent btn-sm">
+                                        <i class="fas fa-shield-alt mr-2"></i>Hybrid Backup
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         
@@ -99,6 +134,44 @@
                             <div class="text-xs text-warning mt-1">
                                 <i class="fas fa-exclamation-triangle mr-1"></i>
                                 Vor dem Import wird empfohlen, ein Backup zu erstellen
+                            </div>
+                        </div>
+
+                        <!-- Backup-Konvertierung -->
+                        <div class="mb-6">
+                            <h4 class="text-lg font-semibold mb-3">Backup-Konvertierung</h4>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">Alte Backups konvertieren</span>
+                                        <div class="text-xs text-base-content/60">
+                                            Konvertiert alte Backups in das neue Format mit Datentyp-Erhaltung
+                                        </div>
+                                    </div>
+                                    <button id="convertAllOldBackupsBtn" class="btn btn-warning btn-sm">
+                                        <i class="fas fa-sync-alt mr-2"></i>Alle konvertieren
+                                    </button>
+                                </div>
+                                
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">Alte Backups auflisten</span>
+                                        <div class="text-xs text-base-content/60">
+                                            Zeigt alle Backups an, die noch im alten Format sind
+                                        </div>
+                                    </div>
+                                    <button id="listOldBackupsBtn" class="btn btn-info btn-sm">
+                                        <i class="fas fa-list mr-2"></i>Auflisten
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Alte Backups Liste -->
+                            <div id="oldBackupsList" class="mt-4 hidden">
+                                <h5 class="font-medium mb-2">Alte Backups:</h5>
+                                <div id="oldBackupsContent" class="space-y-2">
+                                    <!-- Wird dynamisch gefüllt -->
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -204,13 +277,14 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
+                                    <th>Typ</th>
                                     <th>Größe</th>
                                     <th>Erstellt</th>
                                     <th>Aktionen</th>
                                 </tr>
                             </thead>
                             <tbody id="backupsList">
-                                <tr><td colspan="4" class="text-center">Lade Backups...</td></tr>
+                                <tr><td colspan="5" class="text-center">Lade Backups...</td></tr>
                             </tbody>
                         </table>
                     </div>

@@ -1,11 +1,21 @@
 // Backup-Verwaltung
 document.addEventListener('DOMContentLoaded', () => {
-    // Nur noch die eindeutigen Backup-Buttons initialisieren
+    // Backup-Buttons initialisieren
     const createBackupBtn = document.getElementById('createBackupBtn');
+    const createNativeBackupBtn = document.getElementById('createNativeBackupBtn');
+    const createHybridBackupBtn = document.getElementById('createHybridBackupBtn');
     const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
 
     if (createBackupBtn) {
         createBackupBtn.onclick = createBackup;
+    }
+    
+    if (createNativeBackupBtn) {
+        createNativeBackupBtn.onclick = createNativeBackup;
+    }
+    
+    if (createHybridBackupBtn) {
+        createHybridBackupBtn.onclick = createHybridBackup;
     }
     
     if (downloadCurrentBtn) {
@@ -18,6 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialisiere Auto-Backup-System
     initAutoBackup();
+    
+    // Initialisiere Backup-Konvertierung
+    initBackupConversion();
 });
 
 // Hilfsfunktionen
@@ -64,8 +77,20 @@ async function loadBackups() {
             if (data.backups && data.backups.length > 0) {
                 data.backups.forEach(backup => {
                     const row = document.createElement('tr');
+                    
+                    // Bestimme Backup-Typ und Icon
+                    const isNative = backup.name.startsWith('scandy_native_backup_');
+                    const backupType = isNative ? 'Native' : 'JSON';
+                    const typeIcon = isNative ? 'fas fa-database' : 'fas fa-file-code';
+                    const typeClass = isNative ? 'badge-success' : 'badge-primary';
+                    
                     row.innerHTML = `
                         <td>${backup.name}</td>
+                        <td>
+                            <span class="badge ${typeClass}">
+                                <i class="${typeIcon} mr-1"></i>${backupType}
+                            </span>
+                        </td>
                         <td>${formatFileSize(backup.size)}</td>
                         <td>${new Date(backup.created * 1000).toLocaleString('de-DE', {
                             day: '2-digit',
@@ -156,7 +181,7 @@ function setupBackupButtonHandlers() {
     });
 }
 
-// Backup erstellen
+// JSON Backup erstellen
 async function createBackup() {
     // Frage nach E-Mail-Adresse für Backup-Versand
     const emailRecipient = prompt('E-Mail-Adresse für Backup-Versand (optional, leer lassen für keinen Versand):');
@@ -175,13 +200,65 @@ async function createBackup() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', data.message || 'Backup wurde erfolgreich erstellt');
+            showToast('success', data.message || 'JSON Backup wurde erfolgreich erstellt');
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
+            showToast('error', data.message || 'Fehler beim Erstellen des JSON Backups');
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
+        showToast('error', 'Fehler beim Erstellen des JSON Backups: ' + error.message);
+    }
+}
+
+// Native MongoDB Backup erstellen
+async function createNativeBackup() {
+    try {
+        showToast('info', 'Native MongoDB Backup wird erstellt...');
+        
+        const response = await fetch('/admin/backup/create-native', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('success', data.message);
+            loadBackups(); // Liste aktualisieren
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Erstellen des nativen Backups:', error);
+        showToast('error', 'Fehler beim Erstellen des nativen Backups: ' + error.message);
+    }
+}
+
+// Hybrides Backup erstellen
+async function createHybridBackup() {
+    try {
+        showToast('info', 'Hybrides Backup wird erstellt...');
+        
+        const response = await fetch('/admin/backup/create-hybrid', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('success', data.message);
+            loadBackups(); // Liste aktualisieren
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Erstellen des hybriden Backups:', error);
+        showToast('error', 'Fehler beim Erstellen des hybriden Backups: ' + error.message);
     }
 }
 
@@ -458,5 +535,143 @@ async function stopAutoBackup() {
     } catch (error) {
         console.error('Fehler beim Stoppen:', error);
         showToast('error', 'Fehler beim Stoppen');
+    }
+}
+
+// Backup-Konvertierung Funktionen
+function initBackupConversion() {
+    const convertAllOldBackupsBtn = document.getElementById('convertAllOldBackupsBtn');
+    const listOldBackupsBtn = document.getElementById('listOldBackupsBtn');
+    
+    if (convertAllOldBackupsBtn) {
+        convertAllOldBackupsBtn.onclick = convertAllOldBackups;
+    }
+    
+    if (listOldBackupsBtn) {
+        listOldBackupsBtn.onclick = listOldBackups;
+    }
+}
+
+async function convertAllOldBackups() {
+    try {
+        showToast('info', 'Konvertiere alle alten Backups...');
+        
+        const response = await fetch('/admin/backup/convert-all-old', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('success', data.message);
+            if (data.converted_backups && data.converted_backups.length > 0) {
+                console.log('Konvertierte Backups:', data.converted_backups);
+            }
+            // Lade Backups neu
+            loadBackups();
+        } else {
+            showToast('error', data.message || 'Fehler bei der Massenkonvertierung');
+        }
+    } catch (error) {
+        console.error('Fehler bei der Massenkonvertierung:', error);
+        showToast('error', 'Fehler bei der Massenkonvertierung: ' + error.message);
+    }
+}
+
+async function listOldBackups() {
+    try {
+        showToast('info', 'Lade alte Backups...');
+        
+        const response = await fetch('/admin/backup/list-old');
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            displayOldBackups(data.old_backups);
+            showToast('success', `${data.count} alte Backups gefunden`);
+        } else {
+            showToast('error', data.message || 'Fehler beim Auflisten alter Backups');
+        }
+    } catch (error) {
+        console.error('Fehler beim Auflisten alter Backups:', error);
+        showToast('error', 'Fehler beim Auflisten alter Backups: ' + error.message);
+    }
+}
+
+function displayOldBackups(oldBackups) {
+    const oldBackupsList = document.getElementById('oldBackupsList');
+    const oldBackupsContent = document.getElementById('oldBackupsContent');
+    
+    if (!oldBackupsList || !oldBackupsContent) {
+        console.error('Old backups list elements not found');
+        return;
+    }
+    
+    if (oldBackups.length === 0) {
+        oldBackupsContent.innerHTML = '<p class="text-sm text-base-content/60">Keine alten Backups gefunden</p>';
+    } else {
+        oldBackupsContent.innerHTML = '';
+        
+        oldBackups.forEach(backup => {
+            const backupItem = document.createElement('div');
+            backupItem.className = 'flex justify-between items-center p-2 bg-base-200 rounded-lg';
+            
+            const createdDate = new Date(backup.created * 1000).toLocaleString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            backupItem.innerHTML = `
+                <div class="flex-1">
+                    <div class="font-medium">${backup.filename}</div>
+                    <div class="text-xs text-base-content/60">
+                        ${formatFileSize(backup.size)} • ${createdDate} • ${backup.collections.length} Collections
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn btn-warning btn-xs" onclick="convertSingleBackup('${backup.filename}')">
+                        <i class="fas fa-sync-alt mr-1"></i>Konvertieren
+                    </button>
+                </div>
+            `;
+            
+            oldBackupsContent.appendChild(backupItem);
+        });
+    }
+    
+    oldBackupsList.classList.remove('hidden');
+}
+
+async function convertSingleBackup(filename) {
+    try {
+        showToast('info', `Konvertiere Backup: ${filename}`);
+        
+        const response = await fetch(`/admin/backup/convert-old/${filename}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('success', data.message);
+            // Lade Backups neu
+            loadBackups();
+            // Aktualisiere alte Backups Liste
+            listOldBackups();
+        } else {
+            showToast('error', data.message || 'Fehler beim Konvertieren des Backups');
+        }
+    } catch (error) {
+        console.error('Fehler beim Konvertieren des Backups:', error);
+        showToast('error', 'Fehler beim Konvertieren des Backups: ' + error.message);
     }
 } 

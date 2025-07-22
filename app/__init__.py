@@ -307,6 +307,19 @@ def create_app(test_config=None):
     except Exception as e:
         logging.error(f"Fehler beim Starten des automatischen Backup-Systems: {e}")
     
+    # ===== AUTOMATISCHE DASHBOARD-REPARATUR BEIM START =====
+    try:
+        from app.services.admin_debug_service import AdminDebugService
+        with app.app_context():
+            # Führe umfassende Dashboard-Reparatur beim Start aus
+            fixes = AdminDebugService.fix_dashboard_comprehensive()
+            if fixes.get('total', 0) > 0:
+                logging.info(f"Automatische Dashboard-Reparatur beim Start durchgeführt: {fixes}")
+            else:
+                logging.info("Dashboard-Reparatur beim Start: Keine Probleme gefunden")
+    except Exception as e:
+        logging.error(f"Fehler bei automatischer Dashboard-Reparatur beim Start: {e}")
+    
     # ===== HEALTH CHECK ROUTE =====
     @app.route('/health')
     def health_check():

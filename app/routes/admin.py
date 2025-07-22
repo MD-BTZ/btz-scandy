@@ -123,10 +123,90 @@ def index():
 def dashboard():
     """Admin-Dashboard"""
     try:
-        # Automatische Reparatur beim Dashboard-Aufruf
+        # Umfassende automatische Reparatur beim Dashboard-Aufruf
         try:
+            from app.services.admin_debug_service import AdminDebugService
+            from app.services.admin_backup_service import AdminBackupService
+            
+            # 1. Standard Dashboard-Reparatur
             AdminDebugService.fix_missing_created_at_fields()
-            logger.info("Automatische Dashboard-Reparatur durchgeführt")
+            logger.info("Standard Dashboard-Reparatur durchgeführt")
+            
+            # 2. Umfassende Datentyp-Reparatur
+            dashboard_fixes = AdminBackupService.fix_dashboard_after_backup()
+            if dashboard_fixes.get('total', 0) > 0:
+                logger.info(f"Umfassende Dashboard-Reparatur durchgeführt: {dashboard_fixes}")
+            
+            # 3. Zusätzliche Dashboard-spezifische Reparatur
+            try:
+                from app.models.mongodb_database import mongodb
+                
+                # Repariere spezifische Dashboard-Probleme
+                dashboard_fixes_count = 0
+                
+                # Stelle sicher, dass alle Tools gültige Felder haben
+                all_tools = mongodb.find('tools', {})
+                for tool in all_tools:
+                    try:
+                        updates = {}
+                        
+                        # Stelle sicher, dass name Feld existiert
+                        if 'name' not in tool or not tool['name']:
+                            updates['name'] = tool.get('description', 'Unbekanntes Tool')
+                        
+                        # Stelle sicher, dass barcode Feld existiert
+                        if 'barcode' not in tool:
+                            updates['barcode'] = str(tool.get('_id', ''))
+                        
+                        # Stelle sicher, dass status Feld existiert
+                        if 'status' not in tool:
+                            updates['status'] = 'verfügbar'
+                        
+                        # Stelle sicher, dass location Feld existiert
+                        if 'location' not in tool:
+                            updates['location'] = 'Unbekannt'
+                        
+                        if updates:
+                            mongodb.update_one('tools', {'_id': tool['_id']}, {'$set': updates})
+                            dashboard_fixes_count += 1
+                            
+                    except Exception as e:
+                        logger.warning(f"Fehler bei Tool-Reparatur: {e}")
+                        continue
+                
+                # Stelle sicher, dass alle Workers gültige Felder haben
+                all_workers = mongodb.find('workers', {})
+                for worker in all_workers:
+                    try:
+                        updates = {}
+                        
+                        # Stelle sicher, dass name Feld existiert
+                        if 'name' not in worker or not worker['name']:
+                            firstname = worker.get('firstname', '')
+                            lastname = worker.get('lastname', '')
+                            if firstname or lastname:
+                                updates['name'] = f"{firstname} {lastname}".strip()
+                            else:
+                                updates['name'] = 'Unbekannter Worker'
+                        
+                        # Stelle sicher, dass barcode Feld existiert
+                        if 'barcode' not in worker:
+                            updates['barcode'] = str(worker.get('_id', ''))
+                        
+                        if updates:
+                            mongodb.update_one('workers', {'_id': worker['_id']}, {'$set': updates})
+                            dashboard_fixes_count += 1
+                            
+                    except Exception as e:
+                        logger.warning(f"Fehler bei Worker-Reparatur: {e}")
+                        continue
+                
+                if dashboard_fixes_count > 0:
+                    logger.info(f"Dashboard-spezifische Reparatur: {dashboard_fixes_count} Korrekturen")
+                    
+            except Exception as e:
+                logger.warning(f"Dashboard-spezifische Reparatur fehlgeschlagen: {e}")
+                
         except Exception as e:
             logger.warning(f"Automatische Dashboard-Reparatur fehlgeschlagen: {e}")
         
@@ -138,115 +218,250 @@ def dashboard():
         consumable_trend = AdminDashboardService.get_consumable_trend()
         
         # Hole zusätzliche Statistiken
-        total_tools = mongodb.count_documents('tools', {'deleted': {'$ne': True}})
-        total_consumables = mongodb.count_documents('consumables', {'deleted': {'$ne': True}})
-        total_workers = mongodb.count_documents('workers', {'deleted': {'$ne': True}})
-        total_tickets = mongodb.count_documents('tickets', {})
-        
-        # Tool-Statistiken
-        tool_stats = {
-            'total': total_tools,
-            'available': mongodb.count_documents('tools', {'status': 'verfügbar', 'deleted': {'$ne': True}}),
-            'lent': mongodb.count_documents('tools', {'status': 'ausgeliehen', 'deleted': {'$ne': True}}),
-            'defect': mongodb.count_documents('tools', {'status': 'defekt', 'deleted': {'$ne': True}})
-        }
-        
-        # Consumable-Statistiken
-        consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
-        sufficient = 0
-        warning = 0
-        critical = 0
-        
-        for consumable in consumables:
-            if consumable['quantity'] >= consumable.get('warning_threshold', 10):
-                sufficient += 1
-            elif consumable['quantity'] >= consumable.get('critical_threshold', 5):
-                warning += 1
-            else:
-                critical += 1
-        
-        consumable_stats = {
-            'total': total_consumables,
-            'sufficient': sufficient,
-            'warning': warning,
-            'critical': critical
-        }
-        
-        # Worker-Statistiken
-        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
-        worker_stats = {
-            'total': total_workers,
-            'by_department': []
-        }
-        
-        # Gruppiere nach Abteilung
-        dept_counts = {}
-        for worker in workers:
-            dept = worker.get('department', 'Ohne Abteilung')
-            dept_counts[dept] = dept_counts.get(dept, 0) + 1
-        
-        for dept, count in dept_counts.items():
-            worker_stats['by_department'].append({
-                'name': dept,
-                'count': count
-            })
-        
-        # Tool-Warnungen
-        tool_warnings = []
-        defect_tools = list(mongodb.find('tools', {'status': 'defekt', 'deleted': {'$ne': True}}))
-        for tool in defect_tools:
-            tool_warnings.append({
-                'name': tool['name'],
-                'status': 'Defekt',
-                'severity': 'error'
-            })
-        
-        # Consumable-Warnungen
-        consumable_warnings = []
-        low_stock_consumables = list(mongodb.find('consumables', {
-            'quantity': {'$lt': 5},
-            'deleted': {'$ne': True}
-        }))
-        for consumable in low_stock_consumables:
-            consumable_warnings.append({
-                'message': f"{consumable['name']} (Bestand: {consumable['quantity']})",
-                'type': 'error' if consumable['quantity'] == 0 else 'warning',
-                'icon': 'times' if consumable['quantity'] == 0 else 'exclamation-triangle'
-            })
-        
-        # Aktuelle Ausleihen
-        current_lendings = list(mongodb.find('lendings', {'returned_at': None}))
-        
-        # Verarbeite Ausleihen für Anzeige
-        processed_lendings = []
-        for lending in current_lendings:
-            tool = mongodb.find_one('tools', {'barcode': lending['tool_barcode']})
-            worker = mongodb.find_one('workers', {'barcode': lending['worker_barcode']})
+        try:
+            total_tools = mongodb.count_documents('tools', {'deleted': {'$ne': True}})
+            total_consumables = mongodb.count_documents('consumables', {'deleted': {'$ne': True}})
+            total_workers = mongodb.count_documents('workers', {'deleted': {'$ne': True}})
+            total_tickets = mongodb.count_documents('tickets', {})
             
-            if tool and worker:
-                # Sichere Datumsbehandlung für created_at
-                created_at = tool.get('created_at')
-                if isinstance(created_at, str):
-                    try:
-                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
-                    except ValueError:
-                        try:
-                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                        except ValueError:
-                            created_at = datetime.now()  # Fallback
-                elif not isinstance(created_at, datetime):
-                    created_at = datetime.now()  # Fallback wenn kein created_at vorhanden
+            # Tool-Statistiken - Berücksichtige tatsächliche Ausleihen
+            all_tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+            current_lendings = list(mongodb.find('lendings', {'returned_at': {'$exists': False}}))
+            
+            # Debug: Zeige Ausleihen an
+            logger.info(f"Dashboard Debug: {len(current_lendings)} aktuelle Ausleihen gefunden")
+            for lending in current_lendings:
+                logger.info(f"  Ausleihe: Tool={lending.get('tool_barcode')}, Worker={lending.get('worker_barcode')}, ID={lending.get('_id')}")
+            
+            # Erstelle Set der ausgeliehenen Tool-Barcodes (entferne Duplikate)
+            lent_barcodes = set()
+            for lending in current_lendings:
+                tool_barcode = lending.get('tool_barcode')
+                if tool_barcode:
+                    lent_barcodes.add(tool_barcode)
+            
+            logger.info(f"Dashboard Debug: {len(lent_barcodes)} eindeutige ausgeliehene Tools: {list(lent_barcodes)}")
+            
+            available_count = 0
+            lent_count = 0
+            defect_count = 0
+            
+            for tool in all_tools:
+                tool_barcode = tool.get('barcode')
+                status = tool.get('status', 'verfügbar').lower()
                 
-                processed_lendings.append({
-                    'tool_name': tool['name'],
-                    'worker_name': f"{worker['firstname']} {worker['lastname']}",
-                    'lent_at': lending['lent_at'],
-                    'days_lent': (datetime.now() - lending['lent_at']).days
+                # Prüfe ob Tool tatsächlich ausgeliehen ist
+                is_lent = tool_barcode in lent_barcodes
+                
+                if 'defekt' in status or 'defect' in status or 'broken' in status:
+                    defect_count += 1
+                elif is_lent:
+                    lent_count += 1
+                elif 'verfügbar' in status or 'available' in status:
+                    available_count += 1
+                else:
+                    # Unbekannter Status - als verfügbar zählen
+                    available_count += 1
+            
+            tool_stats = {
+                'total': total_tools,
+                'available': available_count,
+                'lent': lent_count,
+                'defect': defect_count
+            }
+            
+            # Consumable-Statistiken - Verbesserte Logik
+            consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+            sufficient = 0
+            warning = 0
+            critical = 0
+            
+            for consumable in consumables:
+                # Verwende verschiedene mögliche Feldnamen für den Bestand
+                stock = consumable.get('stock', consumable.get('quantity', 0))
+                warning_threshold = consumable.get('warning_threshold', 10)
+                critical_threshold = consumable.get('critical_threshold', 5)
+                
+                # Konvertiere zu int falls nötig
+                try:
+                    stock = int(stock) if stock is not None else 0
+                    warning_threshold = int(warning_threshold) if warning_threshold is not None else 10
+                    critical_threshold = int(critical_threshold) if critical_threshold is not None else 5
+                except (ValueError, TypeError):
+                    stock = 0
+                    warning_threshold = 10
+                    critical_threshold = 5
+                
+                if stock >= warning_threshold:
+                    sufficient += 1
+                elif stock >= critical_threshold:
+                    warning += 1
+                else:
+                    critical += 1
+            
+            consumable_stats = {
+                'total': total_consumables,
+                'sufficient': sufficient,
+                'warning': warning,
+                'critical': critical
+            }
+            
+            # Worker-Statistiken
+            workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}))
+            worker_stats = {
+                'total': total_workers,
+                'by_department': []
+            }
+            
+            # Gruppiere nach Abteilung
+            dept_counts = {}
+            for worker in workers:
+                dept = worker.get('department', 'Ohne Abteilung')
+                dept_counts[dept] = dept_counts.get(dept, 0) + 1
+            
+            for dept, count in dept_counts.items():
+                worker_stats['by_department'].append({
+                    'name': dept,
+                    'count': count
                 })
+            
+            # Tool-Warnungen - Erweiterte Logik
+            tool_warnings = []
+            
+            # Defekte Tools
+            defect_tools = list(mongodb.find('tools', {'status': 'defekt', 'deleted': {'$ne': True}}))
+            for tool in defect_tools:
+                tool_warnings.append({
+                    'name': tool.get('name', 'Unbekanntes Tool'),
+                    'status': 'Defekt',
+                    'severity': 'error'
+                })
+            
+            # Warnung bei doppelten Ausleihen
+            lending_counts = {}
+            for lending in current_lendings:
+                tool_barcode = lending.get('tool_barcode')
+                if tool_barcode:
+                    lending_counts[tool_barcode] = lending_counts.get(tool_barcode, 0) + 1
+            
+            duplicate_lendings = {barcode: count for barcode, count in lending_counts.items() if count > 1}
+            if duplicate_lendings:
+                logger.warning(f"Dashboard Debug: Doppelte Ausleihen gefunden: {duplicate_lendings}")
+                for barcode, count in duplicate_lendings.items():
+                    tool = mongodb.find_one('tools', {'barcode': barcode})
+                    if tool:
+                        tool_warnings.append({
+                            'name': f"{tool.get('name', 'Unbekanntes Tool')} (Barcode: {barcode})",
+                            'status': f'Doppelte Ausleihen: {count}x',
+                            'severity': 'warning'
+                        })
+            
+            # Überfällige Ausleihen (mehr als 30 Tage)
+            overdue_lendings = []
+            for lending in current_lendings:
+                try:
+                    lent_at = lending.get('lent_at')
+                    if isinstance(lent_at, str):
+                        try:
+                            lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S.%f')
+                        except ValueError:
+                            try:
+                                lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                continue
+                    
+                    if isinstance(lent_at, datetime):
+                        days_lent = (datetime.now() - lent_at).days
+                        if days_lent > 30:
+                            tool = mongodb.find_one('tools', {'barcode': lending.get('tool_barcode')})
+                            worker = mongodb.find_one('workers', {'barcode': lending.get('worker_barcode')})
+                            
+                            if tool and worker:
+                                overdue_lendings.append({
+                                    'name': f"{tool.get('name', 'Unbekanntes Tool')} - {worker.get('name', 'Unbekannter Worker')}",
+                                    'status': f'Überfällig ({days_lent} Tage)',
+                                    'severity': 'warning'
+                                })
+                except Exception as e:
+                    continue
+            
+            tool_warnings.extend(overdue_lendings)
+            
+            # Consumable-Warnungen - Verbesserte Logik
+            consumable_warnings = []
+            all_consumables = list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+            
+            for consumable in all_consumables:
+                stock = consumable.get('stock', consumable.get('quantity', 0))
+                try:
+                    stock = int(stock) if stock is not None else 0
+                except (ValueError, TypeError):
+                    stock = 0
+                
+                if stock <= 0:
+                    consumable_warnings.append({
+                        'message': f"{consumable.get('name', 'Unbekanntes Verbrauchsmaterial')} (Bestand: {stock})",
+                        'type': 'error',
+                        'icon': 'times'
+                    })
+                elif stock < 5:
+                    consumable_warnings.append({
+                        'message': f"{consumable.get('name', 'Unbekanntes Verbrauchsmaterial')} (Bestand: {stock})",
+                        'type': 'warning',
+                        'icon': 'exclamation-triangle'
+                    })
+            
+            # Aktuelle Ausleihen
+            current_lendings = list(mongodb.find('lendings', {'returned_at': {'$exists': False}}))
+            
+            # Verarbeite Ausleihen für Anzeige
+            processed_lendings = []
+            for lending in current_lendings:
+                try:
+                    tool = mongodb.find_one('tools', {'barcode': lending.get('tool_barcode', '')})
+                    worker = mongodb.find_one('workers', {'barcode': lending.get('worker_barcode', '')})
+                    
+                    if tool and worker:
+                        # Sichere Datumsbehandlung
+                        lent_at = lending.get('lent_at')
+                        if isinstance(lent_at, str):
+                            try:
+                                lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S.%f')
+                            except ValueError:
+                                try:
+                                    lent_at = datetime.strptime(lent_at, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    lent_at = datetime.now()
+                        elif not isinstance(lent_at, datetime):
+                            lent_at = datetime.now()
+                        
+                        processed_lendings.append({
+                            'tool_name': tool.get('name', 'Unbekanntes Tool'),
+                            'worker_name': worker.get('name', 'Unbekannter Worker'),
+                            'lent_at': lent_at,
+                            'days_lent': (datetime.now() - lent_at).days
+                        })
+                except Exception as e:
+                    logger.warning(f"Fehler bei Verarbeitung einer Ausleihe: {e}")
+                    continue
+            
+            # Sortiere nach Ausleihdatum (älteste zuerst)
+            processed_lendings.sort(key=lambda x: x.get('lent_at', datetime.now()))
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Dashboard-Statistiken: {e}")
+            # Fallback-Werte
+            tool_stats = {'total': 0, 'available': 0, 'lent': 0, 'defect': 0}
+            consumable_stats = {'total': 0, 'sufficient': 0, 'warning': 0, 'critical': 0}
+            worker_stats = {'total': 0, 'by_department': []}
+            tool_warnings = []
+            consumable_warnings = []
+            processed_lendings = []
+            total_tools = 0
+            total_consumables = 0
+            total_workers = 0
+            total_tickets = 0
         
-        # Sortiere nach Ausleihdatum (älteste zuerst)
-        processed_lendings.sort(key=lambda x: x['lent_at'])
-
         return render_template('admin/dashboard.html',
                              recent_activity=recent_activity,
                              material_usage=material_usage,
@@ -258,21 +473,21 @@ def dashboard():
                              total_workers=total_workers,
                              total_tickets=total_tickets,
                              current_lendings=processed_lendings,
-                         tool_stats=tool_stats,
-                         consumable_stats=consumable_stats,
-                         worker_stats=worker_stats,
-                         tool_warnings=tool_warnings,
+                             tool_stats=tool_stats,
+                             consumable_stats=consumable_stats,
+                             worker_stats=worker_stats,
+                             tool_warnings=tool_warnings,
                              consumable_warnings=consumable_warnings)
-                             
+        
     except Exception as e:
-        logger.error(f"Fehler beim Laden des Admin-Dashboards: {str(e)}")
+        logger.error(f"Fehler beim Laden des Dashboards: {e}")
         flash('Fehler beim Laden des Dashboards', 'error')
         return render_template('admin/dashboard.html',
                              recent_activity=[],
                              material_usage={'usage_data': [], 'period_days': 30},
                              warnings={'defect_tools': [], 'overdue_lendings': [], 'low_stock_consumables': []},
                              consumables_forecast=[],
-                             consumable_trend={'labels': [], 'datasets': []},
+                             consumable_trend={},
                              total_tools=0,
                              total_consumables=0,
                              total_workers=0,
@@ -2224,12 +2439,26 @@ def delete_ticket_category_legacy(category):
 @bp.route('/backup/list')
 @mitarbeiter_required
 def backup_list():
-    """Gibt eine Liste der verfügbaren Backups zurück"""
+    """Gibt eine Liste der verfügbaren Backups zurück (JSON + Native)"""
     try:
-        backups = AdminBackupService.get_backup_list()
+        from app.services.admin_backup_service import AdminBackupService
+        
+        # Hole beide Backup-Typen
+        json_backups = AdminBackupService.get_backup_list()
+        native_backups = AdminBackupService.get_native_backup_list()
+        
+        # Kombiniere die Listen
+        all_backups = json_backups + native_backups
+        
+        # Sortiere nach Erstellungsdatum (neueste zuerst)
+        all_backups.sort(key=lambda x: x.get('created', 0), reverse=True)
+        
         return jsonify({
             'status': 'success',
-            'backups': backups
+            'backups': all_backups,
+            'json_count': len(json_backups),
+            'native_count': len(native_backups),
+            'total_count': len(all_backups)
         })
     except Exception as e:
         logger.error(f"Fehler beim Laden der Backups: {str(e)}", exc_info=True)
@@ -2352,21 +2581,46 @@ def upload_backup():
 @bp.route('/backup/restore/<filename>', methods=['POST'])
 @admin_required
 def restore_backup(filename):
-    """Stellt ein Backup wieder her"""
+    """Stellt ein Backup wieder her (automatische Erkennung JSON/Native)"""
     try:
-        success, message, validation_info = AdminBackupService.restore_backup(filename)
+        from app.services.admin_backup_service import AdminBackupService
+        from app.utils.backup_manager import backup_manager
         
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': message,
-                'validation_info': validation_info
-            })
+        # Prüfe ob es ein natives Backup ist
+        backup_path = backup_manager.backup_dir / filename
+        is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        
+        if is_native:
+            # Verwende native Restore
+            success, message = AdminBackupService.restore_native_backup(filename)
+            if success:
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Native Backup wiederhergestellt: {message}',
+                    'backup_type': 'native'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Fehler beim Wiederherstellen des nativen Backups: {message}',
+                    'backup_type': 'native'
+                }), 500
         else:
-            return jsonify({
-                'status': 'error',
-                'message': message
-            }), 500
+            # Verwende JSON Restore
+            success, message, validation_info = AdminBackupService.restore_backup(filename)
+            if success:
+                return jsonify({
+                    'status': 'success',
+                    'message': message,
+                    'validation_info': validation_info,
+                    'backup_type': 'json'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': message,
+                    'backup_type': 'json'
+                }), 500
             
     except Exception as e:
         logger.error(f"Fehler beim Wiederherstellen des Backups: {str(e)}")
@@ -2378,25 +2632,62 @@ def restore_backup(filename):
 @bp.route('/backup/download/<filename>')
 @admin_required
 def download_backup(filename):
-    """Lädt ein Backup herunter"""
+    """Lädt ein Backup herunter (JSON oder Native als ZIP)"""
     try:
         from pathlib import Path
         from app.utils.backup_manager import backup_manager
+        import zipfile
+        import tempfile
+        import os
         
         backup_path = backup_manager.backup_dir / filename
         
         if not backup_path.exists():
             return jsonify({
                 'status': 'error',
-                'message': 'Backup-Datei nicht gefunden'
+                'message': 'Backup nicht gefunden'
             }), 404
         
-        return send_file(
-            backup_path,
-            as_attachment=True,
-            download_name=filename,
-            mimetype='application/json'
-        )
+        # Prüfe Backup-Typ
+        is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        
+        if is_native:
+            # Native Backup (Verzeichnis) - erstelle ZIP
+            try:
+                # Erstelle temporäres ZIP
+                temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+                temp_zip.close()
+                
+                with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    # Füge alle Dateien im Backup-Verzeichnis zum ZIP hinzu
+                    for root, dirs, files in os.walk(backup_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, backup_path)
+                            zipf.write(file_path, arcname)
+                
+                # Sende ZIP-Datei
+                return send_file(
+                    temp_zip.name,
+                    as_attachment=True,
+                    download_name=f"{filename}.zip",
+                    mimetype='application/zip'
+                )
+                
+            except Exception as e:
+                # Lösche temporäre Datei bei Fehler
+                if os.path.exists(temp_zip.name):
+                    os.unlink(temp_zip.name)
+                raise e
+                
+        else:
+            # JSON Backup (Datei) - direkt senden
+            return send_file(
+                backup_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/json'
+            )
         
     except Exception as e:
         logger.error(f"Fehler beim Herunterladen des Backups: {str(e)}")
@@ -2408,22 +2699,36 @@ def download_backup(filename):
 @bp.route('/backup/delete/<filename>', methods=['DELETE'])
 @admin_required
 def delete_backup(filename):
-    """Löscht ein Backup"""
+    """Löscht ein Backup (JSON oder Native)"""
     try:
         from app.utils.backup_manager import backup_manager
+        import shutil
         
-        success = backup_manager.delete_backup(filename)
+        backup_path = backup_manager.backup_dir / filename
         
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': 'Backup erfolgreich gelöscht'
-            })
-        else:
+        if not backup_path.exists():
             return jsonify({
                 'status': 'error',
-                'message': 'Fehler beim Löschen des Backups'
-            }), 500
+                'message': 'Backup nicht gefunden'
+            }), 404
+        
+        # Prüfe Backup-Typ
+        is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        
+        if is_native:
+            # Lösche natives Backup (Verzeichnis)
+            shutil.rmtree(backup_path)
+            backup_type = 'native'
+        else:
+            # Lösche JSON Backup (Datei)
+            backup_path.unlink()
+            backup_type = 'json'
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{backup_type.capitalize()} Backup erfolgreich gelöscht',
+            'backup_type': backup_type
+        })
             
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Backups: {str(e)}")
@@ -2456,6 +2761,158 @@ def test_backup(filename):
         return jsonify({
             'status': 'error',
             'message': f'Fehler beim Testen des Backups: {str(e)}'
+        }), 500
+
+@bp.route('/backup/create-native', methods=['POST'])
+@admin_required
+def create_native_backup():
+    """Erstellt ein natives MongoDB-Backup mit mongodump"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        success, message, backup_filename = AdminBackupService.create_native_backup()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Native Backup erfolgreich erstellt: {backup_filename}',
+                'filename': backup_filename
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Erstellen des nativen Backups: {message}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des nativen Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Erstellen des nativen Backups: {str(e)}'
+        }), 500
+
+@bp.route('/backup/restore-native/<backup_name>', methods=['POST'])
+@admin_required
+def restore_native_backup(backup_name):
+    """Stellt ein natives MongoDB-Backup mit mongorestore wieder her"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        success, message = AdminBackupService.restore_native_backup(backup_name)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Native Backup erfolgreich wiederhergestellt: {backup_name}'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Wiederherstellen des nativen Backups: {message}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Wiederherstellen des nativen Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Wiederherstellen des nativen Backups: {str(e)}'
+        }), 500
+
+@bp.route('/backup/create-hybrid', methods=['POST'])
+@admin_required
+def create_hybrid_backup():
+    """Erstellt ein hybrides Backup (Native + JSON)"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        success, message, result = AdminBackupService.create_hybrid_backup()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Hybrides Backup erfolgreich erstellt: {message}',
+                'result': result
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Erstellen des hybriden Backups: {message}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des hybriden Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Erstellen des hybriden Backups: {str(e)}'
+        }), 500
+
+@bp.route('/backup/convert-old/<filename>', methods=['POST'])
+@admin_required
+def convert_old_backup(filename):
+    """Konvertiert ein altes Backup in das neue Format"""
+    try:
+        from app.utils.backup_manager import backup_manager
+        converted_filename = backup_manager.convert_old_backup(filename)
+        
+        if converted_filename:
+            return jsonify({
+                'status': 'success',
+                'message': f'Backup erfolgreich konvertiert: {converted_filename}',
+                'converted_filename': converted_filename
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Fehler beim Konvertieren des Backups'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Konvertieren des Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Konvertieren des Backups: {str(e)}'
+        }), 500
+
+@bp.route('/backup/convert-all-old', methods=['POST'])
+@admin_required
+def convert_all_old_backups():
+    """Konvertiert alle alten Backups automatisch"""
+    try:
+        from app.utils.backup_manager import backup_manager
+        converted_backups = backup_manager.convert_all_old_backups()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'{len(converted_backups)} Backups erfolgreich konvertiert',
+            'converted_backups': converted_backups
+        })
+            
+    except Exception as e:
+        logger.error(f"Fehler bei der Massenkonvertierung: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler bei der Massenkonvertierung: {str(e)}'
+        }), 500
+
+@bp.route('/backup/list-old', methods=['GET'])
+@admin_required
+def list_old_backups():
+    """Listet alle Backups auf, die noch im alten Format sind"""
+    try:
+        from app.utils.backup_manager import backup_manager
+        old_backups = backup_manager.list_old_backups()
+        
+        return jsonify({
+            'status': 'success',
+            'old_backups': old_backups,
+            'count': len(old_backups)
+        })
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Auflisten alter Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Auflisten alter Backups: {str(e)}'
         }), 500
 
 @bp.route('/debug/session')
@@ -4597,6 +5054,62 @@ def fix_email_config():
             'errors': [f"Unerwarteter Fehler: {str(e)}"],
             'old_settings': {},
             'new_config': {}
+        }), 500
+
+@bp.route('/debug/analyze-lendings', methods=['GET'])
+@admin_required
+def analyze_lendings():
+    """Analysiert die Ausleihen in der Datenbank"""
+    try:
+        from app.models.mongodb_database import mongodb
+        
+        # Hole alle Ausleihen
+        all_lendings = list(mongodb.find('lendings', {}))
+        current_lendings = list(mongodb.find('lendings', {'returned_at': {'$exists': False}}))
+        
+        # Analysiere Duplikate
+        lending_counts = {}
+        for lending in current_lendings:
+            tool_barcode = lending.get('tool_barcode')
+            if tool_barcode:
+                lending_counts[tool_barcode] = lending_counts.get(tool_barcode, 0) + 1
+        
+        duplicate_lendings = {barcode: count for barcode, count in lending_counts.items() if count > 1}
+        
+        # Erstelle detaillierte Analyse
+        analysis = {
+            'total_lendings': len(all_lendings),
+            'current_lendings': len(current_lendings),
+            'unique_tools_lent': len(lending_counts),
+            'duplicate_lendings': duplicate_lendings,
+            'lending_details': []
+        }
+        
+        # Detaillierte Ausleihen
+        for lending in current_lendings:
+            tool = mongodb.find_one('tools', {'barcode': lending.get('tool_barcode')})
+            worker = mongodb.find_one('workers', {'barcode': lending.get('worker_barcode')})
+            
+            analysis['lending_details'].append({
+                'id': str(lending.get('_id')),
+                'tool_barcode': lending.get('tool_barcode'),
+                'tool_name': tool.get('name', 'Unbekannt') if tool else 'Unbekannt',
+                'worker_barcode': lending.get('worker_barcode'),
+                'worker_name': worker.get('name', 'Unbekannt') if worker else 'Unbekannt',
+                'lent_at': lending.get('lent_at'),
+                'returned_at': lending.get('returned_at')
+            })
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler bei Ausleihen-Analyse: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 @bp.route('/debug/fix-dashboard-simple', methods=['GET'])

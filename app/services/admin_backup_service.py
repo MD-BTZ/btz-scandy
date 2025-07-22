@@ -315,102 +315,50 @@ class AdminBackupService:
     @staticmethod
     def _fix_missing_created_at_fields():
         """
-        Ergänzt fehlende created_at Felder und andere Standardfelder in Tools und anderen Collections
+        Analysiert fehlende created_at Felder (SICHERE VERSION - nur Analyse, keine Updates)
         """
         try:
             from datetime import datetime
             
-            fixed_count = 0
+            missing_count = 0
             
-            # Tools ohne created_at Feld finden und ergänzen
-            tools_without_created_at = mongodb.find('tools', {
+            # Tools ohne created_at Feld (nur Analyse)
+            tools_without_created_at = list(mongodb.find('tools', {
                 'created_at': {'$exists': False}
-            })
+            }))
             
-            for tool in tools_without_created_at:
-                # Verwende updated_at als created_at, falls vorhanden
-                created_at = tool.get('updated_at') or tool.get('modified_at') or datetime.now()
-                
-                # Konvertiere String zu datetime falls nötig
-                if isinstance(created_at, str):
-                    try:
-                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
-                    except ValueError:
-                        try:
-                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                        except ValueError:
-                            try:
-                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
-                            except ValueError:
-                                created_at = datetime.now()
-                
-                # Ergänze created_at Feld
-                mongodb.update_one('tools', 
-                                 {'_id': tool['_id']}, 
-                                 {'$set': {'created_at': created_at}})
-                fixed_count += 1
+            missing_count += len(tools_without_created_at)
+            if tools_without_created_at:
+                logger.info(f"{len(tools_without_created_at)} Tools ohne created_at Feld gefunden")
+                for tool in tools_without_created_at[:3]:  # Zeige erste 3
+                    logger.info(f"  Tool ohne created_at: {tool.get('name', 'Unbekannt')} (ID: {tool.get('_id')})")
             
-            # Workers ohne created_at Feld finden und ergänzen
-            workers_without_created_at = mongodb.find('workers', {
+            # Workers ohne created_at Feld (nur Analyse)
+            workers_without_created_at = list(mongodb.find('workers', {
                 'created_at': {'$exists': False}
-            })
+            }))
             
-            for worker in workers_without_created_at:
-                created_at = worker.get('updated_at') or worker.get('modified_at') or datetime.now()
-                
-                if isinstance(created_at, str):
-                    try:
-                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
-                    except ValueError:
-                        try:
-                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                        except ValueError:
-                            try:
-                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
-                            except ValueError:
-                                created_at = datetime.now()
-                
-                mongodb.update_one('workers', 
-                                 {'_id': worker['_id']}, 
-                                 {'$set': {'created_at': created_at}})
-                fixed_count += 1
+            missing_count += len(workers_without_created_at)
+            if workers_without_created_at:
+                logger.info(f"{len(workers_without_created_at)} Workers ohne created_at Feld gefunden")
+                for worker in workers_without_created_at[:3]:  # Zeige erste 3
+                    logger.info(f"  Worker ohne created_at: {worker.get('name', 'Unbekannt')} (ID: {worker.get('_id')})")
             
-            # Consumables ohne created_at Feld finden und ergänzen
-            consumables_without_created_at = mongodb.find('consumables', {
+            # Consumables ohne created_at Feld (nur Analyse)
+            consumables_without_created_at = list(mongodb.find('consumables', {
                 'created_at': {'$exists': False}
-            })
+            }))
             
-            for consumable in consumables_without_created_at:
-                created_at = consumable.get('updated_at') or datetime.now()
-                
-                if isinstance(created_at, str):
-                    try:
-                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
-                    except ValueError:
-                        try:
-                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                        except ValueError:
-                            try:
-                                created_at = datetime.strptime(created_at, '%Y-%m-%d')
-                            except ValueError:
-                                created_at = datetime.now()
-                
-                # Ergänze created_at und unit Feld falls fehlend
-                update_data = {'created_at': created_at}
-                
-                # Ergänze unit Feld falls nicht vorhanden
-                if 'unit' not in consumable:
-                    update_data['unit'] = 'Stück'
-                
-                mongodb.update_one('consumables', 
-                                 {'_id': consumable['_id']}, 
-                                 {'$set': update_data})
-                fixed_count += 1
+            missing_count += len(consumables_without_created_at)
+            if consumables_without_created_at:
+                logger.info(f"{len(consumables_without_created_at)} Consumables ohne created_at Feld gefunden")
+                for consumable in consumables_without_created_at[:3]:  # Zeige erste 3
+                    logger.info(f"  Consumable ohne created_at: {consumable.get('name', 'Unbekannt')} (ID: {consumable.get('_id')})")
             
-            # Ergänze unit Feld für alle Consumables die es nicht haben
-            consumables_without_unit = mongodb.find('consumables', {
+            # Consumables ohne unit Feld (nur Analyse)
+            consumables_without_unit = list(mongodb.find('consumables', {
                 'unit': {'$exists': False}
-            })
+            }))
             
             for consumable in consumables_without_unit:
                 mongodb.update_one('consumables', 
@@ -466,3 +414,230 @@ class AdminBackupService:
         except Exception as e:
             logger.error(f"Fehler beim Ergänzen fehlender Felder: {str(e)}")
             return 0 
+
+    @staticmethod
+    def fix_dashboard_after_backup():
+        """
+        Behebt Dashboard-Probleme nach Backup-Import automatisch
+        SICHERE VERSION: Nur Lese-Operationen, keine Datenbank-Manipulation
+        """
+        try:
+            from datetime import datetime
+            
+            fixes_applied = {
+                'datetime_conversions': 0,
+                'missing_fields': 0,
+                'data_consistency': 0,
+                'objectid_conversions': 0,
+                'total': 0
+            }
+            
+            # SICHERE VERSION: Nur Analyse und Logging, keine Datenbank-Updates
+            collections_to_analyze = ['tools', 'workers', 'consumables', 'lendings', 'tickets', 'users', 'consumable_usages']
+            date_fields = ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'lent_at', 'returned_at', 'due_date', 'resolved_at', 'used_at']
+            
+            for collection in collections_to_analyze:
+                try:
+                    # Finde alle Dokumente in der Collection (nur lesen)
+                    all_docs = list(mongodb.find(collection, {}))
+                    
+                    for doc in all_docs:
+                        try:
+                            # Nur Analyse, keine Updates
+                            for field in date_fields:
+                                if field in doc:
+                                    field_value = doc[field]
+                                    if isinstance(field_value, str):
+                                        fixes_applied['datetime_conversions'] += 1
+                                        logger.info(f"String-Datum gefunden in {collection}.{field}: {field_value}")
+                            
+                            # ObjectId-Analyse (nur lesen)
+                            if '_id' in doc and isinstance(doc['_id'], str) and len(doc['_id']) == 24:
+                                fixes_applied['objectid_conversions'] += 1
+                                logger.info(f"String-ObjectId gefunden in {collection}: {doc['_id']}")
+                                
+                        except Exception as e:
+                            logger.warning(f"Fehler bei Dokument-Analyse in {collection}: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.error(f"Fehler bei Collection-Analyse {collection}: {str(e)}")
+            
+            # SICHERE VERSION: Nur Analyse der fehlenden Felder
+            try:
+                # Analysiere Tools ohne created_at
+                tools_without_created = list(mongodb.find('tools', {'created_at': {'$exists': False}}))
+                fixes_applied['missing_fields'] = len(tools_without_created)
+                
+                if tools_without_created:
+                    logger.info(f"{len(tools_without_created)} Tools ohne created_at Feld gefunden")
+                
+                # Analysiere Workers ohne created_at
+                workers_without_created = list(mongodb.find('workers', {'created_at': {'$exists': False}}))
+                fixes_applied['missing_fields'] += len(workers_without_created)
+                
+                if workers_without_created:
+                    logger.info(f"{len(workers_without_created)} Workers ohne created_at Feld gefunden")
+                    
+            except Exception as e:
+                logger.error(f"Fehler bei Datenkonsistenz-Analyse: {str(e)}")
+            
+            # Gesamtzahl berechnen
+            fixes_applied['total'] = sum([
+                fixes_applied['datetime_conversions'],
+                fixes_applied['missing_fields'],
+                fixes_applied['data_consistency'],
+                fixes_applied['objectid_conversions']
+            ])
+            
+            logger.info(f"Dashboard-Analyse abgeschlossen (SICHERE VERSION): {fixes_applied}")
+            return fixes_applied
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Dashboard-Analyse: {str(e)}")
+            return {'total': 0, 'error': str(e)}
+
+    @staticmethod
+    def fix_dashboard_after_backup_SAFE():
+        """
+        SICHERE VERSION: Behebt Dashboard-Probleme nach Backup-Import
+        Nur notwendige Updates, keine gefährlichen Operationen
+        """
+        try:
+            from datetime import datetime
+            
+            fixes_applied = {
+                'datetime_conversions': 0,
+                'missing_fields': 0,
+                'data_consistency': 0,
+                'objectid_conversions': 0,
+                'total': 0
+            }
+            
+            # SICHERE Updates: Nur fehlende created_at Felder ergänzen
+            try:
+                # Tools ohne created_at Feld
+                tools_without_created = list(mongodb.find('tools', {'created_at': {'$exists': False}}))
+                for tool in tools_without_created:
+                    fallback_date = tool.get('updated_at') or tool.get('modified_at') or datetime.now()
+                    if isinstance(fallback_date, str):
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                        except ValueError:
+                            try:
+                                fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                fallback_date = datetime.now()
+                    
+                    mongodb.update_one('tools', 
+                                     {'_id': tool['_id']}, 
+                                     {'$set': {'created_at': fallback_date}})
+                    fixes_applied['missing_fields'] += 1
+                
+                # Workers ohne created_at Feld
+                workers_without_created = list(mongodb.find('workers', {'created_at': {'$exists': False}}))
+                for worker in workers_without_created:
+                    fallback_date = worker.get('updated_at') or worker.get('modified_at') or datetime.now()
+                    if isinstance(fallback_date, str):
+                        try:
+                            fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S.%f')
+                        except ValueError:
+                            try:
+                                fallback_date = datetime.strptime(fallback_date, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                fallback_date = datetime.now()
+                    
+                    mongodb.update_one('workers', 
+                                     {'_id': worker['_id']}, 
+                                     {'$set': {'created_at': fallback_date}})
+                    fixes_applied['missing_fields'] += 1
+                    
+            except Exception as e:
+                logger.error(f"Fehler bei sicheren Dashboard-Fixes: {str(e)}")
+            
+            # Gesamtzahl berechnen
+            fixes_applied['total'] = fixes_applied['missing_fields']
+            
+            logger.info(f"Sichere Dashboard-Fixes angewendet: {fixes_applied}")
+            return fixes_applied
+            
+        except Exception as e:
+            logger.error(f"Fehler bei sicheren Dashboard-Fixes: {str(e)}")
+            return {'total': 0, 'error': str(e)} 
+
+    @staticmethod
+    def create_native_backup() -> Tuple[bool, str, Optional[str]]:
+        """
+        Erstellt ein natives MongoDB-Backup mit mongodump
+        Behält alle Datentypen 1:1 bei - keine JSON-Konvertierung!
+        """
+        try:
+            from app.utils.backup_manager import backup_manager
+            
+            backup_filename = backup_manager.create_native_backup()
+            
+            if backup_filename:
+                logger.info(f"Natives MongoDB-Backup erfolgreich erstellt: {backup_filename}")
+                return True, f"Native Backup erstellt: {backup_filename}", backup_filename
+            else:
+                logger.error("Fehler beim Erstellen des nativen Backups")
+                return False, "Fehler beim Erstellen des nativen Backups", None
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des nativen Backups: {str(e)}")
+            return False, f"Fehler beim Erstellen des nativen Backups: {str(e)}", None
+    
+    @staticmethod
+    def restore_native_backup(backup_filename: str) -> Tuple[bool, str]:
+        """
+        Stellt ein natives MongoDB-Backup mit mongorestore wieder her
+        Behält alle Datentypen 1:1 bei - keine JSON-Konvertierung!
+        """
+        try:
+            from app.utils.backup_manager import backup_manager
+            
+            success = backup_manager.restore_native_backup(backup_filename)
+            
+            if success:
+                logger.info(f"Natives MongoDB-Backup erfolgreich wiederhergestellt: {backup_filename}")
+                return True, f"Native Backup wiederhergestellt: {backup_filename}"
+            else:
+                logger.error(f"Fehler beim Wiederherstellen des nativen Backups: {backup_filename}")
+                return False, f"Fehler beim Wiederherstellen des nativen Backups: {backup_filename}"
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Wiederherstellen des nativen Backups: {str(e)}")
+            return False, f"Fehler beim Wiederherstellen des nativen Backups: {str(e)}"
+    
+    @staticmethod
+    def get_native_backup_list() -> List[Dict[str, Any]]:
+        """Hole Liste aller nativen MongoDB-Backups"""
+        try:
+            from app.utils.backup_manager import backup_manager
+            
+            return backup_manager.list_native_backups()
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der nativen Backup-Liste: {str(e)}")
+            return []
+    
+    @staticmethod
+    def create_hybrid_backup() -> Tuple[bool, str, Optional[Dict[str, str]]]:
+        """
+        Erstellt ein hybrides Backup: Native MongoDB + JSON für Kompatibilität
+        """
+        try:
+            from app.utils.backup_manager import backup_manager
+            
+            result = backup_manager.create_hybrid_backup()
+            
+            if result:
+                logger.info(f"Hybrides Backup erfolgreich erstellt: {result}")
+                return True, f"Hybrides Backup erstellt: Native={result['native']}, JSON={result['json']}", result
+            else:
+                logger.error("Fehler beim Erstellen des hybriden Backups")
+                return False, "Fehler beim Erstellen des hybriden Backups", None
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des hybriden Backups: {str(e)}")
+            return False, f"Fehler beim Erstellen des hybriden Backups: {str(e)}", None 
