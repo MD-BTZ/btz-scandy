@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}Jobbörse{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex gap-8">
+        <!-- Sidebar mit Filtern -->
+        <div class="w-80 flex-shrink-0">
+            <div class="bg-white rounded-lg shadow-lg p-6 sticky top-4">
+                <!-- Neue Jobs Button -->
+                <div class="mb-6">
+                    <a href="{{ url_for('jobs.create_job') }}" 
+                       class="w-full !bg-blue-600 !text-white px-4 py-3 rounded-lg hover:!bg-blue-700 transition-colors text-center font-medium border border-blue-600">
+                        <i class="fas fa-plus mr-2"></i>Neuen Job erstellen
+                    </a>
+                </div>
+                
+                <h3 class="text-lg font-semibold mb-4">
+                    <i class="fas fa-filter"></i> Filter
+                </h3>
+                
+                <form method="GET" action="{{ url_for('jobs.job_list') }}" class="space-y-4">
+                    <!-- Suchfeld -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Suche</label>
+                        <input type="text" name="search" value="{{ filters.search or '' }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="Job-Titel, Firma, Beschreibung...">
+                    </div>
+                    
+                    <!-- Branche -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Branche</label>
+                        <select name="industry" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Alle Branchen</option>
+                            <option value="IT" {% if filters.industry == 'IT' %}selected{% endif %}>IT</option>
+                            <option value="Marketing" {% if filters.industry == 'Marketing' %}selected{% endif %}>Marketing</option>
+                            <option value="Vertrieb" {% if filters.industry == 'Vertrieb' %}selected{% endif %}>Vertrieb</option>
+                            <option value="Finanzen" {% if filters.industry == 'Finanzen' %}selected{% endif %}>Finanzen</option>
+                            <option value="Handwerk" {% if filters.industry == 'Handwerk' %}selected{% endif %}>Handwerk</option>
+                            <option value="Gesundheit" {% if filters.industry == 'Gesundheit' %}selected{% endif %}>Gesundheit</option>
+                            <option value="Bildung" {% if filters.industry == 'Bildung' %}selected{% endif %}>Bildung</option>
+                            <option value="Sonstige" {% if filters.industry == 'Sonstige' %}selected{% endif %}>Sonstige</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Job-Typ -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Job-Typ</label>
+                        <select name="job_type" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Alle Typen</option>
+                            <option value="Vollzeit" {% if filters.job_type == 'Vollzeit' %}selected{% endif %}>Vollzeit</option>
+                            <option value="Teilzeit" {% if filters.job_type == 'Teilzeit' %}selected{% endif %}>Teilzeit</option>
+                            <option value="Praktikum" {% if filters.job_type == 'Praktikum' %}selected{% endif %}>Praktikum</option>
+                            <option value="Ausbildung" {% if filters.job_type == 'Ausbildung' %}selected{% endif %}>Ausbildung</option>
+                            <option value="Freelance" {% if filters.job_type == 'Freelance' %}selected{% endif %}>Freelance</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Standort -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Standort</label>
+                        <input type="text" name="location" value="{{ filters.location or '' }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="Stadt oder Region...">
+                    </div>
+                    
+                    <!-- Anwenden Button -->
+                    <div class="pt-4">
+                        <button type="submit" 
+                                class="w-full !bg-green-600 !text-white px-4 py-2 rounded-md hover:!bg-green-700 transition-colors font-medium border border-green-600">
+                            <i class="fas fa-search mr-2"></i>Filter anwenden
+                        </button>
+                    </div>
+                    
+                    <!-- Filter zurücksetzen -->
+                    {% if filters.search or filters.industry or filters.job_type or filters.location %}
+                    <div class="text-center">
+                        <a href="{{ url_for('jobs.job_list') }}" 
+                           class="text-sm text-gray-500 hover:text-gray-700 underline">
+                            Filter zurücksetzen
+                        </a>
+                    </div>
+                    {% endif %}
+                </form>
+                
+                <!-- Statistiken -->
+                <div class="mt-8 pt-6 border-t border-gray-200">
+                    <h4 class="text-sm font-medium text-gray-700 mb-3">Statistiken</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Gesamt Jobs:</span>
+                            <span class="font-medium">{{ stats.total_jobs }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Aktive Jobs:</span>
+                            <span class="font-medium">{{ stats.active_jobs }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Gesamt Views:</span>
+                            <span class="font-medium">{{ stats.total_views }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Bewerbungen:</span>
+                            <span class="font-medium">{{ stats.total_applications }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hauptbereich mit Jobs -->
+        <div class="flex-1">
+            <!-- Header -->
+            <div class="mb-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Jobbörse</h1>
+                        <p class="text-gray-600">
+                            {% if total_count > 0 %}
+                            {{ total_count }} Job{{ 's' if total_count != 1 else '' }} gefunden
+                            {% else %}
+                            Keine Jobs gefunden
+                            {% endif %}
+                        </p>
+                    </div>
+                    
+                    <!-- Alle löschen Button für Admins -->
+                    {% if current_user.is_authenticated and current_user.role == 'admin' and total_count > 0 %}
+                    <button onclick="deleteAllJobs()" 
+                            class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium">
+                        <i class="fas fa-trash mr-2"></i>Alle Jobs löschen
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Aktive Filter anzeigen -->
+            {% if filters.search or filters.industry or filters.job_type or filters.location %}
+            <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                <div class="flex items-center gap-2 text-sm text-blue-800">
+                    <i class="fas fa-filter"></i>
+                    <span>Aktive Filter:</span>
+                    {% if filters.search %}<span class="bg-blue-200 px-2 py-1 rounded">{{ filters.search }}</span>{% endif %}
+                    {% if filters.industry %}<span class="bg-blue-200 px-2 py-1 rounded">{{ filters.industry }}</span>{% endif %}
+                    {% if filters.job_type %}<span class="bg-blue-200 px-2 py-1 rounded">{{ filters.job_type }}</span>{% endif %}
+                    {% if filters.location %}<span class="bg-blue-200 px-2 py-1 rounded">{{ filters.location }}</span>{% endif %}
+                    <a href="{{ url_for('jobs.job_list') }}" class="text-blue-600 hover:underline">Alle löschen</a>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Jobs Grid -->
+            {% if jobs %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for job in jobs %}
+                <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200 cursor-pointer group">
+                    {% if job.id and job.id != "unknown" %}
+                    <a href="{{ url_for('jobs.job_detail', job_id=job.id|string) }}" class="block">
+                    {% else %}
+                    <a href="#" onclick="alert('Job-ID fehlt - bitte Admin kontaktieren')" class="block">
+                    {% endif %}
+                        <div class="p-4">
+                            <!-- Header mit Lösch-Button -->
+                            <div class="mb-3 flex justify-between items-start">
+                                <div class="flex-1">
+                                    <h3 class="text-lg font-semibold text-gray-900 mb-1 line-clamp-2 group-hover:text-blue-600 transition-colors duration-200">
+                                        {{ job.title }}
+                                    </h3>
+                                    <p class="text-gray-600 font-medium">{{ job.company }}</p>
+                                </div>
+                                
+                                <!-- Lösch-Button für Admins und Job-Ersteller -->
+                                {% if current_user.is_authenticated and (current_user.role == 'admin' or job.created_by == current_user.id) %}
+                                <button onclick="deleteJob('{{ job.id }}')" 
+                                        class="ml-2 text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                                        title="Job löschen">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Tags -->
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">{{ job.job_type }}</span>
+                                {% if job.industry %}
+                                <span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">{{ job.industry }}</span>
+                                {% endif %}
+                                {% if job.location %}
+                                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">{{ job.location }}</span>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Beschreibung -->
+                            <p class="text-gray-700 text-sm line-clamp-3 mb-3">
+                                {{ job.description[:150] }}{% if job.description|length > 150 %}...{% endif %}
+                            </p>
+                            
+                            <!-- Gehalt -->
+                            {% if job.salary_range %}
+                            <p class="text-sm text-gray-600 mb-3">
+                                <i class="fas fa-euro-sign"></i> {{ job.salary_range }}
+                            </p>
+                            {% endif %}
+                            
+                            <!-- Stats -->
+                            <div class="flex justify-between items-center text-xs text-gray-500 mb-3">
+                                <span><i class="fas fa-eye"></i> {{ job.views }} Views</span>
+                                {% if job.applications > 0 %}
+                                <span><i class="fas fa-users"></i> {{ job.applications }} Bewerbungen</span>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Call-to-Action -->
+                            <div class="flex justify-between items-center">
+                                <div class="text-xs text-gray-400">
+                                    Erstellt am {{ job.created_at.strftime('%d.%m.%Y') }}
+                                </div>
+                                <div class="text-blue-600 text-sm font-medium group-hover:text-blue-800 transition-colors duration-200">
+                                    Details anzeigen →
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    
+                    <!-- Separate Bewerben-Button (außerhalb des Links) -->
+                    {% if job.application_url %}
+                    <div class="px-4 pb-4">
+                        <a href="{{ job.application_url }}" target="_blank" 
+                           class="block w-full text-center px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
+                            Bewerben
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="mt-8 flex justify-center">
+                <div class="flex gap-2">
+                    {% if current_page > 1 %}
+                    <a href="{{ url_for('jobs.job_list', page=current_page-1, **filters) }}" 
+                       class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+                        « Zurück
+                    </a>
+                    {% endif %}
+                    
+                    {% for page in range(1, total_pages + 1) %}
+                        {% if page == current_page %}
+                        <span class="px-3 py-2 bg-blue-600 text-white rounded">{{ page }}</span>
+                        {% elif page <= 3 or page > total_pages - 3 or (page >= current_page - 1 and page <= current_page + 1) %}
+                        <a href="{{ url_for('jobs.job_list', page=page, **filters) }}" 
+                           class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors">{{ page }}</a>
+                        {% elif page == 4 and current_page > 6 %}
+                        <span class="px-3 py-2 text-gray-400">...</span>
+                        {% elif page == total_pages - 3 and current_page < total_pages - 5 %}
+                        <span class="px-3 py-2 text-gray-400">...</span>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if current_page < total_pages %}
+                    <a href="{{ url_for('jobs.job_list', page=current_page+1, **filters) }}" 
+                       class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+                        Weiter »
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <!-- Keine Jobs gefunden -->
+            <div class="text-center py-12">
+                <div class="text-6xl text-gray-300 mb-4">
+                    <i class="fas fa-briefcase"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Keine Jobs gefunden</h3>
+                <p class="text-gray-500">
+                    {% if filters.search or filters.industry or filters.job_type or filters.location %}
+                    Versuchen Sie andere Suchkriterien oder setzen Sie die Filter zurück.
+                    {% else %}
+                    Aktuell sind keine Jobs verfügbar. Schauen Sie später wieder vorbei!
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript für Job-Löschung -->
+<script>
+function deleteJob(jobId) {
+    if (confirm('Sind Sie sicher, dass Sie diesen Job löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+        fetch(`/jobs/${jobId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Job-Karte aus dem DOM entfernen
+                const jobCard = document.querySelector(`[onclick="deleteJob('${jobId}')"]`).closest('.bg-white');
+                jobCard.style.animation = 'fadeOut 0.3s ease-out';
+                setTimeout(() => {
+                    jobCard.remove();
+                    // Prüfen ob noch Jobs vorhanden sind
+                    const remainingJobs = document.querySelectorAll('.bg-white').length;
+                    if (remainingJobs === 0) {
+                        location.reload(); // Seite neu laden wenn alle Jobs gelöscht wurden
+                    }
+                }, 300);
+            } else {
+                alert('Fehler beim Löschen des Jobs: ' + (data.error || 'Unbekannter Fehler'));
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            alert('Fehler beim Löschen des Jobs');
+        });
+    }
+}
+
+// CSS für Fade-Out Animation
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes fadeOut {
+        from { opacity: 1; transform: scale(1); }
+        to { opacity: 0; transform: scale(0.95); }
+    }
+`;
+document.head.appendChild(style);
+
+function deleteAllJobs() {
+    if (confirm('Sind Sie sicher, dass Sie ALLE Jobs löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+        if (confirm('Letzte Warnung: Alle Jobs werden unwiderruflich gelöscht. Fortfahren?')) {
+            fetch('/jobs/delete-all', {
+                method: 'DELETE',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Alle Jobs wurden erfolgreich gelöscht!');
+                    location.reload();
+                } else {
+                    alert('Fehler beim Löschen aller Jobs: ' + (data.error || 'Unbekannter Fehler'));
+                }
+            })
+            .catch(error => {
+                console.error('Fehler:', error);
+                alert('Fehler beim Löschen aller Jobs');
+            });
+        }
+    }
+}
+</script>
+
+{% endblock %} 

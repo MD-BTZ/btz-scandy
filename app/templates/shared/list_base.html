@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="space-y-4">
     <!-- Suchleiste und Filter -->
-    <div class="card bg-base-100 shadow-xl mb-6">
+    <div class="card bg-base-100 shadow-lg card-compact">
         <div class="card-body">
-            <!-- Suchleiste -->
-            <div class="flex flex-col md:flex-row gap-4">
+            <!-- Suchleiste und Aktionen -->
+            <div class="flex flex-col md:flex-row gap-4 items-center">
                 <div class="form-control flex-1">
                     <div class="input-group">
                         <input type="text" 
@@ -24,16 +24,16 @@
             </div>
 
             <!-- Filter -->
-            <div class="flex flex-wrap gap-4 mt-4">
+            <div class="flex flex-wrap gap-3 mt-4">
                 {% block filters %}{% endblock %}
             </div>
         </div>
     </div>
 
     <!-- Datentabelle -->
-    <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <div class="overflow-x-auto w-full">
+    <div class="card bg-base-100 shadow-lg">
+        <div class="card-body p-0">
+            <div class="table-container">
                 <table class="table table-zebra w-full">
                     <thead>
                         <tr>
@@ -102,38 +102,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Update Sort-Icons
-        document.querySelectorAll('th .sort-icons').forEach(icon => {
+        table.querySelectorAll('.sort-icons').forEach(icon => {
             icon.innerHTML = '<i class="fas fa-sort"></i>';
-            icon.classList.add('opacity-50');
         });
+        
         const currentIcon = th.querySelector('.sort-icons');
-        currentIcon.innerHTML = `<i class="fas fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'}"></i>`;
-        currentIcon.classList.remove('opacity-50');
+        if (currentSort.direction === 'asc') {
+            currentIcon.innerHTML = '<i class="fas fa-sort-up"></i>';
+        } else {
+            currentIcon.innerHTML = '<i class="fas fa-sort-down"></i>';
+        }
 
-        // Sortiere Zeilen
-        const sortedRows = rows.sort((a, b) => {
-            let aValue = a.children[column].textContent.trim();
-            let bValue = b.children[column].textContent.trim();
-
-            // Versuche numerische Sortierung
-            const aNum = parseFloat(aValue);
-            const bNum = parseFloat(bValue);
-            if (!isNaN(aNum) && !isNaN(bNum)) {
-                aValue = aNum;
-                bValue = bNum;
+        // Sortiere die Zeilen
+        rows.sort((a, b) => {
+            const aValue = a.children[column]?.textContent || '';
+            const bValue = b.children[column]?.textContent || '';
+            
+            if (currentSort.direction === 'asc') {
+                return aValue.localeCompare(bValue);
+            } else {
+                return bValue.localeCompare(aValue);
             }
-
-            if (aValue < bValue) return currentSort.direction === 'asc' ? -1 : 1;
-            if (aValue > bValue) return currentSort.direction === 'asc' ? 1 : -1;
-            return 0;
         });
 
-        // Aktualisiere Tabelle
-        tbody.innerHTML = '';
-        sortedRows.forEach(row => tbody.appendChild(row));
+        // Entferne und füge sortierte Zeilen wieder hinzu
+        rows.forEach(row => tbody.appendChild(row));
     }
 });
 </script>
-
-{% block scripts %}{% endblock %}
 {% endblock %} 

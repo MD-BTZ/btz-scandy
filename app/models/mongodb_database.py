@@ -109,7 +109,7 @@ class MongoDBDatabase:
         return result
     
     def find(self, collection_name: str, filter_dict: Dict[str, Any] = None, 
-             sort: List[tuple] = None, limit: int = None) -> List[Dict[str, Any]]:
+             sort: List[tuple] = None, limit: int = None, skip: int = None) -> List[Dict[str, Any]]:
         """Findet mehrere Dokumente in einer Collection"""
         collection = self.get_collection(collection_name)
         
@@ -123,6 +123,9 @@ class MongoDBDatabase:
         
         if sort:
             cursor = cursor.sort(sort)
+        
+        if skip:
+            cursor = cursor.skip(skip)
         
         if limit:
             cursor = cursor.limit(limit)

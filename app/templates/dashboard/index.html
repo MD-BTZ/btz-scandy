@@ -1,27 +1,180 @@
-ch habe <!-- Bestandsprognose -->
-<div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-        <h2 class="card-title">
-            <i class="fas fa-chart-line text-primary"></i>
-            Bestandsprognose Verbrauchsgüter
-        </h2>
-        <p class="text-sm text-base-content/70">Basierend auf dem durchschnittlichen Verbrauch der letzten 30 Tage</p>
-        
-        <div class="grid grid-cols-2 gap-4 mt-4">
-            {% for item in consumables_forecast %}
-            <div class="card bg-base-200">
-                <div class="card-body p-4">
-                    <h3 class="font-bold text-sm mb-2">{{ item.name }}</h3>
-                    <div class="radial-progress text-primary" style="--value:{{ (item.days_remaining/90)*100 if item.days_remaining < 90 else 100 }};">
-                        {{ item.days_remaining }} Tage
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Übersichtskarten -->
+    <div class="grid-responsive">
+        <!-- Werkzeuge -->
+        <div class="card bg-base-100 shadow-lg card-compact">
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-tools text-primary"></i>
+                        {{ app_labels.tools.name }}
+                    </h2>
+                    <div class="badge badge-primary">{{ tool_stats.total }}</div>
+                </div>
+                <div class="stats stats-horizontal w-full">
+                    <div class="stat">
+                        <div class="stat-title">Verfügbar</div>
+                        <div class="stat-value text-success">{{ tool_stats.available }}</div>
                     </div>
-                    <div class="text-xs mt-2">
-                        <p>Aktueller Bestand: {{ item.current_amount }}</p>
-                        <p>Täglicher Verbrauch: {{ item.avg_daily_usage }}</p>
+                    <div class="stat">
+                        <div class="stat-title">Ausgeliehen</div>
+                        <div class="stat-value text-warning">{{ tool_stats.lent }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Defekt</div>
+                        <div class="stat-value text-error">{{ tool_stats.defect }}</div>
                     </div>
                 </div>
             </div>
-            {% endfor %}
+        </div>
+
+        <!-- Verbrauchsgüter -->
+        <div class="card bg-base-100 shadow-lg card-compact">
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <h2 class="card-title text-lg">
+                        <i class="{{ app_labels.consumables.icon }} text-primary"></i>
+                        {{ app_labels.consumables.name }}
+                    </h2>
+                    <div class="badge badge-primary">{{ consumable_stats.total }}</div>
+                </div>
+                <div class="stats stats-horizontal w-full">
+                    <div class="stat">
+                        <div class="stat-title">Ausreichend</div>
+                        <div class="stat-value text-success">{{ consumable_stats.sufficient }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Warnung</div>
+                        <div class="stat-value text-warning">{{ consumable_stats.warning }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Kritisch</div>
+                        <div class="stat-value text-error">{{ consumable_stats.critical }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mitarbeiter -->
+        {% if current_user.is_authenticated and current_user.is_mitarbeiter %}
+        <div class="card bg-base-100 shadow-lg card-compact">
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-users text-primary"></i>
+                        Mitarbeiter
+                    </h2>
+                    <div class="badge badge-primary">{{ worker_stats.total }}</div>
+                </div>
+                <div class="stats stats-horizontal w-full">
+                    {% for dept in worker_stats.by_department[:3] %}
+                    <div class="stat">
+                        <div class="stat-title">{{ dept.department }}</div>
+                        <div class="stat-value">{{ dept.count }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tickets -->
+        {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
+        <div class="card bg-base-100 shadow-lg card-compact">
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <h2 class="card-title text-lg">
+                        <i class="{{ app_labels.tickets.icon }} text-primary"></i>
+                        {{ app_labels.tickets.name }}
+                    </h2>
+                    <div class="badge badge-primary">{{ ticket_stats.total }}</div>
+                </div>
+                <div class="stats stats-horizontal w-full">
+                    <div class="stat">
+                        <div class="stat-title">Offen</div>
+                        <div class="stat-value text-warning">{{ ticket_stats.open }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">In Bearbeitung</div>
+                        <div class="stat-value text-info">{{ ticket_stats.in_progress }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Geschlossen</div>
+                        <div class="stat-value text-success">{{ ticket_stats.closed }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Bestandsprognose -->
+    {% if consumables_forecast %}
+    <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-chart-line text-primary"></i>
+                Bestandsprognose Verbrauchsgüter
+            </h2>
+            <p class="text-sm text-base-content/70 mb-4">Basierend auf dem durchschnittlichen Verbrauch der letzten 30 Tage</p>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {% for item in consumables_forecast %}
+                <div class="card bg-base-200 card-compact">
+                    <div class="card-body p-4">
+                        <h3 class="font-bold text-sm mb-2">{{ item.name }}</h3>
+                        <div class="radial-progress text-primary" style="--value:{{ (item.days_remaining/90)*100 if item.days_remaining < 90 else 100 }};">
+                            {{ item.days_remaining }} Tage
+                        </div>
+                        <div class="text-xs mt-2 space-y-1">
+                            <p>Aktueller Bestand: {{ item.current_amount }}</p>
+                            <p>Täglicher Verbrauch: {{ item.avg_daily_usage }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
-</div> 
+    {% endif %}
+
+    <!-- Duplikate Warnung -->
+    {% if duplicate_barcodes %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Warnung: {{ duplicate_barcodes|length }} doppelte Barcodes gefunden. Bitte überprüfen Sie die Daten.</span>
+    </div>
+    {% endif %}
+
+    <!-- Aktuelle Mitteilungen -->
+    {% if notices %}
+    <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-bullhorn text-primary"></i>
+                Aktuelle Mitteilungen
+            </h2>
+            <div class="space-y-3">
+                {% for notice in notices %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <h3 class="font-bold">{{ notice.title }}</h3>
+                        <p class="text-sm">{{ notice.content }}</p>
+                        {% if notice.created_at %}
+                        <p class="text-xs opacity-70">{{ notice.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %} 

@@ -1598,7 +1598,7 @@ def add_user():
                     logger.error(f"Fehler beim Versenden der E-Mail: {e}")
                     flash(f'{message} E-Mail konnte nicht versendet werden.', 'warning')
             else:
-                flash(f'{message} Passwort: {processed_data["password"]}', 'success')
+                flash(f'{message} Das Passwort wurde generiert. Bitte notieren Sie es sicher oder verwenden Sie die E-Mail-Funktion für zukünftige Benutzer.', 'success')
             
             return redirect(url_for('admin.manage_users'))
         else:

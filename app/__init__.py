@@ -12,6 +12,9 @@ Hauptfunktionen:
 - Context-Processor für Template-Variablen
 """
 
+# Unterdrücke lästige Bibliotheks-Warnungen frühzeitig
+import app.utils.warning_suppressor
+
 from flask import Flask, jsonify, render_template, redirect, url_for, g, send_from_directory, session, request, flash, current_app
 from flask_session import Session  # Session-Management
 from .constants import Routes

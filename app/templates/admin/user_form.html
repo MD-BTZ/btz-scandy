@@ -1,116 +1,135 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}{{ 'Benutzer bearbeiten' if user else 'Benutzer hinzufügen' }} - Scandy{% endblock %}
+{% block title %}
+{% if user %}Benutzer bearbeiten{% else %}Neuen Benutzer erstellen{% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-2xl">
-    <h1 class="text-3xl font-bold mb-6">{{ 'Benutzer bearbeiten' if user else 'Neuen Benutzer hinzufügen' }}</h1>
+<div class="max-w-2xl mx-auto">
+    <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+            <h2 class="card-title mb-6">
+                <i class="fas fa-user-plus text-primary"></i>
+                {% if user %}Benutzer bearbeiten{% else %}Neuen Benutzer erstellen{% endif %}
+            </h2>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} shadow-lg mb-4">
-                    <div>
-                        {% if category == 'success' %}<i class="fas fa-check-circle"></i>
-                        {% elif category == 'error' %}<i class="fas fa-times-circle"></i>
-                        {% else %}<i class="fas fa-info-circle"></i>{% endif %}
-                        <span>{{ message }}</span>
+            <form method="POST" class="form-compact">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Benutzername -->
+                    <div class="form-control">
+                        <label class="label" for="username">
+                            <span class="label-text">Benutzername <span class="text-error">*</span></span>
+                        </label>
+                        <input type="text" id="username" name="username" 
+                               value="{{ request.form.username or (user.username if user) or '' }}" 
+                               required class="input input-bordered w-full" />
+                    </div>
+
+                    <!-- E-Mail -->
+                    <div class="form-control">
+                        <label class="label" for="email">
+                            <span class="label-text">E-Mail (optional)</span>
+                        </label>
+                        <input type="email" id="email" name="email" 
+                               value="{{ request.form.email or (user.email if user) or '' }}" 
+                               class="input input-bordered w-full" />
+                        {% if not user %}
+                        <label class="label">
+                            <span class="label-text-alt text-info">Wenn eine E-Mail-Adresse angegeben wird, wird das Passwort automatisch per E-Mail gesendet.</span>
+                        </label>
+                        {% endif %}
+                    </div>
+
+                    <!-- Vorname -->
+                    <div class="form-control">
+                        <label class="label" for="firstname">
+                            <span class="label-text">Vorname <span class="text-error">*</span></span>
+                        </label>
+                        <input type="text" id="firstname" name="firstname" 
+                               value="{{ request.form.firstname or (user.firstname if user) or '' }}" 
+                               required class="input input-bordered w-full" />
+                    </div>
+
+                    <!-- Nachname -->
+                    <div class="form-control">
+                        <label class="label" for="lastname">
+                            <span class="label-text">Nachname <span class="text-error">*</span></span>
+                        </label>
+                        <input type="text" id="lastname" name="lastname" 
+                               value="{{ request.form.lastname or (user.lastname if user) or '' }}" 
+                               required class="input input-bordered w-full" />
+                    </div>
+
+                    <!-- Rolle -->
+                    <div class="form-control">
+                        <label class="label" for="role">
+                            <span class="label-text">Rolle <span class="text-error">*</span></span>
+                        </label>
+                        <select id="role" name="role" required class="select select-bordered w-full">
+                            <option value="">Rolle auswählen</option>
+                            <option value="admin" {% if (request.form.role or (user.role if user) or '') == 'admin' %}selected{% endif %}>Admin</option>
+                            <option value="mitarbeiter" {% if (request.form.role or (user.role if user) or '') == 'mitarbeiter' %}selected{% endif %}>Mitarbeiter</option>
+                            <option value="anwender" {% if (request.form.role or (user.role if user) or '') == 'anwender' %}selected{% endif %}>Anwender</option>
+                            <option value="teilnehmer" {% if (request.form.role or (user.role if user) or '') == 'teilnehmer' %}selected{% endif %}>Teilnehmer</option>
+                        </select>
+                    </div>
+
+                    <!-- Abteilung -->
+                    <div class="form-control">
+                        <label class="label" for="department">
+                            <span class="label-text">Abteilung</span>
+                        </label>
+                        <input type="text" id="department" name="department" 
+                               value="{{ request.form.department or (user.department if user) or '' }}" 
+                               class="input input-bordered w-full" />
                     </div>
                 </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
 
-    <form method="POST" class="bg-base-100 p-6 rounded-lg shadow space-y-4">
-        {# Falls user übergeben wird, ist es der Bearbeiten-Modus #}
-        {% set current_user_data = user or None %}
+                <!-- Passwort-Felder -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-control">
+                        <label class="label" for="password">
+                            <span class="label-text">Passwort {% if not user %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
+                        </label>
+                        <input type="password" id="password" name="password" class="input input-bordered w-full" />
+                        {% if not user %}
+                        <label class="label">
+                            <span class="label-text-alt text-info">Lassen Sie das Feld leer, um automatisch ein sicheres 12-stelliges Passwort zu generieren.</span>
+                        </label>
+                        {% endif %}
+                    </div>
 
-        <div class="form-control">
-            <label class="label" for="username">
-                <span class="label-text">Benutzername <span class="text-error">*</span></span>
-            </label>
-            <input type="text" id="username" name="username" value="{{ request.form.username or (current_user_data.username if current_user_data) or '' }}" required class="input input-bordered w-full" />
+                    <div class="form-control">
+                        <label class="label" for="password_confirm">
+                            <span class="label-text">Passwort bestätigen {% if not user %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
+                        </label>
+                        <input type="password" id="password_confirm" name="password_confirm" class="input input-bordered w-full" />
+                    </div>
+                </div>
+
+                <!-- Zusätzliche Optionen -->
+                <div class="mt-6">
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Zeiterfassung aktiviert</span>
+                            <input type="checkbox" name="timesheet_enabled" class="checkbox checkbox-primary" 
+                                   {% if request.form.timesheet_enabled or (user.timesheet_enabled if user) %}checked{% endif %} />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Aktions-Buttons -->
+                <div class="card-actions justify-end mt-6">
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-ghost">
+                        <i class="fas fa-arrow-left mr-2"></i>Zurück
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>
+                        {% if user %}Aktualisieren{% else %}Erstellen{% endif %}
+                    </button>
+                </div>
+            </form>
         </div>
-
-        <div class="form-control">
-            <label class="label" for="email">
-                <span class="label-text">E-Mail (optional)</span>
-            </label>
-            <input type="email" id="email" name="email" value="{{ request.form.email or (current_user_data.email if current_user_data) or '' }}" class="input input-bordered w-full" />
-            {% if not current_user_data %}
-            <label class="label">
-                <span class="label-text-alt text-info">Wenn eine E-Mail-Adresse angegeben wird, wird das Passwort automatisch per E-Mail gesendet.</span>
-            </label>
-            {% endif %}
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="password">
-                <span class="label-text">Passwort {% if not current_user_data %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
-            </label>
-            <input type="password" id="password" name="password" class="input input-bordered w-full" />
-            {% if not current_user_data %}
-            <label class="label">
-                <span class="label-text-alt text-info">Lassen Sie das Feld leer, um automatisch ein sicheres 12-stelliges Passwort zu generieren.</span>
-            </label>
-            {% endif %}
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="password_confirm">
-                <span class="label-text">Passwort bestätigen {% if not current_user_data %}(optional){% else %}(leer lassen für keine Änderung){% endif %}</span>
-            </label>
-            <input type="password" id="password_confirm" name="password_confirm" class="input input-bordered w-full" />
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="firstname">
-                <span class="label-text">Vorname <span class="text-error">*</span></span>
-            </label>
-            <input type="text" id="firstname" name="firstname" value="{{ request.form.firstname or (current_user_data.firstname if current_user_data) or '' }}" required class="input input-bordered w-full" />
-        </div>
-        <div class="form-control">
-            <label class="label" for="lastname">
-                <span class="label-text">Nachname <span class="text-error">*</span></span>
-            </label>
-            <input type="text" id="lastname" name="lastname" value="{{ request.form.lastname or (current_user_data.lastname if current_user_data) or '' }}" required class="input input-bordered w-full" />
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="role">
-                <span class="label-text">Rolle <span class="text-error">*</span></span>
-            </label>
-            <select id="role" name="role" class="select select-bordered w-full" required>
-                <option value="" disabled {% if not (request.form.role or (current_user_data.role if current_user_data)) %}selected{% endif %}>Rolle auswählen...</option>
-                {% for role_option in roles %}
-                    <option value="{{ role_option }}" 
-                            {% if (request.form.role or (current_user_data.role if current_user_data)) == role_option %}selected{% endif %}>
-                        {{ role_option|capitalize }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-control">
-            <label class="cursor-pointer label justify-start">
-                <input type="checkbox" name="timesheet_enabled" 
-                       class="checkbox checkbox-primary mr-3" 
-                       {% if request.form.timesheet_enabled == 'on' or (current_user_data.timesheet_enabled if current_user_data else False) %}checked{% endif %}>
-                <span class="label-text font-medium">Wochenbericht-Feature aktivieren</span>
-            </label>
-            <label class="label">
-                <span class="label-text-alt text-info">
-                    Wenn aktiviert, kann der Benutzer Wochenberichte erstellen und verwalten. 
-                    Das Feature wird in der Navigation angezeigt.
-                </span>
-            </label>
-        </div>
-
-        <div class="flex justify-end space-x-3 pt-4">
-            <a href="{{ url_for('admin.manage_users') }}" class="btn btn-ghost">Abbrechen</a>
-            <button type="submit" class="btn btn-primary">{{ 'Änderungen speichern' if current_user_data else 'Benutzer erstellen' }}</button>
-        </div>
-
-    </form>
+    </div>
 </div>
 {% endblock %} 

@@ -157,6 +157,7 @@ def register_filters(app):
     app.jinja_env.filters['format_time'] = format_time
     app.jinja_env.filters['to_datetime'] = to_datetime
     app.jinja_env.filters['format_duration'] = format_duration
+    app.jinja_env.filters['nl2br'] = nl2br
 
 def status_color(status):
     """Gibt die Bootstrap-Farbe für einen Ticket-Status zurück"""
@@ -177,4 +178,10 @@ def priority_color(priority):
         'hoch': 'danger',
         'dringend': 'danger'
     }
-    return colors.get(priority.lower(), 'secondary') 
+    return colors.get(priority.lower(), 'secondary')
+
+def nl2br(value):
+    """Konvertiert Zeilenumbrüche in HTML <br> Tags"""
+    if not value:
+        return ''
+    return value.replace('\n', '<br>') 

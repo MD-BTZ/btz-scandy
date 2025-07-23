@@ -1,8 +1,19 @@
 import logging
+import warnings
 import sys
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
+from datetime import datetime
+
+# Unterdrücke pkg_resources Warnungen
+def suppress_pkg_resources_warnings():
+    """Unterdrückt pkg_resources Deprecation Warnings"""
+    warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
+    warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
+
+# Rufe die Funktion beim Import auf
+suppress_pkg_resources_warnings()
 
 def setup_logger(name, log_file, level=logging.INFO):
     """Richtet einen spezifischen Logger ein"""
@@ -30,6 +41,7 @@ def setup_logger(name, log_file, level=logging.INFO):
     
     # Konsolen-Handler hinzufügen
     console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     

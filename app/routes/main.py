@@ -108,17 +108,17 @@ def emergency_admin():
         admin_user = mongodb.find_one('users', {'role': 'admin'})
         
         if admin_user:
-            return f"""
-            <html>
-            <head><title>Admin-Benutzer existiert</title></head>
-            <body>
-                <h1>✅ Admin-Benutzer existiert bereits</h1>
-                <p><strong>Benutzername:</strong> admin</p>
-                <p><strong>Passwort:</strong> admin</p>
-                <p><a href="/auth/login">→ Zum Login</a></p>
-            </body>
-            </html>
-            """
+                    return f"""
+        <html>
+        <head><title>Admin-Benutzer existiert</title></head>
+        <body>
+            <h1>✅ Admin-Benutzer existiert bereits</h1>
+            <p><strong>Benutzername:</strong> admin</p>
+            <p><strong>Passwort:</strong> [Standard-Passwort]</p>
+            <p><a href="/auth/login">→ Zum Login</a></p>
+        </body>
+        </html>
+        """
         
         # Erstelle Admin-Benutzer
         admin_data = {
@@ -141,7 +141,7 @@ def emergency_admin():
         <body>
             <h1>✅ Admin-Benutzer erfolgreich erstellt!</h1>
             <p><strong>Benutzername:</strong> admin</p>
-            <p><strong>Passwort:</strong> admin</p>
+            <p><strong>Passwort:</strong> [Standard-Passwort]</p>
             <p><a href="/auth/login">→ Zum Login</a></p>
         </body>
         </html>

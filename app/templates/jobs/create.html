@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Neuen Job erstellen</h1>
+                    <p class="text-gray-600">Erstellen Sie eine neue Jobanzeige für Ihre Jobbörse</p>
+                </div>
+                <a href="{{ url_for('jobs.job_list') }}" class="inline-flex items-center text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Zurück zur Jobbörse
+                </a>
+            </div>
+        </div>
+
+        <!-- Job-Formular -->
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <form method="POST" class="space-y-6">
+                <!-- Pflichtfelder -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Job-Titel *</label>
+                        <input type="text" name="title" value="{{ data.title }}" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="z.B. Softwareentwickler (m/w/d)">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Firma *</label>
+                        <input type="text" name="company" value="{{ data.company }}" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="z.B. TechCorp GmbH">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Standort</label>
+                        <input type="text" name="location" value="{{ data.location }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="z.B. Berlin">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Branche</label>
+                        <select name="industry" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Branche wählen</option>
+                            <option value="IT" {% if data.industry == 'IT' %}selected{% endif %}>IT</option>
+                            <option value="Marketing" {% if data.industry == 'Marketing' %}selected{% endif %}>Marketing</option>
+                            <option value="Vertrieb" {% if data.industry == 'Vertrieb' %}selected{% endif %}>Vertrieb</option>
+                            <option value="Finanzen" {% if data.industry == 'Finanzen' %}selected{% endif %}>Finanzen</option>
+                            <option value="Handwerk" {% if data.industry == 'Handwerk' %}selected{% endif %}>Handwerk</option>
+                            <option value="Gesundheit" {% if data.industry == 'Gesundheit' %}selected{% endif %}>Gesundheit</option>
+                            <option value="Bildung" {% if data.industry == 'Bildung' %}selected{% endif %}>Bildung</option>
+                            <option value="Sonstige" {% if data.industry == 'Sonstige' %}selected{% endif %}>Sonstige</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Job-Typ</label>
+                        <select name="job_type" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="Vollzeit" {% if data.job_type == 'Vollzeit' %}selected{% endif %}>Vollzeit</option>
+                            <option value="Teilzeit" {% if data.job_type == 'Teilzeit' %}selected{% endif %}>Teilzeit</option>
+                            <option value="Praktikum" {% if data.job_type == 'Praktikum' %}selected{% endif %}>Praktikum</option>
+                            <option value="Ausbildung" {% if data.job_type == 'Ausbildung' %}selected{% endif %}>Ausbildung</option>
+                            <option value="Freelance" {% if data.job_type == 'Freelance' %}selected{% endif %}>Freelance</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Beschreibung -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Job-Beschreibung *</label>
+                    <textarea name="description" rows="4" required
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Beschreiben Sie die Position, Aufgaben und Anforderungen...">{{ data.description }}</textarea>
+                </div>
+
+                <!-- Anforderungen und Benefits -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Anforderungen</label>
+                        <textarea name="requirements" rows="3"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Qualifikationen, Erfahrung, Skills...">{{ data.requirements }}</textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Benefits</label>
+                        <textarea name="benefits" rows="3"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Vergünstigungen, Vorteile...">{{ data.benefits }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Gehalt und Kontakt -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Gehalt</label>
+                        <input type="text" name="salary_range" value="{{ data.salary_range }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="z.B. 50.000 - 70.000 €">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Bewerbungs-URL</label>
+                        <input type="url" name="application_url" value="{{ data.application_url }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="https://firma.de/karriere">
+                    </div>
+                </div>
+
+                <!-- Kontaktdaten -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Kontakt-E-Mail</label>
+                        <input type="email" name="contact_email" value="{{ data.contact_email }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="jobs@firma.de">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Kontakt-Telefon</label>
+                        <input type="tel" name="contact_phone" value="{{ data.contact_phone }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="+49 30 12345678">
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="flex gap-4 pt-6 border-t border-gray-200">
+                    <button type="submit" 
+                            class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                        <i class="fas fa-save mr-2"></i>Job erstellen
+                    </button>
+                    <a href="{{ url_for('jobs.job_list') }}" 
+                       class="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                        Abbrechen
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

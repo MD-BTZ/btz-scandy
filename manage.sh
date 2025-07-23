@@ -75,12 +75,12 @@ case "$1" in
         ;;
     backup)
         echo -e "${BLUE}💾 Backup erstellen...${NC}"
-        docker compose exec mongodb-$INSTANCE_NAME mongodump --out /backup
+        docker compose exec scandy-mongodb-$INSTANCE_NAME mongodump --out /backup
         echo -e "${GREEN}✅ Backup erstellt!${NC}"
         ;;
     shell)
         echo -e "${BLUE}🐚 Wechsle in App-Container...${NC}"
-        docker compose exec app-$INSTANCE_NAME bash
+        docker compose exec scandy-app-$INSTANCE_NAME bash
         ;;
     clean)
         echo -e "${RED}⚠️  WARNUNG: Alle Daten werden gelöscht!${NC}"

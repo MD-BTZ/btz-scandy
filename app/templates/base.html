@@ -7,15 +7,12 @@
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/scandy-favicon.png') }}?v=0.2.5">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}?v=0.2.5">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}?v=0.2.5">
     
     <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Tailwind (Produktionsversion) -->
-    <!-- <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script> -->
     
     <!-- DaisyUI -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet" type="text/css" />
@@ -32,9 +29,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar-fixes.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/version-display.css') }}">
 
-    <!-- Eigene JavaScript-Dateien -->
-    <!-- <script src="{{ url_for('static', filename='js/tickets.js') }}"></script> -->
-
     {% block head %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -48,32 +42,139 @@
             font-weight: 600;
             letter-spacing: -0.01em;
         }
+
+        /* Optimierte Layout-Styles */
+        .main-content-with-sidebar {
+            margin-left: 226px;
+            min-height: calc(100vh - 4rem);
+            padding: 1rem;
+        }
+
+        .navbar-with-sidebar {
+            margin-left: 226px;
+            height: 4rem;
+            min-height: 4rem;
+        }
+
+        /* Kompakte Cards */
+        .card-compact {
+            margin-bottom: 1rem;
+        }
+
+        .card-compact .card-body {
+            padding: 1rem;
+        }
+
+        /* Bessere Abstände */
+        .content-section {
+            margin-bottom: 1.5rem;
+        }
+
+        /* Optimierte Tabellen */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+        }
+
+        /* Kompakte Formulare */
+        .form-compact .form-control {
+            margin-bottom: 0.75rem;
+        }
+
+        /* Bessere Grid-Layouts */
+        .grid-responsive {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        /* Optimierte Sidebar */
+        .sidebar-permanent {
+            width: 226px;
+            background: #ffffff;
+            border-right: 2px solid #e5e7eb;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Kompakte Navigation */
+        .sidebar-nav-item {
+            height: 3rem;
+            margin-bottom: 0.25rem;
+            border-radius: 0.5rem;
+            margin-right: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-nav-item:hover {
+            background-color: #f3f4f6;
+            transform: translateX(4px);
+        }
+
+        .sidebar-nav-item.active {
+            background-color: #3b82f6;
+            color: white;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        /* QuickScan Button Styling */
+        #quickScanTrigger {
+            background: #ffffff;
+        }
+
+        #quickScanTrigger:hover {
+            background: #f9fafb;
+        }
+
+        /* Trennlinie */
+        .sidebar-divider {
+            width: 80%;
+            height: 1px;
+            background: linear-gradient(to right, transparent, #e5e7eb, transparent);
+            margin: 1rem auto;
+        }
+
+        /* Bessere Responsive */
+        @media (max-width: 768px) {
+            .main-content-with-sidebar {
+                margin-left: 0;
+                padding: 0.5rem;
+            }
+            
+            .navbar-with-sidebar {
+                margin-left: 0;
+            }
+            
+            .sidebar-permanent {
+                transform: translateX(-100%);
+            }
+        }
     </style>
 </head>
 
 <body class="min-h-screen bg-base-200">
     <div class="flex flex-col min-h-screen">
         <!-- Vertikales Seitenmenü -->
-        <div class="fixed left-0 top-0 h-full w-[226px] bg-base-300 flex flex-col pt-0 pb-4 z-[90] transition-all duration-300 group sidebar-permanent">
-                         <!-- QuickScan-Trigger (exakt wie Navbar, bündig) -->
-             <div class="w-full h-16 min-h-[4rem] px-0" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if not current_user.is_authenticated %}Quick Scan (nicht verfügbar für nicht eingeloggte Benutzer){% elif current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
-                 <div class="w-full h-20 rounded-tl-xl overflow-hidden transition-all duration-300 flex items-center justify-center group
-                     {% if not current_user.is_authenticated or current_user.role == 'teilnehmer' %}bg-base-100 opacity-50 cursor-not-allowed{% else %}bg-base-100 hover:bg-base-200/95 hover:bg-gradient-to-br hover:from-primary/20 hover:to-base-200 cursor-pointer{% endif %}">
-                     <img src="/static/images/scandy-logo.png" alt="Scandy Logo" class="w-12 h-12 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
-                     <span class="ml-4 text-base font-semibold text-base-content group-hover:text-primary transition-colors duration-300">Scan</span>
-                     <!-- Scanner Animation -->
-                     <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
-                 </div>
-             </div>
+        <div class="fixed left-0 top-0 h-full w-[226px] flex flex-col pt-0 pb-4 z-[90] transition-all duration-300 group sidebar-permanent">
+            <!-- QuickScan-Trigger -->
+            <div class="w-full h-16 min-h-[4rem] px-0" id="quickScanTrigger" data-role="{{ current_user.role }}" title="{% if not current_user.is_authenticated %}Quick Scan (nicht verfügbar für nicht eingeloggte Benutzer){% elif current_user.role == 'teilnehmer' %}Quick Scan (nicht verfügbar für Teilnehmer){% else %}Quick Scan öffnen{% endif %}">
+                <div class="w-full h-20 rounded-tl-xl overflow-hidden transition-all duration-300 flex items-center justify-center group
+                    {% if not current_user.is_authenticated or current_user.role == 'teilnehmer' %}opacity-50 cursor-not-allowed{% else %}hover:bg-gray-50 cursor-pointer{% endif %}">
+                    <img src="/static/images/scandy-logo.png" alt="Scandy Logo" class="w-12 h-12 object-contain transition-transform duration-300 group-hover:opacity-80 group-hover:brightness-90">
+                    <span class="ml-4 text-base font-semibold text-gray-700 group-hover:text-primary transition-colors duration-300">Scan</span>
+                    <!-- Scanner Animation -->
+                    <div class="absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner after:content-[''] after:absolute after:top-0 after:left-0 after:w-full after:h-full after:bg-primary/30"></div>
+                </div>
+            </div>
             
             <!-- Trennlinie -->
-            <div class="w-8 h-0.5 bg-base-content/20 rounded-full ml-4 mb-2 mt-4"></div>
+            <div class="sidebar-divider"></div>
             
-            <!-- Navigation Items (using flex) -->
+            <!-- Navigation Items -->
             {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
             <!-- Werkzeuge - nur für Nicht-Teilnehmer -->
             <a href="{{ url_for('tools.index') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tools' in request.endpoint %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tools' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="{{ app_labels['tools']['icon'] }} text-xl"></i>
                  </div>
@@ -81,7 +182,7 @@
             </a>
             <!-- Verbrauchsgüter - nur für Nicht-Teilnehmer -->
             <a href="{{ url_for('consumables.index') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'consumables' in request.endpoint %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'consumables' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="{{ app_labels['consumables']['icon'] }} text-xl"></i>
                  </div>
@@ -92,7 +193,7 @@
             {# Mitarbeiter Link nur für Mitarbeiter und Admins #}
             {% if current_user.is_authenticated and current_user.is_mitarbeiter %}
             <a href="{{ url_for('workers.index') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'workers.index' %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'workers.index' %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="fas fa-users text-xl"></i>
                  </div>
@@ -103,7 +204,7 @@
             {# Ticketsystem für alle eingeloggten Benutzer außer Teilnehmer #}
             {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
             <a href="{{ url_for('tickets.create') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tickets.create' in request.endpoint %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tickets.create' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
                      <i class="{{ app_labels.tickets.icon }} text-xl"></i>
                      {% if unread_tickets_count and unread_tickets_count > 0 %}
@@ -117,7 +218,7 @@
             {# Wochenplan-Link für alle authentifizierten Benutzer (Mitarbeiter, Admins, Anwender und Teilnehmer) #}
             {% if current_user.is_authenticated and current_user.timesheet_enabled %}
             <a href="{{ url_for('workers.timesheet_list') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
                      <i class="fas fa-clock text-xl"></i>
                      {% if unfilled_timesheet_days is defined and unfilled_timesheet_days > 0 %}
@@ -131,17 +232,28 @@
             {# Auftragserstellung - für alle Benutzer #}
             {% if current_user.is_authenticated %}
             <a href="{{ url_for('tickets.public_create_order') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'tickets.public_create_order' %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'tickets.public_create_order' %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="fas fa-file-alt text-xl"></i>
                  </div>
                  <span class="nav-text ml-2 opacity-100 transition-opacity duration-300 whitespace-nowrap sidebar-text">Auftragserstellung</span>
             </a>
             {% endif %}
+            
+            {# Jobbörse - für alle authentifizierten Benutzer #}
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('jobs.job_list') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'jobs' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-briefcase text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-100 transition-opacity duration-300 whitespace-nowrap sidebar-text">Jobbörse</span>
+            </a>
+            {% endif %}
 
             <!-- Über Scandy (öffentlich) -->
             <a href="{{ url_for('main.about') }}" 
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'main.about' %}bg-primary text-primary-content active{% else %}hover:bg-base-100{% endif %}">
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'main.about' %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
                      <i class="fas fa-question-circle text-xl"></i>
                  </div>
@@ -149,14 +261,14 @@
             </a>
 
             <!-- Versionsnummer am unteren Rand -->
-            <div class="mt-auto text-xs text-base-content/50 flex flex-col items-center pb-4">
+            <div class="mt-auto text-xs text-gray-500 flex flex-col items-center pb-4">
                 <div class="version-display">
                     <!-- Lokale Version -->
                     <span class="version-local">{{ version_info.local_version }}</span>
                     
                     <!-- GitHub Version (falls verfügbar) -->
                     {% if version_info.github_version %}
-                        <span class="version-github {% if version_info.is_up_to_date %}text-success{% elif version_info.update_available %}text-warning{% else %}text-base-content/70{% endif %}">
+                        <span class="version-github {% if version_info.is_up_to_date %}text-success{% elif version_info.update_available %}text-warning{% else %}text-gray-400{% endif %}">
                             GitHub: {{ version_info.github_version }}
                         </span>
                     {% endif %}
@@ -184,7 +296,7 @@
             </div>
         </div>
 
-        <!-- Horizontale Navbar mit DaisyUI Struktur -->
+        <!-- Horizontale Navbar -->
         <div class="navbar bg-base-100 px-4 relative z-[100] w-full min-h-[4rem] flex items-center ml-[226px] navbar-with-sidebar">
             <!-- Linker Bereich -->
             <div class="flex-1 flex items-center min-w-0">
@@ -247,7 +359,6 @@
                                 <i class="fas fa-envelope mr-2"></i>E-Mail-Einstellungen
                             </a>
                         </li>
-
                         {% endif %}
                         <li>
                             <a href="{{ url_for('admin.manual_lending') }}" class="{% if request.endpoint and request.endpoint == 'admin.manual_lending' %}active{% endif %}">
@@ -283,12 +394,12 @@
         </div>
 
         <!-- Main Content -->
-        <main class="px-4 py-8 relative z-0 ml-[226px] main-content-with-sidebar">
+        <main class="relative z-0 ml-[226px] main-content-with-sidebar">
             {% block content %}
-            <div class="container mx-auto px-4 py-8">
+            <div class="container mx-auto">
                 <!-- Info-Karte (nur für QuickScan) -->
                 {% if request.endpoint and request.endpoint == 'quick_scan.index' %}
-                <div class="card bg-base-100 shadow-xl mb-8">
+                <div class="card bg-base-100 shadow-xl mb-6">
                     <div class="card-body">
                         <h2 class="card-title">
                             <i class="fas fa-info-circle text-primary"></i>
@@ -398,171 +509,24 @@
         
         /* Deaktivierter QuickScan Button */
         #quickScanTrigger.disabled {
-            @apply cursor-not-allowed;
-            @apply opacity-50;
+            @apply opacity-50 cursor-not-allowed;
+            @apply hover:scale-100 hover:shadow-lg;
         }
         
-        #quickScanTrigger.disabled:hover {
-            @apply scale-100;
-            @apply shadow-lg;
-        }
-        #quickScanTrigger img {
-            @apply w-16 h-16 object-contain;
-            @apply transition-transform duration-300;
-        }
-        #quickScanTrigger:hover img {
-            @apply scale-110;
-        }
-        #quickScanTrigger .scanner-line {
-            @apply absolute w-full h-0.5 bg-primary/50 -top-1 left-0 animate-scanner;
-            @apply after:content-[''] after:absolute after:top-0 after:left-0;
-            @apply after:w-full after:h-full after:bg-primary/30;
-        }
-
-        /* Toast Container Styles */
-        #toast-container {
-            position: fixed;
-            right: 1rem;
-            z-index: 9999999; /* Höher als das Modal */
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            pointer-events: none;
-        }
-
-        .toast {
-            pointer-events: auto;
-            z-index: 9999999; /* Höher als das Modal */
-        }
-
-        /* Toast Animation */
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-
-        .toast-enter {
-            animation: slideIn 0.3s ease-out forwards;
-        }
-
-        .toast-exit {
-            animation: slideOut 0.3s ease-out forwards;
-        }
-
-        /* Modal z-Index anpassen */
-        dialog {
-            z-index: 999999; /* Niedriger als Toast */
-        }
-
-        /* Zebra Animation Styles */
-        .zebra-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            z-index: 9999998;
-            pointer-events: none;
-        }
-
-        /* QuickScan Modal Styles */
-        #quickScanModal .modal-box {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding: 1.5rem;
-            max-width: 800px;
-            width: 90vw;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        #quickScanModal .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-            justify-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        #quickScanModal .card {
-            width: 320px;
-            height: 320px;
-            min-width: 320px;
-            min-height: 320px;
-            margin: 0;
-            flex-shrink: 0;
-            background: transparent !important;
-            box-shadow: none !important;
-            border-radius: 1.5rem;
-            border: 2px solid #e5e7eb;
-            transition: border-color 0.2s, transform 0.2s;
-        }
-        #quickScanModal .card:hover {
-            border-color: #a3a3a3;
-            transform: scale(1.03);
-        }
-        #quickScanModal .card-body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            padding: 1.5rem;
-        }
-
-        /* Responsive Design für QuickScan */
+        /* Responsive Design */
         @media (max-width: 768px) {
-            #quickScanModal .grid {
-                grid-template-columns: 1fr;
+            .sidebar-permanent {
+                transform: translateX(-100%);
             }
-            #quickScanModal .card {
-                width: 280px;
-                height: 280px;
-                min-width: 280px;
-                min-height: 280px;
+            
+            .main-content-with-sidebar {
+                margin-left: 0;
             }
-        }
-
-        #quickScanModal .modal-box .grid .card.selected {
-            background-color: #fde68a !important; /* gelb */
-            border-color: #fbbf24 !important;
-        }
-        #quickScanModal .modal-box .grid .card.success {
-            background-color: #bbf7d0 !important; /* grün */
-            border-color: #22c55e !important;
+            
+            .navbar-with-sidebar {
+                margin-left: 0;
+            }
         }
     </style>
-
-    <footer class="footer footer-center p-4 bg-base-300 text-base-content">
-        <div>
-            <p>Scandy {{ version }} - {{ ''|author }}</p>
-            <p>Veröffentlicht unter MIT License</p>
-        </div>
-    </footer>
-
-    <!-- JavaScript -->
-    <script src="{{ url_for('static', filename='js/delete.js') }}"></script>
-    {% block scripts %}{% endblock %}
 </body>
 </html>
