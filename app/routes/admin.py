@@ -2547,12 +2547,15 @@ def upload_backup():
                 'message': 'Keine Datei ausgewählt'
             }), 400
             
-        # Prüfe Dateityp
-        if not file.filename.endswith('.json'):
+        # Prüfe Dateityp - unterstütze JSON und ZIP (für BSON-Backups)
+        valid_extensions = ['.json', '.zip']
+        file_extension = Path(file.filename).suffix.lower()
+        
+        if file_extension not in valid_extensions:
             logger.warning(f"Backup-Upload: Ungültiger Dateityp: {file.filename}")
             return jsonify({
                 'status': 'error',
-                'message': 'Ungültiger Dateityp. Bitte eine .json-Datei hochladen.'
+                'message': f'Ungültiger Dateityp. Unterstützte Formate: {", ".join(valid_extensions)}'
             }), 400
         
         # Prüfe Dateigröße

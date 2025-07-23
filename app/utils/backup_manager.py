@@ -632,21 +632,33 @@ class BackupManager:
             json_backups = list(self.backup_dir.glob('scandy_backup_*.json'))
             native_backups = list(self.backup_dir.glob('scandy_native_backup_*'))
             
-            all_backups = json_backups + native_backups
+            # Priorisiere BSON-Backups, behalte aber JSON-Backups für Kompatibilität
+            all_backups = native_backups + json_backups
             
             if len(all_backups) > keep:
                 # Sortiere nach Änderungsdatum
                 all_backups.sort(key=lambda x: x.stat().st_mtime, reverse=True)
                 
-                # Lösche alte Backups
-                for old_backup in all_backups[keep:]:
+                # Lösche alte Backups, aber behalte mindestens 2 JSON-Backups für Kompatibilität
+                json_count = len(json_backups)
+                native_count = len(native_backups)
+                
+                backups_to_delete = all_backups[keep:]
+                
+                for old_backup in backups_to_delete:
                     if old_backup.is_dir():
+                        # Natives Backup löschen
                         import shutil
                         shutil.rmtree(old_backup)
-                        print(f"Altes natives Backup gelöscht: {old_backup.name}")
+                        print(f"Altes BSON-Backup gelöscht: {old_backup.name}")
                     else:
-                        old_backup.unlink()
-                        print(f"Altes JSON-Backup gelöscht: {old_backup.name}")
+                        # JSON-Backup löschen, aber mindestens 2 behalten
+                        if json_count > 2:
+                            old_backup.unlink()
+                            json_count -= 1
+                            print(f"Altes JSON-Backup gelöscht: {old_backup.name}")
+                        else:
+                            print(f"JSON-Backup beibehalten für Kompatibilität: {old_backup.name}")
                     
         except Exception as e:
             print(f"Fehler beim Aufräumen alter Backups: {e}")
@@ -764,6 +776,72 @@ class BackupManager:
                 
         except Exception as e:
             print(f"Fehler beim Wiederherstellen des nativen Backups: {e}")
+            return False
+
+    def restore_native_backup_from_upload(self, uploaded_file):
+        """
+        Stellt ein natives MongoDB-Backup aus einer hochgeladenen ZIP-Datei wieder her
+        """
+        try:
+            import tempfile
+            import zipfile
+            import shutil
+            
+            # MongoDB-Verbindungsdaten aus der Konfiguration holen
+            from app import create_app
+            app = create_app()
+            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            
+            # Extrahiere Datenbankname aus URI
+            if '/' in mongo_uri:
+                db_name = mongo_uri.split('/')[-1]
+            else:
+                db_name = 'scandy'
+            
+            # Erstelle temporäres Verzeichnis für das Backup
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Speichere die hochgeladene Datei temporär
+                uploaded_file.save(temp_path / uploaded_file.filename)
+                zip_path = temp_path / uploaded_file.filename
+                
+                # Entpacke die ZIP-Datei
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_path)
+                
+                # Finde die BSON-Dateien
+                bson_dir = temp_path / db_name
+                if not bson_dir.exists():
+                    print(f"BSON-Dateien nicht gefunden in: {bson_dir}")
+                    return False
+                
+                print(f"Stelle natives Backup aus Upload wieder her: {uploaded_file.filename}")
+                print(f"URI: {mongo_uri}")
+                print(f"Datenbank: {db_name}")
+                
+                # mongorestore Befehl ausführen
+                cmd = [
+                    'mongorestore',
+                    '--uri', mongo_uri,
+                    '--gzip',  # Komprimierung
+                    '--drop',  # Bestehende Collections löschen
+                    str(bson_dir)
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if result.returncode == 0:
+                    print(f"✅ Natives Backup aus Upload erfolgreich wiederhergestellt")
+                    return True
+                else:
+                    print(f"❌ Fehler beim Wiederherstellen des nativen Backups aus Upload:")
+                    print(f"STDOUT: {result.stdout}")
+                    print(f"STDERR: {result.stderr}")
+                    return False
+                    
+        except Exception as e:
+            print(f"Fehler beim Wiederherstellen des nativen Backups aus Upload: {e}")
             return False
     
     def _get_dir_size(self, path):

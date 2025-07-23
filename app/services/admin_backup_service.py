@@ -53,6 +53,7 @@ class AdminBackupService:
     def create_backup() -> Tuple[bool, str, Optional[str]]:
         """
         Erstellt ein neues natives MongoDB-Backup (Standard)
+        Nur noch BSON-Format für maximale Datentyp-Erhaltung
         
         Returns:
             (success, message, backup_filename)
@@ -61,19 +62,20 @@ class AdminBackupService:
             backup_filename = backup_manager.create_native_backup()
             
             if backup_filename:
-                logger.info(f"Natives Backup erstellt: {backup_filename}")
-                return True, f"Natives Backup '{backup_filename}' erfolgreich erstellt", backup_filename
+                logger.info(f"BSON-Backup erstellt: {backup_filename}")
+                return True, f"BSON-Backup '{backup_filename}' erfolgreich erstellt", backup_filename
             else:
-                return False, "Fehler beim Erstellen des nativen Backups", None
+                return False, "Fehler beim Erstellen des BSON-Backups", None
                 
         except Exception as e:
-            logger.error(f"Fehler beim Erstellen des nativen Backups: {str(e)}")
-            return False, f"Fehler beim Erstellen des nativen Backups: {str(e)}", None
+            logger.error(f"Fehler beim Erstellen des BSON-Backups: {str(e)}")
+            return False, f"Fehler beim Erstellen des BSON-Backups: {str(e)}", None
 
     @staticmethod
     def upload_backup(file) -> Tuple[bool, str]:
         """
         Lädt ein Backup hoch und stellt es wieder her
+        Unterstützt JSON-Backups (für Kompatibilität) und BSON-Backups (Standard)
         
         Args:
             file: Die hochgeladene Backup-Datei
@@ -88,9 +90,12 @@ class AdminBackupService:
             if file.filename == '':
                 return False, "Keine Datei ausgewählt"
             
-            # Prüfe Dateityp
-            if not file.filename.endswith('.json'):
-                return False, "Ungültiger Dateityp. Bitte eine .json-Datei hochladen."
+            # Prüfe Dateityp - unterstütze JSON und ZIP (für BSON-Backups)
+            valid_extensions = ['.json', '.zip']
+            file_extension = Path(file.filename).suffix.lower()
+            
+            if file_extension not in valid_extensions:
+                return False, f"Ungültiger Dateityp. Unterstützte Formate: {', '.join(valid_extensions)}"
             
             # Prüfe Dateigröße
             file.seek(0, 2)  # Gehe zum Ende der Datei
@@ -100,20 +105,27 @@ class AdminBackupService:
             if file_size == 0:
                 return False, "Die hochgeladene Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus."
             
-            logger.info(f"Backup-Upload: Datei {file.filename}, Größe: {file_size} bytes")
+            logger.info(f"Backup-Upload: Datei {file.filename}, Größe: {file_size} bytes, Typ: {file_extension}")
             
             # Erstelle Backup der aktuellen DB vor dem Upload
-            current_backup = backup_manager.create_backup()
-            logger.info(f"Backup-Upload: Aktuelles Backup erstellt: {current_backup}")
+            current_backup = backup_manager.create_native_backup()
+            logger.info(f"Backup-Upload: Aktuelles BSON-Backup erstellt: {current_backup}")
             
             # Stelle das hochgeladene Backup wieder her
-            success = backup_manager.restore_backup(file)
+            if file_extension == '.json':
+                # JSON-Backup (alte Kompatibilität)
+                success = backup_manager.restore_backup(file)
+                backup_type = "JSON"
+            else:
+                # BSON-Backup (ZIP-Format)
+                success = backup_manager.restore_native_backup_from_upload(file)
+                backup_type = "BSON"
             
             if success:
-                logger.info(f"Backup erfolgreich hochgeladen und aktiviert: {file.filename}")
-                return True, f"Backup '{file.filename}' erfolgreich hochgeladen und aktiviert"
+                logger.info(f"{backup_type}-Backup erfolgreich hochgeladen und aktiviert: {file.filename}")
+                return True, f"{backup_type}-Backup '{file.filename}' erfolgreich hochgeladen und aktiviert"
             else:
-                return False, "Fehler beim Wiederherstellen des Backups"
+                return False, f"Fehler beim Wiederherstellen des {backup_type}-Backups"
                 
         except Exception as e:
             logger.error(f"Fehler beim Upload des Backups: {str(e)}")
