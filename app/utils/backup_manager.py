@@ -681,7 +681,10 @@ class BackupManager:
             app = create_app()
             
             # Hole MongoDB-Verbindungsdaten aus der App-Konfiguration
-            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            mongo_uri = app.config.get('MONGODB_URI')
+            if not mongo_uri:
+                # Fallback auf Standard-URI
+                mongo_uri = 'mongodb://localhost:27017/scandy'
             
             # Extrahiere Datenbankname aus URI
             if '/' in mongo_uri:
@@ -706,7 +709,8 @@ class BackupManager:
             
             if result.returncode == 0:
                 print(f"✅ Natives Backup erstellt: {backup_dirname}")
-                print(f"Backup-Größe: {self._get_dir_size(backup_path)}")
+                backup_size = self._get_dir_size_formatted(backup_path)
+                print(f"Backup-Größe: {backup_size}")
                 
                 # Alte Backups aufräumen
                 self._cleanup_old_backups()
@@ -736,7 +740,10 @@ class BackupManager:
             # MongoDB-Verbindungsdaten aus der Konfiguration holen
             from app import create_app
             app = create_app()
-            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            mongo_uri = app.config.get('MONGODB_URI')
+            if not mongo_uri:
+                # Fallback auf Standard-URI
+                mongo_uri = 'mongodb://localhost:27017/scandy'
             
             # Extrahiere Datenbankname aus URI
             if '/' in mongo_uri:
@@ -790,7 +797,10 @@ class BackupManager:
             # MongoDB-Verbindungsdaten aus der Konfiguration holen
             from app import create_app
             app = create_app()
-            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            mongo_uri = app.config.get('MONGODB_URI')
+            if not mongo_uri:
+                # Fallback auf Standard-URI
+                mongo_uri = 'mongodb://localhost:27017/scandy'
             
             # Extrahiere Datenbankname aus URI
             if '/' in mongo_uri:
@@ -845,7 +855,7 @@ class BackupManager:
             return False
     
     def _get_dir_size(self, path):
-        """Berechnet die Größe eines Verzeichnisses"""
+        """Berechnet die Größe eines Verzeichnisses in Bytes"""
         total_size = 0
         try:
             for dirpath, dirnames, filenames in os.walk(path):
@@ -855,6 +865,11 @@ class BackupManager:
                         total_size += os.path.getsize(filepath)
         except Exception:
             pass
+        return total_size
+    
+    def _get_dir_size_formatted(self, path):
+        """Berechnet die Größe eines Verzeichnisses und formatiert sie"""
+        total_size = self._get_dir_size(path)
         return self._format_size(total_size)
     
     def _format_size(self, size_bytes):
@@ -876,11 +891,14 @@ class BackupManager:
             for item in self.backup_dir.iterdir():
                 if item.is_dir() and item.name.startswith('scandy_native_backup_'):
                     stat = item.stat()
-                    size = self._get_dir_size(item)
+                    size_bytes = self._get_dir_size(item)
+                    size_formatted = self._get_dir_size_formatted(item)
                     backups.append({
                         'name': item.name,
                         'type': 'native',
-                        'size': size,
+                        'size': size_bytes,  # Rohe Größe in Bytes für Frontend
+                        'size_formatted': size_formatted,  # Formatierte Größe für Anzeige
+                        'size_mb': round(size_bytes / (1024 * 1024), 2),  # Größe in MB
                         'created': stat.st_mtime,
                         'modified': datetime.fromtimestamp(stat.st_mtime),
                         'modified_str': datetime.fromtimestamp(stat.st_mtime).strftime('%d.%m.%Y %H:%M:%S')
