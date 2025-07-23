@@ -61,11 +61,12 @@ class ValidationService:
         if email and not ValidationService._is_valid_email(email):
             errors.append('Ungültige E-Mail-Adresse')
         
-        # Passwort-Validierung
+        # Passwort-Validierung (nur bei Bearbeitung oder wenn Passwort eingegeben wurde)
         password = data.get('password', '').strip()
         password_confirm = data.get('password_confirm', '').strip()
         
-        if not is_edit or password:  # Bei Bearbeitung nur wenn Passwort eingegeben wurde
+        # Nur validieren wenn Passwort eingegeben wurde (bei neuen Benutzern optional)
+        if password:
             if password != password_confirm:
                 errors.append('Passwörter stimmen nicht überein')
             elif len(password) < ValidationService.MIN_PASSWORD_LENGTH:

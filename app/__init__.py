@@ -189,6 +189,10 @@ def create_app(test_config=None):
     app.config['TOOL_SYSTEM_NAME'] = os.environ.get('TOOL_SYSTEM_NAME') or 'Werkzeuge'
     app.config['CONSUMABLE_SYSTEM_NAME'] = os.environ.get('CONSUMABLE_SYSTEM_NAME') or 'Verbrauchsgüter'
     
+    # ===== BASE URL FÜR E-MAILS =====
+    from app.config.config import Config
+    app.config['BASE_URL'] = Config.BASE_URL
+    
     # ===== LOGGER UND VERZEICHNISSE =====
     from app.utils.logger import init_app_logger
     init_app_logger(app)

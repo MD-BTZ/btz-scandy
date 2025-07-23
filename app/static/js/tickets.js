@@ -31,6 +31,46 @@ window.showToast = function(type, message) {
     }, 3000);
 };
 
+// Tab-Funktionalität für Tickets
+window.showTab = function(tab) {
+    // Alle Tabellen ausblenden
+    const tableOpen = document.getElementById('table-open');
+    const tableAssigned = document.getElementById('table-assigned');
+    const tableAll = document.getElementById('table-all');
+    
+    if (tableOpen) tableOpen.style.display = 'none';
+    if (tableAssigned) tableAssigned.style.display = 'none';
+    if (tableAll) tableAll.style.display = 'none';
+
+    // Alle Tabs inaktiv machen
+    const tabOpen = document.getElementById('tab-open');
+    const tabAssigned = document.getElementById('tab-assigned');
+    const tabAll = document.getElementById('tab-all');
+    
+    if (tabOpen) tabOpen.classList.remove('tab-active');
+    if (tabAssigned) tabAssigned.classList.remove('tab-active');
+    if (tabAll) tabAll.classList.remove('tab-active');
+
+    // Nur den gewählten Tab aktivieren
+    if (tab === 'open') {
+        if (tableOpen) tableOpen.style.display = '';
+        if (tabOpen) tabOpen.classList.add('tab-active');
+    } else if (tab === 'assigned') {
+        if (tableAssigned) tableAssigned.style.display = '';
+        if (tabAssigned) tabAssigned.classList.add('tab-active');
+    } else if (tab === 'all') {
+        if (tableAll && tabAll) {
+            tableAll.style.display = '';
+            tabAll.classList.add('tab-active');
+        }
+    }
+    
+    // URL-Parameter entfernen, um Filter-Probleme zu vermeiden
+    if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+};
+
 window.deleteTicket = function(ticketId) {
     if (confirm('Möchten Sie dieses Ticket wirklich löschen? Es wird in den Papierkorb verschoben.')) {
         fetch(`/tickets/${ticketId}/delete`, {

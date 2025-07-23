@@ -35,6 +35,34 @@ class Config:
     HOST = '0.0.0.0'
     PORT = 5000
     
+    # Base URL für E-Mails und externe Links
+    BASE_URL = os.environ.get('BASE_URL')
+    if not BASE_URL:
+        # Automatische Erkennung der externen IP
+        import socket
+        try:
+            # Hole die externe IP-Adresse (nicht die Docker-interne)
+            # Verwende eine öffentliche DNS-Abfrage um die externe IP zu bekommen
+            import requests
+            try:
+                # Versuche die externe IP über einen öffentlichen Service zu bekommen
+                response = requests.get('https://api.ipify.org', timeout=3)
+                if response.status_code == 200:
+                    external_ip = response.text.strip()
+                    BASE_URL = f"http://{external_ip}:{PORT}"
+                else:
+                    raise Exception("Konnte externe IP nicht abrufen")
+            except:
+                # Fallback: Verwende die lokale IP-Adresse
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                BASE_URL = f"http://{local_ip}:{PORT}"
+        except:
+            # Fallback auf localhost
+            BASE_URL = f"http://localhost:{PORT}"
+    
     # Sicherheitseinstellungen
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'True').lower() == 'true'
     SESSION_COOKIE_HTTPONLY = True

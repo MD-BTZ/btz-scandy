@@ -11,6 +11,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.models.mongodb_database import mongodb
 from app.utils.id_helpers import find_user_by_id
+import random
+import string
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ class AdminUserService:
         """
         try:
             # Validierung
-            required_fields = ['username', 'password', 'role']
+            required_fields = ['username', 'role']
             for field in required_fields:
                 if field not in user_data or not user_data[field]:
                     return False, f"Feld '{field}' ist erforderlich", None
@@ -70,8 +72,14 @@ class AdminUserService:
             if existing_user:
                 return False, "Benutzername existiert bereits", None
             
+            # Passwort generieren falls nicht angegeben
+            password = user_data.get('password', '')
+            if not password:
+                password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+                logger.info(f"Automatisches Passwort generiert für {user_data['username']}")
+            
             # Passwort hashen
-            password_hash = generate_password_hash(user_data['password'])
+            password_hash = generate_password_hash(password)
             
             # Benutzer erstellen
             new_user = {
@@ -92,7 +100,12 @@ class AdminUserService:
             user_id = mongodb.insert_one('users', new_user)
             
             logger.info(f"Neuer Benutzer erstellt: {user_data['username']} (ID: {user_id})")
-            return True, f"Benutzer '{user_data['username']}' erfolgreich erstellt", user_id
+            
+            # Passwort in der Nachricht zurückgeben falls generiert
+            if not user_data.get('password'):
+                return True, f"Benutzer '{user_data['username']}' erfolgreich erstellt. Generiertes Passwort: {password}", user_id
+            else:
+                return True, f"Benutzer '{user_data['username']}' erfolgreich erstellt", user_id
             
         except Exception as e:
             logger.error(f"Fehler beim Erstellen des Benutzers: {str(e)}")

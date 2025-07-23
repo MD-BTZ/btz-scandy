@@ -26,6 +26,7 @@ from urllib.parse import unquote
 import pandas as pd
 import tempfile
 from typing import Union
+import re
 
 # Import der neuen Services
 from app.services.admin_dashboard_service import AdminDashboardService
@@ -1568,7 +1569,6 @@ def add_user():
         # Benutzer erstellen mit AdminUserService
         user_data = {
             'username': processed_data['username'],
-            'password': processed_data['password'],
             'role': processed_data['role'],
             'email': processed_data['email'] if processed_data['email'] else '',
             'firstname': processed_data['firstname'],
@@ -1577,16 +1577,29 @@ def add_user():
             'is_active': True
         }
         
+        # Passwort nur hinzufügen falls angegeben
+        if processed_data.get('password'):
+            user_data['password'] = processed_data['password']
+        
         success, message, user_id = AdminUserService.create_user(user_data)
         
         if success:
-        # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
+            # E-Mail mit Passwort versenden (falls E-Mail vorhanden)
             if processed_data['email']:
                 try:
+                    # Passwort aus der Antwort extrahieren (falls generiert)
+                    generated_password = None
+                    if 'generiert' in message.lower():
+                        # Versuche das generierte Passwort aus der Nachricht zu extrahieren
+                        import re
+                        match = re.search(r'Passwort: ([a-zA-Z0-9]{12})', message)
+                        if match:
+                            generated_password = match.group(1)
+                    
                     email_sent = EmailService.send_new_user_email(
                         processed_data['email'],
                         processed_data['username'],
-                        processed_data['password'],
+                        generated_password or processed_data.get('password', ''),
                         processed_data['firstname']
                     )
                     

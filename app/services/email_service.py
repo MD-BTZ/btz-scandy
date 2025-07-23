@@ -26,23 +26,18 @@ class EmailService:
             bool: True wenn erfolgreich gesendet
         """
         try:
-            reset_url = f"{current_app.config.get('BASE_URL', 'http://localhost:5000')}/auth/reset_password/{reset_token}"
-            
             subject = "Scandy - Passwort zurücksetzen"
             template = """
             <h2>Passwort zurücksetzen</h2>
             <p>Hallo {{ username }},</p>
             <p>Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts gestellt.</p>
-            <p>Klicken Sie auf den folgenden Link, um Ihr Passwort zurückzusetzen:</p>
-            <p><a href="{{ reset_url }}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Passwort zurücksetzen</a></p>
             <p>Falls Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail ignorieren.</p>
             <p>Der Link ist 24 Stunden gültig.</p>
             <p>Mit freundlichen Grüßen<br>Ihr Scandy-Team</p>
             """
             
             html_content = render_template_string(template, 
-                                                username=username, 
-                                                reset_url=reset_url)
+                                                username=username)
             
             return send_email(user_email, subject, html_content)
             
@@ -77,7 +72,6 @@ class EmailService:
                 <li><strong>Benutzername:</strong> {{ username }}</li>
                 <li><strong>Passwort:</strong> {{ password }}</li>
             </ul>
-            <p>Sie können sich hier anmelden: <a href="{{ login_url }}">{{ login_url }}</a></p>
             <p>Bitte ändern Sie Ihr Passwort nach der ersten Anmeldung.</p>
             <p>Mit freundlichen Grüßen<br>Ihr Scandy-Team</p>
             """
