@@ -71,7 +71,15 @@ class BackupManager:
             # Altes Format
             data_section = backup_data
         
-        required_collections = ['tools', 'workers', 'consumables', 'settings', 'jobs']
+        # Für neue Backups: jobs ist erforderlich
+        # Für alte Backups: jobs ist optional
+        required_collections = ['tools', 'workers', 'consumables', 'settings']
+        
+        # Prüfe ob es ein neues Backup mit jobs ist
+        has_jobs = 'jobs' in data_section
+        if has_jobs:
+            required_collections.append('jobs')
+        
         missing_collections = [coll for coll in required_collections if coll not in data_section]
         
         if missing_collections:
@@ -81,7 +89,8 @@ class BackupManager:
         if total_docs == 0:
             return False, "Backup enthält keine Dokumente"
         
-        return True, f"Backup ist gültig mit {total_docs} Dokumenten in {len(data_section)} Collections"
+        backup_type = "neues" if has_jobs else "altes"
+        return True, f"{backup_type.capitalize()} Backup ist gültig mit {total_docs} Dokumenten in {len(data_section)} Collections"
         
     def _serialize_for_backup(self, obj):
         """
