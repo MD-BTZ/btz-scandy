@@ -25,6 +25,20 @@
                                required class="input input-bordered w-full" />
                     </div>
 
+                    <!-- Rolle -->
+                    <div class="form-control">
+                        <label class="label" for="role">
+                            <span class="label-text">Rolle <span class="text-error">*</span></span>
+                        </label>
+                        <select id="role" name="role" required class="select select-bordered w-full">
+                            <option value="">Rolle auswählen</option>
+                            <option value="admin" {% if (request.form.role or (user.role if user) or '') == 'admin' %}selected{% endif %}>Admin</option>
+                            <option value="mitarbeiter" {% if (request.form.role or (user.role if user) or '') == 'mitarbeiter' %}selected{% endif %}>Mitarbeiter</option>
+                            <option value="anwender" {% if (request.form.role or (user.role if user) or '') == 'anwender' %}selected{% endif %}>Anwender</option>
+                            <option value="teilnehmer" {% if (request.form.role or (user.role if user) or '') == 'teilnehmer' %}selected{% endif %}>Teilnehmer</option>
+                        </select>
+                    </div>
+
                     <!-- E-Mail -->
                     <div class="form-control">
                         <label class="label" for="email">
@@ -43,44 +57,20 @@
                     <!-- Vorname -->
                     <div class="form-control">
                         <label class="label" for="firstname">
-                            <span class="label-text">Vorname <span class="text-error">*</span></span>
+                            <span class="label-text">Vorname (optional)</span>
                         </label>
                         <input type="text" id="firstname" name="firstname" 
                                value="{{ request.form.firstname or (user.firstname if user) or '' }}" 
-                               required class="input input-bordered w-full" />
+                               class="input input-bordered w-full" />
                     </div>
 
                     <!-- Nachname -->
                     <div class="form-control">
                         <label class="label" for="lastname">
-                            <span class="label-text">Nachname <span class="text-error">*</span></span>
+                            <span class="label-text">Nachname (optional)</span>
                         </label>
                         <input type="text" id="lastname" name="lastname" 
                                value="{{ request.form.lastname or (user.lastname if user) or '' }}" 
-                               required class="input input-bordered w-full" />
-                    </div>
-
-                    <!-- Rolle -->
-                    <div class="form-control">
-                        <label class="label" for="role">
-                            <span class="label-text">Rolle <span class="text-error">*</span></span>
-                        </label>
-                        <select id="role" name="role" required class="select select-bordered w-full">
-                            <option value="">Rolle auswählen</option>
-                            <option value="admin" {% if (request.form.role or (user.role if user) or '') == 'admin' %}selected{% endif %}>Admin</option>
-                            <option value="mitarbeiter" {% if (request.form.role or (user.role if user) or '') == 'mitarbeiter' %}selected{% endif %}>Mitarbeiter</option>
-                            <option value="anwender" {% if (request.form.role or (user.role if user) or '') == 'anwender' %}selected{% endif %}>Anwender</option>
-                            <option value="teilnehmer" {% if (request.form.role or (user.role if user) or '') == 'teilnehmer' %}selected{% endif %}>Teilnehmer</option>
-                        </select>
-                    </div>
-
-                    <!-- Abteilung -->
-                    <div class="form-control">
-                        <label class="label" for="department">
-                            <span class="label-text">Abteilung</span>
-                        </label>
-                        <input type="text" id="department" name="department" 
-                               value="{{ request.form.department or (user.department if user) or '' }}" 
                                class="input input-bordered w-full" />
                     </div>
                 </div>

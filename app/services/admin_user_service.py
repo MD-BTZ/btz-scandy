@@ -114,7 +114,7 @@ class AdminUserService:
     @staticmethod
     def update_user(user_id: str, user_data: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Aktualisiert einen Benutzer
+        Aktualisiert einen bestehenden Benutzer
         
         Args:
             user_id: ID des zu aktualisierenden Benutzers
@@ -134,9 +134,9 @@ class AdminUserService:
                 'updated_at': datetime.now()
             }
             
-            # Aktualisierbare Felder
+            # Aktualisierbare Felder (ohne Abteilung)
             updatable_fields = ['username', 'role', 'is_active', 'timesheet_enabled', 
-                              'email', 'firstname', 'lastname', 'department']
+                              'email', 'firstname', 'lastname']
             
             for field in updatable_fields:
                 if field in user_data:
@@ -148,9 +148,17 @@ class AdminUserService:
             
             # Prüfe ob neuer Benutzername bereits existiert (außer bei diesem Benutzer)
             if 'username' in update_data:
+                # Konvertiere user_id zu ObjectId für korrekte Datenbankabfrage
+                from bson import ObjectId
+                try:
+                    object_id = ObjectId(user_id)
+                except:
+                    # Falls user_id bereits ein ObjectId ist oder ungültig
+                    object_id = user_id
+                
                 existing_user = mongodb.find_one('users', {
                     'username': update_data['username'],
-                    '_id': {'$ne': user_id}
+                    '_id': {'$ne': object_id}
                 })
                 if existing_user:
                     return False, "Benutzername existiert bereits"

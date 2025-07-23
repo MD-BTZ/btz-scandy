@@ -40,7 +40,7 @@ class ValidationService:
         role = data.get('role', '').strip()
         email = data.get('email', '').strip()
         
-        # Pflichtfelder
+        # Pflichtfelder (nur Benutzername und Rolle)
         if not username:
             errors.append('Benutzername ist erforderlich')
         elif len(username) < ValidationService.MIN_USERNAME_LENGTH:
@@ -48,24 +48,25 @@ class ValidationService:
         elif len(username) > ValidationService.MAX_USERNAME_LENGTH:
             errors.append(f'Benutzername darf maximal {ValidationService.MAX_USERNAME_LENGTH} Zeichen lang sein')
         
-        if not firstname:
-            errors.append('Vorname ist erforderlich')
-        
-        if not lastname:
-            errors.append('Nachname ist erforderlich')
-        
         if not role:
             errors.append('Rolle ist erforderlich')
+        
+        # Optionale Felder (Vorname und Nachname sind optional)
+        if firstname and len(firstname) > 50:
+            errors.append('Vorname darf maximal 50 Zeichen lang sein')
+        
+        if lastname and len(lastname) > 50:
+            errors.append('Nachname darf maximal 50 Zeichen lang sein')
         
         # E-Mail-Validierung (optional)
         if email and not ValidationService._is_valid_email(email):
             errors.append('Ungültige E-Mail-Adresse')
         
-        # Passwort-Validierung (nur bei Bearbeitung oder wenn Passwort eingegeben wurde)
+        # Passwort-Validierung (nur wenn Passwort eingegeben wurde)
         password = data.get('password', '').strip()
         password_confirm = data.get('password_confirm', '').strip()
         
-        # Nur validieren wenn Passwort eingegeben wurde (bei neuen Benutzern optional)
+        # Nur validieren wenn Passwort eingegeben wurde
         if password:
             if password != password_confirm:
                 errors.append('Passwörter stimmen nicht überein')

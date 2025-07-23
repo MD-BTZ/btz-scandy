@@ -37,7 +37,6 @@ else
 fi
 
 # 4. Benutzer und Verzeichnis anlegen
-useradd -m -s /bin/bash scandy || true
 mkdir -p /opt/scandy
 chown scandy:scandy /opt/scandy
 
