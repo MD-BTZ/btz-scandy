@@ -628,34 +628,167 @@ class BackupManager:
     def _cleanup_old_backups(self, keep=10):
         """Löscht alte Backups, behält nur die letzten 'keep'"""
         try:
-            # Finde alle Backup-Dateien
-            backup_files = list(self.backup_dir.glob('scandy_backup_*.json'))
+            # Finde alle Backup-Dateien (JSON und Native)
+            json_backups = list(self.backup_dir.glob('scandy_backup_*.json'))
+            native_backups = list(self.backup_dir.glob('scandy_native_backup_*'))
             
-            if len(backup_files) > keep:
+            all_backups = json_backups + native_backups
+            
+            if len(all_backups) > keep:
                 # Sortiere nach Änderungsdatum
-                backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                all_backups.sort(key=lambda x: x.stat().st_mtime, reverse=True)
                 
                 # Lösche alte Backups
-                for old_backup in backup_files[keep:]:
-                    old_backup.unlink()
-                    print(f"Altes Backup gelöscht: {old_backup.name}")
+                for old_backup in all_backups[keep:]:
+                    if old_backup.is_dir():
+                        import shutil
+                        shutil.rmtree(old_backup)
+                        print(f"Altes natives Backup gelöscht: {old_backup.name}")
+                    else:
+                        old_backup.unlink()
+                        print(f"Altes JSON-Backup gelöscht: {old_backup.name}")
                     
         except Exception as e:
             print(f"Fehler beim Aufräumen alter Backups: {e}")
 
     def create_native_backup(self):
         """
-        Erstellt ein verbessertes Backup mit Datentyp-Erhaltung
-        (Alias für create_backup für Kompatibilität)
+        Erstellt ein natives MongoDB-Backup mit mongodump
+        Behält alle Datentypen perfekt bei
         """
-        return self.create_backup()
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_dirname = f"scandy_native_backup_{timestamp}"
+            backup_path = self.backup_dir / backup_dirname
+            
+            # Erstelle Backup-Verzeichnis
+            backup_path.mkdir(exist_ok=True)
+            
+            # MongoDB-Verbindungsdaten aus der Konfiguration holen
+            from app import create_app
+            app = create_app()
+            
+            # Hole MongoDB-Verbindungsdaten aus der App-Konfiguration
+            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            
+            # Extrahiere Datenbankname aus URI
+            if '/' in mongo_uri:
+                db_name = mongo_uri.split('/')[-1]
+            else:
+                db_name = 'scandy'
+            
+            # mongodump Befehl ausführen
+            cmd = [
+                'mongodump',
+                '--uri', mongo_uri,
+                '--out', str(backup_path),
+                '--gzip'  # Komprimierung für kleinere Dateien
+            ]
+            
+            print(f"Erstelle natives MongoDB-Backup...")
+            print(f"URI: {mongo_uri}")
+            print(f"Datenbank: {db_name}")
+            print(f"Backup-Pfad: {backup_path}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                print(f"✅ Natives Backup erstellt: {backup_dirname}")
+                print(f"Backup-Größe: {self._get_dir_size(backup_path)}")
+                
+                # Alte Backups aufräumen
+                self._cleanup_old_backups()
+                
+                return backup_dirname
+            else:
+                print(f"❌ Fehler beim Erstellen des nativen Backups:")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            print(f"Fehler beim Erstellen des nativen Backups: {e}")
+            return None
     
     def restore_native_backup(self, backup_filename):
         """
-        Stellt ein verbessertes Backup wieder her
-        (Alias für restore_backup_by_filename für Kompatibilität)
+        Stellt ein natives MongoDB-Backup mit mongorestore wieder her
         """
-        return self.restore_backup_by_filename(backup_filename)
+        try:
+            backup_path = self.backup_dir / backup_filename
+            
+            if not backup_path.exists():
+                print(f"Backup nicht gefunden: {backup_path}")
+                return False
+            
+            # MongoDB-Verbindungsdaten aus der Konfiguration holen
+            from app import create_app
+            app = create_app()
+            mongo_uri = app.config.get('MONGODB_URI', 'mongodb://localhost:27017/scandy')
+            
+            # Extrahiere Datenbankname aus URI
+            if '/' in mongo_uri:
+                db_name = mongo_uri.split('/')[-1]
+            else:
+                db_name = 'scandy'
+            
+            # Finde die BSON-Dateien im Backup
+            bson_dir = backup_path / db_name
+            if not bson_dir.exists():
+                print(f"BSON-Dateien nicht gefunden in: {bson_dir}")
+                return False
+            
+            print(f"Stelle natives Backup wieder her: {backup_filename}")
+            print(f"URI: {mongo_uri}")
+            print(f"Datenbank: {db_name}")
+            
+            # mongorestore Befehl ausführen
+            cmd = [
+                'mongorestore',
+                '--uri', mongo_uri,
+                '--gzip',  # Komprimierung
+                '--drop',  # Bestehende Collections löschen
+                str(bson_dir)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                print(f"✅ Natives Backup erfolgreich wiederhergestellt")
+                return True
+            else:
+                print(f"❌ Fehler beim Wiederherstellen des nativen Backups:")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"Fehler beim Wiederherstellen des nativen Backups: {e}")
+            return False
+    
+    def _get_dir_size(self, path):
+        """Berechnet die Größe eines Verzeichnisses"""
+        total_size = 0
+        try:
+            for dirpath, dirnames, filenames in os.walk(path):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    if os.path.exists(filepath):
+                        total_size += os.path.getsize(filepath)
+        except Exception:
+            pass
+        return self._format_size(total_size)
+    
+    def _format_size(self, size_bytes):
+        """Formatiert Bytes in lesbare Größe"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        while size_bytes >= 1024 and i < len(size_names) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.1f} {size_names[i]}"
     
     def list_native_backups(self):
         """Listet alle nativen MongoDB-Backups auf"""
@@ -665,10 +798,11 @@ class BackupManager:
             for item in self.backup_dir.iterdir():
                 if item.is_dir() and item.name.startswith('scandy_native_backup_'):
                     stat = item.stat()
+                    size = self._get_dir_size(item)
                     backups.append({
                         'name': item.name,
                         'type': 'native',
-                        'size': stat.st_size,
+                        'size': size,
                         'created': stat.st_mtime,
                         'modified': datetime.fromtimestamp(stat.st_mtime),
                         'modified_str': datetime.fromtimestamp(stat.st_mtime).strftime('%d.%m.%Y %H:%M:%S')

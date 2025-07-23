@@ -2776,6 +2776,34 @@ def test_backup(filename):
             'message': f'Fehler beim Testen des Backups: {str(e)}'
         }), 500
 
+@bp.route('/backup/create-json', methods=['POST'])
+@admin_required
+def create_json_backup():
+    """Erstellt ein JSON-Backup (für Kompatibilität)"""
+    try:
+        from app.services.admin_backup_service import AdminBackupService
+        
+        success, message, backup_filename = AdminBackupService.create_json_backup()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'JSON-Backup erfolgreich erstellt: {backup_filename}',
+                'filename': backup_filename
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Fehler beim Erstellen des JSON-Backups: {message}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des JSON-Backups: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fehler beim Erstellen des JSON-Backups: {str(e)}'
+        }), 500
+
 @bp.route('/backup/create-native', methods=['POST'])
 @admin_required
 def create_native_backup():

@@ -52,23 +52,23 @@ class AdminBackupService:
     @staticmethod
     def create_backup() -> Tuple[bool, str, Optional[str]]:
         """
-        Erstellt ein neues Backup
+        Erstellt ein neues natives MongoDB-Backup (Standard)
         
         Returns:
             (success, message, backup_filename)
         """
         try:
-            backup_filename = backup_manager.create_backup()
+            backup_filename = backup_manager.create_native_backup()
             
             if backup_filename:
-                logger.info(f"Backup erstellt: {backup_filename}")
-                return True, f"Backup '{backup_filename}' erfolgreich erstellt", backup_filename
+                logger.info(f"Natives Backup erstellt: {backup_filename}")
+                return True, f"Natives Backup '{backup_filename}' erfolgreich erstellt", backup_filename
             else:
-                return False, "Fehler beim Erstellen des Backups", None
+                return False, "Fehler beim Erstellen des nativen Backups", None
                 
         except Exception as e:
-            logger.error(f"Fehler beim Erstellen des Backups: {str(e)}")
-            return False, f"Fehler beim Erstellen des Backups: {str(e)}", None
+            logger.error(f"Fehler beim Erstellen des nativen Backups: {str(e)}")
+            return False, f"Fehler beim Erstellen des nativen Backups: {str(e)}", None
 
     @staticmethod
     def upload_backup(file) -> Tuple[bool, str]:
@@ -621,6 +621,27 @@ class AdminBackupService:
             logger.error(f"Fehler beim Laden der nativen Backup-Liste: {str(e)}")
             return []
     
+    @staticmethod
+    def create_json_backup() -> Tuple[bool, str, Optional[str]]:
+        """
+        Erstellt ein JSON-Backup (für Kompatibilität)
+        
+        Returns:
+            (success, message, backup_filename)
+        """
+        try:
+            backup_filename = backup_manager.create_backup()
+            
+            if backup_filename:
+                logger.info(f"JSON-Backup erstellt: {backup_filename}")
+                return True, f"JSON-Backup '{backup_filename}' erfolgreich erstellt", backup_filename
+            else:
+                return False, "Fehler beim Erstellen des JSON-Backups", None
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des JSON-Backups: {str(e)}")
+            return False, f"Fehler beim Erstellen des JSON-Backups: {str(e)}", None
+
     @staticmethod
     def create_hybrid_backup() -> Tuple[bool, str, Optional[Dict[str, str]]]:
         """
