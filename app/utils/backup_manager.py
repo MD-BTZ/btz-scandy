@@ -694,7 +694,7 @@ class BackupManager:
             
             # mongodump Befehl ausführen
             cmd = [
-                'mongodump',
+                '/usr/bin/mongodump',
                 '--uri', mongo_uri,
                 '--out', str(backup_path),
                 '--gzip'  # Komprimierung für kleinere Dateien
@@ -763,7 +763,7 @@ class BackupManager:
             
             # mongorestore Befehl ausführen
             cmd = [
-                'mongorestore',
+                '/usr/bin/mongorestore',
                 '--uri', mongo_uri,
                 '--gzip',  # Komprimierung
                 '--drop',  # Bestehende Collections löschen
@@ -832,7 +832,7 @@ class BackupManager:
                 
                 # mongorestore Befehl ausführen
                 cmd = [
-                    'mongorestore',
+                    '/usr/bin/mongorestore',
                     '--uri', mongo_uri,
                     '--gzip',  # Komprimierung
                     '--drop',  # Bestehende Collections löschen
