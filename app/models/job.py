@@ -102,10 +102,14 @@ class Job:
             'is_public': self.is_public,
             'views': self.views,
             'applications': self.applications,
-            'comments': self.comments
+            'job_number': self.job_number
         }
         
-        if self.id:
+        # Kommentare nur hinzufügen, wenn sie existieren
+        if hasattr(self, 'comments') and self.comments:
+            job_data['comments'] = self.comments
+        
+        if self.id and self.id != "unknown":
             # Update existing job
             mongodb.update_one('jobs', {'_id': ObjectId(self.id)}, job_data)
         else:

@@ -7,12 +7,12 @@
         <div class="mb-8">
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold text-base-content mb-2">Neuen Job erstellen</h1>
-                    <p class="text-base-content/70">Erstellen Sie eine neue Jobanzeige für Ihre Jobbörse</p>
+                    <h1 class="text-3xl font-bold text-base-content mb-2">Job bearbeiten</h1>
+                    <p class="text-base-content/70">Bearbeiten Sie die Jobanzeige "{{ job.title }}"</p>
                 </div>
-                <a href="{{ url_for('jobs.job_list') }}" class="btn btn-outline">
+                <a href="{{ url_for('jobs.job_detail', job_id=job.id|string) }}" class="btn btn-outline">
                     <i class="fas fa-arrow-left mr-2"></i>
-                    Zurück zur Jobbörse
+                    Zurück zum Job
                 </a>
             </div>
         </div>
@@ -27,7 +27,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Job-Titel *</span>
                             </label>
-                            <input type="text" name="title" value="{{ data.title }}" required
+                            <input type="text" name="title" value="{{ data.title if data else job.title }}" required
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="z.B. Softwareentwickler (m/w/d)">
                         </div>
@@ -36,7 +36,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Firma *</span>
                             </label>
-                            <input type="text" name="company" value="{{ data.company }}" required
+                            <input type="text" name="company" value="{{ data.company if data else job.company }}" required
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="z.B. TechCorp GmbH">
                         </div>
@@ -47,7 +47,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Standort</span>
                             </label>
-                            <input type="text" name="location" value="{{ data.location }}"
+                            <input type="text" name="location" value="{{ data.location if data else job.location }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="z.B. Berlin">
                         </div>
@@ -56,7 +56,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Branche</span>
                             </label>
-                            <input type="text" name="industry" value="{{ data.industry }}"
+                            <input type="text" name="industry" value="{{ data.industry if data else job.industry }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="z.B. Medien, Design, IT, Buchhaltung, Beratung, Technik...">
                         </div>
@@ -66,11 +66,11 @@
                                 <span class="label-text font-medium">Job-Typ</span>
                             </label>
                             <select name="job_type" class="select select-bordered w-full bg-base-100 text-base-content">
-                                <option value="Vollzeit" {% if data.job_type == 'Vollzeit' %}selected{% endif %}>Vollzeit</option>
-                                <option value="Teilzeit" {% if data.job_type == 'Teilzeit' %}selected{% endif %}>Teilzeit</option>
-                                <option value="Praktikum" {% if data.job_type == 'Praktikum' %}selected{% endif %}>Praktikum</option>
-                                <option value="Ausbildung" {% if data.job_type == 'Ausbildung' %}selected{% endif %}>Ausbildung</option>
-                                <option value="Freelance" {% if data.job_type == 'Freelance' %}selected{% endif %}>Freelance</option>
+                                <option value="Vollzeit" {% if (data.job_type if data else job.job_type) == 'Vollzeit' %}selected{% endif %}>Vollzeit</option>
+                                <option value="Teilzeit" {% if (data.job_type if data else job.job_type) == 'Teilzeit' %}selected{% endif %}>Teilzeit</option>
+                                <option value="Praktikum" {% if (data.job_type if data else job.job_type) == 'Praktikum' %}selected{% endif %}>Praktikum</option>
+                                <option value="Ausbildung" {% if (data.job_type if data else job.job_type) == 'Ausbildung' %}selected{% endif %}>Ausbildung</option>
+                                <option value="Freelance" {% if (data.job_type if data else job.job_type) == 'Freelance' %}selected{% endif %}>Freelance</option>
                             </select>
                         </div>
                     </div>
@@ -82,7 +82,7 @@
                         </label>
                         <textarea name="description" rows="4" required
                                   class="textarea textarea-bordered w-full bg-base-100 text-base-content"
-                                  placeholder="Beschreiben Sie die Position, Aufgaben und Anforderungen...">{{ data.description }}</textarea>
+                                  placeholder="Beschreiben Sie die Position, Aufgaben und Anforderungen...">{{ data.description if data else job.description }}</textarea>
                     </div>
 
                     <!-- Anforderungen und Benefits -->
@@ -93,7 +93,7 @@
                             </label>
                             <textarea name="requirements" rows="3"
                                       class="textarea textarea-bordered w-full bg-base-100 text-base-content"
-                                      placeholder="Qualifikationen, Erfahrung, Skills...">{{ data.requirements }}</textarea>
+                                      placeholder="Qualifikationen, Erfahrung, Skills...">{{ data.requirements if data else job.requirements }}</textarea>
                         </div>
                         
                         <div class="form-control">
@@ -102,7 +102,7 @@
                             </label>
                             <textarea name="benefits" rows="3"
                                       class="textarea textarea-bordered w-full bg-base-100 text-base-content"
-                                      placeholder="Vergünstigungen, Vorteile...">{{ data.benefits }}</textarea>
+                                      placeholder="Vergünstigungen, Vorteile...">{{ data.benefits if data else job.benefits }}</textarea>
                         </div>
                     </div>
 
@@ -112,7 +112,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Gehalt</span>
                             </label>
-                            <input type="text" name="salary_range" value="{{ data.salary_range }}"
+                            <input type="text" name="salary_range" value="{{ data.salary_range if data else job.salary_range }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="z.B. 50.000 - 70.000 €">
                         </div>
@@ -121,7 +121,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Bewerbungs-URL</span>
                             </label>
-                            <input type="url" name="application_url" value="{{ data.application_url }}"
+                            <input type="url" name="application_url" value="{{ data.application_url if data else job.application_url }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="https://firma.de/karriere">
                         </div>
@@ -133,7 +133,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Kontakt-E-Mail</span>
                             </label>
-                            <input type="email" name="contact_email" value="{{ data.contact_email }}"
+                            <input type="email" name="contact_email" value="{{ data.contact_email if data else job.contact_email }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="jobs@firma.de">
                         </div>
@@ -142,7 +142,7 @@
                             <label class="label">
                                 <span class="label-text font-medium">Kontakt-Telefon</span>
                             </label>
-                            <input type="tel" name="contact_phone" value="{{ data.contact_phone }}"
+                            <input type="tel" name="contact_phone" value="{{ data.contact_phone if data else job.contact_phone }}"
                                    class="input input-bordered w-full bg-base-100 text-base-content"
                                    placeholder="+49 30 12345678">
                         </div>
@@ -151,9 +151,9 @@
                     <!-- Buttons -->
                     <div class="flex gap-4 pt-6 border-t border-base-300">
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save mr-2"></i>Job erstellen
+                            <i class="fas fa-save mr-2"></i>Änderungen speichern
                         </button>
-                        <a href="{{ url_for('jobs.job_list') }}" class="btn btn-outline">
+                        <a href="{{ url_for('jobs.job_detail', job_id=job.id|string) }}" class="btn btn-outline">
                             Abbrechen
                         </a>
                     </div>

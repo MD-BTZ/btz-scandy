@@ -151,20 +151,57 @@ class JobService:
     def update_job(job_id, data, user):
         """Job aktualisieren"""
         try:
-            job = Job.find_by_id(job_id)
-            if not job or job.created_by != str(user.id):
+            from app.models.mongodb_database import get_mongodb
+            from bson import ObjectId
+            from datetime import datetime
+            
+            mongodb = get_mongodb()
+            
+            # Job finden
+            job = mongodb.find_one('jobs', {'_id': ObjectId(job_id)})
+            if not job:
+                loggers['errors'].error(f"Job nicht gefunden für Update: {job_id}")
                 return None
             
-            # Felder aktualisieren
-            for field, value in data.items():
-                if hasattr(job, field):
-                    setattr(job, field, value)
+            # Berechtigung prüfen: Admin oder Job-Ersteller
+            if user.role != 'admin' and job.get('created_by') != str(user.id):
+                loggers['errors'].error(f"Keine Berechtigung zum Bearbeiten des Jobs {job_id} von {user.username}")
+                return None
             
-            job.updated_at = datetime.utcnow()
-            job.save()
+            # Update-Daten vorbereiten
+            update_data = {
+                'title': data['title'],
+                'company': data['company'],
+                'location': data.get('location', ''),
+                'industry': data.get('industry', ''),
+                'job_type': data.get('job_type', 'Vollzeit'),
+                'description': data['description'],
+                'requirements': data.get('requirements', ''),
+                'benefits': data.get('benefits', ''),
+                'salary_range': data.get('salary_range', ''),
+                'contact_email': data.get('contact_email', ''),
+                'contact_phone': data.get('contact_phone', ''),
+                'application_url': data.get('application_url', ''),
+                'updated_at': datetime.now()
+            }
             
-            loggers['user_actions'].info(f"Job aktualisiert: {job.title} von {user.username}")
-            return job
+            # Job aktualisieren
+            result = mongodb.update_one('jobs', {'_id': ObjectId(job_id)}, update_data)
+            
+            if result:
+                # Aktualisierten Job abrufen
+                updated_job = mongodb.find_one('jobs', {'_id': ObjectId(job_id)})
+                if updated_job:
+                    # Job-Objekt korrekt erstellen
+                    job_obj = Job(updated_job)
+                    loggers['user_actions'].info(f"Job aktualisiert: {data['title']} von {user.username}")
+                    return job_obj
+                else:
+                    loggers['errors'].error(f"Job nach Update nicht gefunden: {job_id}")
+                    return None
+            else:
+                loggers['errors'].error(f"Fehler beim Aktualisieren des Jobs {job_id}")
+                return None
             
         except Exception as e:
             loggers['errors'].error(f"Fehler beim Aktualisieren des Jobs {job_id}: {e}")

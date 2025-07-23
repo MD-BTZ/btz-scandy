@@ -58,7 +58,7 @@
                         </a>
                         {% endif %}
                         
-                        {% if current_user.is_authenticated and current_user.role in ['admin', 'mitarbeiter'] %}
+                        {% if current_user.is_authenticated and (current_user.role == 'admin' or (job.created_by and job.created_by == current_user.id)) %}
                         <a href="{{ url_for('jobs.edit_job', job_id=job.id|string) }}" 
                            class="btn btn-primary">
                             <i class="fas fa-edit mr-2"></i>Bearbeiten
@@ -82,9 +82,9 @@
         </div>
         
         <!-- Job Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Hauptinhalt -->
-            <div class="lg:col-span-3 space-y-8">
+            <div class="lg:col-span-2 space-y-8">
                 <!-- Beschreibung -->
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
@@ -132,24 +132,6 @@
                             <i class="fas fa-comments text-accent mr-3"></i>Kommentare
                             <span class="ml-2 text-sm text-base-content/60">({{ job.comments|length if job.comments else 0 }})</span>
                         </h2>
-                        
-                        <!-- Kommentar hinzufügen -->
-                        <div class="mb-8 p-6 bg-base-200 rounded-lg">
-                            <form id="commentForm" class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-base-content mb-2">Neuer Kommentar</label>
-                                    <textarea name="comment" id="commentText" rows="4" 
-                                              class="textarea textarea-bordered w-full"
-                                              placeholder="Ihr Kommentar..."></textarea>
-                                </div>
-                                <div class="flex justify-end">
-                                    <button type="submit" id="submitComment"
-                                            class="btn btn-primary">
-                                        <i class="fas fa-paper-plane mr-2"></i>Kommentar hinzufügen
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
                         
                         <!-- Kommentare anzeigen -->
                         <div id="commentsList" class="space-y-6">
@@ -280,6 +262,39 @@
                             </div>
                             {% endif %}
                         </div>
+                    </div>
+                </div>
+                
+                <!-- Kommentar hinzufügen -->
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h3 class="card-title text-lg mb-4">
+                            <i class="fas fa-comments text-accent mr-2"></i>Kommentar hinzufügen
+                        </h3>
+                        
+                        {% if current_user.is_authenticated %}
+                        <div class="p-4 bg-base-200 rounded-lg">
+                            <form id="commentForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-base-content mb-2">Neuer Kommentar</label>
+                                    <textarea name="comment" id="commentText" rows="6" 
+                                              class="textarea textarea-bordered w-full bg-base-100 text-base-content"
+                                              placeholder="Ihr Kommentar..."></textarea>
+                                </div>
+                                <div class="flex justify-end">
+                                    <button type="submit" id="submitComment"
+                                            class="btn btn-primary">
+                                        <i class="fas fa-paper-plane mr-2"></i>Kommentar hinzufügen
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-6 text-base-content/60">
+                            <i class="fas fa-sign-in-alt text-2xl mb-2"></i>
+                            <p class="text-sm">Bitte melden Sie sich an, um zu kommentieren.</p>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 

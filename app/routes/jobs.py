@@ -42,6 +42,11 @@ def job_list():
         
         loggers['user_actions'].info(f"Statistiken: {stats}")
         
+        # Verfügbare Branchen aus der Datenbank sammeln
+        mongodb = get_mongodb()
+        available_industries = mongodb.distinct('jobs', 'industry')
+        available_industries = [ind for ind in available_industries if ind and ind.strip()]  # Leere Werte entfernen
+        
         # MongoDB-Daten direkt verwenden
         jobs_data = []
         for job in result['jobs']:
@@ -76,7 +81,8 @@ def job_list():
                              total_pages=result['total_pages'],
                              current_page=result['current_page'],
                              filters=filters,
-                             stats=stats)
+                             stats=stats,
+                             available_industries=available_industries)
                              
     except Exception as e:
         loggers['errors'].error(f"Fehler in job_list: {e}")
@@ -169,8 +175,13 @@ def edit_job(job_id):
     """Job bearbeiten"""
     try:
         job = JobService.get_job_by_id(job_id)
-        if not job or job.created_by != current_user:
-            flash('Job nicht gefunden oder keine Berechtigung', 'error')
+        if not job:
+            flash('Job nicht gefunden', 'error')
+            return redirect(url_for('jobs.job_list'))
+        
+        # Berechtigung prüfen: Admin oder Job-Ersteller
+        if current_user.role != 'admin' and job.created_by != str(current_user.id):
+            flash('Keine Berechtigung zum Bearbeiten dieses Jobs', 'error')
             return redirect(url_for('jobs.job_list'))
         
         if request.method == 'POST':

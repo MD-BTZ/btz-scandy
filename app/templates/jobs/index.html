@@ -35,14 +35,9 @@
                             <label class="block text-sm font-medium text-base-content mb-1">Branche</label>
                             <select name="industry" class="select select-bordered w-full">
                                 <option value="">Alle Branchen</option>
-                                <option value="IT" {% if filters.industry == 'IT' %}selected{% endif %}>IT</option>
-                                <option value="Marketing" {% if filters.industry == 'Marketing' %}selected{% endif %}>Marketing</option>
-                                <option value="Vertrieb" {% if filters.industry == 'Vertrieb' %}selected{% endif %}>Vertrieb</option>
-                                <option value="Finanzen" {% if filters.industry == 'Finanzen' %}selected{% endif %}>Finanzen</option>
-                                <option value="Handwerk" {% if filters.industry == 'Handwerk' %}selected{% endif %}>Handwerk</option>
-                                <option value="Gesundheit" {% if filters.industry == 'Gesundheit' %}selected{% endif %}>Gesundheit</option>
-                                <option value="Bildung" {% if filters.industry == 'Bildung' %}selected{% endif %}>Bildung</option>
-                                <option value="Sonstige" {% if filters.industry == 'Sonstige' %}selected{% endif %}>Sonstige</option>
+                                {% for industry in available_industries %}
+                                <option value="{{ industry }}" {% if filters.industry == industry %}selected{% endif %}>{{ industry }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         

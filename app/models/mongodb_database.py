@@ -282,6 +282,18 @@ class MongoDBDatabase:
         
         return results
     
+    def distinct(self, collection_name: str, field: str, filter_dict: Dict[str, Any] = None) -> List[Any]:
+        """Gibt eindeutige Werte eines Feldes zurück"""
+        collection = self.get_collection(collection_name)
+        
+        if filter_dict is None:
+            filter_dict = {}
+        
+        # Konvertiere String-IDs zu ObjectIds in filter_dict
+        processed_filter = self._process_filter_ids(filter_dict)
+        
+        return list(collection.distinct(field, processed_filter))
+    
     def create_index(self, collection_name: str, field: str, unique: bool = False, sparse: bool = False):
         """Erstellt einen Index für eine Collection"""
         collection = self.get_collection(collection_name)
