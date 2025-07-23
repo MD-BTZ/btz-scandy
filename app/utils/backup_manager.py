@@ -315,11 +315,24 @@ class BackupManager:
                 print("Erkennung: Altes Backup-Format - Konvertierung erforderlich")
                 data_section = backup_data
             
-            # Backup-Daten validieren
+            # Backup-Daten validieren (mit spezieller Behandlung für alte Backups)
             is_valid, validation_message = self._validate_backup_data({'data': data_section})
             if not is_valid:
-                print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
-                return False
+                # Bei alten Backups: Versuche Validierung ohne jobs-Collection
+                if 'jobs' not in data_section:
+                    print("Altes Backup erkannt - versuche Validierung ohne jobs-Collection")
+                    # Temporäre Validierung nur für alte Backups
+                    old_backup_required = ['tools', 'workers', 'consumables', 'settings']
+                    missing_old = [coll for coll in old_backup_required if coll not in data_section]
+                    if not missing_old:
+                        is_valid = True
+                        validation_message = f"Altes Backup ist gültig mit {sum(len(docs) for docs in data_section.values())} Dokumenten"
+                    else:
+                        print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
+                        return False
+                else:
+                    print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
+                    return False
             
             print(f"Backup-Validierung erfolgreich: {validation_message}")
             
