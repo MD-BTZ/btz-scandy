@@ -71,7 +71,7 @@ class BackupManager:
             # Altes Format
             data_section = backup_data
         
-        required_collections = ['tools', 'workers', 'consumables', 'settings']
+        required_collections = ['tools', 'workers', 'consumables', 'settings', 'jobs']
         missing_collections = [coll for coll in required_collections if coll not in data_section]
         
         if missing_collections:
@@ -183,7 +183,7 @@ class BackupManager:
             collections_to_backup = [
                 'tools', 'workers', 'consumables', 'lendings', 'consumable_usages', 
                 'settings', 'tickets', 'timesheets', 'users', 'auftrag_details', 
-                'auftrag_material', 'email_config', 'email_settings', 'system_logs'
+                'auftrag_material', 'email_config', 'email_settings', 'system_logs', 'jobs'
             ]
             backup_data = {}
             
