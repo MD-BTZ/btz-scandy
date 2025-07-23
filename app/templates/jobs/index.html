@@ -127,14 +127,6 @@
                             {% endif %}
                         </p>
                     </div>
-                    
-                    <!-- Alle löschen Button für Admins -->
-                    {% if current_user.is_authenticated and current_user.role == 'admin' and total_count > 0 %}
-                    <button onclick="deleteAllJobs()" 
-                            class="btn btn-error">
-                        <i class="fas fa-trash mr-2"></i>Alle Jobs löschen
-                    </button>
-                    {% endif %}
                 </div>
             </div>
             
@@ -338,31 +330,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-function deleteAllJobs() {
-    if (confirm('Sind Sie sicher, dass Sie ALLE Jobs löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden!')) {
-        if (confirm('Letzte Warnung: Alle Jobs werden unwiderruflich gelöscht. Fortfahren?')) {
-            fetch('/jobs/delete-all', {
-                method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Alle Jobs wurden erfolgreich gelöscht!');
-                    location.reload();
-                } else {
-                    alert('Fehler beim Löschen aller Jobs: ' + (data.error || 'Unbekannter Fehler'));
-                }
-            })
-            .catch(error => {
-                console.error('Fehler:', error);
-                alert('Fehler beim Löschen aller Jobs');
-            });
-        }
-    }
-}
+
 </script>
 
 {% endblock %} 
