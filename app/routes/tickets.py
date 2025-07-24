@@ -1521,12 +1521,12 @@ def get_unassigned_ticket_count():
         '$and': [
             {
                 '$or': [
-                    {'assigned_to': {'$exists': False}},
                     {'assigned_to': None},
-                    {'assigned_to': ''}
+                    {'assigned_to': ''},
+                    {'assigned_to': {'$exists': False}}
                 ]
             },
-            {'status': {'$ne': 'geschlossen'}},
+            {'status': 'offen'},
             {'deleted': {'$ne': True}}
         ]
     })
@@ -1889,12 +1889,12 @@ def debug_unassigned_tickets():
             '$and': [
                 {
                     '$or': [
-                        {'assigned_to': {'$exists': False}},
                         {'assigned_to': None},
-                        {'assigned_to': ''}
+                        {'assigned_to': ''},
+                        {'assigned_to': {'$exists': False}}
                     ]
                 },
-                {'status': {'$ne': 'geschlossen'}},
+                {'status': 'offen'},
                 {'deleted': {'$ne': True}}
             ]
         })

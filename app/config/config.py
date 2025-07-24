@@ -35,6 +35,17 @@ class Config:
     HOST = '0.0.0.0'
     PORT = 5000
     
+    # Static Files Konfiguration (für LXC-Container)
+    STATIC_FOLDER = os.path.join(BASE_DIR, 'app', 'static')
+    STATIC_URL_PATH = '/static'
+    
+    # LXC-spezifische Einstellungen
+    LXC_MODE = os.environ.get('LXC_MODE', 'false').lower() == 'true'
+    if LXC_MODE:
+        # Deaktiviere HTTPS für LXC-Container
+        SESSION_COOKIE_SECURE = False
+        REMEMBER_COOKIE_SECURE = False
+    
     # Base URL für E-Mails und externe Links
     BASE_URL = os.environ.get('BASE_URL')
     if not BASE_URL:

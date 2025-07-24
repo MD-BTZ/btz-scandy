@@ -243,7 +243,8 @@ document.addEventListener('DOMContentLoaded', function() {
         assignmentForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const checkboxes = this.querySelectorAll('input[name="assigned_to"]:checked');
-            const assignedUsers = Array.from(checkboxes).map(cb => cb.value);
+            // Nehme nur den ersten ausgewählten Benutzer (oder null wenn keiner ausgewählt)
+            const assignedUser = checkboxes.length > 0 ? checkboxes[0].value : null;
             
             try {
                 const response = await fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
@@ -251,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ assigned_to: assignedUsers })
+                    body: JSON.stringify({ assigned_to: assignedUser })
                 });
                 
                 if (response.ok) {
@@ -285,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const result = await response.json();
                 if (result.success) {
-                    showToast('success', 'Nachricht erfolgreich gesendet');
+                    showToast('Nachricht erfolgreich gesendet', 'success');
                     // Füge die neue Nachricht zum Container hinzu
                     const messagesContainer = document.querySelector('.messages-container');
                     const newMessage = document.createElement('div');
@@ -311,10 +312,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Scrolle zum Ende des Containers
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 } else {
-                    showToast('error', result.message || 'Fehler beim Senden der Nachricht');
+                    showToast(result.message || 'Fehler beim Senden der Nachricht', 'error');
                 }
             } catch (error) {
-                showToast('error', 'Fehler beim Senden der Nachricht');
+                showToast('Fehler beim Senden der Nachricht', 'error');
             }
         });
     }
@@ -337,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const result = await response.json();
                 if (result.success) {
-                    showToast('success', 'Notiz erfolgreich hinzugefügt');
+                    showToast('Notiz erfolgreich hinzugefügt', 'success');
                     // Füge die neue Notiz zum Container hinzu
                     const notesContainer = document.querySelector('.notes-container');
                     const newNote = document.createElement('div');
@@ -361,10 +362,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Leere das Formular
                     this.reset();
                 } else {
-                    showToast('error', result.message || 'Fehler beim Hinzufügen der Notiz');
+                    showToast(result.message || 'Fehler beim Hinzufügen der Notiz', 'error');
                 }
             } catch (error) {
-                showToast('error', 'Fehler beim Hinzufügen der Notiz');
+                showToast('Fehler beim Hinzufügen der Notiz', 'error');
             }
         });
     }

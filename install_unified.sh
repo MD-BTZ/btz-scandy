@@ -460,6 +460,19 @@ install_containers() {
     fi
     
     log "${GREEN}✅ Container gestartet${NC}"
+    
+    # Korrigiere Berechtigungen für Static Files
+    log "${BLUE}🔧 Korrigiere Berechtigungen für Static Files...${NC}"
+    if [ -d "app/static" ]; then
+        chmod -R 755 app/static/
+        log "${GREEN}✅ Static Files Berechtigungen korrigiert${NC}"
+    fi
+    
+    # Korrigiere Berechtigungen für Upload-Verzeichnis
+    if [ -d "data/uploads" ]; then
+        chmod -R 755 data/uploads/
+        log "${GREEN}✅ Upload-Verzeichnis Berechtigungen korrigiert${NC}"
+    fi
 }
 
 # Warte auf Services

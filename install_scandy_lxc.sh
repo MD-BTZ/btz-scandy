@@ -116,4 +116,28 @@ systemctl restart nginx
 # 11. Abschluss
 IP=$(hostname -I | awk '{print $1}')
 echo -e "${GREEN}==== Installation abgeschlossen! ====${NC}"
-echo -e "Scandy läuft jetzt unter: http://$IP/" 
+echo -e "Scandy läuft jetzt unter: http://$IP/"
+
+# 12. Korrigiere Berechtigungen für Static Files
+echo -e "${GREEN}🔧 Korrigiere Berechtigungen für Static Files...${NC}"
+if [ -d "/opt/scandy/app/static" ]; then
+    chmod -R 755 /opt/scandy/app/static/
+    chown -R scandy:scandy /opt/scandy/app/static/
+    echo -e "${GREEN}✅ Static Files Berechtigungen korrigiert${NC}"
+fi
+
+# 13. Korrigiere Berechtigungen für Upload-Verzeichnis
+if [ -d "/opt/scandy/app/uploads" ]; then
+    chmod -R 755 /opt/scandy/app/uploads/
+    chown -R scandy:scandy /opt/scandy/app/uploads/
+    echo -e "${GREEN}✅ Upload-Verzeichnis Berechtigungen korrigiert${NC}"
+fi
+
+# 14. Korrigiere Berechtigungen für Flask-Session
+if [ -d "/opt/scandy/app/flask_session" ]; then
+    chmod -R 755 /opt/scandy/app/flask_session/
+    chown -R scandy:scandy /opt/scandy/app/flask_session/
+    echo -e "${GREEN}✅ Flask-Session Berechtigungen korrigiert${NC}"
+fi
+
+echo -e "${GREEN}✅ Alle Berechtigungen korrigiert!${NC}" 

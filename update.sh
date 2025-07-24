@@ -114,6 +114,19 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Korrigiere Berechtigungen für Static Files
+echo -e "${BLUE}🔧 Korrigiere Berechtigungen für Static Files...${NC}"
+if [ -d "app/static" ]; then
+    chmod -R 755 app/static/
+    echo -e "${GREEN}✅ Static Files Berechtigungen korrigiert${NC}"
+fi
+
+# Korrigiere Berechtigungen für Upload-Verzeichnis
+if [ -d "data/uploads" ]; then
+    chmod -R 755 data/uploads/
+    echo -e "${GREEN}✅ Upload-Verzeichnis Berechtigungen korrigiert${NC}"
+fi
+
 echo
 echo -e "${BLUE}⏳ Warte auf App-Start...${NC}"
 sleep 10

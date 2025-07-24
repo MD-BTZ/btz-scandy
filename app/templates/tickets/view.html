@@ -2,6 +2,145 @@
 
 {% block title %}Auftrag #{{ ticket.ticket_number or ticket.id }}{% endblock %}
 
+{% block head %}
+{{ super() }}
+<script>
+// Globale Funktionen für onchange Events - müssen vor den Events verfügbar sein
+function updateTicketStatus(newStatus) {
+    fetch(`/tickets/{{ ticket.id }}/update-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Optional: Seite neu laden oder UI aktualisieren
+            window.location.reload();
+        } else {
+            alert('Fehler beim Aktualisieren des Status: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
+    });
+}
+
+function updateTicketAssignment(newAssignment) {
+    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            assigned_to: newAssignment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (typeof showToast !== 'undefined') {
+                showToast('Zuweisung erfolgreich aktualisiert', 'success');
+            } else {
+                alert('Zuweisung erfolgreich aktualisiert');
+            }
+        } else {
+            if (typeof showToast !== 'undefined') {
+                showToast('Fehler beim Aktualisieren der Zuweisung: ' + data.message, 'error');
+            } else {
+                alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        if (typeof showToast !== 'undefined') {
+            showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.', 'error');
+        } else {
+            alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+        }
+    });
+}
+
+function saveTicketChanges() {
+    console.log('saveTicketChanges aufgerufen');
+    
+    const estimatedTime = document.getElementById('estimatedTimeInput').value;
+    const category = document.getElementById('categoryInput').value;
+    const dueDate = document.getElementById('dueDateInput') ? document.getElementById('dueDateInput').value : null;
+    const priority = document.getElementById('prioritySelect') ? document.getElementById('prioritySelect').value : null;
+    
+    console.log('Gefundene Werte:', {
+        estimatedTime,
+        category,
+        dueDate,
+        priority
+    });
+    
+    const updateData = {
+        estimated_time: parseFloat(estimatedTime),
+        category: category
+    };
+    
+    if (dueDate) {
+        updateData.due_date = dueDate;
+    }
+    
+    if (priority) {
+        updateData.priority = priority;
+    }
+    
+    console.log('Update-Daten:', updateData);
+    
+    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+    })
+    .then(response => {
+        console.log('Response Status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response Data:', data);
+        if (data.success) {
+            if (typeof showToast !== 'undefined') {
+                showToast('Änderungen erfolgreich gespeichert', 'success');
+            } else {
+                alert('Änderungen erfolgreich gespeichert');
+            }
+        } else {
+            if (typeof showToast !== 'undefined') {
+                showToast('Fehler beim Speichern: ' + data.message, 'error');
+            } else {
+                alert('Fehler beim Speichern: ' + data.message);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        if (typeof showToast !== 'undefined') {
+            showToast('Ein Fehler ist aufgetreten beim Speichern.', 'error');
+        } else {
+            alert('Ein Fehler ist aufgetreten beim Speichern.');
+        }
+    });
+}
+
+// Debug: Prüfe ob Funktionen verfügbar sind
+console.log('updateTicketStatus verfügbar:', typeof updateTicketStatus);
+console.log('updateTicketAssignment verfügbar:', typeof updateTicketAssignment);
+console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <!-- Zurück Button -->
@@ -288,119 +427,6 @@ document.getElementById('messageForm').addEventListener('submit', function(e) {
         alert('Ein Fehler ist aufgetreten');
     });
 });
-
-function updateTicketStatus(newStatus) {
-    fetch(`/tickets/{{ ticket.id }}/update-status`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            status: newStatus
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Optional: Seite neu laden oder UI aktualisieren
-            window.location.reload();
-        } else {
-            alert('Fehler beim Aktualisieren des Status: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten beim Aktualisieren des Status.');
-    });
-}
-
-
-
-
-
-function updateTicketAssignment(newAssignment) {
-    fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            assigned_to: newAssignment
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Zuweisung erfolgreich aktualisiert');
-        } else {
-            showToast('error', 'Fehler beim Aktualisieren der Zuweisung: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
-    });
-}
-
-
-
-function saveTicketChanges() {
-    console.log('saveTicketChanges aufgerufen');
-    
-    const estimatedTime = document.getElementById('estimatedTimeInput').value;
-    const category = document.getElementById('categoryInput').value;
-    const dueDate = document.getElementById('dueDateInput') ? document.getElementById('dueDateInput').value : null;
-    const priority = document.getElementById('prioritySelect') ? document.getElementById('prioritySelect').value : null;
-    
-    console.log('Gefundene Werte:', {
-        estimatedTime,
-        category,
-        dueDate,
-        priority
-    });
-    
-    const updateData = {
-        estimated_time: parseFloat(estimatedTime),
-        category: category
-    };
-    
-    if (dueDate) {
-        updateData.due_date = dueDate;
-    }
-    
-    if (priority) {
-        updateData.priority = priority;
-    }
-    
-    console.log('Update-Daten:', updateData);
-    
-    fetch(`/tickets/{{ ticket.id }}/update-ticket`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updateData)
-    })
-    .then(response => {
-        console.log('Response Status:', response.status);
-        return response.json();
-    })
-    .then(data => {
-        console.log('Response Data:', data);
-        if (data.success) {
-            showToast('success', 'Änderungen wurden gespeichert');
-            console.log('Update erfolgreich');
-        } else {
-            showToast('error', 'Fehler beim Speichern: ' + data.message);
-            console.error('Update fehlgeschlagen:', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        showToast('error', 'Ein Fehler ist aufgetreten beim Speichern.');
-    });
-}
-
 
 
 function showToast(type, message) {

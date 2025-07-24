@@ -103,12 +103,17 @@ class TicketService:
             
             # Offene Tickets (nicht zugewiesene, offene Tickets)
             open_query = {
-                '$or': [
-                    {'assigned_to': None},
-                    {'assigned_to': ''}
-                ],
-                'status': 'offen',
-                'deleted': {'$ne': True}
+                '$and': [
+                    {
+                        '$or': [
+                            {'assigned_to': None},
+                            {'assigned_to': ''},
+                            {'assigned_to': {'$exists': False}}
+                        ]
+                    },
+                    {'status': 'offen'},
+                    {'deleted': {'$ne': True}}
+                ]
             }
             print(f"DEBUG: Offene Tickets Query: {open_query}")
             open_tickets = mongodb.find('tickets', open_query)
@@ -446,12 +451,17 @@ class TicketService:
         """
         try:
             count = mongodb.count_documents('tickets', {
-                '$or': [
-                    {'assigned_to': None},
-                    {'assigned_to': ''}
-                ],
-                'status': 'offen',
-                'deleted': {'$ne': True}
+                '$and': [
+                    {
+                        '$or': [
+                            {'assigned_to': None},
+                            {'assigned_to': ''},
+                            {'assigned_to': {'$exists': False}}
+                        ]
+                    },
+                    {'status': 'offen'},
+                    {'deleted': {'$ne': True}}
+                ]
             })
             return count
             

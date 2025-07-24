@@ -105,6 +105,28 @@ echo -e "${BLUE}🚀 Starte Scandy-Service neu...${NC}"
 systemctl daemon-reload
 systemctl restart scandy
 
+# Korrigiere Berechtigungen für Static Files
+echo -e "${BLUE}🔧 Korrigiere Berechtigungen für Static Files...${NC}"
+if [ -d "/opt/scandy/app/static" ]; then
+    chmod -R 755 /opt/scandy/app/static/
+    chown -R scandy:scandy /opt/scandy/app/static/
+    echo -e "${GREEN}✅ Static Files Berechtigungen korrigiert${NC}"
+fi
+
+# Korrigiere Berechtigungen für Upload-Verzeichnis
+if [ -d "/opt/scandy/app/uploads" ]; then
+    chmod -R 755 /opt/scandy/app/uploads/
+    chown -R scandy:scandy /opt/scandy/app/uploads/
+    echo -e "${GREEN}✅ Upload-Verzeichnis Berechtigungen korrigiert${NC}"
+fi
+
+# Korrigiere Berechtigungen für Flask-Session
+if [ -d "/opt/scandy/app/flask_session" ]; then
+    chmod -R 755 /opt/scandy/app/flask_session/
+    chown -R scandy:scandy /opt/scandy/app/flask_session/
+    echo -e "${GREEN}✅ Flask-Session Berechtigungen korrigiert${NC}"
+fi
+
 # Warte auf Service-Start
 echo -e "${BLUE}⏳ Warte auf Service-Start...${NC}"
 sleep 5
