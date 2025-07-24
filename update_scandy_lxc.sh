@@ -127,6 +127,89 @@ if [ -d "/opt/scandy/app/flask_session" ]; then
     echo -e "${GREEN}✅ Flask-Session Berechtigungen korrigiert${NC}"
 fi
 
+# Erstelle Cron-Job für automatische Bereinigung (falls noch nicht vorhanden)
+echo -e "${BLUE}⏰ Prüfe Cron-Job für automatische Bereinigung...${NC}"
+
+# Erstelle das Cleanup-Skript falls nicht vorhanden
+if [ ! -f "/opt/scandy/cleanup_expired.sh" ]; then
+    echo -e "${BLUE}📝 Erstelle Cleanup-Skript...${NC}"
+    cat > /opt/scandy/cleanup_expired.sh << 'EOF'
+#!/bin/bash
+
+# Scandy Cleanup Script für abgelaufene Accounts und Jobs
+# Wird täglich um 2:00 Uhr ausgeführt
+
+# Farben für Logging
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging-Funktion
+log() {
+    echo -e "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> /opt/scandy/app/logs/cleanup.log
+    echo -e "$1"
+}
+
+# Prüfe ob wir im richtigen Verzeichnis sind
+if [ ! -f "/opt/scandy/cleanup_expired.py" ]; then
+    log "${RED}❌ ERROR: cleanup_expired.py nicht gefunden!${NC}"
+    exit 1
+fi
+
+# Prüfe ob Python verfügbar ist
+if ! command -v python3 &> /dev/null; then
+    log "${RED}❌ ERROR: Python3 ist nicht installiert!${NC}"
+    exit 1
+fi
+
+log "${BLUE}🔍 Starte automatische Bereinigung abgelaufener Accounts und Jobs...${NC}"
+
+# Wechsle ins Scandy-Verzeichnis
+cd /opt/scandy
+
+# Führe das Cleanup-Skript aus
+sudo -u scandy /opt/scandy/venv/bin/python cleanup_expired.py
+
+if [ $? -eq 0 ]; then
+    log "${GREEN}✅ Automatische Bereinigung erfolgreich abgeschlossen${NC}"
+else
+    log "${RED}❌ Fehler bei der automatischen Bereinigung${NC}"
+fi
+
+log "${BLUE}📋 Cleanup-Log: /opt/scandy/app/logs/cleanup.log${NC}"
+EOF
+
+    chmod +x /opt/scandy/cleanup_expired.sh
+    chown scandy:scandy /opt/scandy/cleanup_expired.sh
+    echo -e "${GREEN}✅ Cleanup-Skript erstellt${NC}"
+else
+    echo -e "${GREEN}✅ Cleanup-Skript existiert bereits${NC}"
+fi
+
+# Erstelle Cron-Job (täglich um 2:00 Uhr)
+CRON_JOB="0 2 * * * /opt/scandy/cleanup_expired.sh"
+
+# Prüfe ob Cron-Job bereits existiert
+if crontab -l 2>/dev/null | grep -q "cleanup_expired.sh"; then
+    echo -e "${GREEN}✅ Cron-Job für automatische Bereinigung existiert bereits${NC}"
+else
+    # Füge Cron-Job hinzu
+    (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Cron-Job für automatische Bereinigung eingerichtet${NC}"
+        echo -e "${BLUE}📅 Ausführung: Täglich um 2:00 Uhr${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Fehler beim Einrichten des Cron-Jobs (möglicherweise keine Berechtigung)${NC}"
+    fi
+fi
+
+# Erstelle Log-Verzeichnis falls nicht vorhanden
+mkdir -p /opt/scandy/app/logs
+chown -R scandy:scandy /opt/scandy/app/logs
+echo -e "${GREEN}✅ Log-Verzeichnis erstellt${NC}"
+
 # Warte auf Service-Start
 echo -e "${BLUE}⏳ Warte auf Service-Start...${NC}"
 sleep 5
