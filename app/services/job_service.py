@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.models.job import Job
 from app.utils.logger import loggers
 from bson import ObjectId
+from typing import Tuple
 
 class JobService:
     """Service für Job-Management"""
@@ -16,16 +17,36 @@ class JobService:
             # Basis-Filter für aktive Jobs (ohne is_public, da nicht alle Jobs dieses Feld haben)
             query = {'is_active': True}
             
+            # Filter für nicht abgelaufene Jobs
+            now = datetime.now()
+            query['$or'] = [
+                {'expires_at': {'$exists': False}},  # Jobs ohne Ablaufdatum
+                {'expires_at': None},  # Jobs mit None Ablaufdatum
+                {'expires_at': {'$gt': now}}  # Jobs die noch nicht abgelaufen sind
+            ]
+            
             # Zusätzliche Filter anwenden
             if filters:
                 if filters.get('search'):
                     search_term = filters['search']
-                    query['$or'] = [
-                        {'title': {'$regex': search_term, '$options': 'i'}},
-                        {'company': {'$regex': search_term, '$options': 'i'}},
-                        {'description': {'$regex': search_term, '$options': 'i'}},
-                        {'location': {'$regex': search_term, '$options': 'i'}}
-                    ]
+                    # Erweitere $or um Suchbegriffe
+                    if '$or' in query:
+                        query['$and'] = [
+                            {'$or': query['$or']},
+                            {'$or': [
+                                {'title': {'$regex': search_term, '$options': 'i'}},
+                                {'company': {'$regex': search_term, '$options': 'i'}},
+                                {'description': {'$regex': search_term, '$options': 'i'}},
+                                {'location': {'$regex': search_term, '$options': 'i'}}
+                            ]}
+                        ]
+                        del query['$or']
+                    else:
+                        query['$or'] = [
+                            {'title': {'$regex': search_term, '$options': 'i'}},
+                            {'company': {'$regex': search_term, '$options': 'i'}},
+                            {'description': {'$regex': search_term, '$options': 'i'}}
+                        ]
                 
                 if filters.get('industry'):
                     query['industry'] = filters['industry']
@@ -46,19 +67,17 @@ class JobService:
             # Jobs in Job-Objekte konvertieren
             jobs = []
             for job_data in jobs_data:
-                job = Job()
-                job.__dict__.update(job_data)
+                job = Job(job_data)
                 jobs.append(job)
             
             total_pages = (total_count + per_page - 1) // per_page
-            
-            loggers['user_actions'].info(f"Jobs abgerufen: {len(jobs)} von {total_count} (Seite {page}/{total_pages})")
             
             return {
                 'jobs': jobs,
                 'total_count': total_count,
                 'total_pages': total_pages,
-                'current_page': page
+                'current_page': page,
+                'per_page': per_page
             }
             
         except Exception as e:
@@ -67,22 +86,27 @@ class JobService:
                 'jobs': [],
                 'total_count': 0,
                 'total_pages': 0,
-                'current_page': page
+                'current_page': page,
+                'per_page': per_page
             }
     
     @staticmethod
     def get_job_by_id(job_id):
-        """Job anhand ID abrufen"""
+        """Holt einen Job anhand der ID"""
         try:
-            loggers['user_actions'].info(f"JobService.get_job_by_id aufgerufen mit ID: {job_id}")
-            job = Job.find_by_id(job_id)
-            if job:
-                loggers['user_actions'].info(f"Job gefunden: {job.title}")
-                # Views erhöhen
-                job.views += 1
-                job.save()
-                return job
-            loggers['errors'].error(f"Job nicht gefunden für ID: {job_id}")
+            from app.models.mongodb_database import get_mongodb
+            mongodb = get_mongodb()
+            
+            # Versuche ObjectId-Konvertierung
+            try:
+                obj_id = ObjectId(job_id)
+                job_data = mongodb.find_one('jobs', {'_id': obj_id})
+            except:
+                # Falls ObjectId-Konvertierung fehlschlägt, suche nach job_number
+                job_data = mongodb.find_one('jobs', {'job_number': int(job_id) if job_id.isdigit() else job_id})
+            
+            if job_data:
+                return Job(job_data)
             return None
             
         except Exception as e:
@@ -104,6 +128,17 @@ class JobService:
             for job in all_jobs:
                 if 'job_number' in job and job['job_number'] >= next_job_number:
                     next_job_number = job['job_number'] + 1
+            
+            # Ablaufdatum verarbeiten
+            expires_at = None
+            if data.get('expires_at'):
+                try:
+                    if isinstance(data['expires_at'], str):
+                        expires_at = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
+                    else:
+                        expires_at = data['expires_at']
+                except Exception as e:
+                    loggers['errors'].warning(f"Ungültiges Ablaufdatum für Job: {e}")
             
             # Job-Daten vorbereiten
             job_data = {
@@ -127,7 +162,8 @@ class JobService:
                 'is_active': True,
                 'is_public': True,
                 'views': 0,
-                'applications': 0
+                'applications': 0,
+                'expires_at': expires_at
             }
             
             # Job in DB einfügen
@@ -168,6 +204,17 @@ class JobService:
                 loggers['errors'].error(f"Keine Berechtigung zum Bearbeiten des Jobs {job_id} von {user.username}")
                 return None
             
+            # Ablaufdatum verarbeiten
+            expires_at = None
+            if data.get('expires_at'):
+                try:
+                    if isinstance(data['expires_at'], str):
+                        expires_at = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
+                    else:
+                        expires_at = data['expires_at']
+                except Exception as e:
+                    loggers['errors'].warning(f"Ungültiges Ablaufdatum für Job {job_id}: {e}")
+            
             # Update-Daten vorbereiten
             update_data = {
                 'title': data['title'],
@@ -182,6 +229,7 @@ class JobService:
                 'contact_email': data.get('contact_email', ''),
                 'contact_phone': data.get('contact_phone', ''),
                 'application_url': data.get('application_url', ''),
+                'expires_at': expires_at,
                 'updated_at': datetime.now()
             }
             
@@ -236,6 +284,22 @@ class JobService:
             total_jobs = mongodb.count_documents('jobs', {'is_active': True})
             active_jobs = mongodb.count_documents('jobs', {'is_active': True, 'is_public': True})
             
+            # Abgelaufene Jobs
+            now = datetime.now()
+            expired_jobs = mongodb.count_documents('jobs', {
+                'expires_at': {'$exists': True, '$ne': None, '$lt': now}
+            })
+            
+            # Jobs die bald ablaufen (in den nächsten 30 Tagen)
+            soon_expiring = mongodb.count_documents('jobs', {
+                'expires_at': {
+                    '$exists': True,
+                    '$ne': None,
+                    '$gt': now,
+                    '$lt': now + timedelta(days=30)
+                }
+            })
+            
             # Views und Bewerbungen summieren
             pipeline = [
                 {'$match': {'is_active': True}},
@@ -262,6 +326,8 @@ class JobService:
             return {
                 'total_jobs': total_jobs,
                 'active_jobs': active_jobs,
+                'expired_jobs': expired_jobs,
+                'soon_expiring': soon_expiring,
                 'total_views': total_views,
                 'total_applications': total_applications,
                 'top_industries': top_industries
@@ -272,10 +338,12 @@ class JobService:
             return {
                 'total_jobs': 0,
                 'active_jobs': 0,
+                'expired_jobs': 0,
+                'soon_expiring': 0,
                 'total_views': 0,
                 'total_applications': 0,
                 'top_industries': []
-            } 
+            }
 
     @staticmethod
     def get_jobs(filters=None, page=1, per_page=12):
@@ -309,20 +377,23 @@ class JobService:
             skip = (page - 1) * per_page
             
             jobs_data = mongodb.find('jobs', query, skip=skip, limit=per_page, sort=[('created_at', -1)])
+            
+            # Jobs in Job-Objekte konvertieren
+            jobs = []
+            for job_data in jobs_data:
+                job = Job(job_data)
+                jobs.append(job)
+            
+            # Gesamtanzahl für Pagination
             total_count = mongodb.count_documents('jobs', query)
-            
-            # MongoDB-Daten direkt zurückgeben
-            jobs = list(jobs_data)
-            
             total_pages = (total_count + per_page - 1) // per_page
-            
-            loggers['user_actions'].info(f"Jobs abgerufen: {len(jobs)} von {total_count} (Seite {page}/{total_pages})")
             
             return {
                 'jobs': jobs,
                 'total_count': total_count,
                 'total_pages': total_pages,
-                'current_page': page
+                'current_page': page,
+                'per_page': per_page
             }
             
         except Exception as e:
@@ -331,5 +402,50 @@ class JobService:
                 'jobs': [],
                 'total_count': 0,
                 'total_pages': 0,
-                'current_page': page
-            } 
+                'current_page': page,
+                'per_page': per_page
+            }
+
+    @staticmethod
+    def cleanup_expired_jobs() -> Tuple[int, str]:
+        """
+        Bereinigt abgelaufene Jobs
+        
+        Returns:
+            (anzahl_gelöscht, message)
+        """
+        try:
+            from app.models.mongodb_database import get_mongodb
+            mongodb = get_mongodb()
+            
+            now = datetime.now()
+            
+            # Finde abgelaufene Jobs
+            expired_jobs = list(mongodb.find('jobs', {
+                'expires_at': {
+                    '$exists': True,
+                    '$ne': None,
+                    '$lt': now
+                }
+            }))
+            
+            if not expired_jobs:
+                return 0, "Keine abgelaufenen Jobs gefunden"
+            
+            # Lösche abgelaufene Jobs
+            deleted_count = 0
+            for job in expired_jobs:
+                try:
+                    mongodb.delete_one('jobs', {'_id': job['_id']})
+                    deleted_count += 1
+                    loggers['user_actions'].info(f"Abgelaufener Job gelöscht: {job.get('title', 'Unknown')} (ID: {job['_id']})")
+                except Exception as e:
+                    loggers['errors'].error(f"Fehler beim Löschen des abgelaufenen Jobs {job['_id']}: {e}")
+            
+            message = f"{deleted_count} abgelaufene Jobs wurden gelöscht"
+            loggers['user_actions'].info(message)
+            return deleted_count, message
+            
+        except Exception as e:
+            loggers['errors'].error(f"Fehler bei der Bereinigung abgelaufener Jobs: {str(e)}")
+            return 0, f"Fehler bei der Bereinigung: {str(e)}" 

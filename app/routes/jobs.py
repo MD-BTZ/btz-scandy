@@ -110,7 +110,8 @@ def create_job():
                 'salary_range': request.form.get('salary_range', '').strip(),
                 'contact_email': request.form.get('contact_email', '').strip(),
                 'contact_phone': request.form.get('contact_phone', '').strip(),
-                'application_url': request.form.get('application_url', '').strip()
+                'application_url': request.form.get('application_url', '').strip(),
+                'expires_at': request.form.get('expires_at', '').strip()
             }
             
             # Validierung
@@ -143,7 +144,8 @@ def create_job():
         'salary_range': '',
         'contact_email': '',
         'contact_phone': '',
-        'application_url': ''
+        'application_url': '',
+        'expires_at': ''
     }
     
     return render_template('jobs/create.html', data=data)
@@ -197,7 +199,8 @@ def edit_job(job_id):
                 'salary_range': request.form.get('salary_range', '').strip(),
                 'contact_email': request.form.get('contact_email', '').strip(),
                 'contact_phone': request.form.get('contact_phone', '').strip(),
-                'application_url': request.form.get('application_url', '').strip()
+                'application_url': request.form.get('application_url', '').strip(),
+                'expires_at': request.form.get('expires_at', '').strip()
             }
             
             # Validierung

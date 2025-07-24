@@ -2,6 +2,7 @@
 User-Modell für Flask-Login Integration mit MongoDB
 """
 from flask_login import UserMixin
+from datetime import datetime
 
 class User(UserMixin):
     """User-Klasse für Flask-Login Integration"""
@@ -18,6 +19,14 @@ class User(UserMixin):
             self.is_teilnehmer = user_data.get('role', 'anwender') == 'teilnehmer'
             # Speichere is_active als normales Attribut
             self._active = user_data.get('is_active', True)
+            
+            # Ablaufdatum-Funktionalität
+            self.expires_at = user_data.get('expires_at')
+            if self.expires_at and isinstance(self.expires_at, str):
+                try:
+                    self.expires_at = datetime.fromisoformat(self.expires_at.replace('Z', '+00:00'))
+                except:
+                    self.expires_at = None
             
             # Wochenbericht-Feature: Prüfe ob Feld existiert, sonst setze Standard
             if 'timesheet_enabled' in user_data:
@@ -40,6 +49,7 @@ class User(UserMixin):
             self.is_mitarbeiter = False
             self.is_teilnehmer = False
             self._active = True
+            self.expires_at = None
             self.timesheet_enabled = False
     
     def get_id(self):
@@ -53,7 +63,25 @@ class User(UserMixin):
     
     @property
     def is_active(self):
+        # Prüfe Ablaufdatum
+        if self.expires_at and datetime.now() > self.expires_at:
+            return False
         return self._active
+    
+    @property
+    def is_expired(self):
+        """Prüft ob der Account abgelaufen ist"""
+        if not self.expires_at:
+            return False
+        return datetime.now() > self.expires_at
+    
+    @property
+    def days_until_expiry(self):
+        """Gibt die Anzahl der Tage bis zum Ablauf zurück"""
+        if not self.expires_at:
+            return None
+        delta = self.expires_at - datetime.now()
+        return delta.days
     
     def _save_timesheet_enabled(self, user_id, enabled):
         """Speichert das timesheet_enabled Feld in der Datenbank"""

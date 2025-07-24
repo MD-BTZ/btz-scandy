@@ -6,7 +6,7 @@ die aus der großen admin.py Datei ausgelagert wurden.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.models.mongodb_database import mongodb
@@ -29,6 +29,11 @@ class AdminUserService:
             for user in users:
                 if '_id' in user:
                     user['_id'] = str(user['_id'])
+                
+                # Konvertiere expires_at zu String falls vorhanden
+                if 'expires_at' in user and user['expires_at']:
+                    if isinstance(user['expires_at'], datetime):
+                        user['expires_at'] = user['expires_at'].isoformat()
             
             return users
             
@@ -43,6 +48,12 @@ class AdminUserService:
             user = find_user_by_id(user_id)
             if user and '_id' in user:
                 user['_id'] = str(user['_id'])
+                
+                # Konvertiere expires_at zu String falls vorhanden
+                if 'expires_at' in user and user['expires_at']:
+                    if isinstance(user['expires_at'], datetime):
+                        user['expires_at'] = user['expires_at'].isoformat()
+                        
             return user
             
         except Exception as e:
@@ -81,6 +92,17 @@ class AdminUserService:
             # Passwort hashen
             password_hash = generate_password_hash(password)
             
+            # Ablaufdatum verarbeiten
+            expires_at = None
+            if user_data.get('expires_at'):
+                try:
+                    if isinstance(user_data['expires_at'], str):
+                        expires_at = datetime.fromisoformat(user_data['expires_at'].replace('Z', '+00:00'))
+                    else:
+                        expires_at = user_data['expires_at']
+                except Exception as e:
+                    logger.warning(f"Ungültiges Ablaufdatum für {user_data['username']}: {e}")
+            
             # Benutzer erstellen
             new_user = {
                 'username': user_data['username'],
@@ -92,6 +114,7 @@ class AdminUserService:
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
                 'department': user_data.get('department', ''),
+                'expires_at': expires_at,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
@@ -142,6 +165,19 @@ class AdminUserService:
                 if field in user_data:
                     update_data[field] = user_data[field]
             
+            # Ablaufdatum verarbeiten
+            if 'expires_at' in user_data:
+                expires_at = None
+                if user_data['expires_at']:
+                    try:
+                        if isinstance(user_data['expires_at'], str):
+                            expires_at = datetime.fromisoformat(user_data['expires_at'].replace('Z', '+00:00'))
+                        else:
+                            expires_at = user_data['expires_at']
+                    except Exception as e:
+                        logger.warning(f"Ungültiges Ablaufdatum für User {user_id}: {e}")
+                update_data['expires_at'] = expires_at
+            
             # Passwort aktualisieren falls angegeben
             if 'password' in user_data and user_data['password']:
                 update_data['password_hash'] = generate_password_hash(user_data['password'])
@@ -176,7 +212,7 @@ class AdminUserService:
     @staticmethod
     def delete_user(user_id: str) -> Tuple[bool, str]:
         """
-        Löscht einen Benutzer
+        Löscht einen Benutzer (soft delete)
         
         Args:
             user_id: ID des zu löschenden Benutzers
@@ -190,17 +226,20 @@ class AdminUserService:
             if not user:
                 return False, "Benutzer nicht gefunden"
             
-            # Prüfe ob es der letzte Admin ist
+            # Admin-Benutzer können nicht gelöscht werden
             if user.get('role') == 'admin':
-                admin_count = mongodb.count_documents('users', {'role': 'admin', 'is_active': True})
-                if admin_count <= 1:
-                    return False, "Der letzte Admin kann nicht gelöscht werden"
+                return False, "Admin-Benutzer können nicht gelöscht werden"
             
-            # Benutzer löschen
-            mongodb.delete_one('users', {'_id': user_id})
+            # Benutzer deaktivieren statt löschen
+            mongodb.update_one('users', {'_id': user_id}, {
+                '$set': {
+                    'is_active': False,
+                    'updated_at': datetime.now()
+                }
+            })
             
-            logger.info(f"Benutzer gelöscht: {user.get('username', 'Unknown')} (ID: {user_id})")
-            return True, f"Benutzer '{user.get('username', 'Unknown')}' erfolgreich gelöscht"
+            logger.info(f"Benutzer deaktiviert: {user.get('username', 'Unknown')} (ID: {user_id})")
+            return True, f"Benutzer '{user.get('username', 'Unknown')}' erfolgreich deaktiviert"
             
         except Exception as e:
             logger.error(f"Fehler beim Löschen des Benutzers {user_id}: {str(e)}")
@@ -235,11 +274,11 @@ class AdminUserService:
                 }
             })
             
-            logger.info(f"Passwort zurückgesetzt für Benutzer: {user.get('username', 'Unknown')} (ID: {user_id})")
+            logger.info(f"Passwort zurückgesetzt für: {user.get('username', 'Unknown')} (ID: {user_id})")
             return True, f"Passwort für '{user.get('username', 'Unknown')}' erfolgreich zurückgesetzt"
             
         except Exception as e:
-            logger.error(f"Fehler beim Zurücksetzen des Passworts für Benutzer {user_id}: {str(e)}")
+            logger.error(f"Fehler beim Zurücksetzen des Passworts für {user_id}: {str(e)}")
             return False, f"Fehler beim Zurücksetzen des Passworts: {str(e)}"
 
     @staticmethod
@@ -249,35 +288,87 @@ class AdminUserService:
             # Gesamtanzahl Benutzer
             total_users = mongodb.count_documents('users', {})
             
-            # Benutzer nach Rollen
-            role_stats = {}
-            roles = ['admin', 'mitarbeiter', 'teilnehmer', 'anwender']
-            
-            for role in roles:
-                count = mongodb.count_documents('users', {'role': role})
-                role_stats[role] = count
-            
-            # Aktive vs. inaktive Benutzer
+            # Aktive Benutzer
             active_users = mongodb.count_documents('users', {'is_active': True})
-            inactive_users = mongodb.count_documents('users', {'is_active': False})
             
-            # Benutzer mit aktiviertem Wochenbericht
-            timesheet_enabled = mongodb.count_documents('users', {'timesheet_enabled': True})
+            # Benutzer nach Rollen
+            role_stats = list(mongodb.aggregate('users', [
+                {'$group': {'_id': '$role', 'count': {'$sum': 1}}},
+                {'$sort': {'count': -1}}
+            ]))
+            
+            # Abgelaufene Benutzer
+            now = datetime.now()
+            expired_users = mongodb.count_documents('users', {
+                'expires_at': {'$exists': True, '$ne': None, '$lt': now}
+            })
+            
+            # Benutzer die bald ablaufen (in den nächsten 30 Tagen)
+            soon_expiring = mongodb.count_documents('users', {
+                'expires_at': {
+                    '$exists': True,
+                    '$ne': None,
+                    '$gt': now,
+                    '$lt': now + timedelta(days=30)
+                }
+            })
             
             return {
                 'total_users': total_users,
-                'role_stats': role_stats,
                 'active_users': active_users,
-                'inactive_users': inactive_users,
-                'timesheet_enabled': timesheet_enabled
+                'role_stats': role_stats,
+                'expired_users': expired_users,
+                'soon_expiring': soon_expiring
             }
             
         except Exception as e:
-            logger.error(f"Fehler beim Laden der Benutzer-Statistiken: {str(e)}")
+            logger.error(f"Fehler beim Abrufen der Benutzer-Statistiken: {str(e)}")
             return {
                 'total_users': 0,
-                'role_stats': {},
                 'active_users': 0,
-                'inactive_users': 0,
-                'timesheet_enabled': 0
-            } 
+                'role_stats': [],
+                'expired_users': 0,
+                'soon_expiring': 0
+            }
+
+    @staticmethod
+    def cleanup_expired_users() -> Tuple[int, str]:
+        """
+        Bereinigt abgelaufene Benutzerkonten
+        
+        Returns:
+            (anzahl_gelöscht, message)
+        """
+        try:
+            now = datetime.now()
+            
+            # Finde abgelaufene Benutzer
+            expired_users = list(mongodb.find('users', {
+                'expires_at': {
+                    '$exists': True,
+                    '$ne': None,
+                    '$lt': now
+                },
+                'role': {'$ne': 'admin'}  # Admin-Accounts nicht löschen
+            }))
+            
+            if not expired_users:
+                return 0, "Keine abgelaufenen Benutzer gefunden"
+            
+            # Lösche abgelaufene Benutzer
+            deleted_count = 0
+            for user in expired_users:
+                try:
+                    mongodb.delete_one('users', {'_id': user['_id']})
+                    deleted_count += 1
+                    logger.info(f"Abgelaufener Benutzer gelöscht: {user.get('username', 'Unknown')} (ID: {user['_id']})")
+                except Exception as e:
+                    logger.error(f"Fehler beim Löschen des abgelaufenen Benutzers {user['_id']}: {e}")
+            
+            message = f"{deleted_count} abgelaufene Benutzerkonten wurden gelöscht"
+            logger.info(message)
+            return deleted_count, message
+            
+        except Exception as e:
+            logger.error(f"Fehler bei der Bereinigung abgelaufener Benutzer: {str(e)}")
+            return 0, f"Fehler bei der Bereinigung: {str(e)}" 

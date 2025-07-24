@@ -38,6 +38,7 @@ from app.services.admin_notification_service import AdminNotificationService
 from app.services.admin_ticket_service import AdminTicketService
 from app.services.admin_debug_service import AdminDebugService
 from app.services.admin_system_settings_service import AdminSystemSettingsService
+from app.services.cleanup_service import CleanupService
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
 # Logger einrichten
@@ -1574,7 +1575,8 @@ def add_user():
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
-            'is_active': True
+            'is_active': True,
+            'expires_at': processed_data.get('expires_at', '')
         }
         
         # Passwort nur hinzufügen falls angegeben
@@ -1667,7 +1669,8 @@ def edit_user(user_id):
             'email': processed_data['email'] if processed_data['email'] else '',
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
-            'timesheet_enabled': processed_data['timesheet_enabled']
+            'timesheet_enabled': processed_data['timesheet_enabled'],
+            'expires_at': processed_data.get('expires_at', '')
         }
         
         # Passwort hinzufügen falls angegeben
@@ -3462,6 +3465,75 @@ def delete_user(user_id):
 def user_form():
     """Benutzer-Formular (für neue Benutzer)"""
     return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+
+# ===== ABLAUFDATUM-VERWALTUNG =====
+
+@bp.route('/expiry_management')
+@admin_required
+def expiry_management():
+    """Ablaufdatum-Verwaltung"""
+    try:
+        # Statistiken abrufen
+        stats = CleanupService.get_expiry_statistics()
+        warnings = CleanupService.get_expiry_warnings()
+        
+        return render_template('admin/expiry_management.html', 
+                             stats=stats, 
+                             warnings=warnings)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Ablaufdatum-Verwaltung: {e}")
+        flash('Fehler beim Laden der Ablaufdatum-Verwaltung', 'error')
+        return render_template('admin/expiry_management.html', 
+                             stats={}, 
+                             warnings={})
+
+@bp.route('/cleanup_expired')
+@admin_required
+def cleanup_expired():
+    """Automatische Bereinigung abgelaufener Daten"""
+    try:
+        results = CleanupService.cleanup_all()
+        
+        if 'error' in results:
+            flash(f'Fehler bei der Bereinigung: {results["error"]}', 'error')
+        else:
+            user_count = results['users']['deleted_count']
+            job_count = results['jobs']['deleted_count']
+            total_count = results['total']['deleted_count']
+            
+            if total_count > 0:
+                flash(f'Bereinigung erfolgreich: {user_count} Benutzer und {job_count} Jobs gelöscht', 'success')
+            else:
+                flash('Keine abgelaufenen Daten gefunden', 'info')
+        
+        return redirect(url_for('admin.expiry_management'))
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Bereinigung: {e}")
+        flash('Fehler bei der Bereinigung', 'error')
+        return redirect(url_for('admin.expiry_management'))
+
+@bp.route('/api/expiry_warnings')
+@admin_required
+def api_expiry_warnings():
+    """API für Ablaufwarnungen"""
+    try:
+        warnings = CleanupService.get_expiry_warnings()
+        return jsonify(warnings)
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Ablaufwarnungen: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/expiry_statistics')
+@admin_required
+def api_expiry_statistics():
+    """API für Ablauf-Statistiken"""
+    try:
+        stats = CleanupService.get_expiry_statistics()
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Ablauf-Statistiken: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/export_all_data')
 @admin_required
