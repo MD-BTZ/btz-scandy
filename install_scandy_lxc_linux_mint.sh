@@ -33,7 +33,9 @@ log "Linux Mint Version erkannt: $MINT_VERSION"
 # Bestimme den entsprechenden Ubuntu-Codename für MongoDB
 case $MINT_VERSION in
     "22.1"|"22.2"|"22.3")
-        UBUNTU_CODENAME="noble"
+        # Linux Mint 22.x verwendet Ubuntu 22.04 (jammy) Repository, da noble noch nicht existiert
+        UBUNTU_CODENAME="jammy"
+        log "${YELLOW}Hinweis: Linux Mint 22.x verwendet Ubuntu 22.04 (jammy) Repository${NC}"
         ;;
     "21.3"|"21.2"|"21.1")
         UBUNTU_CODENAME="jammy"
@@ -46,8 +48,8 @@ case $MINT_VERSION in
         ;;
     *)
         # Fallback für neuere Versionen
-        UBUNTU_CODENAME="noble"
-        log "${YELLOW}Warnung: Unbekannte Linux Mint Version, verwende noble als Fallback${NC}"
+        UBUNTU_CODENAME="jammy"
+        log "${YELLOW}Warnung: Unbekannte Linux Mint Version, verwende jammy als Fallback${NC}"
         ;;
 esac
 

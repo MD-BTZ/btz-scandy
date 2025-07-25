@@ -106,6 +106,15 @@ chmod +x fix_permissions.sh
 sudo ./fix_permissions.sh
 ```
 
+### 3. Manuelle MongoDB-Installation
+
+Falls das automatische Script weiterhin Probleme hat:
+
+```bash
+chmod +x manual_mongodb_install.sh
+sudo ./manual_mongodb_install.sh
+```
+
 ### 2. Häufige Probleme und Lösungen
 
 #### Problem: MongoDB startet nicht
@@ -135,8 +144,8 @@ sudo kill -9 [PID]
 # GPG-Key neu hinzufügen
 curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
 
-# Repository neu hinzufügen (für Linux Mint 22.x)
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+# Repository neu hinzufügen (für Linux Mint 22.x - verwendet jammy)
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 
 # System aktualisieren
 sudo apt update
@@ -152,6 +161,17 @@ sudo mkdir -p /tmp/mongodb-download
 cd /tmp/mongodb-download
 sudo curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o server-7.0.asc
 sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg server-7.0.asc
+```
+
+#### Problem: GPG-Import-Fehler
+```bash
+# Manuelle MongoDB-Installation
+sudo ./manual_mongodb_install.sh
+
+# Oder manueller GPG-Import
+sudo rm -f /usr/share/keyrings/mongodb-server-7.0.gpg
+sudo curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+sudo chmod 644 /usr/share/keyrings/mongodb-server-7.0.gpg
 ```
 
 #### Problem: Python-Abhängigkeiten
