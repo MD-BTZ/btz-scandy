@@ -81,7 +81,22 @@ fi
 
 # Nur ausführen, wenn die Datei existiert
 if [ -f "$TEMP_DIR/server-7.0.asc" ]; then
-    gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg "$TEMP_DIR/server-7.0.asc"
+    # GPG-Key mit sudo importieren
+    if gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg "$TEMP_DIR/server-7.0.asc" 2>/dev/null; then
+        log "MongoDB GPG-Key erfolgreich importiert"
+    else
+        log "${YELLOW}Warnung: GPG-Import fehlgeschlagen, versuche alternative Methode...${NC}"
+        # Alternative: Direkt mit curl und gpg
+        if curl -fsSL https://pgp.mongodb.com/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg 2>/dev/null; then
+            log "MongoDB GPG-Key erfolgreich importiert (alternative Methode)"
+        else
+            log "${RED}Fehler: GPG-Key konnte nicht importiert werden${NC}"
+            log "Versuche manuelle Methode..."
+            # Manuelle Methode
+            rm -f /usr/share/keyrings/mongodb-server-7.0.gpg
+            curl -fsSL https://pgp.mongodb.com/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+        fi
+    fi
     rm -rf "$TEMP_DIR"
 fi
 

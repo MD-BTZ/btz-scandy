@@ -99,6 +99,16 @@ else
     fi
 fi
 
+# 8. GPG-Berechtigungen korrigieren
+log "Korrigiere GPG-Berechtigungen..."
+if [ -f "/usr/share/keyrings/mongodb-server-7.0.gpg" ]; then
+    chmod 644 /usr/share/keyrings/mongodb-server-7.0.gpg
+    chown root:root /usr/share/keyrings/mongodb-server-7.0.gpg
+    echo -e "${GREEN}✅ GPG-Key Berechtigungen korrigiert${NC}"
+else
+    echo -e "${YELLOW}⚠️  GPG-Key nicht gefunden, wird beim Download erstellt${NC}"
+fi
+
 # 8. System-Informationen anzeigen
 log "System-Informationen..."
 echo -e "${BLUE}=== System-Info ===${NC}"
