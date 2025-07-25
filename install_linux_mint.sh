@@ -38,8 +38,17 @@ check_root() {
     fi
 }
 
-# Prüfe Linux Mint
-check_linux_mint() {
+# Prüfe Betriebssystem
+check_operating_system() {
+    # Prüfe ob wir auf Windows sind
+    if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        print_error "Dieses Skript ist für Linux Mint entwickelt!"
+        print_error "Es kann nicht auf Windows ausgeführt werden."
+        print_warning "Bitte führen Sie das Skript auf einem Linux Mint System aus."
+        exit 1
+    fi
+    
+    # Prüfe Linux Mint
     if ! grep -q "Linux Mint" /etc/os-release; then
         print_warning "Dieses Skript wurde für Linux Mint entwickelt."
         print_warning "Es könnte auch auf anderen Ubuntu-basierten Systemen funktionieren."
@@ -153,13 +162,39 @@ create_directories() {
     # Erstelle Session-Verzeichnis
     mkdir -p app/flask_session
     
-    # Setze Berechtigungen
-    chmod 755 app/uploads
-    chmod 755 app/static/uploads
-    chmod 755 backups
-    chmod 755 logs
-    chmod 755 app/logs
-    chmod 755 app/flask_session
+    # Prüfe ob Verzeichnisse erfolgreich erstellt wurden
+    if [ ! -d "app/uploads" ] || [ ! -d "app/static/uploads" ] || [ ! -d "backups" ] || [ ! -d "logs" ] || [ ! -d "app/logs" ] || [ ! -d "app/flask_session" ]; then
+        print_error "Fehler beim Erstellen der Verzeichnisse!"
+        print_status "Prüfen Sie die Berechtigungen im aktuellen Verzeichnis."
+        exit 1
+    fi
+    
+    # Setze Berechtigungen (nur auf Unix-Systemen)
+    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
+        print_status "Setze Verzeichnis-Berechtigungen..."
+        
+        # Funktion zum sicheren Setzen von Berechtigungen
+        set_permissions() {
+            local dir="$1"
+            if [ -d "$dir" ]; then
+                if chmod 755 "$dir" 2>/dev/null; then
+                    print_success "Berechtigungen für $dir gesetzt"
+                else
+                    print_warning "Konnte Berechtigungen für $dir nicht setzen (möglicherweise fehlende Rechte)"
+                fi
+            else
+                print_warning "Verzeichnis $dir existiert nicht"
+            fi
+        }
+        
+        # Setze Berechtigungen für alle Verzeichnisse
+        set_permissions "app/uploads"
+        set_permissions "app/static/uploads"
+        set_permissions "backups"
+        set_permissions "logs"
+        set_permissions "app/logs"
+        set_permissions "app/flask_session"
+    fi
     
     print_success "Verzeichnisse erstellt"
 }
@@ -440,7 +475,7 @@ main() {
     
     # Prüfungen
     check_root
-    check_linux_mint
+    check_operating_system
     
     # Installation
     update_system
