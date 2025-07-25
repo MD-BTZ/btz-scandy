@@ -1,14 +1,12 @@
-# Scandy Installation auf Linux Mint
+# Scandy Linux Mint Installation (ohne Docker)
 
-## Übersicht
-
-Diese Anleitung hilft Ihnen bei der Installation von Scandy auf Linux Mint. Das ursprüngliche `install_scandy_lxc.sh` Script hat Probleme mit der MongoDB-Installation auf Linux Mint, die hier behoben werden.
+Diese Anleitung beschreibt die Installation von Scandy auf einem Linux Mint System ohne Docker oder Containerisierung.
 
 ## Voraussetzungen
 
-- Linux Mint 19.x, 20.x oder 21.x
+- Linux Mint 20.x oder neuer
 - Internetverbindung
-- Root-Rechte (sudo)
+- Sudo-Rechte für den Benutzer
 - Mindestens 2GB freier Speicherplatz
 
 ## Installation
@@ -20,249 +18,244 @@ git clone <repository-url>
 cd scandy
 ```
 
-### 2. Installation ausführen
+### 2. Installationsskript ausführbar machen
 
 ```bash
-# Scripts ausführbar machen
-chmod +x install_scandy_lxc_linux_mint.sh
-chmod +x troubleshoot_mongodb.sh
-chmod +x fix_permissions.sh
-
-# Bei Berechtigungsproblemen zuerst Fix-Script ausführen
-sudo ./fix_permissions.sh
-
-# Installation starten
-sudo ./install_scandy_lxc_linux_mint.sh
+chmod +x install_linux_mint.sh
 ```
 
-### 3. Installation überwachen
-
-Das Script führt folgende Schritte automatisch aus:
-
-1. **System-Update**: Aktualisiert alle Pakete
-2. **Basis-Pakete**: Installiert Python, Nginx, Git, etc.
-3. **MongoDB**: Installiert MongoDB 7.0 mit korrekter Linux Mint-Konfiguration
-4. **Benutzer**: Erstellt den `scandy`-Benutzer
-5. **Python-Umgebung**: Richtet virtuelle Python-Umgebung ein
-6. **Konfiguration**: Erstellt `.env`-Datei und Services
-7. **Services**: Startet MongoDB, Nginx und Scandy
-
-## Nach der Installation
-
-### Standard-Zugangsdaten
-
-- **Web-Interface**: http://[IHRE-IP]/
-- **MongoDB**: localhost:27017
-- **Admin-Benutzer**: admin / scandy123456
-
-### Wichtige Sicherheitshinweise
-
-⚠️ **Ändern Sie unbedingt das Standard-Passwort!**
+### 3. Installation starten
 
 ```bash
-# .env-Datei bearbeiten
-sudo nano /opt/scandy/.env
-
-# Passwort ändern:
-# MONGO_INITDB_ROOT_PASSWORD=ihr_neues_sicheres_passwort
-# MONGODB_URI=mongodb://admin:ihr_neues_sicheres_passwort@localhost:27017/scandy?authSource=admin
+./install_linux_mint.sh
 ```
 
-### Services verwalten
+Das Skript führt automatisch folgende Schritte aus:
+
+- System-Updates
+- Installation aller Abhängigkeiten (Python, MongoDB, Node.js)
+- Konfiguration von MongoDB
+- Erstellung eines Python Virtual Environment
+- Installation aller Python-Pakete
+- Erstellung notwendiger Verzeichnisse
+- Konfiguration der .env Datei
+- Erstellung eines Systemd Service
+- Optionale Nginx-Installation
+- Firewall-Konfiguration
+- Erstellung von Backup- und Update-Skripten
+
+## Was wird installiert?
+
+### System-Pakete
+- **Python 3**: Für die Flask-Anwendung
+- **MongoDB 7.0**: Datenbank
+- **Node.js 18**: Für CSS-Build (Tailwind)
+- **Nginx**: Optional als Reverse Proxy
+- **UFW**: Firewall
+
+### Python-Pakete
+Alle Pakete aus `requirements.txt` werden installiert:
+- Flask und Erweiterungen
+- MongoDB-Treiber
+- Bildverarbeitung (Pillow)
+- E-Mail-Funktionalität
+- Dokumentenverarbeitung
+
+## Konfiguration
+
+### .env Datei
+
+Nach der Installation wird eine `.env` Datei erstellt. Bearbeiten Sie diese für Ihre spezifischen Einstellungen:
+
+```bash
+nano .env
+```
+
+Wichtige Einstellungen:
+- `MAIL_USERNAME` und `MAIL_PASSWORD`: Für E-Mail-Funktionen
+- `BASE_URL`: Die öffentliche URL Ihrer Anwendung
+- `SECRET_KEY`: Wird automatisch generiert
+
+### E-Mail-Konfiguration
+
+Für Gmail:
+```
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=ihre-email@gmail.com
+MAIL_PASSWORD=ihr-app-passwort
+```
+
+**Hinweis**: Für Gmail benötigen Sie ein App-Passwort, nicht Ihr normales Passwort.
+
+## Verwaltung
+
+### Service-Verwaltung
 
 ```bash
 # Status prüfen
-sudo systemctl status mongod
-sudo systemctl status scandy
-sudo systemctl status nginx
+./manage_scandy.sh status
 
-# Services neu starten
-sudo systemctl restart mongod
-sudo systemctl restart scandy
-sudo systemctl restart nginx
+# Starten
+./manage_scandy.sh start
+
+# Stoppen
+./manage_scandy.sh stop
+
+# Neustart
+./manage_scandy.sh restart
 
 # Logs anzeigen
-sudo journalctl -u mongod -f
-sudo journalctl -u scandy -f
+./manage_scandy.sh logs
 ```
+
+### Backups
+
+```bash
+# Manuelles Backup erstellen
+./manage_scandy.sh backup
+
+# Oder direkt
+./backup_scandy.sh
+```
+
+### Updates
+
+```bash
+# Scandy aktualisieren
+./manage_scandy.sh update
+
+# Oder direkt
+./update_scandy.sh
+```
+
+## Zugriff auf die Anwendung
+
+Nach erfolgreicher Installation ist Scandy verfügbar unter:
+
+- **Lokal**: http://localhost:5000
+- **Netzwerk**: http://[IP-Adresse]:5000
+- **Über Nginx**: http://[IP-Adresse] (falls installiert)
+
+## Erste Schritte
+
+1. **Admin-Benutzer erstellen**: Öffnen Sie die Web-Oberfläche und erstellen Sie den ersten Administrator
+2. **E-Mail konfigurieren**: Bearbeiten Sie die `.env` Datei für E-Mail-Funktionen
+3. **Backup-Strategie**: Richten Sie regelmäßige Backups ein
 
 ## Troubleshooting
 
-### 1. MongoDB-Probleme
-
-Führen Sie das Troubleshooting-Script aus:
+### MongoDB-Probleme
 
 ```bash
-chmod +x troubleshoot_mongodb.sh
-sudo ./troubleshoot_mongodb.sh
-```
+# MongoDB Status prüfen
+sudo systemctl status mongod
 
-### 2. Berechtigungsprobleme
-
-Bei Download-Fehlern oder Berechtigungsproblemen:
-
-```bash
-chmod +x fix_permissions.sh
-sudo ./fix_permissions.sh
-```
-
-### 3. Manuelle MongoDB-Installation
-
-Falls das automatische Script weiterhin Probleme hat:
-
-```bash
-chmod +x manual_mongodb_install.sh
-sudo ./manual_mongodb_install.sh
-```
-
-### 2. Häufige Probleme und Lösungen
-
-#### Problem: MongoDB startet nicht
-```bash
-# Logs prüfen
-sudo journalctl -u mongod -n 50
-
-# Berechtigungen korrigieren
-sudo chown -R mongodb:mongodb /var/lib/mongodb
-sudo chmod 755 /var/lib/mongodb
+# MongoDB Logs anzeigen
+sudo journalctl -u mongod -f
 
 # MongoDB neu starten
 sudo systemctl restart mongod
 ```
 
-#### Problem: Port 27017 ist belegt
-```bash
-# Prozess finden
-sudo netstat -tlnp | grep :27017
+### Scandy-Probleme
 
-# Prozess beenden (falls nötig)
-sudo kill -9 [PID]
+```bash
+# Scandy Status prüfen
+sudo systemctl status scandy.service
+
+# Scandy Logs anzeigen
+sudo journalctl -u scandy.service -f
+
+# Scandy neu starten
+sudo systemctl restart scandy.service
 ```
 
-#### Problem: Repository-Fehler
+### Nginx-Probleme
+
 ```bash
-# GPG-Key neu hinzufügen
-curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+# Nginx Status prüfen
+sudo systemctl status nginx
 
-# Repository neu hinzufügen (für Linux Mint 22.x - verwendet jammy)
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-
-# System aktualisieren
-sudo apt update
-```
-
-#### Problem: Download-Berechtigungen
-```bash
-# Berechtigungen korrigieren
-sudo ./fix_permissions.sh
-
-# Alternative: Manueller Download
-sudo mkdir -p /tmp/mongodb-download
-cd /tmp/mongodb-download
-sudo curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o server-7.0.asc
-sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg server-7.0.asc
-```
-
-#### Problem: GPG-Import-Fehler
-```bash
-# Manuelle MongoDB-Installation
-sudo ./manual_mongodb_install.sh
-
-# Oder manueller GPG-Import
-sudo rm -f /usr/share/keyrings/mongodb-server-7.0.gpg
-sudo curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
-sudo chmod 644 /usr/share/keyrings/mongodb-server-7.0.gpg
-```
-
-#### Problem: Python-Abhängigkeiten
-```bash
-# Virtuelle Umgebung neu erstellen
-sudo -u scandy python3 -m venv /opt/scandy/venv --clear
-sudo -u scandy /opt/scandy/venv/bin/pip install --upgrade pip
-sudo -u scandy /opt/scandy/venv/bin/pip install -r /opt/scandy/requirements.txt
-```
-
-#### Problem: Nginx-Fehler
-```bash
-# Nginx-Konfiguration testen
+# Nginx Konfiguration testen
 sudo nginx -t
 
-# Nginx-Logs prüfen
+# Nginx Logs anzeigen
 sudo tail -f /var/log/nginx/error.log
 ```
 
-### 3. Firewall-Konfiguration
+### Firewall-Probleme
 
 ```bash
-# UFW-Status prüfen
+# Firewall Status prüfen
 sudo ufw status
 
-# Ports freigeben (falls UFW aktiv ist)
-sudo ufw allow 80/tcp
-sudo ufw allow 22/tcp
+# Port 5000 freigeben
+sudo ufw allow 5000
 ```
 
-### 4. Speicherplatz prüfen
+## Sicherheit
+
+### Firewall
+Die Installation konfiguriert automatisch UFW mit folgenden Regeln:
+- SSH (Port 22)
+- HTTP (Port 80)
+- HTTPS (Port 443)
+- Scandy (Port 5000)
+
+### Updates
+Regelmäßige System-Updates sind wichtig:
 
 ```bash
-# Verfügbaren Speicherplatz anzeigen
-df -h
+sudo apt update && sudo apt upgrade
+```
 
-# MongoDB-Datenbankgröße prüfen
-du -sh /var/lib/mongodb
+### Backups
+Erstellen Sie regelmäßige Backups:
+
+```bash
+# Automatisches Backup (cron job)
+crontab -e
+# Fügen Sie hinzu: 0 2 * * * /pfad/zu/scandy/backup_scandy.sh
 ```
 
 ## Deinstallation
 
+Falls Sie Scandy entfernen möchten:
+
 ```bash
-# Services stoppen
-sudo systemctl stop scandy
-sudo systemctl stop mongod
-sudo systemctl stop nginx
-
-# Services deaktivieren
-sudo systemctl disable scandy
-sudo systemctl disable mongod
-
-# Dateien entfernen
-sudo rm -rf /opt/scandy
+# Service stoppen und entfernen
+sudo systemctl stop scandy.service
+sudo systemctl disable scandy.service
 sudo rm /etc/systemd/system/scandy.service
-sudo rm /etc/nginx/sites-enabled/scandy
-sudo rm /etc/nginx/sites-available/scandy
+sudo systemctl daemon-reload
 
-# MongoDB entfernen
+# MongoDB entfernen (optional)
 sudo apt remove --purge mongodb-org*
 sudo rm -rf /var/lib/mongodb
-sudo rm -rf /var/log/mongodb
-sudo rm /etc/mongod.conf
 
-# Systemd neu laden
-sudo systemctl daemon-reload
+# Nginx entfernen (optional)
+sudo apt remove --purge nginx
+sudo rm -rf /etc/nginx/sites-available/scandy
+sudo rm -rf /etc/nginx/sites-enabled/scandy
+
+# Python Environment entfernen
+rm -rf venv
+
+# Anwendungsverzeichnis entfernen
+cd ..
+rm -rf scandy
 ```
 
 ## Support
 
 Bei Problemen:
+1. Prüfen Sie die Logs: `./manage_scandy.sh logs`
+2. Prüfen Sie den Service-Status: `./manage_scandy.sh status`
+3. Erstellen Sie ein Backup vor Änderungen
+4. Dokumentieren Sie Fehler für Support-Anfragen
 
-1. Führen Sie das Troubleshooting-Script aus
-2. Prüfen Sie die Logs der betroffenen Services
-3. Stellen Sie sicher, dass alle Voraussetzungen erfüllt sind
-4. Überprüfen Sie die Firewall-Einstellungen
+## Lizenz
 
-## Unterschiede zum ursprünglichen Script
-
-Das neue Script `install_scandy_lxc_linux_mint.sh` behebt folgende Probleme:
-
-- **Linux Mint Kompatibilität**: Korrekte Erkennung der Linux Mint Version
-- **MongoDB Repository**: Verwendet den richtigen Ubuntu-Codename für das Repository
-- **Authentifizierung**: Richtet MongoDB-Authentifizierung korrekt ein
-- **Fehlerbehandlung**: Bessere Fehlerbehandlung und Logging
-- **Berechtigungen**: Korrekte Berechtigungen für alle Verzeichnisse
-- **Service-Abhängigkeiten**: Korrekte Abhängigkeiten zwischen Services
-
-## Version
-
-- **Script-Version**: 2.0
-- **MongoDB-Version**: 7.0
-- **Python-Version**: 3.x
-- **Getestet auf**: Linux Mint 21.3, 20.3 
+Diese Installation unterliegt der gleichen Lizenz wie die Scandy-Anwendung. 
