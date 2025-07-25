@@ -107,18 +107,7 @@
                         </label>
                     </div>
                     
-                    <!-- Ablaufdatum -->
-                    <div class="form-control mt-4">
-                        <label class="label" for="expires_at">
-                            <span class="label-text">Ablaufdatum (optional)</span>
-                        </label>
-                        <input type="datetime-local" id="expires_at" name="expires_at" 
-                               value="{{ request.form.expires_at or (user.expires_at[:16] if user and user.expires_at) or '' }}" 
-                               class="input input-bordered w-full" />
-                        <label class="label">
-                            <span class="label-text-alt text-info">Lassen Sie das Feld leer für ein unbegrenztes Konto. Nach dem Ablaufdatum wird der Account automatisch deaktiviert.</span>
-                        </label>
-                    </div>
+
                 </div>
 
                 <!-- Aktions-Buttons -->

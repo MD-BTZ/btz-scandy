@@ -50,13 +50,7 @@ class Job:
         self.job_number = data.get('job_number')
         self.comments = data.get('comments', [])
         
-        # Ablaufdatum-Funktionalität
-        self.expires_at = data.get('expires_at')
-        if self.expires_at and isinstance(self.expires_at, str):
-            try:
-                self.expires_at = datetime.fromisoformat(self.expires_at.replace('Z', '+00:00'))
-            except:
-                self.expires_at = None
+
     
     def to_dict(self):
         """Konvertiert Job zu Dictionary"""
@@ -83,23 +77,10 @@ class Job:
             'is_active': self.is_active,
             'is_public': self.is_public,
             'comments': self.comments,
-            'expires_at': self.expires_at.isoformat() if self.expires_at else None
+
         }
     
-    @property
-    def is_expired(self):
-        """Prüft ob der Job abgelaufen ist"""
-        if not self.expires_at:
-            return False
-        return datetime.now() > self.expires_at
-    
-    @property
-    def days_until_expiry(self):
-        """Gibt die Anzahl der Tage bis zum Ablauf zurück"""
-        if not self.expires_at:
-            return None
-        delta = self.expires_at - datetime.now()
-        return delta.days
+
     
     def save(self):
         """Speichert den Job in der Datenbank"""
@@ -127,7 +108,7 @@ class Job:
             'views': self.views,
             'applications': self.applications,
             'job_number': self.job_number,
-            'expires_at': self.expires_at
+
         }
         
         # Kommentare nur hinzufügen, wenn sie existieren
@@ -175,16 +156,11 @@ class Job:
         try:
             mongodb = get_mongodb()
             
-            # Basis-Filter - berücksichtige Ablaufdatum
+            # Basis-Filter für aktive Jobs
             filter_dict = {'is_active': True, 'is_public': True}
             
-            # Filter für nicht abgelaufene Jobs
-            now = datetime.now()
-            filter_dict['$or'] = [
-                {'expires_at': {'$exists': False}},  # Jobs ohne Ablaufdatum
-                {'expires_at': None},  # Jobs mit None Ablaufdatum
-                {'expires_at': {'$gt': now}}  # Jobs die noch nicht abgelaufen sind
-            ]
+            # Basis-Filter für aktive Jobs
+            filter_dict = {'is_active': True, 'is_public': True}
             
             if filters:
                 if filters.get('industry'):

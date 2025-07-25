@@ -29,11 +29,6 @@ class AdminUserService:
             for user in users:
                 if '_id' in user:
                     user['_id'] = str(user['_id'])
-                
-                # Konvertiere expires_at zu String falls vorhanden
-                if 'expires_at' in user and user['expires_at']:
-                    if isinstance(user['expires_at'], datetime):
-                        user['expires_at'] = user['expires_at'].isoformat()
             
             return users
             
@@ -48,11 +43,6 @@ class AdminUserService:
             user = find_user_by_id(user_id)
             if user and '_id' in user:
                 user['_id'] = str(user['_id'])
-                
-                # Konvertiere expires_at zu String falls vorhanden
-                if 'expires_at' in user and user['expires_at']:
-                    if isinstance(user['expires_at'], datetime):
-                        user['expires_at'] = user['expires_at'].isoformat()
                         
             return user
             
@@ -92,16 +82,7 @@ class AdminUserService:
             # Passwort hashen
             password_hash = generate_password_hash(password)
             
-            # Ablaufdatum verarbeiten
-            expires_at = None
-            if user_data.get('expires_at'):
-                try:
-                    if isinstance(user_data['expires_at'], str):
-                        expires_at = datetime.fromisoformat(user_data['expires_at'].replace('Z', '+00:00'))
-                    else:
-                        expires_at = user_data['expires_at']
-                except Exception as e:
-                    logger.warning(f"Ungültiges Ablaufdatum für {user_data['username']}: {e}")
+
             
             # Benutzer erstellen
             new_user = {
@@ -114,7 +95,7 @@ class AdminUserService:
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
                 'department': user_data.get('department', ''),
-                'expires_at': expires_at,
+
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
@@ -165,18 +146,7 @@ class AdminUserService:
                 if field in user_data:
                     update_data[field] = user_data[field]
             
-            # Ablaufdatum verarbeiten
-            if 'expires_at' in user_data:
-                expires_at = None
-                if user_data['expires_at']:
-                    try:
-                        if isinstance(user_data['expires_at'], str):
-                            expires_at = datetime.fromisoformat(user_data['expires_at'].replace('Z', '+00:00'))
-                        else:
-                            expires_at = user_data['expires_at']
-                    except Exception as e:
-                        logger.warning(f"Ungültiges Ablaufdatum für User {user_id}: {e}")
-                update_data['expires_at'] = expires_at
+
             
             # Passwort aktualisieren falls angegeben
             if 'password' in user_data and user_data['password']:
@@ -297,28 +267,13 @@ class AdminUserService:
                 {'$sort': {'count': -1}}
             ]))
             
-            # Abgelaufene Benutzer
-            now = datetime.now()
-            expired_users = mongodb.count_documents('users', {
-                'expires_at': {'$exists': True, '$ne': None, '$lt': now}
-            })
-            
-            # Benutzer die bald ablaufen (in den nächsten 30 Tagen)
-            soon_expiring = mongodb.count_documents('users', {
-                'expires_at': {
-                    '$exists': True,
-                    '$ne': None,
-                    '$gt': now,
-                    '$lt': now + timedelta(days=30)
-                }
-            })
+
             
             return {
                 'total_users': total_users,
                 'active_users': active_users,
                 'role_stats': role_stats,
-                'expired_users': expired_users,
-                'soon_expiring': soon_expiring
+
             }
             
         except Exception as e:
@@ -327,48 +282,7 @@ class AdminUserService:
                 'total_users': 0,
                 'active_users': 0,
                 'role_stats': [],
-                'expired_users': 0,
-                'soon_expiring': 0
+
             }
 
-    @staticmethod
-    def cleanup_expired_users() -> Tuple[int, str]:
-        """
-        Bereinigt abgelaufene Benutzerkonten
-        
-        Returns:
-            (anzahl_gelöscht, message)
-        """
-        try:
-            now = datetime.now()
-            
-            # Finde abgelaufene Benutzer
-            expired_users = list(mongodb.find('users', {
-                'expires_at': {
-                    '$exists': True,
-                    '$ne': None,
-                    '$lt': now
-                },
-                'role': {'$ne': 'admin'}  # Admin-Accounts nicht löschen
-            }))
-            
-            if not expired_users:
-                return 0, "Keine abgelaufenen Benutzer gefunden"
-            
-            # Lösche abgelaufene Benutzer
-            deleted_count = 0
-            for user in expired_users:
-                try:
-                    mongodb.delete_one('users', {'_id': user['_id']})
-                    deleted_count += 1
-                    logger.info(f"Abgelaufener Benutzer gelöscht: {user.get('username', 'Unknown')} (ID: {user['_id']})")
-                except Exception as e:
-                    logger.error(f"Fehler beim Löschen des abgelaufenen Benutzers {user['_id']}: {e}")
-            
-            message = f"{deleted_count} abgelaufene Benutzerkonten wurden gelöscht"
-            logger.info(message)
-            return deleted_count, message
-            
-        except Exception as e:
-            logger.error(f"Fehler bei der Bereinigung abgelaufener Benutzer: {str(e)}")
-            return 0, f"Fehler bei der Bereinigung: {str(e)}" 
+ 

@@ -70,13 +70,13 @@ class AutoBackupScheduler:
                 'system_locks',
                 {
                     'key': backup_key,
-                    'expires_at': {'$lt': current_time}  # Nur wenn abgelaufen
+        
                 },
                 {
                     '$set': {
                         'worker_id': self.worker_id,
                         'created_at': current_time,
-                        'expires_at': current_time + timedelta(minutes=5)
+        
                     }
                 },
                 upsert=True
@@ -121,7 +121,7 @@ class AutoBackupScheduler:
             
             # Lösche alle abgelaufenen Locks
             result = mongodb.delete_many('system_locks', {
-                'expires_at': {'$lt': current_time}
+    
             })
             
             if result.deleted_count > 0:

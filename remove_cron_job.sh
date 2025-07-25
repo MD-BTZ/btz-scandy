@@ -77,7 +77,7 @@ echo
 echo -e "${YELLOW}⚠️  WICHTIG:${NC}"
 echo "- Abgelaufene Accounts und Jobs werden nicht mehr automatisch gelöscht"
 echo "- Sie können die Bereinigung manuell über die Admin-Oberfläche durchführen"
-echo "- Gehen Sie zu: /admin/expiry_management"
+
 echo
 echo -e "${BLUE}🔧 Nützliche Befehle:${NC}"
 echo "- Cron-Jobs anzeigen: crontab -l"

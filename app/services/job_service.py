@@ -17,13 +17,7 @@ class JobService:
             # Basis-Filter für aktive Jobs (ohne is_public, da nicht alle Jobs dieses Feld haben)
             query = {'is_active': True}
             
-            # Filter für nicht abgelaufene Jobs
-            now = datetime.now()
-            query['$or'] = [
-                {'expires_at': {'$exists': False}},  # Jobs ohne Ablaufdatum
-                {'expires_at': None},  # Jobs mit None Ablaufdatum
-                {'expires_at': {'$gt': now}}  # Jobs die noch nicht abgelaufen sind
-            ]
+
             
             # Zusätzliche Filter anwenden
             if filters:
@@ -129,16 +123,7 @@ class JobService:
                 if 'job_number' in job and job['job_number'] >= next_job_number:
                     next_job_number = job['job_number'] + 1
             
-            # Ablaufdatum verarbeiten
-            expires_at = None
-            if data.get('expires_at'):
-                try:
-                    if isinstance(data['expires_at'], str):
-                        expires_at = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
-                    else:
-                        expires_at = data['expires_at']
-                except Exception as e:
-                    loggers['errors'].warning(f"Ungültiges Ablaufdatum für Job: {e}")
+
             
             # Job-Daten vorbereiten
             job_data = {
@@ -162,8 +147,7 @@ class JobService:
                 'is_active': True,
                 'is_public': True,
                 'views': 0,
-                'applications': 0,
-                'expires_at': expires_at
+                'applications': 0
             }
             
             # Job in DB einfügen
@@ -204,16 +188,7 @@ class JobService:
                 loggers['errors'].error(f"Keine Berechtigung zum Bearbeiten des Jobs {job_id} von {user.username}")
                 return None
             
-            # Ablaufdatum verarbeiten
-            expires_at = None
-            if data.get('expires_at'):
-                try:
-                    if isinstance(data['expires_at'], str):
-                        expires_at = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
-                    else:
-                        expires_at = data['expires_at']
-                except Exception as e:
-                    loggers['errors'].warning(f"Ungültiges Ablaufdatum für Job {job_id}: {e}")
+
             
             # Update-Daten vorbereiten
             update_data = {
@@ -229,7 +204,7 @@ class JobService:
                 'contact_email': data.get('contact_email', ''),
                 'contact_phone': data.get('contact_phone', ''),
                 'application_url': data.get('application_url', ''),
-                'expires_at': expires_at,
+
                 'updated_at': datetime.now()
             }
             
@@ -284,21 +259,7 @@ class JobService:
             total_jobs = mongodb.count_documents('jobs', {'is_active': True})
             active_jobs = mongodb.count_documents('jobs', {'is_active': True, 'is_public': True})
             
-            # Abgelaufene Jobs
-            now = datetime.now()
-            expired_jobs = mongodb.count_documents('jobs', {
-                'expires_at': {'$exists': True, '$ne': None, '$lt': now}
-            })
-            
-            # Jobs die bald ablaufen (in den nächsten 30 Tagen)
-            soon_expiring = mongodb.count_documents('jobs', {
-                'expires_at': {
-                    '$exists': True,
-                    '$ne': None,
-                    '$gt': now,
-                    '$lt': now + timedelta(days=30)
-                }
-            })
+
             
             # Views und Bewerbungen summieren
             pipeline = [
@@ -326,8 +287,7 @@ class JobService:
             return {
                 'total_jobs': total_jobs,
                 'active_jobs': active_jobs,
-                'expired_jobs': expired_jobs,
-                'soon_expiring': soon_expiring,
+
                 'total_views': total_views,
                 'total_applications': total_applications,
                 'top_industries': top_industries
@@ -338,8 +298,7 @@ class JobService:
             return {
                 'total_jobs': 0,
                 'active_jobs': 0,
-                'expired_jobs': 0,
-                'soon_expiring': 0,
+
                 'total_views': 0,
                 'total_applications': 0,
                 'top_industries': []
@@ -406,46 +365,4 @@ class JobService:
                 'per_page': per_page
             }
 
-    @staticmethod
-    def cleanup_expired_jobs() -> Tuple[int, str]:
-        """
-        Bereinigt abgelaufene Jobs
-        
-        Returns:
-            (anzahl_gelöscht, message)
-        """
-        try:
-            from app.models.mongodb_database import get_mongodb
-            mongodb = get_mongodb()
-            
-            now = datetime.now()
-            
-            # Finde abgelaufene Jobs
-            expired_jobs = list(mongodb.find('jobs', {
-                'expires_at': {
-                    '$exists': True,
-                    '$ne': None,
-                    '$lt': now
-                }
-            }))
-            
-            if not expired_jobs:
-                return 0, "Keine abgelaufenen Jobs gefunden"
-            
-            # Lösche abgelaufene Jobs
-            deleted_count = 0
-            for job in expired_jobs:
-                try:
-                    mongodb.delete_one('jobs', {'_id': job['_id']})
-                    deleted_count += 1
-                    loggers['user_actions'].info(f"Abgelaufener Job gelöscht: {job.get('title', 'Unknown')} (ID: {job['_id']})")
-                except Exception as e:
-                    loggers['errors'].error(f"Fehler beim Löschen des abgelaufenen Jobs {job['_id']}: {e}")
-            
-            message = f"{deleted_count} abgelaufene Jobs wurden gelöscht"
-            loggers['user_actions'].info(message)
-            return deleted_count, message
-            
-        except Exception as e:
-            loggers['errors'].error(f"Fehler bei der Bereinigung abgelaufener Jobs: {str(e)}")
-            return 0, f"Fehler bei der Bereinigung: {str(e)}" 
+ 

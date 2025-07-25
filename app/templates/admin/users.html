@@ -105,7 +105,6 @@
                     <th>Rolle</th>
                     <th>Email</th>
                     <th>Status</th>
-                    <th>Ablaufdatum</th>
                     <th>Aktionen</th>
                 </tr>
             </thead>
@@ -132,21 +131,7 @@
                             <span class="badge badge-ghost">Inaktiv</span>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if user.expires_at %}
-                            {% set expiry_date = user.expires_at.split('T')[0] if 'T' in user.expires_at else user.expires_at.split(' ')[0] %}
-                            {% set days_left = ((user.expires_at | string).split('T')[0] | string | replace('-', '') | int) - (now.strftime('%Y%m%d') | int) %}
-                            {% if days_left < 0 %}
-                                <span class="badge badge-error" title="Abgelaufen am {{ expiry_date }}">Abgelaufen</span>
-                            {% elif days_left <= 7 %}
-                                <span class="badge badge-warning" title="Läuft ab am {{ expiry_date }} ({{ days_left }} Tage)">{{ days_left }} Tage</span>
-                            {% else %}
-                                <span class="badge badge-info" title="Läuft ab am {{ expiry_date }}">{{ expiry_date }}</span>
-                            {% endif %}
-                        {% else %}
-                            <span class="badge badge-ghost">Unbegrenzt</span>
-                        {% endif %}
-                    </td>
+
                     <td>
                         <div class="flex space-x-2">
                             <a href="{{ url_for('admin.edit_user', user_id=user._id) }}" class="btn btn-sm btn-outline btn-info" title="Bearbeiten">
