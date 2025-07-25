@@ -16,6 +16,10 @@
 
 3. **Installation starten**
    ```bash
+   # Empfohlen: Mit sudo für bessere Berechtigungen
+   sudo ./install_linux_mint.sh
+   
+   # Oder ohne sudo (falls Berechtigungsprobleme auftreten)
    ./install_linux_mint.sh
    ```
 

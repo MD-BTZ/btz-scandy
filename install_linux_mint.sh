@@ -29,12 +29,15 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Prüfe ob als Root ausgeführt
+# Prüfe Root-Rechte
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        print_error "Dieses Skript sollte nicht als Root ausgeführt werden!"
-        print_warning "Führe das Skript als normaler Benutzer aus."
-        exit 1
+        print_warning "Skript wird als Root ausgeführt."
+        print_status "Dies ist erlaubt, aber stellen Sie sicher, dass Sie das Skript im richtigen Verzeichnis ausführen."
+    else
+        print_warning "Skript wird ohne Root-Rechte ausgeführt."
+        print_status "Falls Berechtigungsprobleme auftreten, führen Sie das Skript mit 'sudo' aus."
+        print_status "Beispiel: sudo ./install_linux_mint.sh"
     fi
 }
 
@@ -169,32 +172,13 @@ create_directories() {
         exit 1
     fi
     
-    # Setze Berechtigungen (nur auf Unix-Systemen)
-    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
-        print_status "Setze Verzeichnis-Berechtigungen..."
-        
-        # Funktion zum sicheren Setzen von Berechtigungen
-        set_permissions() {
-            local dir="$1"
-            if [ -d "$dir" ]; then
-                if chmod 755 "$dir" 2>/dev/null; then
-                    print_success "Berechtigungen für $dir gesetzt"
-                else
-                    print_warning "Konnte Berechtigungen für $dir nicht setzen (möglicherweise fehlende Rechte)"
-                fi
-            else
-                print_warning "Verzeichnis $dir existiert nicht"
-            fi
-        }
-        
-        # Setze Berechtigungen für alle Verzeichnisse
-        set_permissions "app/uploads"
-        set_permissions "app/static/uploads"
-        set_permissions "backups"
-        set_permissions "logs"
-        set_permissions "app/logs"
-        set_permissions "app/flask_session"
-    fi
+    # Setze Berechtigungen
+    print_status "Setze Verzeichnis-Berechtigungen..."
+    
+    # Setze Berechtigungen für alle Verzeichnisse
+    chmod 755 app/uploads app/static/uploads backups logs app/logs app/flask_session 2>/dev/null || print_warning "Einige Berechtigungen konnten nicht gesetzt werden"
+    
+    print_success "Verzeichnis-Berechtigungen gesetzt"
     
     print_success "Verzeichnisse erstellt"
 }
