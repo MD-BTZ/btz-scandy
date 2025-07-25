@@ -138,6 +138,37 @@ else
 fi
 echo ""
 
+# 13. Berechtigungen für temporäre Verzeichnisse prüfen
+log "Prüfe Berechtigungen für temporäre Verzeichnisse..."
+echo -e "${BLUE}=== Temporäre Verzeichnisse ===${NC}"
+TEMP_DIR=$(mktemp -d)
+if [ -d "$TEMP_DIR" ]; then
+    echo -e "${GREEN}✅ Temporäres Verzeichnis erstellbar: $TEMP_DIR${NC}"
+    rm -rf "$TEMP_DIR"
+else
+    echo -e "${RED}❌ Temporäres Verzeichnis nicht erstellbar${NC}"
+fi
+
+echo "Berechtigungen für /tmp:"
+ls -ld /tmp
+echo ""
+
+# 14. DNS-Auflösung prüfen
+log "Prüfe DNS-Auflösung..."
+echo -e "${BLUE}=== DNS-Auflösung ===${NC}"
+if nslookup pgp.mongodb.com &> /dev/null; then
+    echo -e "${GREEN}✅ pgp.mongodb.com auflösbar${NC}"
+else
+    echo -e "${RED}❌ pgp.mongodb.com nicht auflösbar${NC}"
+fi
+
+if nslookup repo.mongodb.org &> /dev/null; then
+    echo -e "${GREEN}✅ repo.mongodb.org auflösbar${NC}"
+else
+    echo -e "${RED}❌ repo.mongodb.org nicht auflösbar${NC}"
+fi
+echo ""
+
 # 13. Lösungsvorschläge
 echo -e "${BLUE}=== Lösungsvorschläge ===${NC}"
 

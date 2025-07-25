@@ -32,6 +32,9 @@ log "Linux Mint Version erkannt: $MINT_VERSION"
 
 # Bestimme den entsprechenden Ubuntu-Codename für MongoDB
 case $MINT_VERSION in
+    "22.1"|"22.2"|"22.3")
+        UBUNTU_CODENAME="noble"
+        ;;
     "21.3"|"21.2"|"21.1")
         UBUNTU_CODENAME="jammy"
         ;;
@@ -43,8 +46,8 @@ case $MINT_VERSION in
         ;;
     *)
         # Fallback für neuere Versionen
-        UBUNTU_CODENAME="jammy"
-        log "${YELLOW}Warnung: Unbekannte Linux Mint Version, verwende jammy als Fallback${NC}"
+        UBUNTU_CODENAME="noble"
+        log "${YELLOW}Warnung: Unbekannte Linux Mint Version, verwende noble als Fallback${NC}"
         ;;
 esac
 
@@ -52,16 +55,35 @@ log "Verwende Ubuntu-Codename: $UBUNTU_CODENAME für MongoDB-Repository"
 
 # MongoDB GPG-Key hinzufügen
 log "Füge MongoDB GPG-Key hinzu..."
-if ! curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o /tmp/server-7.0.asc; then
+
+# Erstelle temporäres Verzeichnis mit korrekten Berechtigungen
+TEMP_DIR=$(mktemp -d)
+chmod 755 "$TEMP_DIR"
+
+# Versuche Download mit verschiedenen Methoden
+if curl -fsSL https://pgp.mongodb.com/server-7.0.asc -o "$TEMP_DIR/server-7.0.asc"; then
+    log "MongoDB GPG-Key erfolgreich heruntergeladen"
+elif wget -qO "$TEMP_DIR/server-7.0.asc" https://pgp.mongodb.com/server-7.0.asc; then
+    log "MongoDB GPG-Key erfolgreich heruntergeladen (wget)"
+else
     log "${RED}Fehler: Konnte den MongoDB GPG-Key nicht herunterladen!${NC}"
-    log "Versuche alternativen Download..."
-    wget -qO /tmp/server-7.0.asc https://pgp.mongodb.com/server-7.0.asc || {
-        log "${RED}Fehler: Auch alternativer Download fehlgeschlagen!${NC}"
+    log "Versuche alternative Methode..."
+    
+    # Alternative: Direkt mit gpg importieren
+    if curl -fsSL https://pgp.mongodb.com/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg; then
+        log "MongoDB GPG-Key erfolgreich importiert (direkt)"
+    else
+        log "${RED}Fehler: Alle Download-Methoden fehlgeschlagen!${NC}"
+        log "Prüfe Internetverbindung und DNS-Einstellungen"
         exit 1
-    }
+    fi
 fi
 
-gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg /tmp/server-7.0.asc
+# Nur ausführen, wenn die Datei existiert
+if [ -f "$TEMP_DIR/server-7.0.asc" ]; then
+    gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg "$TEMP_DIR/server-7.0.asc"
+    rm -rf "$TEMP_DIR"
+fi
 
 # MongoDB Repository hinzufügen
 log "Füge MongoDB Repository hinzu..."
