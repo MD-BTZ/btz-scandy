@@ -67,13 +67,34 @@ def index():
         workers = mongodb.find('workers', {'deleted': {'$ne': True}})
         workers = list(workers)
         
-        # Für jeden Mitarbeiter die aktiven Ausleihen zählen
+        # Für jeden Mitarbeiter die aktiven Ausleihen zählen und Benutzer-Informationen hinzufügen
         for worker in workers:
             active_lendings_count = mongodb.count_documents('lendings', {
                 'worker_barcode': worker.get('barcode'),
                 'returned_at': None
             })
             worker['active_lendings'] = active_lendings_count
+            
+            # Hole Benutzer-Informationen falls vorhanden
+            if worker.get('user_id'):
+                user = mongodb.find_one('users', {'_id': worker['user_id']})
+                if user:
+                    worker['username'] = user.get('username', '')
+                    worker['user_role'] = user.get('role', '')
+                    worker['user_active'] = user.get('is_active', True)
+                else:
+                    worker['username'] = ''
+                    worker['user_role'] = ''
+                    worker['user_active'] = False
+            elif worker.get('username'):
+                # Fallback für direkte username-Verknüpfung
+                user = mongodb.find_one('users', {'username': worker['username']})
+                if user:
+                    worker['user_role'] = user.get('role', '')
+                    worker['user_active'] = user.get('is_active', True)
+                else:
+                    worker['user_role'] = ''
+                    worker['user_active'] = False
         
         # Hole alle Abteilungen für Filter
         departments = get_departments_from_settings()
@@ -220,6 +241,27 @@ def details(original_barcode):
         if not worker:
             flash('Mitarbeiter nicht gefunden', 'error')
             return redirect(url_for('workers.index'))
+        
+        # Hole Benutzer-Informationen falls vorhanden
+        if worker.get('user_id'):
+            user = mongodb.find_one('users', {'_id': worker['user_id']})
+            if user:
+                worker['username'] = user.get('username', '')
+                worker['user_role'] = user.get('role', '')
+                worker['user_active'] = user.get('is_active', True)
+            else:
+                worker['username'] = ''
+                worker['user_role'] = ''
+                worker['user_active'] = False
+        elif worker.get('username'):
+            # Fallback für direkte username-Verknüpfung
+            user = mongodb.find_one('users', {'username': worker['username']})
+            if user:
+                worker['user_role'] = user.get('role', '')
+                worker['user_active'] = user.get('is_active', True)
+            else:
+                worker['user_role'] = ''
+                worker['user_active'] = False
 
         # Hole aktuelle Ausleihen
         active_lendings = mongodb.find('lendings', {

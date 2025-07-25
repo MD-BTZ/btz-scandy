@@ -22,6 +22,7 @@
 <th>Barcode</th>
 <th>Abteilung</th>
 <th>E-Mail</th>
+<th>Benutzer</th>
 <th>Status</th>
 <th class="text-right">Aktionen</th>
 {% endblock %}
@@ -53,6 +54,19 @@
             <a href="mailto:{{ worker.email }}" class="link link-hover text-primary">
                 {{ worker.email }}
             </a>
+        {% else %}
+            <span class="text-gray-400">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if worker.username %}
+            <div class="badge badge-info gap-1">
+                <i class="fas fa-user"></i>
+                {{ worker.username }}
+            </div>
+            {% if worker.role %}
+                <div class="badge badge-outline text-xs mt-1">{{ worker.role }}</div>
+            {% endif %}
         {% else %}
             <span class="text-gray-400">-</span>
         {% endif %}

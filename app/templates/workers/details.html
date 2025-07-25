@@ -29,6 +29,33 @@
                 {% if worker.email %}
                 <p><strong>E-Mail:</strong> {{ worker.email }}</p>
                 {% endif %}
+                
+                <!-- Benutzer-Informationen -->
+                {% if worker.username %}
+                <div class="divider"></div>
+                <div class="bg-info/10 p-3 rounded-lg">
+                    <h3 class="font-semibold text-info mb-2">
+                        <i class="fas fa-user mr-2"></i>Benutzerkonto
+                    </h3>
+                    <div class="space-y-1">
+                        <p><strong>Benutzername:</strong> {{ worker.username }}</p>
+                        {% if worker.user_role %}
+                        <p><strong>Rolle:</strong> 
+                            <span class="badge badge-{{ 'error' if worker.user_role == 'admin' else 'warning' if worker.user_role == 'mitarbeiter' else 'info' }}">
+                                {{ worker.user_role }}
+                            </span>
+                        </p>
+                        {% endif %}
+                        {% if worker.user_active is defined %}
+                        <p><strong>Status:</strong> 
+                            <span class="badge badge-{{ 'success' if worker.user_active else 'error' }}">
+                                {{ 'Aktiv' if worker.user_active else 'Inaktiv' }}
+                            </span>
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
             
             <!-- Aktionen -->

@@ -105,6 +105,11 @@ class AdminUserService:
             
             logger.info(f"Neuer Benutzer erstellt: {user_data['username']} (ID: {user_id})")
             
+            # Automatisch Mitarbeiter-Eintrag erstellen
+            worker_created = AdminUserService._create_worker_from_user(new_user, user_id)
+            if worker_created:
+                logger.info(f"Automatischer Mitarbeiter-Eintrag erstellt für: {user_data['username']}")
+            
             # Passwort in der Nachricht zurückgeben falls generiert
             if not user_data.get('password'):
                 return True, f"Benutzer '{user_data['username']}' erfolgreich erstellt. Generiertes Passwort: {password}", user_id
@@ -172,6 +177,9 @@ class AdminUserService:
             # Benutzer aktualisieren
             mongodb.update_one('users', {'_id': user_id}, {'$set': update_data})
             
+            # Synchronisiere Mitarbeiter-Eintrag falls vorhanden
+            AdminUserService._sync_worker_from_user(user_id, update_data)
+            
             logger.info(f"Benutzer aktualisiert: {user.get('username', 'Unknown')} (ID: {user_id})")
             return True, f"Benutzer erfolgreich aktualisiert"
             
@@ -207,6 +215,9 @@ class AdminUserService:
                     'updated_at': datetime.now()
                 }
             })
+            
+            # Deaktiviere auch den zugehörigen Mitarbeiter-Eintrag
+            AdminUserService._deactivate_worker_from_user(user_id)
             
             logger.info(f"Benutzer deaktiviert: {user.get('username', 'Unknown')} (ID: {user_id})")
             return True, f"Benutzer '{user.get('username', 'Unknown')}' erfolgreich deaktiviert"
@@ -284,5 +295,164 @@ class AdminUserService:
                 'role_stats': [],
 
             }
+    
+    @staticmethod
+    def _create_worker_from_user(user_data: Dict[str, Any], user_id: str) -> bool:
+        """
+        Erstellt automatisch einen Mitarbeiter-Eintrag aus Benutzerdaten
+        
+        Args:
+            user_data: Benutzerdaten
+            user_id: ID des erstellten Benutzers
+            
+        Returns:
+            True wenn erfolgreich erstellt, False sonst
+        """
+        try:
+            # Prüfe ob bereits ein Mitarbeiter mit diesem Benutzernamen existiert
+            existing_worker = mongodb.find_one('workers', {
+                'username': user_data['username'],
+                'deleted': {'$ne': True}
+            })
+            
+            if existing_worker:
+                logger.info(f"Mitarbeiter-Eintrag existiert bereits für: {user_data['username']}")
+                return True
+            
+            # Generiere einen eindeutigen Barcode basierend auf dem Benutzernamen
+            barcode = f"USER_{user_data['username'].upper()}"
+            
+            # Prüfe ob der Barcode bereits existiert
+            existing_barcode = mongodb.find_one('workers', {
+                'barcode': barcode,
+                'deleted': {'$ne': True}
+            })
+            
+            if existing_barcode:
+                # Falls Barcode existiert, füge eine Nummer hinzu
+                counter = 1
+                while True:
+                    new_barcode = f"{barcode}_{counter}"
+                    existing = mongodb.find_one('workers', {
+                        'barcode': new_barcode,
+                        'deleted': {'$ne': True}
+                    })
+                    if not existing:
+                        barcode = new_barcode
+                        break
+                    counter += 1
+            
+            # Erstelle Mitarbeiter-Daten
+            worker_data = {
+                'barcode': barcode,
+                'username': user_data['username'],  # Verknüpfung zum Benutzer
+                'user_id': user_id,  # Verknüpfung zur Benutzer-ID
+                'firstname': user_data.get('firstname', ''),
+                'lastname': user_data.get('lastname', ''),
+                'department': user_data.get('department', ''),
+                'email': user_data.get('email', ''),
+                'role': user_data.get('role', 'anwender'),
+                'created_at': datetime.now(),
+                'modified_at': datetime.now(),
+                'deleted': False
+            }
+            
+            # Mitarbeiter in Datenbank speichern
+            mongodb.insert_one('workers', worker_data)
+            
+            logger.info(f"Automatischer Mitarbeiter-Eintrag erstellt: {barcode} für Benutzer {user_data['username']}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des automatischen Mitarbeiter-Eintrags: {str(e)}")
+            return False
+    
+    @staticmethod
+    def _sync_worker_from_user(user_id: str, user_update_data: Dict[str, Any]) -> bool:
+        """
+        Synchronisiert einen bestehenden Mitarbeiter-Eintrag mit Benutzerdaten
+        
+        Args:
+            user_id: ID des Benutzers
+            user_update_data: Aktualisierte Benutzerdaten
+            
+        Returns:
+            True wenn erfolgreich synchronisiert, False sonst
+        """
+        try:
+            # Finde den zugehörigen Mitarbeiter-Eintrag
+            worker = mongodb.find_one('workers', {
+                'user_id': user_id,
+                'deleted': {'$ne': True}
+            })
+            
+            if not worker:
+                logger.info(f"Kein Mitarbeiter-Eintrag gefunden für Benutzer-ID: {user_id}")
+                return False
+            
+            # Bereite Update-Daten vor
+            worker_update_data = {
+                'modified_at': datetime.now()
+            }
+            
+            # Synchronisiere relevante Felder
+            if 'firstname' in user_update_data:
+                worker_update_data['firstname'] = user_update_data['firstname']
+            if 'lastname' in user_update_data:
+                worker_update_data['lastname'] = user_update_data['lastname']
+            if 'email' in user_update_data:
+                worker_update_data['email'] = user_update_data['email']
+            if 'department' in user_update_data:
+                worker_update_data['department'] = user_update_data['department']
+            
+            # Aktualisiere Mitarbeiter-Eintrag
+            mongodb.update_one('workers', 
+                             {'user_id': user_id}, 
+                             {'$set': worker_update_data})
+            
+            logger.info(f"Mitarbeiter-Eintrag synchronisiert für Benutzer-ID: {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Synchronisieren des Mitarbeiter-Eintrags: {str(e)}")
+            return False
+    
+    @staticmethod
+    def _deactivate_worker_from_user(user_id: str) -> bool:
+        """
+        Deaktiviert den zugehörigen Mitarbeiter-Eintrag
+        
+        Args:
+            user_id: ID des Benutzers
+            
+        Returns:
+            True wenn erfolgreich deaktiviert, False sonst
+        """
+        try:
+            # Finde den zugehörigen Mitarbeiter-Eintrag
+            worker = mongodb.find_one('workers', {
+                'user_id': user_id,
+                'deleted': {'$ne': True}
+            })
+            
+            if not worker:
+                logger.info(f"Kein Mitarbeiter-Eintrag gefunden für Benutzer-ID: {user_id}")
+                return False
+            
+            # Deaktiviere den Mitarbeiter-Eintrag (Soft Delete)
+            mongodb.update_one('workers', 
+                             {'user_id': user_id}, 
+                             {'$set': {
+                                 'deleted': True,
+                                 'deleted_at': datetime.now(),
+                                 'modified_at': datetime.now()
+                             }})
+            
+            logger.info(f"Mitarbeiter-Eintrag deaktiviert für Benutzer-ID: {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Deaktivieren des Mitarbeiter-Eintrags: {str(e)}")
+            return False
 
  
