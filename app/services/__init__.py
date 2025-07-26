@@ -12,6 +12,10 @@ from .backup_service import BackupService
 from .notification_service import NotificationService
 from .ticket_service import TicketService
 from .consumable_service import ConsumableService
+from .admin_user_service import AdminUserService
+from .admin_ticket_service import AdminTicketService
+from .admin_debug_service import AdminDebugService
+from .tool_service import ToolService
 
 __all__ = [
     'StatisticsService',
@@ -22,5 +26,9 @@ __all__ = [
     'BackupService',
     'NotificationService',
     'TicketService',
-    'ConsumableService'
+    'ConsumableService',
+    'AdminUserService',
+    'AdminTicketService',
+    'AdminDebugService',
+    'ToolService'
 ] 

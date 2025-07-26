@@ -7,6 +7,7 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold">Benutzerverwaltung</h1>
         <div class="flex gap-2">
+
             <form action="{{ url_for('admin.migrate_users_to_workers') }}" method="post" class="inline">
                 <button type="submit" class="btn btn-warning" 
                         onclick="return confirm('Möchten Sie alle bestehenden Benutzer automatisch als Mitarbeiter registrieren?')">
@@ -145,6 +146,7 @@
                             <a href="{{ url_for('admin.edit_user', user_id=user._id) }}" class="btn btn-sm btn-outline btn-info" title="Bearbeiten">
                                 <i class="fas fa-edit"></i>
                             </a>
+                            
                             {# Löschen-Button mit Bestätigung #}
                             <form action="{{ url_for('admin.delete_user', user_id=user._id) }}" method="post" class="inline-block" 
                                   onsubmit="return confirm('Sind Sie sicher, dass Sie den Benutzer \'{{ user.username }}\' unwiderruflich löschen möchten?');">
@@ -164,4 +166,7 @@
         </table>
     </div>
 </div>
+
+
+
 {% endblock %} 

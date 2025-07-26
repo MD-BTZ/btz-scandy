@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+
+{% block title %}Löschungsstatus - Scandy{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">Löschungsstatus</h1>
+        <div class="flex gap-2">
+            <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline">
+                <i class="fas fa-arrow-left mr-2"></i>Zurück zur Benutzerverwaltung
+            </a>
+            <form action="{{ url_for('admin.run_cleanup') }}" method="post" class="inline">
+                <button type="submit" class="btn btn-warning" 
+                        onclick="return confirm('Möchten Sie die automatische Bereinigung jetzt ausführen?')">
+                    <i class="fas fa-broom mr-2"></i>Bereinigung ausführen
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} shadow-lg mb-4">
+                    <div>
+                        {% if category == 'success' %}<i class="fas fa-check-circle"></i>
+                        {% elif category == 'error' %}<i class="fas fa-times-circle"></i>
+                        {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                        <span>{{ message }}</span>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Statistiken -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="stat bg-base-100 shadow">
+            <div class="stat-figure text-primary">
+                <i class="fas fa-users text-3xl"></i>
+            </div>
+            <div class="stat-title">Gesamt Benutzer</div>
+            <div class="stat-value text-primary">{{ user_stats.total_users }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow">
+            <div class="stat-figure text-success">
+                <i class="fas fa-user-check text-3xl"></i>
+            </div>
+            <div class="stat-title">Aktive Benutzer</div>
+            <div class="stat-value text-success">{{ user_stats.active_users }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow">
+            <div class="stat-figure text-warning">
+                <i class="fas fa-clock text-3xl"></i>
+            </div>
+            <div class="stat-title">Zur Löschung geplant</div>
+            <div class="stat-value text-warning">{{ user_stats.scheduled_for_deletion }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow">
+            <div class="stat-figure text-info">
+                <i class="fas fa-calendar text-3xl"></i>
+            </div>
+            <div class="stat-title">Nächste Bereinigung</div>
+            <div class="stat-value text-info">Täglich 2:00</div>
+        </div>
+    </div>
+
+    <!-- Zur Löschung vorgesehene Benutzer -->
+    <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-clock text-warning"></i>
+                Zur Löschung vorgesehene Benutzer
+            </h2>
+            
+            {% if scheduled_users %}
+                <div class="overflow-x-auto">
+                    <table class="table w-full">
+                        <thead>
+                            <tr>
+                                <th>Benutzername</th>
+                                <th>Rolle</th>
+                                <th>Email</th>
+                                <th>Löschdatum</th>
+                                <th>Verbleibende Tage</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in scheduled_users %}
+                            <tr class="hover">
+                                <td>{{ user.username }}</td>
+                                <td>
+                                    {% if user.role == 'admin' %}
+                                        <span class="badge badge-error">Admin</span>
+                                    {% elif user.role == 'mitarbeiter' %}
+                                        <span class="badge badge-warning">Mitarbeiter</span>
+                                    {% elif user.role == 'teilnehmer' %}
+                                        <span class="badge badge-secondary">Teilnehmer</span>
+                                    {% else %}
+                                        <span class="badge badge-info">Benutzer</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ user.email or '-' }}</td>
+                                <td>
+                                    {% if user.delete_at %}
+                                        {% set delete_date = user.delete_at %}
+                                        {% if delete_date is string %}
+                                            {{ delete_date.split('T')[0] }}
+                                        {% else %}
+                                            {{ delete_date.strftime('%d.%m.%Y') }}
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.days_until_deletion is defined %}
+                                        {% if user.days_until_deletion <= 0 %}
+                                            <span class="badge badge-error">Überfällig</span>
+                                        {% elif user.days_until_deletion <= 7 %}
+                                            <span class="badge badge-warning">{{ user.days_until_deletion }} Tage</span>
+                                        {% else %}
+                                            <span class="badge badge-info">{{ user.days_until_deletion }} Tage</span>
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form action="{{ url_for('admin.cancel_user_deletion', user_id=user._id) }}" method="post" class="inline-block">
+                                        <button type="submit" class="btn btn-sm btn-outline btn-success" title="Löschung stornieren">
+                                            <i class="fas fa-undo mr-1"></i>Stornieren
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-8">
+                    <i class="fas fa-check-circle text-success text-5xl mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">Keine Benutzer zur Löschung vorgesehen</h3>
+                    <p class="text-gray-600">Alle Benutzer sind aktuell aktiv und nicht zur Löschung geplant.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Informationen -->
+    <div class="card bg-base-100 shadow-lg mt-6">
+        <div class="card-body">
+            <h2 class="card-title">
+                <i class="fas fa-info-circle text-info"></i>
+                Informationen zur automatischen Löschung
+            </h2>
+            
+            <div class="prose max-w-none">
+                <h3>Wie funktioniert die automatische Löschung?</h3>
+                <ul>
+                    <li><strong>Geplante Löschung:</strong> Benutzer können mit einem Löschdatum versehen werden</li>
+                    <li><strong>Automatische Bereinigung:</strong> Täglich um 2:00 Uhr werden abgelaufene Accounts gelöscht</li>
+                    <li><strong>Vollständige Löschung:</strong> Alle mit dem Benutzer verbundenen Daten werden entfernt</li>
+                    <li><strong>Stornierung:</strong> Geplante Löschungen können jederzeit storniert werden</li>
+                </ul>
+                
+                <h3>Was wird gelöscht?</h3>
+                <ul>
+                    <li>Benutzeraccount und alle persönlichen Daten</li>
+                    <li>Zugehöriger Mitarbeiter-Eintrag</li>
+                    <li>Alle Ausleihen und Materialverwendungen</li>
+                    <li>Erstellte Tickets und Nachrichten</li>
+                    <li>Wochenberichte und Erfahrungsberichte</li>
+                </ul>
+                
+                <h3>Sicherheitshinweise</h3>
+                <ul>
+                    <li>Admin-Benutzer können nicht automatisch gelöscht werden</li>
+                    <li>Eigene Accounts können nicht gelöscht werden</li>
+                    <li>Löschungen sind unwiderruflich</li>
+                    <li>Backups werden vor der Löschung erstellt</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

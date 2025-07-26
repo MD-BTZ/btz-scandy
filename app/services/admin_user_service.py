@@ -278,13 +278,10 @@ class AdminUserService:
                 {'$sort': {'count': -1}}
             ]))
             
-
-            
             return {
                 'total_users': total_users,
                 'active_users': active_users,
-                'role_stats': role_stats,
-
+                'role_stats': role_stats
             }
             
         except Exception as e:
@@ -293,7 +290,8 @@ class AdminUserService:
                 'total_users': 0,
                 'active_users': 0,
                 'role_stats': [],
-
+                'scheduled_for_deletion': 0,
+                'scheduled_users': []
             }
     
     @staticmethod
@@ -454,5 +452,6 @@ class AdminUserService:
         except Exception as e:
             logger.error(f"Fehler beim Deaktivieren des Mitarbeiter-Eintrags: {str(e)}")
             return False
+    
 
- 
+    

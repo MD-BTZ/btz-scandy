@@ -20,6 +20,14 @@ class User(UserMixin):
             # Speichere is_active als normales Attribut
             self._active = user_data.get('is_active', True)
             
+            # Löschdatum-Funktionalität
+            self.delete_at = user_data.get('delete_at')
+            if self.delete_at and isinstance(self.delete_at, str):
+                try:
+                    self.delete_at = datetime.fromisoformat(self.delete_at.replace('Z', '+00:00'))
+                except:
+                    self.delete_at = None
+            
 
             
             # Wochenbericht-Feature: Prüfe ob Feld existiert, sonst setze Standard
@@ -57,6 +65,21 @@ class User(UserMixin):
     @property
     def is_active(self):
         return self._active
+    
+    @property
+    def is_scheduled_for_deletion(self):
+        """Prüft ob der Account zur Löschung vorgesehen ist"""
+        if not self.delete_at:
+            return False
+        return datetime.now() > self.delete_at
+    
+    @property
+    def days_until_deletion(self):
+        """Gibt die Anzahl der Tage bis zur Löschung zurück"""
+        if not self.delete_at:
+            return None
+        delta = self.delete_at - datetime.now()
+        return delta.days
     
 
     

@@ -3512,6 +3512,14 @@ def delete_user(user_id):
         flash('Fehler beim Löschen des Benutzers', 'error')
         return redirect(url_for('admin.manage_users'))
 
+
+
+
+
+
+
+
+
 @bp.route('/user_form')
 @mitarbeiter_required
 def user_form():
