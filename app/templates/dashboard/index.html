@@ -84,7 +84,7 @@
         {% endif %}
 
         <!-- Tickets -->
-        {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
+        {% if current_user.is_authenticated %}
         <div class="card bg-base-100 shadow-lg card-compact">
             <div class="card-body">
                 <div class="flex items-center justify-between">

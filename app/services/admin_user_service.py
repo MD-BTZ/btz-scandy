@@ -68,8 +68,8 @@ class AdminUserService:
                 if field not in user_data or not user_data[field]:
                     return False, f"Feld '{field}' ist erforderlich", None
             
-            # Prüfe ob Benutzername bereits existiert
-            existing_user = mongodb.find_one('users', {'username': user_data['username']})
+            # Prüfe ob Benutzername bereits existiert (case-insensitive)
+            existing_user = mongodb.find_one('users', {'username': {'$regex': f'^{user_data["username"]}$', '$options': 'i'}})
             if existing_user:
                 return False, "Benutzername existiert bereits", None
             
@@ -158,7 +158,7 @@ class AdminUserService:
             if 'password' in user_data and user_data['password']:
                 update_data['password_hash'] = generate_password_hash(user_data['password'])
             
-            # Prüfe ob neuer Benutzername bereits existiert (außer bei diesem Benutzer)
+            # Prüfe ob neuer Benutzername bereits existiert (außer bei diesem Benutzer) - case-insensitive
             if 'username' in update_data:
                 # Konvertiere user_id zu ObjectId für korrekte Datenbankabfrage
                 from bson import ObjectId
@@ -169,7 +169,7 @@ class AdminUserService:
                     object_id = user_id
                 
                 existing_user = mongodb.find_one('users', {
-                    'username': update_data['username'],
+                    'username': {'$regex': f'^{update_data["username"]}$', '$options': 'i'},
                     '_id': {'$ne': object_id}
                 })
                 if existing_user:

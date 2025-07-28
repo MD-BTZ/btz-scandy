@@ -645,9 +645,9 @@ def create():
     # Hole alle Kategorien aus der settings Collection
     categories = get_ticket_categories_from_settings()
     
-    # Für Admins und Mitarbeiter: Hole auch alle Mitarbeiter
+    # Für Admins, Mitarbeiter und Teilnehmer: Hole alle Mitarbeiter
     workers = []
-    if current_user.role in ['admin', 'mitarbeiter']:
+    if current_user.role in ['admin', 'mitarbeiter', 'teilnehmer']:
         workers = list(mongodb.find('users', {'role': {'$in': ['admin', 'mitarbeiter']}}))
     
     print(f"DEBUG: Rendere Template mit {len(open_tickets)} offenen, {len(assigned_tickets)} zugewiesenen, {len(all_tickets)} allen Tickets")
@@ -657,7 +657,7 @@ def create():
                          open_tickets=open_tickets,
                          all_tickets=all_tickets,
                          workers=workers,
-                         show_all_tickets=current_user.role in ['admin', 'mitarbeiter'],
+                         show_all_tickets=current_user.role in ['admin', 'mitarbeiter', 'teilnehmer'],
                          categories=categories,
                          now=datetime.now(),
                          status_colors={
@@ -692,7 +692,7 @@ def view(ticket_id):
     if (
         ticket.get('created_by') != current_user.username
         and ticket.get('assigned_to') not in [None, '', current_user.username]
-        and current_user.role not in ['admin', 'mitarbeiter']
+        and current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer']
     ):
         logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
         flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
@@ -883,8 +883,8 @@ def detail(id):
             print(f"DEBUG: Ticket nicht gefunden für ID: {id}")
             return render_template('404.html'), 404
         
-        # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-        if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        # Prüfe Berechtigungen: Admins/Mitarbeiter/Teilnehmer können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
+        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
             return redirect(url_for('tickets.create'))
         
@@ -931,7 +931,7 @@ def detail(id):
         categories = get_ticket_categories_from_settings()
 
         # Bestimme Berechtigungen
-        can_edit = current_user.role in ['admin', 'mitarbeiter'] or ticket.get('created_by') == current_user.username
+        can_edit = current_user.role in ['admin', 'mitarbeiter', 'teilnehmer'] or ticket.get('created_by') == current_user.username
         can_assign = current_user.role in ['admin', 'mitarbeiter']
         can_change_status = current_user.role in ['admin', 'mitarbeiter']
         can_delete = current_user.role in ['admin', 'mitarbeiter']
@@ -1752,8 +1752,8 @@ def auftrag_details_page(id):
         if not ticket:
             return render_template('404.html'), 404
         
-        # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-        if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        # Prüfe Berechtigungen: Admins/Mitarbeiter/Teilnehmer können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
+        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
             return redirect(url_for('tickets.index'))
         
@@ -1856,7 +1856,7 @@ def update_ticket(id):
         logging.info(f"DEBUG: Ticket gefunden: {ticket.get('title', 'No Title')}")
         
         # Prüfe Berechtigungen: Normale User können nur ihre eigenen oder zugewiesenen Tickets bearbeiten
-        if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
             logging.error(f"DEBUG: Keine Berechtigung für User {current_user.username}")
             return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
         

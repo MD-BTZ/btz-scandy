@@ -819,8 +819,9 @@ class MongoDBUser:
     
     @classmethod
     def get_by_username(cls, username: str) -> Optional[Dict[str, Any]]:
-        """Holt einen Benutzer anhand des Benutzernamens"""
-        return mongodb.find_one(cls.COLLECTION_NAME, {'username': username})
+        """Holt einen Benutzer anhand des Benutzernamens (case-insensitive)"""
+        # Verwende case-insensitive Suche mit MongoDB regex
+        return mongodb.find_one(cls.COLLECTION_NAME, {'username': {'$regex': f'^{username}$', '$options': 'i'}})
     
     @classmethod
     def get_all(cls) -> List[Dict[str, Any]]:

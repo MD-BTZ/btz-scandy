@@ -201,8 +201,8 @@
             </a>
             {% endif %}
             
-            {# Ticketsystem für alle eingeloggten Benutzer außer Teilnehmer #}
-            {% if current_user.is_authenticated and current_user.role != 'teilnehmer' %}
+            {# Ticketsystem für alle eingeloggten Benutzer #}
+            {% if current_user.is_authenticated %}
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tickets.create' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
