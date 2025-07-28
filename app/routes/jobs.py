@@ -1,14 +1,17 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.services.job_service import JobService
 from app.models.mongodb_database import get_mongodb
 from app.utils.decorators import mitarbeiter_required
 from app.utils.logger import loggers
+
 import json
 from bson import ObjectId
 from datetime import datetime
 
 bp = Blueprint('jobs', __name__)
+
+
 
 @bp.route('/')
 def job_list():
@@ -31,11 +34,39 @@ def job_list():
         
         loggers['user_actions'].info(f"Job-Liste abgerufen - Filter: {filters}, Seite: {page}")
         
-        # Jobs abrufen
-        result = JobService.get_jobs(filters, page, per_page)
+        # Jobs direkt aus MongoDB abrufen
+        mongodb = get_mongodb()
         
-        loggers['user_actions'].info(f"Jobs abgerufen: {len(result['jobs'])} von {result['total_count']}")
-        loggers['user_actions'].info(f"Result: {result}")
+        # Filter vorbereiten
+        query = {}  # Zeige alle Jobs an
+        
+        if filters:
+            if filters.get('search'):
+                search_term = filters['search']
+                query['$or'] = [
+                    {'title': {'$regex': search_term, '$options': 'i'}},
+                    {'company': {'$regex': search_term, '$options': 'i'}},
+                    {'description': {'$regex': search_term, '$options': 'i'}}
+                ]
+            
+            if filters.get('industry'):
+                query['industry'] = filters['industry']
+            
+            if filters.get('job_type'):
+                query['job_type'] = filters['job_type']
+            
+            if filters.get('location'):
+                query['location'] = {'$regex': filters['location'], '$options': 'i'}
+        
+        # Jobs abrufen
+        skip = (page - 1) * per_page
+        jobs_data_raw = list(mongodb.find('jobs', query, skip=skip, limit=per_page, sort=[('created_at', -1)]))
+        
+        # Gesamtanzahl für Pagination
+        total_count = mongodb.count_documents('jobs', query)
+        total_pages = (total_count + per_page - 1) // per_page
+        
+        loggers['user_actions'].info(f"Jobs abgerufen: {len(jobs_data_raw)} von {total_count}")
         
         # Statistiken für Sidebar
         stats = JobService.get_job_statistics()
@@ -43,13 +74,12 @@ def job_list():
         loggers['user_actions'].info(f"Statistiken: {stats}")
         
         # Verfügbare Branchen aus der Datenbank sammeln
-        mongodb = get_mongodb()
         available_industries = mongodb.distinct('jobs', 'industry')
         available_industries = [ind for ind in available_industries if ind and ind.strip()]  # Leere Werte entfernen
         
-        # MongoDB-Daten direkt verwenden
+        # MongoDB-Daten für Template vorbereiten
         jobs_data = []
-        for job in result['jobs']:
+        for job in jobs_data_raw:
             job_dict = {
                 'id': str(job.get('_id', 'unknown')),
                 'title': job.get('title', ''),
@@ -71,15 +101,16 @@ def job_list():
                 'is_public': job.get('is_public', True),
                 'views': job.get('views', 0),
                 'applications': job.get('applications', 0),
-                'job_number': job.get('job_number')
+                'job_number': job.get('job_number'),
+                'images': job.get('images', [])
             }
             jobs_data.append(job_dict)
         
         return render_template('jobs/index.html', 
                              jobs=jobs_data,
-                             total_count=result['total_count'],
-                             total_pages=result['total_pages'],
-                             current_page=result['current_page'],
+                             total_count=total_count,
+                             total_pages=total_pages,
+                             current_page=page,
                              filters=filters,
                              stats=stats,
                              available_industries=available_industries)
@@ -89,7 +120,14 @@ def job_list():
         import traceback
         loggers['errors'].error(f"Traceback: {traceback.format_exc()}")
         flash('Fehler beim Laden der Jobs', 'error')
-        return render_template('jobs/index.html', jobs=[], stats={})
+        return render_template('jobs/index.html', 
+                             jobs=[], 
+                             stats={}, 
+                             filters={}, 
+                             total_count=0, 
+                             total_pages=0, 
+                             current_page=1, 
+                             available_industries=[])
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -162,7 +200,7 @@ def job_detail(job_id):
         
         loggers['user_actions'].info(f"Job gefunden: {job.title}")
         return render_template('jobs/detail.html', 
-                             job=job)
+                             job=job, entity_type='jobs', entity_id=job_id)
                              
     except Exception as e:
         loggers['errors'].error(f"Fehler in job_detail: {e}")
@@ -214,7 +252,7 @@ def edit_job(job_id):
             else:
                 flash('Fehler beim Aktualisieren des Jobs', 'error')
                 
-        return render_template('jobs/edit.html', job=job)
+        return render_template('jobs/edit.html', job=job, entity_type='jobs', entity_id=job_id)
         
     except Exception as e:
         loggers['errors'].error(f"Fehler beim Bearbeiten des Jobs {job_id}: {e}")
@@ -362,6 +400,8 @@ def test_jobs():
         loggers['errors'].error(f"TEST Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}) 
 
+
+
 @bp.route('/fix-test-job')
 def fix_test_job():
     """Test-Job reparieren"""
@@ -389,7 +429,11 @@ def fix_test_job():
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}) 
+                return jsonify({'error': str(e)})
+
+
+
+
 
 @bp.route('/create-test-job')
 def create_test_job():

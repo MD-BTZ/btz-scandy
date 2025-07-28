@@ -148,20 +148,252 @@
                         </div>
                     </div>
 
-                    
-
-                    <!-- Buttons -->
-                    <div class="flex gap-4 pt-6 border-t border-base-300">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save mr-2"></i>Änderungen speichern
-                        </button>
-                        <a href="{{ url_for('jobs.job_detail', job_id=job.id|string) }}" class="btn btn-outline">
-                            Abbrechen
-                        </a>
-                    </div>
+                                            <!-- Medien-Galerie -->
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Medien (Flyer, etc.)</span>
+                            </label>
+                            
+                            <!-- Medien-Liste -->
+                            <div class="media-list grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-4">
+                                <!-- Wird per JavaScript gefüllt -->
+                            </div>
+                            
+                            <!-- Keine Medien Nachricht -->
+                            <div class="no-media-message text-center py-4 text-base-content/60 hidden">
+                                <i class="fas fa-images text-2xl mb-2"></i>
+                                <p class="text-sm">Keine Medien vorhanden</p>
+                            </div>
+                            
+                            <div class="text-sm text-base-content/60 mt-2">
+                                <p>Verwenden Sie das Upload-Formular unten, um neue Medien hinzuzufügen.</p>
+                            </div>
+                        </div>
                 </form>
+
+                <!-- Upload-Formular (außerhalb des Hauptformulars) -->
+                <div class="mt-6">
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <h3 class="card-title text-lg mb-4">
+                                <i class="fas fa-cloud-upload-alt text-primary mr-2"></i>Neue Medien hochladen
+                            </h3>
+                            
+                            <form action="{{ url_for('media.upload_media', entity_type='jobs', entity_id=job.id|string) }}" 
+                                  method="post" enctype="multipart/form-data" class="space-y-4">
+                                
+                                <div class="flex items-center justify-center">
+                                    <i class="fas fa-cloud-upload-alt text-4xl text-base-content/50 mb-4"></i>
+                                </div>
+                                
+                                <div>
+                                    <input type="file" id="media" name="media" accept="image/*" 
+                                           class="file-input file-input-bordered w-full" onchange="updateMediaFileName(this)">
+                                </div>
+                                
+                                <div id="selected-media-file" class="text-sm text-base-content/70 hidden">
+                                    <span id="media-file-name"></span>
+                                </div>
+                                
+                                <div class="text-sm text-base-content/60">
+                                    <p>Maximal 10 Bilder (jpg, png, gif, webp)</p>
+                                    <p>Bilder werden automatisch auf 1080p skaliert</p>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary" id="upload-media-btn" disabled>
+                                    <i class="fas fa-upload mr-2"></i>Medien hochladen
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="flex gap-4 pt-6 border-t border-base-300">
+                    <a href="{{ url_for('jobs.job_detail', job_id=job.id|string) }}" class="btn btn-outline">
+                        Zurück zur Detailansicht
+                    </a>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Bild-Modal -->
+<div id="imageModal" class="modal">
+    <div class="modal-box max-w-4xl">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Bild-Vorschau</h3>
+            <button onclick="closeImageModal()" class="btn btn-ghost btn-sm">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <img id="modalImage" src="" alt="Bild-Vorschau" class="w-full h-auto max-h-96 object-contain">
+    </div>
+</div>
+
+<script>
+// Bild-Modal Funktionen
+function openImageModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+    document.getElementById('imageModal').classList.add('modal-open');
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').classList.remove('modal-open');
+}
+
+// Dateiauswahl Funktionen
+function updateFileName(input) {
+    const fileName = input.files[0]?.name;
+    const selectedFile = document.getElementById('selected-file');
+    const fileNameSpan = document.getElementById('file-name');
+    const uploadBtn = document.getElementById('upload-btn');
+    
+    if (fileName) {
+        fileNameSpan.textContent = fileName;
+        selectedFile.classList.remove('hidden');
+        uploadBtn.disabled = false;
+    } else {
+        selectedFile.classList.add('hidden');
+        uploadBtn.disabled = true;
+    }
+}
+
+// Medien-Verwaltung
+let mediaList = [];
+
+function loadMediaList() {
+    const entityType = 'jobs';
+    const entityId = '{{ job.id|string }}';
+    
+    fetch(`/media/${entityType}/${entityId}/list`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.media_list.length > 0) {
+                mediaList = data.media_list;
+                displayMediaList();
+                document.querySelector('.no-media-message').classList.add('hidden');
+            } else {
+                mediaList = [];
+                document.querySelector('.no-media-message').classList.remove('hidden');
+                document.querySelector('.media-list').innerHTML = '';
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Medien:', error);
+            document.querySelector('.no-media-message').classList.remove('hidden');
+        });
+}
+
+function displayMediaList() {
+    const container = document.querySelector('.media-list');
+    container.innerHTML = '';
+    
+    mediaList.forEach((media, index) => {
+        const mediaItem = document.createElement('div');
+        mediaItem.className = 'relative group';
+        mediaItem.innerHTML = `
+            <div class="relative">
+                <img src="${media.url}" 
+                     alt="Medien ${index + 1}"
+                     class="w-full h-24 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
+                     onclick="openImageModal('${media.url}')">
+                <button onclick="deleteMedia('${media.filename}')" 
+                        class="absolute top-1 right-1 btn btn-error btn-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(mediaItem);
+    });
+}
+
+function deleteMedia(filename) {
+    if (confirm('Möchten Sie dieses Medium wirklich löschen?')) {
+        const entityType = 'jobs';
+        const entityId = '{{ job.id|string }}';
+        
+        const formData = new FormData();
+        formData.append('_method', 'DELETE');
+        
+        fetch(`/media/${entityType}/${entityId}/delete/${filename}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Medien-Liste neu laden
+                loadMediaList();
+                // Erfolgsmeldung anzeigen
+                if (typeof showToast === 'function') {
+                    showToast('Medium erfolgreich gelöscht!', 'success');
+                } else {
+                    alert('Medium erfolgreich gelöscht!');
+                }
+            } else {
+                if (typeof showToast === 'function') {
+                    showToast('Fehler beim Löschen des Mediums', 'error');
+                } else {
+                    alert('Fehler beim Löschen des Mediums');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Löschen:', error);
+            if (typeof showToast === 'function') {
+                showToast('Fehler beim Löschen des Mediums', 'error');
+            } else {
+                alert('Fehler beim Löschen des Mediums');
+            }
+        });
+    }
+}
+
+function updateMediaFileName(input) {
+    const fileName = input.files[0]?.name;
+    const selectedFile = document.getElementById('selected-media-file');
+    const fileNameSpan = document.getElementById('media-file-name');
+    const uploadBtn = document.getElementById('upload-media-btn');
+    
+    console.log('updateMediaFileName called with:', input.files[0]);
+    
+    if (fileName) {
+        fileNameSpan.textContent = fileName;
+        selectedFile.classList.remove('hidden');
+        uploadBtn.disabled = false;
+        console.log('File selected:', fileName);
+    } else {
+        selectedFile.classList.add('hidden');
+        uploadBtn.disabled = true;
+        console.log('No file selected');
+    }
+}
+
+// Medien-Liste beim Laden der Seite laden
+document.addEventListener('DOMContentLoaded', function() {
+    loadMediaList();
+    
+    // Upload-Formular nach erfolgreichem Upload aktualisieren
+    const uploadForm = document.querySelector('form[action*="/media/"]');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', function(e) {
+            // Formular normal absenden
+            // Nach dem Upload wird die Seite neu geladen und die Medien-Liste aktualisiert
+        });
+    }
+});
+
+// Modal schließen bei Klick außerhalb
+document.getElementById('imageModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeImageModal();
+    }
+});
+</script>
 {% endblock %} 

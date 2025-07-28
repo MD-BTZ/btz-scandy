@@ -36,6 +36,7 @@
 {% endblock %}
 
 {% block table_headers %}
+<th>Bild</th>
 <th>Barcode</th>
 <th>Name</th>
 <th>Kategorie</th>
@@ -50,6 +51,13 @@
     data-category="{{ tool.category or '' }}" 
     data-location="{{ tool.location or '' }}"
     data-status="{{ tool.status or '' }}">
+    <td>
+        <div class="tool-media-preview" data-barcode="{{ tool.barcode }}" data-preview-image="{{ tool.preview_image or '' }}">
+            <div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center">
+                <i class="fas fa-tools text-base-content/40"></i>
+            </div>
+        </div>
+    </td>
     <td>
         <div class="badge badge-outline">{{ tool.barcode or 'Kein Barcode' }}</div>
     </td>
@@ -104,34 +112,4 @@
     </td>
 </tr>
 {% endfor %}
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
-<script>
-// Filter-Funktionalität
-document.addEventListener('DOMContentLoaded', function() {
-    const categoryFilter = document.getElementById('categoryFilter');
-    const locationFilter = document.getElementById('locationFilter');
-    const statusFilter = document.getElementById('statusFilter');
-
-    function applyFilters() {
-        const category = categoryFilter.value;
-        const location = locationFilter.value;
-        const status = statusFilter.value;
-
-        document.querySelectorAll('.data-row').forEach(row => {
-            const matchesCategory = !category || row.dataset.category === category;
-            const matchesLocation = !location || row.dataset.location === location;
-            const matchesStatus = !status || row.dataset.status === status;
-
-            row.style.display = matchesCategory && matchesLocation && matchesStatus ? '' : 'none';
-        });
-    }
-
-    categoryFilter.addEventListener('change', applyFilters);
-    locationFilter.addEventListener('change', applyFilters);
-    statusFilter.addEventListener('change', applyFilters);
-});
-</script>
 {% endblock %} 

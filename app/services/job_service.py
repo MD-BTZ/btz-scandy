@@ -100,6 +100,7 @@ class JobService:
                 job_data = mongodb.find_one('jobs', {'job_number': int(job_id) if job_id.isdigit() else job_id})
             
             if job_data:
+
                 return Job(job_data)
             return None
             
@@ -237,6 +238,8 @@ class JobService:
             job = Job.find_by_id(job_id)
             if not job or job.created_by != str(user.id):
                 return False
+            
+            
             
             job.is_active = False
             job.save()

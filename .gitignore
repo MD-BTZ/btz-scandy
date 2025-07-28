@@ -51,6 +51,12 @@ logs/
 app/uploads/
 app/static/uploads/
 
+# Medien-Ordner (Bilder, Dokumente, etc.)
+static/uploads/
+uploads/
+app/static/uploads/**/
+app/uploads/**/
+
 # Generierte Word-Dokumente (ausschließen)
 # Aber Word-Vorlagen im static/word/ Verzeichnis beibehalten
 app/uploads/**/*.docx

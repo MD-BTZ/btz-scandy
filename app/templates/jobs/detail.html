@@ -81,8 +81,10 @@
             </div>
         </div>
         
-        <!-- Job Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        
+                    <!-- Job Content -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Hauptinhalt -->
             <div class="lg:col-span-2 space-y-8">
                 <!-- Beschreibung -->
@@ -178,6 +180,22 @@
             
             <!-- Sidebar -->
             <div class="space-y-6">
+                <!-- Medien-Galerie -->
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h2 class="card-title">Medien-Galerie</h2>
+                        <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
+                            <!-- Medien werden hier dynamisch geladen -->
+                        </div>
+                        <div id="no-media-message" class="text-base-content/60 text-center py-4">
+                            Keine Medien vorhanden
+                        </div>
+                        <button id="openCarouselBtn" class="btn btn-primary btn-sm" style="display: none;" onclick="openMediaCarousel(0)">
+                            <i class="fas fa-images mr-2"></i>Galerie öffnen
+                        </button>
+                    </div>
+                </div>
+                
                 <!-- Kontakt -->
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
@@ -432,5 +450,346 @@ function deleteComment(commentId) {
         });
     }
 }
+
+// Bild-Modal Funktionen
+function openImageModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+    document.getElementById('imageModal').classList.add('modal-open');
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').classList.remove('modal-open');
+}
+
+// Modal schließen bei Klick außerhalb
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeImageModal();
+            }
+        });
+    }
+    
+    // Medien-Galerie laden
+    loadMediaGallery();
+});
+
+// Medien-Galerie Variablen
+let mediaList = [];
+let currentImageIndex = 0;
+
+// Medien-Galerie laden
+function loadMediaGallery() {
+    console.log('=== LOADING JOB MEDIA GALLERY ===');
+    const jobId = '{{ job.id|string }}';
+    
+    if (!jobId) {
+        console.log('No job ID found');
+        return;
+    }
+    
+    const url = `/media/jobs/${jobId}/list`;
+    console.log('Fetching from:', url);
+    
+    fetch(url)
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Media data:', data);
+            
+            if (data.success && data.media_list && data.media_list.length > 0) {
+                mediaList = data.media_list;
+                displayMediaPreview();
+            } else {
+                console.log('No media found');
+                document.getElementById('no-media-message').style.display = 'block';
+                document.getElementById('openCarouselBtn').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Medien:', error);
+        });
+}
+
+// Medien-Vorschau anzeigen
+function displayMediaPreview() {
+    const gallery = document.getElementById('media-preview-gallery');
+    const noMediaMessage = document.getElementById('no-media-message');
+    const openCarouselBtn = document.getElementById('openCarouselBtn');
+    
+    if (mediaList.length === 0) {
+        noMediaMessage.style.display = 'block';
+        openCarouselBtn.style.display = 'none';
+        return;
+    }
+    
+    noMediaMessage.style.display = 'none';
+    openCarouselBtn.style.display = 'block';
+    
+    // Zeige die ersten 4 Bilder als Vorschau
+    const previewImages = mediaList.slice(0, 4);
+    gallery.innerHTML = '';
+    
+    previewImages.forEach((media, index) => {
+        const mediaContainer = document.createElement('div');
+        mediaContainer.className = 'relative group';
+        
+        const img = document.createElement('img');
+        img.src = media.url;
+        img.alt = 'Job Vorschau';
+        img.className = 'w-full h-20 object-contain rounded-lg cursor-pointer bg-base-200';
+        img.onclick = () => openMediaCarousel(index);
+        
+        // Overlay mit Buttons
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2';
+        
+        // Preview-Stern Button
+        const starBtn = document.createElement('button');
+        starBtn.className = 'btn btn-xs btn-circle btn-primary';
+        starBtn.innerHTML = '<i class="fas fa-star"></i>';
+        starBtn.title = 'Als Preview-Bild setzen';
+        starBtn.onclick = (e) => {
+            e.stopPropagation();
+            setPreviewImage(media.filename);
+        };
+        
+        // Lösch-Button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-xs btn-circle btn-error';
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.title = 'Medium löschen';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteMedia(media.filename);
+        };
+        
+        overlay.appendChild(starBtn);
+        overlay.appendChild(deleteBtn);
+        mediaContainer.appendChild(img);
+        mediaContainer.appendChild(overlay);
+        gallery.appendChild(mediaContainer);
+    });
+}
+
+// Carousel öffnen
+function openMediaCarousel(startIndex = 0) {
+    currentImageIndex = startIndex;
+    displayCarousel();
+    document.getElementById('mediaCarouselModal').showModal();
+    setupCarouselEventListeners();
+}
+
+// Carousel schließen
+function closeMediaCarousel() {
+    document.getElementById('mediaCarouselModal').close();
+}
+
+// Vollbild-Button
+function openImageInNewTab() {
+    if (mediaList.length > 0) {
+        const currentMedia = mediaList[currentImageIndex];
+        window.open(currentMedia.url, '_blank');
+    }
+}
+
+// Medium löschen
+function deleteMedia(filename) {
+    if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
+        return;
+    }
+    
+    fetch(`/media/jobs/{{ job.id|string }}/delete/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Medium erfolgreich gelöscht!');
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Löschen');
+        }
+    })
+    .catch(error => {
+        console.error('Delete error:', error);
+        alert('Fehler beim Löschen');
+    });
+}
+
+// Preview-Bild setzen
+function setPreviewImage(filename) {
+    fetch(`/media/jobs/{{ job.id|string }}/set_preview/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Preview-Bild erfolgreich gesetzt!');
+            window.location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Setzen des Preview-Bildes');
+        }
+    })
+    .catch(error => {
+        console.error('Set preview error:', error);
+        alert('Fehler beim Setzen des Preview-Bildes');
+    });
+}
+
+// Carousel anzeigen
+function displayCarousel() {
+    const carouselContainer = document.getElementById('carousel-image-container');
+    const thumbnailNav = document.getElementById('thumbnailNav');
+    
+    if (mediaList.length === 0) return;
+    
+    // Hauptbild anzeigen
+    const currentMedia = mediaList[currentImageIndex];
+    carouselContainer.innerHTML = `
+        <img src="${currentMedia.url}" alt="Job Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
+    `;
+    
+    // Thumbnail-Navigation
+    thumbnailNav.innerHTML = '';
+    mediaList.forEach((media, index) => {
+        const thumb = document.createElement('img');
+        thumb.src = media.url;
+        thumb.alt = 'Thumbnail';
+        thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+        thumb.onclick = () => goToSlide(index);
+        thumbnailNav.appendChild(thumb);
+    });
+    
+    updateCarouselPosition();
+}
+
+// Carousel-Position aktualisieren
+function updateCarouselPosition() {
+    const prevBtn = document.getElementById('carousel-prev');
+    const nextBtn = document.getElementById('carousel-next');
+    
+    prevBtn.disabled = currentImageIndex === 0;
+    nextBtn.disabled = currentImageIndex === mediaList.length - 1;
+}
+
+// Zu Slide gehen
+function goToSlide(index) {
+    currentImageIndex = index;
+    displayCarousel();
+}
+
+// Nächster Slide
+function nextSlide() {
+    if (currentImageIndex < mediaList.length - 1) {
+        currentImageIndex++;
+        displayCarousel();
+    }
+}
+
+// Vorheriger Slide
+function prevSlide() {
+    if (currentImageIndex > 0) {
+        currentImageIndex--;
+        displayCarousel();
+    }
+}
+
+// Carousel Event Listeners einrichten
+function setupCarouselEventListeners() {
+    setTimeout(() => {
+        const prevBtn = document.getElementById('carousel-prev');
+        const nextBtn = document.getElementById('carousel-next');
+        
+        if (prevBtn) {
+            prevBtn.removeEventListener('click', prevSlide);
+            prevBtn.addEventListener('click', prevSlide);
+        }
+        
+        if (nextBtn) {
+            nextBtn.removeEventListener('click', nextSlide);
+            nextBtn.addEventListener('click', nextSlide);
+        }
+    }, 100);
+}
+
+// Seite laden
+document.addEventListener('DOMContentLoaded', function() {
+    // Medien-Galerie laden
+    loadMediaGallery();
+});
+
+// Event Listeners für Carousel
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('mediaCarouselModal').open) {
+        if (e.key === 'ArrowLeft') {
+            prevSlide();
+        } else if (e.key === 'ArrowRight') {
+            nextSlide();
+        } else if (e.key === 'Escape') {
+            closeMediaCarousel();
+        }
+    }
+});
+
+// Modal-Event-Listener
+document.getElementById('mediaCarouselModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeMediaCarousel();
+    }
+});
 </script>
+
+<!-- Bild-Modal -->
+<div id="imageModal" class="modal">
+    <div class="modal-box max-w-4xl">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Bild-Vorschau</h3>
+            <button onclick="closeImageModal()" class="btn btn-ghost btn-sm">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <img id="modalImage" src="" alt="Bild-Vorschau" class="w-full h-auto max-h-96 object-contain">
+    </div>
+</div>
+
+<!-- Medien-Carousel Modal -->
+<dialog id="mediaCarouselModal" class="modal">
+    <div class="modal-box max-w-7xl w-11/12 h-4/5 bg-base-200">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Medien-Galerie</h3>
+            <button class="btn btn-sm btn-circle" onclick="closeMediaCarousel()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="carousel-container h-96 bg-base-100 rounded-lg relative">
+            <div id="carousel-image-container" class="h-full flex items-center justify-center p-4">
+                <!-- Hauptbild wird hier angezeigt -->
+            </div>
+            
+            <!-- Navigation Buttons -->
+            <button id="carousel-prev" class="btn btn-circle btn-primary absolute left-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button id="carousel-next" class="btn btn-circle btn-primary absolute right-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Vollbild Button -->
+            <button id="fullscreen-btn" class="btn btn-sm btn-secondary absolute top-4 right-4 z-50" onclick="openImageInNewTab()">
+                <i class="fas fa-external-link-alt mr-1"></i>Vollbild
+            </button>
+        </div>
+        
+        <!-- Thumbnail Navigation -->
+        <div id="thumbnailNav" class="mt-4 max-h-16 overflow-x-auto flex gap-2 p-2">
+            <!-- Thumbnails werden hier dynamisch geladen -->
+        </div>
+    </div>
+</dialog>
 {% endblock %} 

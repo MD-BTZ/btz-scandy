@@ -1,82 +1,81 @@
 {% extends "base.html" %}
 
-{% block title %}{{ tool.name }} - Details{% endblock %}
+{% block title %}{{ tool.name }} - {{ app_labels.tools.name }}{% endblock %}
 
-{% block page_content %}
-<div class="mb-4">
-    <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
-        <i class="fas fa-arrow-left mr-2"></i>
-        Zurück zur Übersicht
-    </a>
-</div>
+{% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="max-w-4xl mx-auto">
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold">{{ tool.name }}</h1>
-            <div class="flex gap-2">
-                <button class="btn btn-primary" onclick="editTool()">
-                    <i class="fas fa-edit mr-2"></i>
-                    Bearbeiten
-                </button>
-            </div>
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold">{{ tool.name }}</h1>
+            <p class="text-base-content/60">Barcode: {{ tool.barcode }}</p>
         </div>
+        <div class="flex gap-2">
+            <button onclick="editTool()" class="btn btn-primary">
+                <i class="fas fa-edit mr-2"></i>Bearbeiten
+            </button>
+            <button onclick="showUpdateBarcodeModal()" class="btn btn-outline">
+                <i class="fas fa-barcode mr-2"></i>Barcode ändern
+            </button>
+        </div>
+    </div>
 
-        <!-- Details Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Basis-Informationen -->
+    <!-- Hauptinhalt -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Linke Spalte -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Werkzeug-Details -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <div class="flex justify-between items-start">
-                        <h2 class="card-title">Details</h2>
-                        <button onclick="editTool()" class="btn btn-ghost btn-sm">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    </div>
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <label class="text-sm font-medium text-base-content/60">Barcode</label>
-                                <p class="font-mono">{{ tool.barcode }}</p>
-                            </div>
-                            <button onclick="showUpdateBarcodeModal()" class="btn btn-ghost btn-sm">
-                                <i class="fas fa-barcode"></i>
-                            </button>
-                        </div>
+                    <h2 class="card-title">
+                        <i class="fas fa-tools text-primary mr-2"></i>Details
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-sm font-medium text-base-content/60">Name</label>
-                            <p>{{ tool.name }}</p>
+                            <label class="label">
+                                <span class="label-text font-semibold">Name</span>
+                            </label>
+                            <p class="text-lg">{{ tool.name }}</p>
                         </div>
+                        
                         <div>
-                            <label class="text-sm font-medium text-base-content/60">Kategorie</label>
-                            <p>{{ tool.category or '-' }}</p>
+                            <label class="label">
+                                <span class="label-text font-semibold">Barcode</span>
+                            </label>
+                            <p class="text-lg font-mono">{{ tool.barcode }}</p>
                         </div>
+                        
                         <div>
-                            <label class="text-sm font-medium text-base-content/60">Lagerort</label>
-                            <p>{{ tool.location or '-' }}</p>
+                            <label class="label">
+                                <span class="label-text font-semibold">Kategorie</span>
+                            </label>
+                            <p class="text-lg">{{ tool.category or 'Keine Kategorie' }}</p>
                         </div>
+                        
                         <div>
-                            <label class="text-sm font-medium text-base-content/60">Status</label>
-                            <p>
-                                <span class="badge {% if tool.status == 'verfügbar' %}badge-success{% elif tool.status == 'ausgeliehen' %}badge-warning{% else %}badge-error{% endif %}">
-                                    {{ tool.status }}
-                                </span>
-                            </p>
+                            <label class="label">
+                                <span class="label-text font-semibold">Standort</span>
+                            </label>
+                            <p class="text-lg">{{ tool.location or 'Kein Standort' }}</p>
                         </div>
                     </div>
+                    
+                    {% if tool.description %}
+                    <div class="mt-4">
+                        <label class="label">
+                            <span class="label-text font-semibold">Beschreibung</span>
+                        </label>
+                        <p class="text-base-content/80">{{ tool.description }}</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
-            <!-- Beschreibung -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title">Beschreibung</h2>
-                    <p class="whitespace-pre-wrap">{{ tool.description or 'Keine Beschreibung vorhanden' }}</p>
-                </div>
-            </div>
+            
 
             <!-- Ausleihhistorie -->
-            <div class="card bg-base-100 shadow-xl col-span-2">
+            <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <h2 class="card-title">Ausleihhistorie</h2>
                     {% if lending_history %}
@@ -116,6 +115,100 @@
                 </div>
             </div>
         </div>
+
+        <!-- Rechte Spalte -->
+        <div class="space-y-6">
+            <!-- Status -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">
+                        <i class="fas fa-info-circle text-primary mr-2"></i>Status
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Aktueller Status</span>
+                            </label>
+                            {% if tool.is_available %}
+                                <div class="badge badge-success gap-2">
+                                    <i class="fas fa-check"></i>
+                                    Verfügbar
+                                </div>
+                            {% else %}
+                                <div class="badge badge-error gap-2">
+                                    <i class="fas fa-times"></i>
+                                    Ausgeliehen
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        {% if not tool.is_available %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Ausgeliehen an</span>
+                            </label>
+                            <a href="{{ url_for('workers.details', original_barcode=tool.lent_to_worker_barcode) }}" class="link link-primary">
+                                {{ tool.lent_to_worker_name }}
+                            </a>
+                        </div>
+                        
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Seit</span>
+                            </label>
+                            <p>{{ tool.lent_at | datetime if tool.lent_at else 'Unbekannt' }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medien-Galerie -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">Medien-Galerie</h2>
+                    <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
+                        <!-- Medien werden hier dynamisch geladen -->
+                    </div>
+                    <div id="no-media-message" class="text-base-content/60 text-center py-4">
+                        Keine Medien vorhanden
+                    </div>
+                    <button id="openCarouselBtn" class="btn btn-primary btn-sm" style="display: none;" onclick="openMediaCarousel(0)">
+                        <i class="fas fa-images mr-2"></i>Galerie öffnen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Aktionen -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">
+                        <i class="fas fa-cogs text-primary mr-2"></i>Aktionen
+                    </h2>
+                    
+                    <div class="space-y-2">
+                        {% if tool.is_available %}
+                            <button onclick="lendTool()" class="btn btn-primary w-full">
+                                <i class="fas fa-hand-holding mr-2"></i>Ausleihen
+                            </button>
+                        {% else %}
+                            <button onclick="returnTool()" class="btn btn-success w-full">
+                                <i class="fas fa-undo mr-2"></i>Zurückgeben
+                            </button>
+                        {% endif %}
+                        
+                        <button onclick="editTool()" class="btn btn-outline w-full">
+                            <i class="fas fa-edit mr-2"></i>Bearbeiten
+                        </button>
+                        
+                        <button onclick="showUpdateBarcodeModal()" class="btn btn-outline w-full">
+                            <i class="fas fa-barcode mr-2"></i>Barcode ändern
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -146,69 +239,389 @@
 
 <!-- Edit Modal -->
 <dialog id="editModal" class="modal">
-    <div class="modal-box">
+    <div class="modal-box max-w-2xl w-11/12 max-h-[90vh] overflow-y-auto">
         <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
         <form method="POST" id="editForm" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
-            <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Name</span>
                     </label>
                     <input type="text" name="name" class="input input-bordered" value="{{ tool.name }}" required>
                 </div>
+                
                 <div class="form-control">
                     <label class="label">
-                        <span class="label-text">Beschreibung</span>
+                        <span class="label-text">Barcode</span>
                     </label>
-                    <textarea name="description" class="textarea textarea-bordered h-24">{{ tool.description }}</textarea>
+                    <input type="text" name="barcode" class="input input-bordered" value="{{ tool.barcode }}" required>
                 </div>
+                
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Kategorie</span>
                     </label>
                     <select name="category" class="select select-bordered">
                         <option value="">Keine Kategorie</option>
-                        {% for cat in categories %}
-                        <option value="{{ cat }}" {% if tool and tool.category == cat %}selected{% endif %}>
-                            {{ cat }}
+                        {% for category in categories %}
+                        <option value="{{ category }}" {{ 'selected' if category == tool.category }}>
+                            {{ category }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
+                
                 <div class="form-control">
                     <label class="label">
-                        <span class="label-text">Lagerort</span>
+                        <span class="label-text">Standort</span>
                     </label>
                     <select name="location" class="select select-bordered">
                         <option value="">Kein Standort</option>
                         {% for location in locations %}
-                        <option value="{{ location }}" {% if tool and tool.location == location %}selected{% endif %}>
+                        <option value="{{ location }}" {{ 'selected' if location == tool.location }}>
                             {{ location }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-control">
+                
+                <div class="form-control md:col-span-2">
                     <label class="label">
-                        <span class="label-text">Status</span>
+                        <span class="label-text">Beschreibung</span>
                     </label>
-                    <select name="status" class="select select-bordered">
-                        <option value="verfügbar" {% if tool.status == 'verfügbar' %}selected{% endif %}>Verfügbar</option>
-                        <option value="defekt" {% if tool.status == 'defekt' %}selected{% endif %}>Defekt</option>
-                        <option value="ausgeliehen" {% if tool.status == 'ausgeliehen' %}selected{% endif %}>Ausgeliehen</option>
-                    </select>
+                    <textarea name="description" class="textarea textarea-bordered h-20">{{ tool.description or '' }}</textarea>
                 </div>
             </div>
-            <div class="modal-action">
-                <button type="submit" class="btn btn-primary">Speichern</button>
-                <button type="button" class="btn" onclick="closeEditModal()">Abbrechen</button>
+            
+            <div class="modal-action flex flex-wrap gap-2 justify-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save mr-2"></i>Speichern
+                </button>
+                <button type="button" class="btn" onclick="closeEditModal()">
+                    <i class="fas fa-times mr-2"></i>Abbrechen
+                </button>
             </div>
         </form>
     </div>
 </dialog>
 
-<!-- JavaScript -->
+<!-- Media Modal -->
+<dialog id="mediaModal" class="modal">
+    <div class="modal-box max-w-4xl w-11/12 h-4/5">
+        <h3 class="font-bold text-lg mb-4">Medien-Verwaltung</h3>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            <!-- Upload-Bereich -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-semibold mb-4">Upload-Bereich</h4>
+                
+                <div class="space-y-4">
+                    <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
+                        <p class="text-base-content/60 mb-4">Drag & Drop Zone</p>
+                        <input type="file" id="modalMediaFile" accept="image/*" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
+                    </div>
+                    
+                    <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
+                        <i class="fas fa-upload mr-2"></i>Hochladen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Vorhandene Medien -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-semibold mb-4">Vorhandene Medien</h4>
+                <div id="modal-media-list" class="grid grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                    <!-- Wird per JavaScript gefüllt -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn" onclick="closeMediaModal()">Schließen</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Medien-Carousel Modal -->
+<dialog id="mediaCarouselModal" class="modal">
+    <div class="modal-box max-w-7xl w-11/12 h-4/5 bg-base-200">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Medien-Galerie</h3>
+            <button class="btn btn-sm btn-circle" onclick="closeMediaCarousel()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="carousel-container h-96 bg-base-100 rounded-lg relative">
+            <div id="carousel-image-container" class="h-full flex items-center justify-center p-4">
+                <!-- Hauptbild wird hier angezeigt -->
+            </div>
+            
+            <!-- Navigation Buttons -->
+            <button id="carousel-prev" class="btn btn-circle btn-primary absolute left-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button id="carousel-next" class="btn btn-circle btn-primary absolute right-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Vollbild Button -->
+            <button id="fullscreen-btn" class="btn btn-sm btn-secondary absolute top-4 right-4 z-50" onclick="openImageInNewTab()">
+                <i class="fas fa-external-link-alt mr-1"></i>Vollbild
+            </button>
+        </div>
+        
+        <!-- Thumbnail Navigation -->
+        <div id="thumbnailNav" class="mt-4 max-h-16 overflow-x-auto flex gap-2 p-2">
+            <!-- Thumbnails werden hier dynamisch geladen -->
+        </div>
+    </div>
+</dialog>
+
 <script>
+// Medien-Galerie Variablen
+let mediaList = [];
+let currentImageIndex = 0;
+
+// Medien-Galerie laden
+function loadMediaGallery() {
+    console.log('=== LOADING TOOL MEDIA GALLERY ===');
+    const barcode = '{{ tool.barcode }}';
+    
+    if (!barcode) {
+        console.log('No barcode found');
+        return;
+    }
+    
+    const url = `/media/tools/${barcode}/list`;
+    console.log('Fetching from:', url);
+    
+    fetch(url)
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Media data:', data);
+            
+            if (data.success && data.media_list && data.media_list.length > 0) {
+                mediaList = data.media_list;
+                displayMediaPreview();
+            } else {
+                console.log('No media found');
+                document.getElementById('no-media-message').style.display = 'block';
+                document.getElementById('openCarouselBtn').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Medien:', error);
+        });
+}
+
+// Medien-Vorschau anzeigen
+function displayMediaPreview() {
+    const gallery = document.getElementById('media-preview-gallery');
+    const noMediaMessage = document.getElementById('no-media-message');
+    const openCarouselBtn = document.getElementById('openCarouselBtn');
+    
+    if (mediaList.length === 0) {
+        noMediaMessage.style.display = 'block';
+        openCarouselBtn.style.display = 'none';
+        return;
+    }
+    
+    noMediaMessage.style.display = 'none';
+    openCarouselBtn.style.display = 'block';
+    
+    // Zeige die ersten 4 Bilder als Vorschau
+    const previewImages = mediaList.slice(0, 4);
+    gallery.innerHTML = '';
+    
+    previewImages.forEach((media, index) => {
+        const mediaContainer = document.createElement('div');
+        mediaContainer.className = 'relative group';
+        
+        const img = document.createElement('img');
+        img.src = media.url;
+        img.alt = 'Werkzeug Vorschau';
+        img.className = 'w-full h-20 object-contain rounded-lg cursor-pointer bg-base-200';
+        img.onclick = () => openMediaCarousel(index);
+        
+        // Overlay mit Buttons
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2';
+        
+        // Preview-Stern Button
+        const starBtn = document.createElement('button');
+        starBtn.className = 'btn btn-xs btn-circle btn-primary';
+        starBtn.innerHTML = '<i class="fas fa-star"></i>';
+        starBtn.title = 'Als Preview-Bild setzen';
+        starBtn.onclick = (e) => {
+            e.stopPropagation();
+            setPreviewImage(media.filename);
+        };
+        
+        // Lösch-Button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-xs btn-circle btn-error';
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.title = 'Medium löschen';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteMedia(media.filename);
+        };
+        
+        overlay.appendChild(starBtn);
+        overlay.appendChild(deleteBtn);
+        mediaContainer.appendChild(img);
+        mediaContainer.appendChild(overlay);
+        gallery.appendChild(mediaContainer);
+    });
+}
+
+// Carousel öffnen
+function openMediaCarousel(startIndex = 0) {
+    currentImageIndex = startIndex;
+    displayCarousel();
+    document.getElementById('mediaCarouselModal').showModal();
+    setupCarouselEventListeners();
+}
+
+// Carousel schließen
+function closeMediaCarousel() {
+    document.getElementById('mediaCarouselModal').close();
+}
+
+// Carousel anzeigen
+function displayCarousel() {
+    const carouselContainer = document.getElementById('carousel-image-container');
+    const thumbnailNav = document.getElementById('thumbnailNav');
+    
+    if (mediaList.length === 0) return;
+    
+    // Hauptbild anzeigen
+    const currentMedia = mediaList[currentImageIndex];
+    carouselContainer.innerHTML = `
+        <img src="${currentMedia.url}" alt="Werkzeug Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
+    `;
+    
+    // Thumbnail-Navigation
+    thumbnailNav.innerHTML = '';
+    mediaList.forEach((media, index) => {
+        const thumb = document.createElement('img');
+        thumb.src = media.url;
+        thumb.alt = 'Thumbnail';
+        thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+        thumb.onclick = () => goToSlide(index);
+        thumbnailNav.appendChild(thumb);
+    });
+    
+    updateCarouselPosition();
+}
+
+// Carousel-Position aktualisieren
+function updateCarouselPosition() {
+    const prevBtn = document.getElementById('carousel-prev');
+    const nextBtn = document.getElementById('carousel-next');
+    
+    prevBtn.disabled = currentImageIndex === 0;
+    nextBtn.disabled = currentImageIndex === mediaList.length - 1;
+}
+
+// Zu Slide gehen
+function goToSlide(index) {
+    currentImageIndex = index;
+    displayCarousel();
+}
+
+// Nächster Slide
+function nextSlide() {
+    if (currentImageIndex < mediaList.length - 1) {
+        currentImageIndex++;
+        displayCarousel();
+    }
+}
+
+// Vorheriger Slide
+function prevSlide() {
+    if (currentImageIndex > 0) {
+        currentImageIndex--;
+        displayCarousel();
+    }
+}
+
+// Carousel Event Listeners einrichten
+function setupCarouselEventListeners() {
+    setTimeout(() => {
+        const prevBtn = document.getElementById('carousel-prev');
+        const nextBtn = document.getElementById('carousel-next');
+        
+        if (prevBtn) {
+            prevBtn.removeEventListener('click', prevSlide);
+            prevBtn.addEventListener('click', prevSlide);
+        }
+        
+        if (nextBtn) {
+            nextBtn.removeEventListener('click', nextSlide);
+            nextBtn.addEventListener('click', nextSlide);
+        }
+    }, 100);
+}
+
+// Vollbild-Button
+function openImageInNewTab() {
+    if (mediaList.length > 0) {
+        const currentMedia = mediaList[currentImageIndex];
+        window.open(currentMedia.url, '_blank');
+    }
+}
+
+// Medium löschen
+function deleteMedia(filename) {
+    if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
+        return;
+    }
+    
+    fetch(`/media/tools/{{ tool.barcode }}/delete/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Medium erfolgreich gelöscht!');
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Löschen');
+        }
+    })
+    .catch(error => {
+        console.error('Delete error:', error);
+        alert('Fehler beim Löschen');
+    });
+}
+
+// Preview-Bild setzen
+function setPreviewImage(filename) {
+    fetch(`/media/tools/{{ tool.barcode }}/set_preview/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Preview-Bild erfolgreich gesetzt!');
+            window.location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Setzen des Preview-Bildes');
+        }
+    })
+    .catch(error => {
+        console.error('Set preview error:', error);
+        alert('Fehler beim Setzen des Preview-Bildes');
+    });
+}
+
+// Modal-Funktionen
 function showUpdateBarcodeModal() {
     const modal = document.getElementById('updateBarcodeModal');
     document.getElementById('oldBarcode').value = '{{ tool.barcode }}';
@@ -277,7 +690,6 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
         if (data.success) {
             showToast('success', data.message);
             document.getElementById('editModal').close();
-            // Kurze Verzögerung, dann zur Detail-Seite weiterleiten
             setTimeout(() => {
                 window.location.href = data.redirect;
             }, 1000);
@@ -289,6 +701,32 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
         console.error('Error:', error);
         showToast('error', 'Ein Fehler ist aufgetreten');
     });
+});
+
+// Event Listeners für Carousel
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('mediaCarouselModal').open) {
+        if (e.key === 'ArrowLeft') {
+            prevSlide();
+        } else if (e.key === 'ArrowRight') {
+            nextSlide();
+        } else if (e.key === 'Escape') {
+            closeMediaCarousel();
+        }
+    }
+});
+
+// Modal-Event-Listener
+document.getElementById('mediaCarouselModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeMediaCarousel();
+    }
+});
+
+// Seite laden
+document.addEventListener('DOMContentLoaded', function() {
+    // Medien-Galerie laden
+    loadMediaGallery();
 });
 </script>
 {% endblock %} 

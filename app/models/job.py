@@ -49,6 +49,7 @@ class Job:
         self.applications = data.get('applications', 0)
         self.job_number = data.get('job_number')
         self.comments = data.get('comments', [])
+
         
 
     
@@ -108,7 +109,6 @@ class Job:
             'views': self.views,
             'applications': self.applications,
             'job_number': self.job_number,
-
         }
         
         # Kommentare nur hinzufügen, wenn sie existieren
@@ -140,6 +140,7 @@ class Job:
             
             if job_data:
                 loggers['user_actions'].info(f"Job gefunden in DB: {job_data.get('title', 'Unbekannt')}")
+
                 return Job(job_data)
             else:
                 loggers['errors'].error(f"Job nicht in DB gefunden für ID: {job_id}")

@@ -128,6 +128,228 @@ document.addEventListener('DOMContentLoaded', function() {
         // Entferne und füge sortierte Zeilen wieder hinzu
         rows.forEach(row => tbody.appendChild(row));
     }
+
+    // Tool-spezifische Funktionen
+    {% if request.endpoint == 'tools.index' %}
+    console.log('=== TOOLS PAGE SCRIPT LOADED ===');
+
+    // Filter-Funktionalität
+    function initializeFilters() {
+        console.log('Initializing filters...');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const locationFilter = document.getElementById('locationFilter');
+        const statusFilter = document.getElementById('statusFilter');
+
+        function applyFilters() {
+            const category = categoryFilter.value;
+            const location = locationFilter.value;
+            const status = statusFilter.value;
+
+            document.querySelectorAll('.data-row').forEach(row => {
+                const matchesCategory = !category || row.dataset.category === category;
+                const matchesLocation = !location || row.dataset.location === location;
+                const matchesStatus = !status || row.dataset.status === status;
+
+                row.style.display = matchesCategory && matchesLocation && matchesStatus ? '' : 'none';
+            });
+        }
+
+        categoryFilter.addEventListener('change', applyFilters);
+        locationFilter.addEventListener('change', applyFilters);
+        statusFilter.addEventListener('change', applyFilters);
+        console.log('Filters initialized');
+    }
+
+    // Medien-Vorschau für Werkzeuge laden
+    function loadToolPreviews() {
+        console.log('=== LOADING TOOL PREVIEWS ===');
+        
+        const toolPreviews = document.querySelectorAll('.tool-media-preview');
+        console.log(`Found ${toolPreviews.length} tool previews`);
+        
+        toolPreviews.forEach((preview, index) => {
+            const barcode = preview.dataset.barcode;
+            const savedPreviewImage = preview.dataset.previewImage;
+            
+            console.log(`[${index}] Loading preview for tool ${barcode}, saved preview: ${savedPreviewImage}`);
+            
+            if (barcode) {
+                const url = `/media/tools/${barcode}/list`;
+                console.log(`[${index}] Fetching from: ${url}`);
+                
+                fetch(url)
+                    .then(response => {
+                        console.log(`[${index}] Response status:`, response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log(`[${index}] Media data:`, data);
+                        
+                        if (data.success && data.media_list && data.media_list.length > 0) {
+                            // Suche nach dem gespeicherten Preview-Bild oder verwende das erste
+                            let previewImage = data.media_list[0];
+                            
+                            // Wenn ein gespeichertes Preview-Bild existiert, verwende es
+                            if (savedPreviewImage && savedPreviewImage !== '') {
+                                const savedImage = data.media_list.find(img => img.filename === savedPreviewImage);
+                                if (savedImage) {
+                                    console.log(`[${index}] Found saved preview image:`, savedImage);
+                                    previewImage = savedImage;
+                                } else {
+                                    console.log(`[${index}] Saved preview image not found in media list`);
+                                }
+                            }
+                            
+                            console.log(`[${index}] Using preview image:`, previewImage);
+                            console.log(`[${index}] Image URL:`, previewImage.url);
+                            
+                            // Test: Zeige das Bild direkt an
+                            const imgHtml = `<img src="${previewImage.url}" alt="Werkzeug Vorschau" class="w-12 h-12 object-cover rounded-lg">`;
+                            console.log(`[${index}] Setting HTML:`, imgHtml);
+                            
+                            preview.innerHTML = imgHtml;
+                            
+                            // Zusätzlicher Test: Prüfe ob das Bild geladen wurde
+                            setTimeout(() => {
+                                const img = preview.querySelector('img');
+                                if (img) {
+                                    console.log(`[${index}] Image element found, src:`, img.src);
+                                    img.onload = () => console.log(`[${index}] Image loaded successfully`);
+                                    img.onerror = () => console.log(`[${index}] Image failed to load`);
+                                } else {
+                                    console.log(`[${index}] No image element found after setting HTML`);
+                                }
+                            }, 100);
+                            
+                        } else {
+                            console.log(`[${index}] No media found for tool ${barcode}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(`[${index}] Fehler beim Laden der Medien-Vorschau:`, error);
+                    });
+            } else {
+                console.log(`[${index}] No barcode found`);
+            }
+        });
+    }
+
+    // Sofortige Ausführung für Tools
+    console.log('Running tools page script immediately');
+    initializeFilters();
+    loadToolPreviews();
+    {% endif %}
+
+    // Verbrauchsgüter-spezifische Funktionen
+    {% if request.endpoint == 'consumables.index' %}
+    console.log('=== CONSUMABLES PAGE SCRIPT LOADED ===');
+
+    // Filter-Funktionalität
+    function initializeFilters() {
+        console.log('Initializing filters...');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const locationFilter = document.getElementById('locationFilter');
+        const stockFilter = document.getElementById('stockFilter');
+
+        function applyFilters() {
+            const category = categoryFilter.value;
+            const location = locationFilter.value;
+            const stock = stockFilter.value;
+
+            document.querySelectorAll('.data-row').forEach(row => {
+                const matchesCategory = !category || row.dataset.category === category;
+                const matchesLocation = !location || row.dataset.location === location;
+                const matchesStock = !stock || row.dataset.stock === stock;
+
+                row.style.display = matchesCategory && matchesLocation && matchesStock ? '' : 'none';
+            });
+        }
+
+        categoryFilter.addEventListener('change', applyFilters);
+        locationFilter.addEventListener('change', applyFilters);
+        stockFilter.addEventListener('change', applyFilters);
+        console.log('Filters initialized');
+    }
+
+    // Medien-Vorschau für Verbrauchsgüter laden
+    function loadConsumablePreviews() {
+        console.log('=== LOADING CONSUMABLE PREVIEWS ===');
+        
+        const consumablePreviews = document.querySelectorAll('.consumable-media-preview');
+        console.log(`Found ${consumablePreviews.length} consumable previews`);
+        
+        consumablePreviews.forEach((preview, index) => {
+            const barcode = preview.dataset.barcode;
+            const savedPreviewImage = preview.dataset.previewImage;
+            
+            console.log(`[${index}] Loading preview for consumable ${barcode}, saved preview: ${savedPreviewImage}`);
+            
+            if (barcode) {
+                const url = `/media/consumables/${barcode}/list`;
+                console.log(`[${index}] Fetching from: ${url}`);
+                
+                fetch(url)
+                    .then(response => {
+                        console.log(`[${index}] Response status:`, response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log(`[${index}] Media data:`, data);
+                        
+                        if (data.success && data.media_list && data.media_list.length > 0) {
+                            // Suche nach dem gespeicherten Preview-Bild oder verwende das erste
+                            let previewImage = data.media_list[0];
+                            
+                            // Wenn ein gespeichertes Preview-Bild existiert, verwende es
+                            if (savedPreviewImage && savedPreviewImage !== '') {
+                                const savedImage = data.media_list.find(img => img.filename === savedPreviewImage);
+                                if (savedImage) {
+                                    console.log(`[${index}] Found saved preview image:`, savedImage);
+                                    previewImage = savedImage;
+                                } else {
+                                    console.log(`[${index}] Saved preview image not found in media list`);
+                                }
+                            }
+                            
+                            console.log(`[${index}] Using preview image:`, previewImage);
+                            console.log(`[${index}] Image URL:`, previewImage.url);
+                            
+                            // Test: Zeige das Bild direkt an
+                            const imgHtml = `<img src="${previewImage.url}" alt="Verbrauchsgut Vorschau" class="w-12 h-12 object-cover rounded-lg">`;
+                            console.log(`[${index}] Setting HTML:`, imgHtml);
+                            
+                            preview.innerHTML = imgHtml;
+                            
+                            // Zusätzlicher Test: Prüfe ob das Bild geladen wurde
+                            setTimeout(() => {
+                                const img = preview.querySelector('img');
+                                if (img) {
+                                    console.log(`[${index}] Image element found, src:`, img.src);
+                                    img.onload = () => console.log(`[${index}] Image loaded successfully`);
+                                    img.onerror = () => console.log(`[${index}] Image failed to load`);
+                                } else {
+                                    console.log(`[${index}] No image element found after setting HTML`);
+                                }
+                            }, 100);
+                            
+                        } else {
+                            console.log(`[${index}] No media found for consumable ${barcode}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(`[${index}] Fehler beim Laden der Medien-Vorschau:`, error);
+                    });
+            } else {
+                console.log(`[${index}] No barcode found`);
+            }
+        });
+    }
+
+    // Sofortige Ausführung für Verbrauchsgüter
+    console.log('Running consumables page script immediately');
+    initializeFilters();
+    loadConsumablePreviews();
+    {% endif %}
 });
 </script>
 {% endblock %} 

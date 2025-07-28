@@ -36,6 +36,7 @@
 {% endblock %}
 
 {% block table_headers %}
+<th>Bild</th>
 <th>Barcode</th>
 <th>Name</th>
 <th>Kategorie</th>
@@ -50,6 +51,13 @@
     data-category="{{ consumable.category }}" 
     data-location="{{ consumable.location }}"
     data-stock="{% if consumable.quantity == 0 %}none{% elif consumable.quantity <= consumable.min_quantity %}low{% else %}normal{% endif %}">
+    <td>
+        <div class="consumable-media-preview" data-barcode="{{ consumable.barcode }}" data-preview-image="{{ consumable.preview_image or '' }}">
+            <div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center">
+                <i class="fas fa-box text-base-content/40"></i>
+            </div>
+        </div>
+    </td>
     <td>
         <div class="badge badge-outline">{{ consumable.barcode }}</div>
     </td>
@@ -99,31 +107,6 @@
 {% block scripts %}
 {{ super() }}
 <script>
-// Filter-Funktionalität
-document.addEventListener('DOMContentLoaded', function() {
-    const categoryFilter = document.getElementById('categoryFilter');
-    const locationFilter = document.getElementById('locationFilter');
-    const stockFilter = document.getElementById('stockFilter');
-
-    function applyFilters() {
-        const category = categoryFilter.value;
-        const location = locationFilter.value;
-        const stock = stockFilter.value;
-
-        document.querySelectorAll('.data-row').forEach(row => {
-            const matchesCategory = !category || row.dataset.category === category;
-            const matchesLocation = !location || row.dataset.location === location;
-            const matchesStock = !stock || row.dataset.stock === stock;
-
-            row.style.display = matchesCategory && matchesLocation && matchesStock ? '' : 'none';
-        });
-    }
-
-    categoryFilter.addEventListener('change', applyFilters);
-    locationFilter.addEventListener('change', applyFilters);
-    stockFilter.addEventListener('change', applyFilters);
-});
-
 // Lösch-Funktion
 function deleteConsumable(barcode) {
     if (confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {
@@ -149,4 +132,4 @@ function deleteConsumable(barcode) {
     }
 }
 </script>
-{% endblock %} 
+{% endblock %}
