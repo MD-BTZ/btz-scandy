@@ -16,7 +16,7 @@
                 Neuen Auftrag erstellen
             </h1>
             <p class="text-center text-base-content/70">
-                Erstellen Sie einen neuen Auftrag.
+                Erstellen Sie einen neuen Auftrag für ein spezifisches Handlungsfeld.
             </p>
         </div>
         <!-- Formular -->
@@ -40,18 +40,13 @@
                         </div>
                         <div class="form-control">
                             <label class="label">
-                                <span class="label-text font-semibold">Bereich *</span>
+                                <span class="label-text font-semibold">Handlungsfeld *</span>
                             </label>
                             <select name="category" class="select select-bordered w-full" required>
-                                <option value="">Bereich auswählen</option>
-                                <option value="Werkstatt">Werkstatt</option>
-                                <option value="IT-Support">IT-Support</option>
-                                <option value="Verwaltung">Verwaltung</option>
-                                <option value="Hausmeister">Hausmeister</option>
-                                <option value="Catering">Catering</option>
-                                <option value="Reinigung">Reinigung</option>
-                                <option value="Sicherheit">Sicherheit</option>
-                                <option value="Sonstiges">Sonstiges</option>
+                                <option value="">Handlungsfeld auswählen</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat }}">{{ cat }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                     </div>

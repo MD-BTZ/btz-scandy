@@ -179,9 +179,7 @@
                                 <h3 class="card-title text-lg">
                                     <i class="fas fa-images text-primary mr-2"></i>Medien-Galerie
                                 </h3>
-                                <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-plus mr-2"></i>Medien hinzufügen
-                                </button>
+
                             </div>
                             
                             <!-- Medien-Liste -->
@@ -230,43 +228,7 @@
     </div>
 </div>
 
-<!-- Media Modal -->
-<dialog id="mediaModal" class="modal">
-    <div class="modal-box max-w-4xl w-11/12 h-4/5">
-        <h3 class="font-bold text-lg mb-4">Medien-Verwaltung</h3>
-        
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-            <!-- Upload-Bereich -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h4 class="font-semibold mb-4">Upload-Bereich</h4>
-                
-                <div class="space-y-4">
-                    <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
-                        <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
-                        <p class="text-base-content/60 mb-4">Drag & Drop Zone</p>
-                        <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
-                    </div>
-                    
-                    <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
-                        <i class="fas fa-upload mr-2"></i>Hochladen
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Vorhandene Medien -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h4 class="font-semibold mb-4">Vorhandene Medien</h4>
-                <div id="modal-media-list" class="grid grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                    <!-- Wird per JavaScript gefüllt -->
-                </div>
-            </div>
-        </div>
 
-        <div class="modal-action">
-            <button type="button" class="btn" onclick="closeMediaModal()">Schließen</button>
-        </div>
-    </div>
-</dialog>
 
 <script>
 // Bild-Modal Funktionen
@@ -410,267 +372,18 @@ function updateMediaFileName(input) {
     }
 }
 
-// Medien-Modal Funktionen
-function openMediaModal() {
-    document.getElementById('mediaModal').showModal();
-    loadModalMediaList();
-}
 
-function closeMediaModal() {
-    document.getElementById('mediaModal').close();
-}
 
-function updateModalMediaFileName() {
-    const fileInput = document.getElementById('modalMediaFile');
-    const uploadBtn = document.getElementById('modalUploadBtn');
-    
-    if (fileInput.files.length > 0) {
-        uploadBtn.disabled = false;
-    } else {
-        uploadBtn.disabled = true;
-    }
-}
 
-function uploadModalMedia() {
-    const fileInput = document.getElementById('modalMediaFile');
-    const uploadBtn = document.getElementById('modalUploadBtn');
-    
-    if (!fileInput.files.length) {
-        alert('Bitte wählen Sie eine Datei aus');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    
-    uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hochladen...';
-    
-    fetch(`/media/jobs/{{ job.id|string }}/upload`, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Datei-Input zurücksetzen
-            fileInput.value = '';
-            uploadBtn.disabled = true;
-            uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
-            
-            // Erfolgsmeldung anzeigen
-            alert('Medien erfolgreich hochgeladen!');
-            
-            // Medien-Listen neu laden
-            loadModalMediaList();
-            loadMediaList();
-        } else {
-            alert(data.error || 'Fehler beim Hochladen');
-            uploadBtn.disabled = false;
-            uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
-        }
-    })
-    .catch(error => {
-        console.error('Upload error:', error);
-        alert('Fehler beim Hochladen');
-        uploadBtn.disabled = false;
-        uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
-    });
-}
 
-function loadModalMediaList() {
-    fetch(`/media/jobs/{{ job.id|string }}/list`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.media_list && data.media_list.length > 0) {
-                displayModalMediaList(data.media_list);
-            } else {
-                document.getElementById('modal-media-list').innerHTML = '<p class="text-base-content/60">Keine Medien vorhanden</p>';
-            }
-        })
-        .catch(error => {
-            console.error('Fehler beim Laden der Modal-Medien:', error);
-            document.getElementById('modal-media-list').innerHTML = '<p class="text-base-content/60">Fehler beim Laden</p>';
-        });
-}
-
-function displayModalMediaList(mediaList) {
-    const container = document.getElementById('modal-media-list');
-    container.innerHTML = '';
-    
-    mediaList.forEach((media, index) => {
-        const mediaItem = document.createElement('div');
-        mediaItem.className = 'relative group';
-        
-        // Prüfe ob es eine PDF-Datei ist
-        const isPdf = media.filename.toLowerCase().endsWith('.pdf');
-        
-        if (isPdf) {
-            // PDF-Anzeige
-            mediaItem.innerHTML = `
-                <div class="relative">
-                    <div class="w-full h-24 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity"
-                         onclick="openPdfModal('${media.url}', '${media.filename}')">
-                        <div class="text-center">
-                            <i class="fas fa-file-pdf text-red-500 text-2xl mb-1"></i>
-                            <p class="text-xs text-red-700 font-medium">PDF</p>
-                            <p class="text-xs text-red-600 truncate">${media.filename}</p>
-                        </div>
-                    </div>
-                    <button onclick="deleteModalMedia('${media.filename}')" 
-                            class="absolute top-1 right-1 btn btn-error btn-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            `;
-        } else {
-            // Bild-Anzeige
-            mediaItem.innerHTML = `
-                <div class="relative">
-                    <img src="${media.url}" 
-                         alt="Medien ${index + 1}"
-                         class="w-full h-24 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
-                         onclick="openImageModal('${media.url}')">
-                    <button onclick="deleteModalMedia('${media.filename}')" 
-                            class="absolute top-1 right-1 btn btn-error btn-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            `;
-        }
-        
-        container.appendChild(mediaItem);
-    });
-}
-
-function deleteModalMedia(filename) {
-    if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
-        return;
-    }
-    
-    fetch(`/media/jobs/{{ job.id|string }}/delete/${filename}`, {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Medium erfolgreich gelöscht!');
-            loadModalMediaList();
-            loadMediaList();
-        } else {
-            alert(data.error || 'Fehler beim Löschen');
-        }
-    })
-    .catch(error => {
-        console.error('Delete error:', error);
-        alert('Fehler beim Löschen');
-    });
-}
-
-function openImageModal(imageSrc) {
-    // Verwende das bestehende Bild-Modal oder erstelle ein neues
-    const modal = document.getElementById('imageModal') || createImageModal();
-    document.getElementById('modalImage').src = imageSrc;
-    modal.showModal();
-}
-
-function createImageModal() {
-    const modal = document.createElement('dialog');
-    modal.id = 'imageModal';
-    modal.className = 'modal';
-    modal.innerHTML = `
-        <div class="modal-box max-w-4xl">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-lg">Bild-Vorschau</h3>
-                <button onclick="closeImageModal()" class="btn btn-ghost btn-sm">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <img id="modalImage" src="" alt="Bild-Vorschau" class="w-full h-auto max-h-96 object-contain">
-        </div>
-    `;
-    document.body.appendChild(modal);
-    return modal;
-}
-
-function closeImageModal() {
-    const modal = document.getElementById('imageModal');
-    if (modal) {
-        modal.close();
-    }
-}
-
-// PDF-Modal Funktionen
-function openPdfModal(pdfUrl, filename) {
-    // Erstelle oder verwende bestehendes PDF-Modal
-    let pdfModal = document.getElementById('pdfModal');
-    if (!pdfModal) {
-        pdfModal = createPdfModal();
-    }
-    
-    // Setze PDF-URL und Dateiname
-    const pdfIframe = document.getElementById('pdfIframe');
-    const pdfTitle = document.getElementById('pdfTitle');
-    
-    pdfIframe.src = pdfUrl;
-    pdfTitle.textContent = filename;
-    
-    pdfModal.showModal();
-}
-
-function createPdfModal() {
-    const modal = document.createElement('dialog');
-    modal.id = 'pdfModal';
-    modal.className = 'modal';
-    modal.innerHTML = `
-        <div class="modal-box max-w-6xl w-11/12 h-4/5">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-lg" id="pdfTitle">PDF-Vorschau</h3>
-                <button onclick="closePdfModal()" class="btn btn-ghost btn-sm">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="h-full bg-base-100 rounded-lg overflow-hidden">
-                <iframe id="pdfIframe" 
-                        class="w-full h-full border-0" 
-                        frameborder="0">
-                </iframe>
-            </div>
-            <div class="modal-action">
-                <button onclick="downloadPdf()" class="btn btn-primary btn-sm">
-                    <i class="fas fa-download mr-2"></i>Herunterladen
-                </button>
-                <button onclick="closePdfModal()" class="btn btn-ghost btn-sm">Schließen</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    return modal;
-}
-
-function closePdfModal() {
-    const modal = document.getElementById('pdfModal');
-    if (modal) {
-        // Iframe-Src zurücksetzen um Speicher freizugeben
-        const iframe = document.getElementById('pdfIframe');
-        if (iframe) {
-            iframe.src = '';
-        }
-        modal.close();
-    }
-}
-
-function downloadPdf() {
-    const iframe = document.getElementById('pdfIframe');
-    const filename = document.getElementById('pdfTitle').textContent;
-    
-    if (iframe && iframe.src) {
-        // Erstelle Download-Link
-        const link = document.createElement('a');
-        link.href = iframe.src;
-        link.download = filename;
-        link.click();
-    }
+// PDF Download Funktion
+function downloadPdf(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // Medien-Liste beim Laden der Seite laden
@@ -687,11 +400,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Modal schließen bei Klick außerhalb
-document.getElementById('imageModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeImageModal();
-    }
-});
+
 </script>
 {% endblock %} 

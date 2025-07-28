@@ -334,13 +334,7 @@
                 </div>
             </div>
             
-            <!-- Vorhandene Medien -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h4 class="font-semibold mb-4">Vorhandene Medien</h4>
-                <div id="modal-media-list" class="grid grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                    <!-- Wird per JavaScript gefüllt -->
-                </div>
-            </div>
+
         </div>
 
         <div class="modal-action">
@@ -480,7 +474,7 @@ function displayMediaPreview() {
             // PDF-Vorschau
             const pdfPreview = document.createElement('div');
             pdfPreview.className = 'w-full h-20 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity';
-            pdfPreview.onclick = () => openPdfModal(media.url, media.filename);
+            pdfPreview.onclick = () => downloadPdf(media.url, media.filename);
             
             pdfPreview.innerHTML = `
                 <div class="text-center">
@@ -552,19 +546,47 @@ function displayCarousel() {
     
     // Hauptbild anzeigen
     const currentMedia = mediaList[currentImageIndex];
-    carouselContainer.innerHTML = `
-        <img src="${currentMedia.url}" alt="Werkzeug Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
-    `;
+    const isPdf = currentMedia.filename.toLowerCase().endsWith('.pdf');
+    
+    if (isPdf) {
+        // PDF anzeigen
+        carouselContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full">
+                <i class="fas fa-file-pdf text-red-500 text-6xl mb-4"></i>
+                <p class="text-lg font-semibold mb-4">${currentMedia.filename}</p>
+                <button onclick="downloadPdf('${currentMedia.url}', '${currentMedia.filename}')" class="btn btn-primary">
+                    <i class="fas fa-download mr-2"></i>PDF herunterladen
+                </button>
+            </div>
+        `;
+    } else {
+        // Bild anzeigen
+        carouselContainer.innerHTML = `
+            <img src="${currentMedia.url}" alt="Werkzeug Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
+        `;
+    }
     
     // Thumbnail-Navigation
     thumbnailNav.innerHTML = '';
     mediaList.forEach((media, index) => {
-        const thumb = document.createElement('img');
-        thumb.src = media.url;
-        thumb.alt = 'Thumbnail';
-        thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
-        thumb.onclick = () => goToSlide(index);
-        thumbnailNav.appendChild(thumb);
+        const isThumbPdf = media.filename.toLowerCase().endsWith('.pdf');
+        
+        if (isThumbPdf) {
+            // PDF Thumbnail
+            const thumb = document.createElement('div');
+            thumb.className = `w-12 h-12 bg-red-100 border-2 border-red-300 rounded flex items-center justify-center cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+            thumb.innerHTML = '<i class="fas fa-file-pdf text-red-500 text-xs"></i>';
+            thumb.onclick = () => goToSlide(index);
+            thumbnailNav.appendChild(thumb);
+        } else {
+            // Bild Thumbnail
+            const thumb = document.createElement('img');
+            thumb.src = media.url;
+            thumb.alt = 'Thumbnail';
+            thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+            thumb.onclick = () => goToSlide(index);
+            thumbnailNav.appendChild(thumb);
+        }
     });
     
     updateCarouselPosition();
@@ -1122,6 +1144,16 @@ function uploadModalMedia() {
         uploadBtn.disabled = false;
         uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
     });
+}
+
+// PDF Download Funktion
+function downloadPdf(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // Seite laden

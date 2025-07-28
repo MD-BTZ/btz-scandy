@@ -495,37 +495,37 @@ let currentImageIndex = 0;
 
 // Medien-Galerie laden
 function loadMediaGallery() {
-    console.log('=== LOADING TICKET MEDIA GALLERY ===');
-    const ticketId = '{{ ticket.id }}';
-    
-    if (!ticketId) {
-        console.log('No ticket ID found');
-        return;
-    }
-    
-    const url = `/media/tickets/${ticketId}/list`;
-    console.log('Fetching from:', url);
-    
-    fetch(url)
-        .then(response => {
-            console.log('Response status:', response.status);
-            return response.json();
-        })
-        .then(data => {
-            console.log('Media data:', data);
-            
-            if (data.success && data.media_list && data.media_list.length > 0) {
-                mediaList = data.media_list;
-                displayMediaPreview();
-            } else {
-                console.log('No media found');
+        console.log('=== LOADING TICKET MEDIA GALLERY ===');
+        const ticketId = '{{ ticket.id }}';
+        
+        if (!ticketId) {
+            console.log('No ticket ID found');
+            return;
+        }
+        
+        const url = `/media/tickets/${ticketId}/list`;
+        console.log('Fetching from:', url);
+        
+        fetch(url)
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Media data:', data);
+                
+                if (data.success && data.media_list && data.media_list.length > 0) {
+                    mediaList = data.media_list;
+                    displayMediaPreview();
+                } else {
+                    console.log('No media found');
                 document.getElementById('no-media-message').style.display = 'block';
                 document.getElementById('openCarouselBtn').style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error('Fehler beim Laden der Medien:', error);
-        });
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Laden der Medien:', error);
+            });
 }
 
 // Medien-Vorschau anzeigen

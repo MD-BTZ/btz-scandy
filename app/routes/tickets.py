@@ -1597,6 +1597,11 @@ def inject_unread_tickets_count():
 @login_required
 def public_create_order():
     """Interne Auftragserstellung für eingeloggte Benutzer."""
+    if request.method == 'GET':
+        categories = get_ticket_categories_from_settings()
+        return render_template('tickets/create_auftrag.html', 
+                             categories=categories,
+                             error=None)
     return _handle_auftrag_creation()
 
 @bp.route('/auftrag-extern', methods=['GET', 'POST'])
@@ -1633,8 +1638,9 @@ def _handle_auftrag_creation(external=False):
                                          categories=categories,
                                          error='Titel ist erforderlich.')
                 else:
-                    flash('Titel ist erforderlich.', 'error')
-                    return redirect(url_for('tickets.public_create_order'))
+                    return render_template('tickets/create_auftrag.html', 
+                                         categories=categories,
+                                         error='Titel ist erforderlich.')
                 
             if not description:
                 categories = get_ticket_categories_from_settings()
@@ -1643,8 +1649,9 @@ def _handle_auftrag_creation(external=False):
                                          categories=categories,
                                          error='Beschreibung ist erforderlich.')
                 else:
-                    flash('Beschreibung ist erforderlich.', 'error')
-                    return redirect(url_for('tickets.public_create_order'))
+                    return render_template('tickets/create_auftrag.html', 
+                                         categories=categories,
+                                         error='Beschreibung ist erforderlich.')
                 
             # Kategorie ist optional, daher entfernen wir die Validierung
             # if not category:
