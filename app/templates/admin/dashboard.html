@@ -261,7 +261,7 @@
             </div>
         </div>
 
-        <!-- Kategorien -->
+                        <!-- Kategorien -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
@@ -282,18 +282,18 @@
                     </table>
                 </div>
                 <form id="addCategoryForm" class="mt-4 flex gap-2">
-                    <input type="text" name="name" class="input input-bordered flex-1" placeholder="Kategorie eingeben" required>
+                                            <input type="text" name="name" class="input input-bordered flex-1" placeholder="Kategorie eingeben" required>
                     <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
                 </form>
             </div>
         </div>
 
-        <!-- Ticket-Kategorien -->
+                        <!-- Handlungsfelder -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
                     <i class="fas fa-ticket-alt text-primary"></i>
-                    Ticket-Kategorien
+                    Handlungsfelder
                 </h2>
                 <div class="overflow-y-auto max-h-64">
                     <table class="table table-zebra w-full">
@@ -309,7 +309,7 @@
                     </table>
                 </div>
                 <form id="addTicketCategoryForm" class="mt-4 flex gap-2">
-                    <input type="text" name="name" class="input input-bordered flex-1" placeholder="Ticket-Kategorie eingeben" required>
+                                            <input type="text" name="name" class="input input-bordered flex-1" placeholder="Handlungsfeld eingeben" required>
                     <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
                 </form>
             </div>
@@ -579,7 +579,7 @@ const LocationManager = {
     }
 };
 
-// Kategorieverwaltung
+        // Kategorieverwaltung
 const CategoryManager = {
     init() {
         const form = document.getElementById('addCategoryForm');
@@ -644,7 +644,7 @@ const CategoryManager = {
             if (data.success) {
                 form.reset();
                 this.loadCategories();
-                showToast('success', 'Kategorie hinzugefügt');
+                showToast('success', 'Handlungsfeld hinzugefügt');
             } else {
                 showToast('error', data.message || 'Fehler beim Hinzufügen');
             }
@@ -659,7 +659,7 @@ const CategoryManager = {
     },
 
     async deleteCategory(name) {
-        if (!confirm(`Möchten Sie die Kategorie "${name}" wirklich löschen?`)) {
+        if (!confirm(`Möchten Sie das Handlungsfeld "${name}" wirklich löschen?`)) {
             return;
         }
 
@@ -671,7 +671,7 @@ const CategoryManager = {
             
             if (data.success) {
                 this.loadCategories();
-                showToast('success', 'Kategorie gelöscht');
+                showToast('success', 'Handlungsfeld gelöscht');
             } else {
                 showToast('error', data.message || 'Fehler beim Löschen');
             }

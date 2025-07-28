@@ -32,9 +32,9 @@
                             <p>{{ ticket.priority }}</p>
                         </div>
                         <div>
-                            <p class="text-sm opacity-70">Kategorie</p>
+                            <p class="text-sm opacity-70">Handlungsfeld</p>
                             <select id="categoryInput" class="select select-bordered w-full" onchange="updateTicketCategory(this.value)">
-                                <option value="">Keine Kategorie</option>
+                                <option value="">Kein Handlungsfeld</option>
                                 {% for category in categories %}
                                 <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
                                     {{ category }}
@@ -399,15 +399,15 @@ function updateTicketCategory(newCategory) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast('Kategorie erfolgreich aktualisiert', 'success');
+                            showToast('Handlungsfeld erfolgreich aktualisiert', 'success');
             setTimeout(() => window.location.reload(), 1000);
         } else {
-            showToast(data.message || 'Fehler beim Aktualisieren der Kategorie', 'error');
+            showToast(data.message || 'Fehler beim Aktualisieren des Handlungsfelds', 'error');
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
-        showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Kategorie', 'error');
+        showToast('Ein Fehler ist aufgetreten beim Aktualisieren des Handlungsfelds', 'error');
     });
 }
 

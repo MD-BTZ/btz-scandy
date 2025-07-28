@@ -97,7 +97,7 @@ function applyFilters() {
             }
         }
         
-        // Kategorie Filter - suche nach Kategorie-Zelle
+                    // Kategorie Filter - suche nach Kategorie-Zelle
         if (categoryFilter && show) {
             const cells = row.querySelectorAll('td');
             let categoryFound = false;
@@ -256,10 +256,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             <!-- Kategorie Filter -->
                             <div class="form-control">
                                 <label class="label">
-                                    <span class="label-text">Kategorie</span>
+                                                                          <span class="label-text">Kategorie</span>
                                 </label>
                                 <select id="categoryFilter" class="select select-bordered w-full" onchange="applyFilters()">
-                                    <option value="">Alle Kategorien</option>
+                                                                          <option value="">Alle Kategorien</option>
                                     {% for category in categories %}
                                     <option value="{{ category }}">{{ category }}</option>
                                     {% endfor %}

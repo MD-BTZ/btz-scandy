@@ -193,9 +193,9 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
                             {% endif %}
                         </div>
                         <div>
-                            <p class="text-sm opacity-70">Kategorie</p>
+                            <p class="text-sm opacity-70">Handlungsfeld</p>
                             <select id="categoryInput" class="select select-bordered w-full">
-                                <option value="">Keine Kategorie</option>
+                                <option value="">Kein Handlungsfeld</option>
                                 {% for category in categories %}
                                 <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
                                     {{ category }}
