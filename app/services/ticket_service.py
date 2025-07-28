@@ -102,13 +102,6 @@ class TicketService:
             all_tickets_debug = list(mongodb.find('tickets', {}))
             print(f"DEBUG: Gesamtanzahl Tickets in DB: {len(all_tickets_debug)}")
             
-            # Handlungsfeld-Filter für nicht-Admin/Mitarbeiter
-            handlungsfeld_filter = {}
-            if role not in ['admin', 'mitarbeiter'] and handlungsfelder:
-                # Für normale User: Nur Tickets aus zugewiesenen Handlungsfeldern
-                handlungsfeld_filter = {'category': {'$in': handlungsfelder}}
-                print(f"DEBUG: Handlungsfeld-Filter: {handlungsfeld_filter}")
-            
             # Offene Tickets (nicht zugewiesene, offene Tickets)
             open_query = {
                 '$and': [
@@ -124,18 +117,20 @@ class TicketService:
                 ]
             }
             
-            # Handlungsfeld-Filter zu offenen Tickets hinzufügen
-            if handlungsfeld_filter:
-                open_query['$and'].append(handlungsfeld_filter)
+            # Handlungsfeld-Filter für normale User
+            if role not in ['admin', 'mitarbeiter'] and handlungsfelder:
+                # Für normale User: Nur offene Tickets aus zugewiesenen Handlungsfeldern
+                open_query['$and'].append({'category': {'$in': handlungsfelder}})
+                print(f"DEBUG: Offene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
             
             print(f"DEBUG: Offene Tickets Query: {open_query}")
             open_tickets = mongodb.find('tickets', open_query)
             open_tickets = list(open_tickets)
             print(f"DEBUG: Offene Tickets gefunden: {len(open_tickets)}")
             
-            # Zugewiesene Tickets (unterstützt Mehrfachzuweisungen)
+            # Zugewiesene Tickets (nur für zugewiesene Benutzer)
             if role in ['admin', 'mitarbeiter']:
-                # Für Admins/Mitarbeiter: Eigene zugewiesene Tickets + alle gelösten/geschlossenen
+                # Für Admins/Mitarbeiter: Alle zugewiesenen Tickets + alle gelösten/geschlossenen
                 # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
                 user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
                 assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
@@ -170,10 +165,6 @@ class TicketService:
                     '_id': {'$in': all_assigned_ids},
                     'deleted': {'$ne': True}
                 }
-                
-                # Handlungsfeld-Filter zu zugewiesenen Tickets hinzufügen
-                if handlungsfeld_filter:
-                    assigned_query = {'$and': [assigned_query, handlungsfeld_filter]}
             
             print(f"DEBUG: Zugewiesene Tickets Query: {assigned_query}")
             assigned_tickets = mongodb.find('tickets', assigned_query)
@@ -199,78 +190,44 @@ class TicketService:
                     # ID-Feld für Template-Kompatibilität
                     ticket['id'] = str(ticket['_id'])
                     
-                    # Nachrichtenanzahl - verwende verschiedene ID-Formate
-                    ticket_id_str = str(ticket['_id'])
-                    message_query = {
-                        '$or': [
-                            {'ticket_id': ticket['_id']},
-                            {'ticket_id': ticket_id_str}
-                        ]
-                    }
-                    message_count = mongodb.count_documents('ticket_messages', message_query)
-                    ticket['message_count'] = message_count
-                    print(f"DEBUG:   Nachrichtenanzahl für Ticket {ticket_id_str}: {message_count}")
+                    # Nachrichtenanzahl laden
+                    messages = mongodb.find('messages', {'ticket_id': str(ticket['_id'])})
+                    ticket['message_count'] = len(list(messages))
                     
-                    # Auftragsdetails - verwende verschiedene ID-Formate
-                    auftrag_query = {
-                        '$or': [
-                            {'ticket_id': ticket['_id']},
-                            {'ticket_id': ticket_id_str}
-                        ]
-                    }
-                    auftrag_details = mongodb.find_one('auftrag_details', auftrag_query)
-                    if auftrag_details:
-                        ticket['auftrag_details'] = auftrag_details
-                        print(f"DEBUG:   Auftragsdetails gefunden für Ticket {ticket_id_str}")
+                    # Auftragsdetails laden (falls vorhanden)
+                    if ticket.get('auftrag_details'):
+                        ticket['has_auftrag_details'] = True
+                    else:
+                        ticket['has_auftrag_details'] = False
                     
-                    # Datetime-Felder konvertieren
+                    # Datum-Formatierung
                     ticket = self._convert_datetime_fields(ticket)
-                    
-                    # Lade Mehrfachzuweisungen für jedes Ticket
-                    ticket_assignments = self.get_ticket_assignments(str(ticket['_id']))
-                    if ticket_assignments:
-                        ticket['assigned_to'] = [assignment['assigned_to'] for assignment in ticket_assignments]
-                    elif ticket.get('assigned_to'):
-                        # Legacy-Support: Konvertiere Einzelzuweisung zu Liste
-                        ticket['assigned_to'] = [ticket['assigned_to']]
             
-            # Sichere Sortierung mit None-Behandlung
+            # Sortierung: Neueste zuerst
             def safe_sort_key(ticket):
-                created_at = ticket.get('created_at')
-                if created_at is None:
-                    return datetime.min
-                elif isinstance(created_at, str):
+                updated_at = ticket.get('updated_at')
+                if isinstance(updated_at, str):
                     try:
-                        # Versuche String zu datetime zu konvertieren
-                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d']:
-                            try:
-                                return datetime.strptime(created_at, fmt)
-                            except ValueError:
-                                continue
-                        return datetime.min
+                        return datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
                     except:
                         return datetime.min
-                elif isinstance(created_at, datetime):
-                    return created_at
+                elif isinstance(updated_at, datetime):
+                    return updated_at
                 else:
                     return datetime.min
             
-            # Sortierung
             open_tickets.sort(key=safe_sort_key, reverse=True)
             assigned_tickets.sort(key=safe_sort_key, reverse=True)
             all_tickets.sort(key=safe_sort_key, reverse=True)
             
-            result = {
+            return {
                 'open_tickets': open_tickets,
                 'assigned_tickets': assigned_tickets,
                 'all_tickets': all_tickets
             }
             
-            print(f"DEBUG: Endergebnis: {len(open_tickets)} offene, {len(assigned_tickets)} zugewiesene, {len(all_tickets)} alle Tickets")
-            return result
-            
         except Exception as e:
-            print(f"DEBUG: Fehler beim Laden der Tickets: {str(e)}")
+            logger.error(f"Fehler beim Laden der Tickets: {str(e)}")
             return {
                 'open_tickets': [],
                 'assigned_tickets': [],

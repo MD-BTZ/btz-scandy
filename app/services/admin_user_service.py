@@ -95,6 +95,7 @@ class AdminUserService:
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
                 'department': user_data.get('department', ''),
+                'handlungsfelder': user_data.get('handlungsfelder', []),
 
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
@@ -145,7 +146,7 @@ class AdminUserService:
             
             # Aktualisierbare Felder (ohne Abteilung)
             updatable_fields = ['username', 'role', 'is_active', 'timesheet_enabled', 
-                              'email', 'firstname', 'lastname']
+                              'email', 'firstname', 'lastname', 'handlungsfelder']
             
             for field in updatable_fields:
                 if field in user_data:
