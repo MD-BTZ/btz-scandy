@@ -347,18 +347,19 @@ class AutoBackupScheduler:
                 logger.info(f"Worker {self.worker_id} überspringt Backup (nicht primär)")
                 return
 
-            # Backup erstellen
-            backup_filename = self.backup_manager.create_backup()
+            # Backup erstellen über vereinheitlichtes System
+            from app.utils.unified_backup_manager import unified_backup_manager
+            backup_filename = unified_backup_manager.create_backup(include_media=True, compress=True)
             
             if backup_filename:
-                logger.info(f"Automatisches Backup erfolgreich erstellt: {backup_filename}")
-                self._log_backup_event(f"Backup erfolgreich: {backup_filename}")
+                logger.info(f"Automatisches ZIP-Backup erfolgreich erstellt: {backup_filename}")
+                self._log_backup_event(f"ZIP-Backup erfolgreich: {backup_filename}")
                 
                 # Optional: E-Mail-Benachrichtigung
                 self._send_backup_notification(backup_filename, success=True)
             else:
-                logger.error("Automatisches Backup fehlgeschlagen")
-                self._log_backup_event("Backup fehlgeschlagen")
+                logger.error("Automatisches ZIP-Backup fehlgeschlagen")
+                self._log_backup_event("ZIP-Backup fehlgeschlagen")
                 self._send_backup_notification(None, success=False)
                 
         except Exception as e:
@@ -380,12 +381,12 @@ class AutoBackupScheduler:
                 logger.info(f"Worker {self.worker_id} überspringt wöchentliches Backup (nicht primär)")
                 return
 
-            # Alle aktuellen Backups finden
-            backup_files = list(self.backup_manager.backup_dir.glob('scandy_backup_*.json'))
+            # Alle aktuellen ZIP-Backups finden
+            backup_files = list(self.backup_manager.backup_dir.glob('scandy_backup_*.zip'))
             
             if not backup_files:
-                logger.warning("Keine Backup-Dateien für wöchentliches Archiv gefunden")
-                self._log_backup_event("Keine Backup-Dateien für wöchentliches Archiv gefunden")
+                logger.warning("Keine ZIP-Backup-Dateien für wöchentliches Archiv gefunden")
+                self._log_backup_event("Keine ZIP-Backup-Dateien für wöchentliches Archiv gefunden")
                 return
             
             # Sortiere nach Änderungsdatum (neueste zuerst)

@@ -37,7 +37,6 @@ def upload_media(entity_type, entity_id):
     # Imports am Anfang
     from werkzeug.utils import secure_filename
     import uuid
-    import os
     
     try:
         loggers['user_actions'].info(f"=== UPLOAD START === entity_type={entity_type}, entity_id={entity_id}")
@@ -456,7 +455,6 @@ def simple_upload_test(entity_type, entity_id):
 @mitarbeiter_required
 def set_preview_image(entity_type, entity_id, filename):
     """Preview-Bild für eine Entität setzen"""
-    import os
     from bson import ObjectId
     
     try:
@@ -482,23 +480,23 @@ def set_preview_image(entity_type, entity_id, filename):
             return jsonify({'success': False, 'error': 'Datei existiert nicht'})
         
         # Preview-Bild in Datenbank speichern
-        db = get_mongodb()
+        from app.models.mongodb_database import mongodb
         
         # Entität finden und Preview-Bild setzen
         if entity_type == 'tools':
-            result = db.update_one(
+            result = mongodb.update_one(
                 'tools',
                 {'barcode': entity_id},
                 {'$set': {'preview_image': filename}}
             )
         elif entity_type == 'jobs':
-            result = db.update_one(
+            result = mongodb.update_one(
                 'jobs',
                 {'_id': ObjectId(entity_id)},
                 {'$set': {'preview_image': filename}}
             )
         elif entity_type == 'consumables':
-            result = db.update_one(
+            result = mongodb.update_one(
                 'consumables',
                 {'barcode': entity_id},
                 {'$set': {'preview_image': filename}}

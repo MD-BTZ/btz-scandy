@@ -1,21 +1,16 @@
 // Backup-Verwaltung
 document.addEventListener('DOMContentLoaded', () => {
-    // Backup-Buttons initialisieren
-    const createBackupBtn = document.getElementById('createBackupBtn');
-    const createNativeBackupBtn = document.getElementById('createNativeBackupBtn');
-    const createHybridBackupBtn = document.getElementById('createHybridBackupBtn');
+    // Neue vereinheitlichte Backup-Buttons initialisieren
+        const createUnifiedBackupBtn = document.getElementById('createUnifiedBackupBtn');
+    const createBackupNoMediaBtn = document.getElementById('createBackupNoMediaBtn');
     const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
-
-    if (createBackupBtn) {
-        createBackupBtn.onclick = createBackup;
+    
+    if (createUnifiedBackupBtn) {
+        createUnifiedBackupBtn.onclick = createUnifiedBackup;
     }
     
-    if (createNativeBackupBtn) {
-        createNativeBackupBtn.onclick = createNativeBackup;
-    }
-    
-    if (createHybridBackupBtn) {
-        createHybridBackupBtn.onclick = createHybridBackup;
+    if (createBackupNoMediaBtn) {
+        createBackupNoMediaBtn.onclick = createBackupNoMedia;
     }
     
     if (downloadCurrentBtn) {
@@ -79,13 +74,30 @@ async function loadBackups() {
                     const row = document.createElement('tr');
                     
                     // Bestimme Backup-Typ und Icon
-                    const isNative = backup.name.startsWith('scandy_native_backup_');
-                    const backupType = isNative ? 'Native' : 'JSON';
-                    const typeIcon = isNative ? 'fas fa-database' : 'fas fa-file-code';
-                    const typeClass = isNative ? 'badge-success' : 'badge-primary';
+                    let backupType, typeIcon, typeClass;
+                    
+                    if (backup.type === 'zip' || backup.name.endsWith('.zip')) {
+                        backupType = 'ZIP';
+                        typeIcon = 'fas fa-archive';
+                        typeClass = 'badge-info';
+                    } else if (backup.name.startsWith('scandy_native_backup_')) {
+                        backupType = 'Native';
+                        typeIcon = 'fas fa-database';
+                        typeClass = 'badge-success';
+                    } else {
+                        backupType = 'JSON';
+                        typeIcon = 'fas fa-file-code';
+                        typeClass = 'badge-primary';
+                    }
+                    
+                    // Zusätzliche Informationen für ZIP-Backups
+                    let additionalInfo = '';
+                    if (backup.type === 'zip' && backup.includes_media) {
+                        additionalInfo = ' <span class="text-xs text-success">(mit Medien)</span>';
+                    }
                     
                     row.innerHTML = `
-                        <td>${backup.name}</td>
+                        <td>${backup.name}${additionalInfo}</td>
                         <td>
                             <span class="badge ${typeClass}">
                                 <i class="${typeIcon} mr-1"></i>${backupType}
@@ -181,33 +193,101 @@ function setupBackupButtonHandlers() {
     });
 }
 
-// JSON Backup erstellen
-async function createBackup() {
-    // Frage nach E-Mail-Adresse für Backup-Versand
-    const emailRecipient = prompt('E-Mail-Adresse für Backup-Versand (optional, leer lassen für keinen Versand):');
-    
+// Vereinheitlichtes Backup erstellen (mit Medien)
+async function createUnifiedBackup() {
     try {
-        const formData = new FormData();
-        if (emailRecipient && emailRecipient.trim()) {
-            formData.append('email_recipient', emailRecipient.trim());
-        }
+        showToast('info', 'Vereinheitlichtes Backup wird erstellt...');
         
-        const response = await fetch('/admin/backup/create', {
+        const response = await fetch('/backup/create', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                include_media: true,
+                compress: true
+            })
         });
         
         const data = await response.json();
         
-        if (data.status === 'success') {
-            showToast('success', data.message || 'JSON Backup wurde erfolgreich erstellt');
+        if (data.success) {
+            showToast('success', data.message || 'Vereinheitlichtes Backup erfolgreich erstellt');
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Erstellen des JSON Backups');
+            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Erstellen des JSON Backups: ' + error.message);
+        console.error('Fehler beim Erstellen des vereinheitlichten Backups:', error);
+        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
     }
+}
+
+// Backup ohne Medien erstellen
+async function createBackupNoMedia() {
+    try {
+        showToast('info', 'Backup ohne Medien wird erstellt...');
+        
+        const response = await fetch('/backup/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                include_media: false,
+                compress: true
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message || 'Backup ohne Medien erfolgreich erstellt');
+            loadBackups();
+        } else {
+            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
+        }
+    } catch (error) {
+        console.error('Fehler beim Erstellen des Backups ohne Medien:', error);
+        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
+    }
+}
+
+// JSON-Backup importieren
+async function importJsonBackup() {
+    // Datei-Auswahl-Dialog öffnen
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            showToast('info', 'JSON-Backup wird importiert...');
+            
+            const formData = new FormData();
+            formData.append('json_file', file);
+            
+            const response = await fetch('/backup/import-json', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('success', data.message || 'JSON-Backup erfolgreich importiert');
+                loadBackups();
+            } else {
+                showToast('error', data.message || 'Fehler beim Importieren des JSON-Backups');
+            }
+        } catch (error) {
+            console.error('Fehler beim Importieren des JSON-Backups:', error);
+            showToast('error', 'Fehler beim Importieren des JSON-Backups: ' + error.message);
+        }
+    };
+    input.click();
 }
 
 // Native MongoDB Backup erstellen
@@ -368,8 +448,9 @@ function setupBackupHandlers() {
                 return;
             }
             
-            if (!fileInput.files[0].name.endsWith('.json')) {
-                showToast('error', 'Nur .json-Dateien erlaubt!');
+            const fileName = fileInput.files[0].name.toLowerCase();
+            if (!fileName.endsWith('.zip')) {
+                showToast('error', 'Nur .zip-Dateien erlaubt!');
                 return;
             }
             
@@ -379,7 +460,8 @@ function setupBackupHandlers() {
                 return;
             }
             
-            if (fileInput.files[0].size < 100) {
+            // Mindestgröße für ZIP-Dateien
+            if (fileInput.files[0].size < 1000) {
                 showToast('error', 'Die ausgewählte Datei ist zu klein für ein gültiges Backup. Bitte wählen Sie eine gültige Backup-Datei aus.');
                 return;
             }

@@ -2550,16 +2550,51 @@ def delete_ticket_category_legacy(category):
 @bp.route('/backup/list')
 @mitarbeiter_required
 def backup_list():
-    """Gibt eine Liste der verfügbaren Backups zurück (JSON + Native)"""
+    """Gibt eine Liste der verfügbaren Backups zurück (alle Formate)"""
     try:
+        from app.utils.unified_backup_manager import unified_backup_manager
         from app.services.admin_backup_service import AdminBackupService
         
-        # Hole beide Backup-Typen
+        # Hole neue ZIP-Backups
+        zip_backups = unified_backup_manager.list_backups()
+        
+        # Hole alte JSON-Backups
         json_backups = AdminBackupService.get_backup_list()
+        
+        # Hole native Backups
         native_backups = AdminBackupService.get_native_backup_list()
         
-        # Kombiniere die Listen
-        all_backups = json_backups + native_backups
+        # Konvertiere ZIP-Backups in das erwartete Format
+        converted_zip_backups = []
+        for backup in zip_backups:
+            try:
+                # Parse created_at String zu Timestamp
+                from datetime import datetime
+                created_at = backup.get('created_at', '')
+                if created_at and created_at != 'Unbekannt':
+                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    created_timestamp = dt.timestamp()
+                else:
+                    created_timestamp = 0
+                
+                # Hole tatsächliche Dateigröße
+                backup_path = backup_manager.backup_dir / backup['filename']
+                file_size = backup_path.stat().st_size if backup_path.exists() else 0
+                
+                converted_zip_backups.append({
+                    'name': backup['filename'],
+                    'size': file_size,  # Numerische Größe in Bytes
+                    'created': created_timestamp,
+                    'type': 'zip',
+                    'includes_media': backup.get('includes_media', False),
+                    'version': backup.get('version', '2.0')
+                })
+            except Exception as e:
+                logger.error(f"Fehler beim Konvertieren von ZIP-Backup {backup}: {e}")
+                continue
+        
+        # Kombiniere alle Backups
+        all_backups = converted_zip_backups + json_backups + native_backups
         
         # Sortiere nach Erstellungsdatum (neueste zuerst)
         all_backups.sort(key=lambda x: x.get('created', 0), reverse=True)
@@ -2567,6 +2602,7 @@ def backup_list():
         return jsonify({
             'status': 'success',
             'backups': all_backups,
+            'zip_count': len(converted_zip_backups),
             'json_count': len(json_backups),
             'native_count': len(native_backups),
             'total_count': len(all_backups)
@@ -2645,15 +2681,14 @@ def upload_backup():
                 'message': 'Keine Datei ausgewählt'
             }), 400
             
-        # Prüfe Dateityp - unterstütze JSON und ZIP (für BSON-Backups)
-        valid_extensions = ['.json', '.zip']
+        # Prüfe Dateityp - nur ZIP-Backups
         file_extension = Path(file.filename).suffix.lower()
         
-        if file_extension not in valid_extensions:
+        if file_extension != '.zip':
             logger.warning(f"Backup-Upload: Ungültiger Dateityp: {file.filename}")
             return jsonify({
                 'status': 'error',
-                'message': f'Ungültiger Dateityp. Unterstützte Formate: {", ".join(valid_extensions)}'
+                'message': 'Nur ZIP-Backups sind erlaubt'
             }), 400
         
         # Prüfe Dateigröße
@@ -2670,20 +2705,41 @@ def upload_backup():
                 'message': 'Die hochgeladene Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.'
             }), 400
             
-        success, message = AdminBackupService.upload_backup(file)
+        # ZIP-Backup über vereinheitlichtes System
+        from app.utils.unified_backup_manager import unified_backup_manager
         
-        if success:
-            logger.info("Backup-Upload: Backup erfolgreich wiederhergestellt")
-            return jsonify({
-                'status': 'success',
-                'message': message
-            })
-        else:
-            logger.error("Backup-Upload: Fehler beim Wiederherstellen des Backups")
-            return jsonify({
-                'status': 'error',
-                'message': message
-            }), 500
+        # Direkt ins Backup-Verzeichnis speichern
+        backup_filename = secure_filename(file.filename)
+        backup_path = Path('backups') / backup_filename
+        
+        # Backup-Verzeichnis erstellen falls nicht vorhanden
+        backup_path.parent.mkdir(exist_ok=True)
+        
+        # Datei direkt ins Backup-Verzeichnis speichern
+        file.save(backup_path)
+        
+        try:
+            # ZIP-Backup wiederherstellen
+            success = unified_backup_manager.restore_backup(backup_filename)
+            
+            if success:
+                logger.info("Backup-Upload: ZIP-Backup erfolgreich wiederhergestellt")
+                return jsonify({
+                    'status': 'success',
+                    'message': f'ZIP-Backup erfolgreich hochgeladen und wiederhergestellt: {file.filename}'
+                })
+            else:
+                logger.error("Backup-Upload: Fehler beim Wiederherstellen des ZIP-Backups")
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Fehler beim Wiederherstellen des ZIP-Backups: {file.filename}'
+                }), 500
+                
+        except Exception as e:
+            # Bei Fehler das fehlerhafte Backup löschen
+            if backup_path.exists():
+                backup_path.unlink()
+            raise e
             
     except Exception as e:
         logger.error(f"Fehler beim Hochladen des Backups: {str(e)}", exc_info=True)
@@ -2700,11 +2756,28 @@ def restore_backup(filename):
         from app.services.admin_backup_service import AdminBackupService
         from app.utils.backup_manager import backup_manager
         
-        # Prüfe ob es ein natives Backup ist
+        # Prüfe Backup-Typ
         backup_path = backup_manager.backup_dir / filename
         is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        is_zip = backup_path.is_file() and filename.endswith('.zip')
         
-        if is_native:
+        if is_zip:
+            # Verwende vereinheitlichtes ZIP-Restore
+            from app.utils.unified_backup_manager import unified_backup_manager
+            success = unified_backup_manager.restore_backup(filename)
+            if success:
+                return jsonify({
+                    'status': 'success',
+                    'message': f'ZIP-Backup erfolgreich wiederhergestellt: {filename}',
+                    'backup_type': 'zip'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Fehler beim Wiederherstellen des ZIP-Backups: {filename}',
+                    'backup_type': 'zip'
+                }), 500
+        elif is_native:
             # Verwende native Restore
             success, message = AdminBackupService.restore_native_backup(filename)
             if success:
@@ -2764,8 +2837,17 @@ def download_backup(filename):
         
         # Prüfe Backup-Typ
         is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        is_zip = backup_path.is_file() and filename.endswith('.zip')
         
-        if is_native:
+        if is_zip:
+            # ZIP Backup - direkt senden
+            return send_file(
+                backup_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/zip'
+            )
+        elif is_native:
             # Native Backup (Verzeichnis) - erstelle ZIP
             try:
                 # Erstelle temporäres ZIP
@@ -2828,8 +2910,13 @@ def delete_backup(filename):
         
         # Prüfe Backup-Typ
         is_native = backup_path.is_dir() and filename.startswith('scandy_native_backup_')
+        is_zip = backup_path.is_file() and filename.endswith('.zip')
         
-        if is_native:
+        if is_zip:
+            # Lösche ZIP Backup (Datei)
+            backup_path.unlink()
+            backup_type = 'zip'
+        elif is_native:
             # Lösche natives Backup (Verzeichnis)
             shutil.rmtree(backup_path)
             backup_type = 'native'

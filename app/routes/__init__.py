@@ -15,6 +15,7 @@ from app.routes.tickets import bp as tickets_bp
 from app.routes.setup import bp as setup_bp
 from app.routes.jobs import bp as jobs_bp
 from app.routes.media import bp as media_bp
+from app.routes.backup_routes import bp as backup_bp
 
 def init_app(app):
     """Registriert alle Blueprints mit ihren URL-Präfixen"""
@@ -33,8 +34,9 @@ def init_app(app):
     app.register_blueprint(setup_bp)
     app.register_blueprint(jobs_bp, url_prefix='/jobs')
     app.register_blueprint(media_bp, url_prefix='/media')
+    app.register_blueprint(backup_bp)  # Backup-Routen mit /backup Präfix
 
 __all__ = [
     'auth_bp', 'tools_bp', 'workers_bp', 'consumables_bp',
-    'api_bp', 'admin_bp', 'quick_scan_bp', 'history_bp', 'main_bp', 'dashboard_bp', 'lending_bp', 'tickets_bp', 'setup_bp', 'jobs_bp', 'media_bp'
+    'api_bp', 'admin_bp', 'quick_scan_bp', 'history_bp', 'main_bp', 'dashboard_bp', 'lending_bp', 'tickets_bp', 'setup_bp', 'jobs_bp', 'media_bp', 'backup_bp'
 ]

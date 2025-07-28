@@ -1,408 +1,420 @@
 {% extends "base.html" %}
 
-{% block title %}Server-Einstellungen{% endblock %}
+{% block title %}System-Einstellungen - Scandy{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Toast Script -->
+<script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
+<!-- Backup Script -->
+<script src="{{ url_for('static', filename='js/backup.js') }}" defer></script>
+{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <h2 class="card-title mb-6">
-                <i class="fas fa-server text-primary mr-2"></i>
-                Server-Einstellungen
-            </h2>
+    <!-- Seitentitel -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-base-content mb-2">
+            <i class="fas fa-server text-primary mr-3"></i>
+            System-Einstellungen
+        </h1>
+        <p class="text-base-content/70">Backup-Verwaltung, Labels und Systemkonfiguration</p>
+    </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Backup-Verwaltung -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">
-                            <i class="fas fa-database text-primary mr-2"></i>
-                            Backup-Verwaltung
-                        </h3>
-                        
-                        <!-- Automatisches Backup-System -->
-                        <div class="mb-6">
-                            <h4 class="text-lg font-semibold mb-3">Automatisches Backup-System</h4>
-                            <div class="space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <span class="font-medium">Status:</span>
-                                    <span id="autoBackupStatus" class="badge badge-info">Lade...</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="font-medium">Nächste Backups:</span>
-                                    <span id="nextBackupTime" class="text-sm">Lade...</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="font-medium">Backup-Zeiten:</span>
-                                    <span id="backupTimesDisplay" class="text-sm">06:00 Uhr, 18:00 Uhr</span>
-                                </div>
-                                <div class="flex gap-2 mt-3">
-                                    <button id="startAutoBackup" class="btn btn-success btn-sm">
-                                        <i class="fas fa-play mr-1"></i>Starten
-                                    </button>
-                                    <button id="stopAutoBackup" class="btn btn-error btn-sm">
-                                        <i class="fas fa-stop mr-1"></i>Stoppen
-                                    </button>
-                                    <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-primary btn-sm">
-                                        <i class="fas fa-cog mr-1"></i>Verwalten
-                                    </a>
-                                </div>
+    <!-- 2-Spalten Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <!-- Linke Spalte: Backup-Verwaltung -->
+        <div class="space-y-6">
+            
+            <!-- Auto-Backup Status -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-robot text-primary mr-2"></i>
+                        Automatisches Backup
+                    </h2>
+                    
+                    <!-- Status Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div class="stat bg-base-200 rounded-lg p-4">
+                            <div class="stat-figure text-primary">
+                                <i class="fas fa-heartbeat text-2xl"></i>
                             </div>
+                            <div class="stat-title text-sm">Status</div>
+                            <div class="stat-value text-lg" id="autoBackupStatus">Lade...</div>
                         </div>
+                        
+                        <div class="stat bg-base-200 rounded-lg p-4">
+                            <div class="stat-figure text-secondary">
+                                <i class="fas fa-clock text-2xl"></i>
+                            </div>
+                            <div class="stat-title text-sm">Backup-Zeiten</div>
+                            <div class="stat-value text-lg" id="backupTimesDisplay">06:00, 18:00</div>
+                        </div>
+                    </div>
 
-                        <!-- Backup erstellen -->
-                        <div class="mb-6">
-                            <h4 class="text-lg font-semibold mb-3">Backup erstellen</h4>
-                            <div class="space-y-3">
-                                <!-- JSON Backup -->
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <span class="font-medium">JSON Backup</span>
-                                        <div class="text-xs text-base-content/60">
-                                            Kompatibel mit alten Backups, Datentyp-Konvertierung
-                                        </div>
-                                    </div>
-                                    <button id="createBackupBtn" class="btn btn-primary btn-sm">
-                                        <i class="fas fa-plus mr-2"></i>JSON Backup
-                                    </button>
-                                </div>
-                                
-                                <!-- Native Backup -->
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <span class="font-medium">Native MongoDB Backup</span>
-                                        <div class="text-xs text-base-content/60">
-                                            Behält alle Datentypen 1:1 bei (empfohlen)
-                                        </div>
-                                    </div>
-                                    <button id="createNativeBackupBtn" class="btn btn-success btn-sm">
-                                        <i class="fas fa-database mr-2"></i>Native Backup
-                                    </button>
-                                </div>
-                                
-                                <!-- Hybrid Backup -->
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <span class="font-medium">Hybrides Backup</span>
-                                        <div class="text-xs text-base-content/60">
-                                            Erstellt beide Backup-Typen für maximale Sicherheit
-                                        </div>
-                                    </div>
-                                    <button id="createHybridBackupBtn" class="btn btn-accent btn-sm">
-                                        <i class="fas fa-shield-alt mr-2"></i>Hybrid Backup
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Backup hochladen -->
-                        <div class="mb-6">
-                            <h4 class="text-lg font-semibold mb-3">Backup hochladen</h4>
-                            <form id="uploadBackupForm" class="space-y-3">
-                                <input type="file" name="backup_file" accept=".json" class="file-input file-input-bordered w-full" required>
-                                <button type="submit" class="btn btn-secondary btn-sm w-full">
-                                    <i class="fas fa-upload mr-2"></i>Backup hochladen
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <!-- Excel-Export -->
-                        <div class="mb-6">
-                            <div class="flex justify-between items-center">
-                                <span class="font-medium">Datenbank-Export</span>
-                                <a href="{{ url_for('admin.export_all_data') }}" class="btn btn-accent btn-sm">
-                                    <i class="fas fa-download mr-2"></i>Excel-Export
-                                </a>
-                            </div>
-                            <div class="text-xs text-base-content/60 mt-1">
-                                Exportiert alle Daten als Excel-Datei mit mehreren Arbeitsblättern
-                            </div>
-                        </div>
-                        
-                        <!-- Excel-Import -->
-                        <div class="mb-6">
-                            <h4 class="text-lg font-semibold mb-3">Daten importieren</h4>
-                            <form action="{{ url_for('admin.import_all_data') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
-                                <input type="file" name="file" accept=".xlsx" class="file-input file-input-bordered w-full" required>
-                                <button type="submit" class="btn btn-success btn-sm w-full">
-                                    <i class="fas fa-upload mr-2"></i>Excel-Daten importieren
-                                </button>
-                            </form>
-                            <div class="text-xs text-base-content/60 mt-2">
-                                Importiert Daten aus einer Excel-Datei (.xlsx) mit Arbeitsblättern: Werkzeuge, Mitarbeiter, Verbrauchsmaterial, Verlauf
-                            </div>
-                            <div class="text-xs text-warning mt-1">
-                                <i class="fas fa-exclamation-triangle mr-1"></i>
-                                Vor dem Import wird empfohlen, ein Backup zu erstellen
-                            </div>
-                        </div>
-
-                        <!-- Backup-Konvertierung -->
-                        <div class="mb-6">
-                            <h4 class="text-lg font-semibold mb-3">Backup-Konvertierung</h4>
-                            <div class="space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <span class="font-medium">Alte Backups konvertieren</span>
-                                        <div class="text-xs text-base-content/60">
-                                            Konvertiert alte Backups in das neue Format mit Datentyp-Erhaltung
-                                        </div>
-                                    </div>
-                                    <button id="convertAllOldBackupsBtn" class="btn btn-warning btn-sm">
-                                        <i class="fas fa-sync-alt mr-2"></i>Alle konvertieren
-                                    </button>
-                                </div>
-                                
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <span class="font-medium">Alte Backups auflisten</span>
-                                        <div class="text-xs text-base-content/60">
-                                            Zeigt alle Backups an, die noch im alten Format sind
-                                        </div>
-                                    </div>
-                                    <button id="listOldBackupsBtn" class="btn btn-info btn-sm">
-                                        <i class="fas fa-list mr-2"></i>Auflisten
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <!-- Alte Backups Liste -->
-                            <div id="oldBackupsList" class="mt-4 hidden">
-                                <h5 class="font-medium mb-2">Alte Backups:</h5>
-                                <div id="oldBackupsContent" class="space-y-2">
-                                    <!-- Wird dynamisch gefüllt -->
+                    <!-- Nächstes Backup -->
+                    <div class="bg-base-200 rounded-lg p-4 mb-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-calendar-alt text-info mr-3"></i>
+                                <div>
+                                    <div class="font-medium">Nächstes Backup</div>
+                                    <div class="text-sm opacity-70" id="nextBackupTime">Berechnet...</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Begriffe & Icons -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">
-                            <i class="fas fa-tags text-primary mr-2"></i>
-                            Begriffe & Icons
-                        </h3>
-                        <form method="POST" class="space-y-4">
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.tools.name }} Name</span>
-                                </label>
-                                <input type="text" name="label_tools_name" value="{{ app_labels.tools.name }}" 
-                                       class="input input-bordered">
-                            </div>
-                            
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.tools.name }} Icon</span>
-                                </label>
-                                <div class="flex gap-2">
-                                    <div class="flex items-center gap-2 p-3 border border-base-300 rounded-lg bg-base-200 flex-1">
-                                        <i id="toolsIconPreview" class="{{ app_labels.tools.icon }} text-2xl text-base-content"></i>
-                                        <span class="text-sm text-base-content/70">{{ app_labels.tools.icon }}</span>
-                                    </div>
-                                    <button type="button" class="btn btn-outline" onclick="openIconSelector('toolsIconInput', 'toolsIconPreview')">
-                                        <i class="fas fa-icons"></i>
-                                    </button>
-                                    <input type="hidden" name="label_tools_icon" value="{{ app_labels.tools.icon }}" id="toolsIconInput">
-                                </div>
-                            </div>
-                            
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.consumables.name }} Name</span>
-                                </label>
-                                <input type="text" name="label_consumables_name" value="{{ app_labels.consumables.name }}" 
-                                       class="input input-bordered">
-                            </div>
-                            
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.consumables.name }} Icon</span>
-                                </label>
-                                <div class="flex gap-2">
-                                    <div class="flex items-center gap-2 p-3 border border-base-300 rounded-lg bg-base-200 flex-1">
-                                        <i id="consumablesIconPreview" class="{{ app_labels.consumables.icon }} text-2xl text-base-content"></i>
-                                        <span class="text-sm text-base-content/70">{{ app_labels.consumables.icon }}</span>
-                                    </div>
-                                    <button type="button" class="btn btn-outline" onclick="openIconSelector('consumablesIconInput', 'consumablesIconPreview')">
-                                        <i class="fas fa-icons"></i>
-                                    </button>
-                                    <input type="hidden" name="label_consumables_icon" value="{{ app_labels.consumables.icon }}" id="consumablesIconInput">
-                                </div>
-                            </div>
-                            
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.tickets.name }} Name</span>
-                                </label>
-                                <input type="text" name="label_tickets_name" value="{{ app_labels.tickets.name }}" 
-                                       class="input input-bordered">
-                            </div>
-                            
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text font-medium">{{ app_labels.tickets.name }} Icon</span>
-                                </label>
-                                <div class="flex gap-2">
-                                    <div class="flex items-center gap-2 p-3 border border-base-300 rounded-lg bg-base-200 flex-1">
-                                        <i id="ticketsIconPreview" class="{{ app_labels.tickets.icon }} text-2xl text-base-content"></i>
-                                        <span class="text-sm text-base-content/70">{{ app_labels.tickets.icon }}</span>
-                                    </div>
-                                    <button type="button" class="btn btn-outline" onclick="openIconSelector('ticketsIconInput', 'ticketsIconPreview')">
-                                        <i class="fas fa-icons"></i>
-                                    </button>
-                                    <input type="hidden" name="label_tickets_icon" value="{{ app_labels.tickets.icon }}" id="ticketsIconInput">
-                                </div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save mr-2"></i>Einstellungen speichern
-                            </button>
-                        </form>
+                    <!-- Steuerung -->
+                    <div class="flex flex-wrap gap-2">
+                        <button id="startAutoBackup" class="btn btn-success btn-sm">
+                            <i class="fas fa-play mr-2"></i>Starten
+                        </button>
+                        <button id="stopAutoBackup" class="btn btn-error btn-sm">
+                            <i class="fas fa-stop mr-2"></i>Stoppen
+                        </button>
+                        <a href="{{ url_for('admin.auto_backup') }}" class="btn btn-info btn-sm">
+                            <i class="fas fa-cog mr-2"></i>Verwalten
+                        </a>
                     </div>
                 </div>
             </div>
 
-            <!-- Backup-Liste -->
-            <div class="card bg-base-100 shadow-xl mt-6">
+            <!-- Backup erstellen -->
+            <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h3 class="card-title">
-                        <i class="fas fa-list text-primary mr-2"></i>
-                        Verfügbare Backups
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="table table-zebra w-full">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Typ</th>
-                                    <th>Größe</th>
-                                    <th>Erstellt</th>
-                                    <th>Aktionen</th>
-                                </tr>
-                            </thead>
-                            <tbody id="backupsList">
-                                <tr><td colspan="5" class="text-center">Lade Backups...</td></tr>
-                            </tbody>
-                        </table>
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-plus-circle text-primary mr-2"></i>
+                        Backup erstellen
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <!-- Vollständiges Backup -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <div class="avatar placeholder mr-3">
+                                        <div class="bg-primary text-primary-content rounded-full w-12 h-12">
+                                            <i class="fas fa-archive text-lg"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold">Vollständiges Backup</div>
+                                        <div class="text-sm text-base-content/60">
+                                            MongoDB + Medien + Konfiguration
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="createUnifiedBackupBtn" class="btn btn-primary">
+                                    <i class="fas fa-plus mr-2"></i>Erstellen
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Datenbank-Backup -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <div class="avatar placeholder mr-3">
+                                        <div class="bg-secondary text-secondary-content rounded-full w-12 h-12">
+                                            <i class="fas fa-database text-lg"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold">Datenbank-Backup</div>
+                                        <div class="text-sm text-base-content/60">
+                                            Nur Datenbank und Konfiguration
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="createBackupNoMediaBtn" class="btn btn-secondary">
+                                    <i class="fas fa-plus mr-2"></i>Erstellen
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Backup hochladen -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-upload text-primary mr-2"></i>
+                        Backup wiederherstellen
+                    </h2>
+                    
+                    <form id="uploadBackupForm" class="space-y-4">
+                        <div class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                            <div class="flex flex-col items-center">
+                                <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-3"></i>
+                                <p class="text-lg font-medium mb-2">ZIP-Backup hochladen</p>
+                                <p class="text-sm text-base-content/60 mb-4">
+                                    Datei hierher ziehen oder klicken zum Auswählen
+                                </p>
+                                <input type="file" name="backup_file" accept=".zip" class="file-input file-input-bordered w-full max-w-xs" required>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-accent w-full">
+                            <i class="fas fa-undo mr-2"></i>Backup hochladen und anwenden
+                        </button>
+                    </form>
+
+                    <div class="alert alert-warning mt-4">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <h3 class="font-bold">Wichtiger Hinweis</h3>
+                            <div class="text-sm">Das Backup wird sofort angewendet und überschreibt aktuelle Daten!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Spalte: System-Konfiguration -->
+        <div class="space-y-6">
+            
+            <!-- System-Labels -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-tags text-primary mr-2"></i>
+                        System-Labels
+                    </h2>
+                    
+                    <form method="POST" action="{{ url_for('admin.system') }}" class="space-y-6">
+                        <!-- Tools -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3 flex items-center">
+                                <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
+                                {{ app_labels.tools.name }}
+                            </h3>
+                            
+                            <div class="space-y-3">
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Name</span>
+                                    </label>
+                                    <input type="text" name="label_tools_name" value="{{ app_labels.tools.name }}" 
+                                           class="input input-bordered input-sm">
+                                </div>
+                                
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Icon</span>
+                                    </label>
+                                    <div class="flex gap-2">
+                                        <div class="flex items-center gap-2 p-2 border border-base-300 rounded bg-base-100 flex-1">
+                                            <i id="toolsIconPreview" class="{{ app_labels.tools.icon }} text-xl"></i>
+                                            <span class="text-sm">{{ app_labels.tools.icon }}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="openIconSelector('toolsIconInput', 'toolsIconPreview')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="label_tools_icon" value="{{ app_labels.tools.icon }}" id="toolsIconInput">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Consumables -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3 flex items-center">
+                                <i class="{{ app_labels.consumables.icon }} text-primary mr-2"></i>
+                                {{ app_labels.consumables.name }}
+                            </h3>
+                            
+                            <div class="space-y-3">
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Name</span>
+                                    </label>
+                                    <input type="text" name="label_consumables_name" value="{{ app_labels.consumables.name }}" 
+                                           class="input input-bordered input-sm">
+                                </div>
+                                
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Icon</span>
+                                    </label>
+                                    <div class="flex gap-2">
+                                        <div class="flex items-center gap-2 p-2 border border-base-300 rounded bg-base-100 flex-1">
+                                            <i id="consumablesIconPreview" class="{{ app_labels.consumables.icon }} text-xl"></i>
+                                            <span class="text-sm">{{ app_labels.consumables.icon }}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="openIconSelector('consumablesIconInput', 'consumablesIconPreview')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="label_consumables_icon" value="{{ app_labels.consumables.icon }}" id="consumablesIconInput">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tickets -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3 flex items-center">
+                                <i class="{{ app_labels.tickets.icon }} text-primary mr-2"></i>
+                                {{ app_labels.tickets.name }}
+                            </h3>
+                            
+                            <div class="space-y-3">
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Name</span>
+                                    </label>
+                                    <input type="text" name="label_tickets_name" value="{{ app_labels.tickets.name }}" 
+                                           class="input input-bordered input-sm">
+                                </div>
+                                
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Icon</span>
+                                    </label>
+                                    <div class="flex gap-2">
+                                        <div class="flex items-center gap-2 p-2 border border-base-300 rounded bg-base-100 flex-1">
+                                            <i id="ticketsIconPreview" class="{{ app_labels.tickets.icon }} text-xl"></i>
+                                            <span class="text-sm">{{ app_labels.tickets.icon }}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="openIconSelector('ticketsIconInput', 'ticketsIconPreview')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="label_tickets_icon" value="{{ app_labels.tickets.icon }}" id="ticketsIconInput">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full">
+                            <i class="fas fa-save mr-2"></i>Einstellungen speichern
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- System-Info -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-info-circle text-primary mr-2"></i>
+                        System-Information
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center py-2">
+                            <span class="text-sm font-medium">Backup-Format:</span>
+                            <span class="badge badge-primary">ZIP v2.0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2">
+                            <span class="text-sm font-medium">Medien-Support:</span>
+                            <span class="badge badge-success">Aktiviert</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2">
+                            <span class="text-sm font-medium">Komprimierung:</span>
+                            <span class="badge badge-info">ZIP_DEFLATED</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup-Liste (Vollbreite unter den Spalten) -->
+    <div class="card bg-base-100 shadow-xl mt-8">
+        <div class="card-body">
+            <h2 class="card-title text-xl mb-6">
+                <i class="fas fa-list text-primary mr-2"></i>
+                Verfügbare Backups
+            </h2>
+            
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Typ</th>
+                            <th>Größe</th>
+                            <th>Erstellt</th>
+                            <th class="text-right">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupsList">
+                        <tr>
+                            <td colspan="5" class="text-center py-8">
+                                <div class="loading loading-spinner loading-md"></div>
+                                <div class="mt-2">Lade Backups...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Icon Selector Modal -->
-<dialog id="iconSelectorModal" class="modal">
-    <div class="modal-box w-11/12 max-w-5xl">
+<div id="iconModal" class="modal">
+    <div class="modal-box max-w-4xl">
         <h3 class="font-bold text-lg mb-4">Icon auswählen</h3>
-        <div class="grid grid-cols-6 gap-2 max-h-96 overflow-y-auto" id="iconGrid">
+        <div class="grid grid-cols-8 gap-2 max-h-96 overflow-y-auto" id="iconGrid">
             <!-- Icons werden hier dynamisch geladen -->
         </div>
         <div class="modal-action">
             <button class="btn" onclick="closeIconSelector()">Schließen</button>
         </div>
     </div>
-</dialog>
+</div>
 
-<!-- Restore Confirmation Modal -->
-<dialog id="restoreBackupModal" class="modal">
-    <div class="modal-box">
-        <h3 class="font-bold text-lg">Backup wiederherstellen</h3>
-        <p class="py-4">Möchten Sie das Backup "<span id="restoreBackupName"></span>" wirklich wiederherstellen? Die aktuelle Datenbank wird automatisch gesichert.</p>
-        <div class="modal-action">
-            <button class="btn btn-warning" id="confirmRestoreBtn">Wiederherstellen</button>
-            <button class="btn" onclick="document.getElementById('restoreBackupModal').close()">Abbrechen</button>
-        </div>
-    </div>
-</dialog>
-
-<script src="{{ url_for('static', filename='js/toast.js') }}"></script>
-<script src="{{ url_for('static', filename='js/backup.js') }}"></script>
 <script>
-// Icon Selector Funktionen
-const commonIcons = [
-    // Werkzeuge & Handwerk
-    'fas fa-tools', 'fas fa-wrench', 'fas fa-screwdriver', 'fas fa-hammer', 'fas fa-cut',
-    'fas fa-paint-brush', 'fas fa-pencil', 'fas fa-ruler', 'fas fa-drafting-compass',
-    
-    // Büro & Dokumente
-    'fas fa-box', 'fas fa-file', 'fas fa-folder', 'fas fa-ticket-alt', 'fas fa-clipboard',
-    'fas fa-calendar', 'fas fa-clock', 'fas fa-calculator', 'fas fa-chart-bar',
-    
-    // Technik & Computer
-    'fas fa-database', 'fas fa-server', 'fas fa-cog', 'fas fa-microchip', 'fas fa-tv',
-    'fas fa-desktop', 'fas fa-laptop', 'fas fa-tablet-alt', 'fas fa-mobile-alt',
-    
-    // Kommunikation & Medien
-    'fas fa-phone', 'fas fa-fax', 'fas fa-print', 'fas fa-barcode', 'fas fa-camera',
-    'fas fa-video', 'fas fa-microphone', 'fas fa-headphones', 'fas fa-volume-up',
-    'fas fa-volume-down', 'fas fa-music', 'fas fa-broadcast-tower',
-    
-    // Personen & Sicherheit
-    'fas fa-users', 'fas fa-user', 'fas fa-user-tie', 'fas fa-hard-hat', 'fas fa-vest',
-    'fas fa-shield-alt', 'fas fa-lock', 'fas fa-key',
-    
-    // Transport & Fahrzeuge
-    'fas fa-car', 'fas fa-truck', 'fas fa-bicycle', 'fas fa-motorcycle', 'fas fa-train',
-    'fas fa-plane', 'fas fa-ship', 'fas fa-rocket',
-    
-    // Elektronik & Strom
-    'fas fa-satellite', 'fas fa-wifi', 'fas fa-bluetooth', 'fas fa-usb', 'fas fa-plug',
-    'fas fa-battery-full', 'fas fa-charging-station', 'fas fa-lightbulb', 'fas fa-bolt',
-    
-    // Sonstiges
-    'fas fa-question-circle', 'fas fa-info-circle', 'fas fa-exclamation-triangle',
-    'fas fa-check-circle', 'fas fa-times-circle', 'fas fa-plus', 'fas fa-minus'
-];
-
+// Icon Selector Funktionalität
 let currentIconInput = null;
+let currentIconPreview = null;
+
+const commonIcons = [
+    'fas fa-tools', 'fas fa-wrench', 'fas fa-hammer', 'fas fa-screwdriver',
+    'fas fa-cogs', 'fas fa-gear', 'fas fa-bolt', 'fas fa-plug',
+    'fas fa-box', 'fas fa-boxes', 'fas fa-cube', 'fas fa-cubes',
+    'fas fa-ticket-alt', 'fas fa-clipboard', 'fas fa-file-alt', 'fas fa-list',
+    'fas fa-users', 'fas fa-user', 'fas fa-user-tie', 'fas fa-building',
+    'fas fa-home', 'fas fa-industry', 'fas fa-warehouse', 'fas fa-store',
+    'fas fa-car', 'fas fa-truck', 'fas fa-bicycle', 'fas fa-plane',
+    'fas fa-laptop', 'fas fa-desktop', 'fas fa-mobile-alt', 'fas fa-tablet-alt'
+];
 
 function openIconSelector(inputId, previewId) {
     currentIconInput = document.getElementById(inputId);
-    const modal = document.getElementById('iconSelectorModal');
-    const grid = document.getElementById('iconGrid');
+    currentIconPreview = document.getElementById(previewId);
     
-    // Grid mit Icons füllen
-    grid.innerHTML = '';
+    const iconGrid = document.getElementById('iconGrid');
+    iconGrid.innerHTML = '';
+    
     commonIcons.forEach(icon => {
-        const div = document.createElement('div');
-        div.className = 'p-3 border rounded cursor-pointer hover:bg-base-200 text-center transition-colors';
-        div.innerHTML = `<i class="${icon} text-2xl text-base-content"></i>`;
-        div.onclick = () => selectIcon(icon, previewId);
-        grid.appendChild(div);
+        const button = document.createElement('button');
+        button.className = 'btn btn-ghost p-2 h-12';
+        button.innerHTML = `<i class="${icon} text-xl"></i>`;
+        button.onclick = () => selectIcon(icon);
+        iconGrid.appendChild(button);
     });
     
-    modal.showModal();
+    document.getElementById('iconModal').classList.add('modal-open');
 }
 
-function selectIcon(icon, previewId) {
-    if (currentIconInput) {
-        currentIconInput.value = icon;
-    }
-    if (previewId) {
-        const previewElement = document.getElementById(previewId);
-        previewElement.className = `${icon} text-2xl text-base-content`;
-        // Aktualisiere auch den Text neben dem Icon
-        const textElement = previewElement.nextElementSibling;
-        if (textElement) {
-            textElement.textContent = icon;
-        }
+function selectIcon(iconClass) {
+    if (currentIconInput && currentIconPreview) {
+        currentIconInput.value = iconClass;
+        currentIconPreview.className = `${iconClass} text-xl`;
+        currentIconPreview.parentElement.querySelector('span').textContent = iconClass;
     }
     closeIconSelector();
 }
 
 function closeIconSelector() {
-    document.getElementById('iconSelectorModal').close();
+    document.getElementById('iconModal').classList.remove('modal-open');
     currentIconInput = null;
+    currentIconPreview = null;
 }
-
-// Backup-Funktionen initialisieren
-document.addEventListener('DOMContentLoaded', function() {
-    setupBackupHandlers();
-    loadBackups();
-});
 </script>
 {% endblock %} 

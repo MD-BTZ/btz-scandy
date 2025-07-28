@@ -80,30 +80,36 @@ def job_list():
         # MongoDB-Daten für Template vorbereiten
         jobs_data = []
         for job in jobs_data_raw:
-            job_dict = {
-                'id': str(job.get('_id', 'unknown')),
-                'title': job.get('title', ''),
-                'company': job.get('company', ''),
-                'location': job.get('location', ''),
-                'industry': job.get('industry', ''),
-                'job_type': job.get('job_type', 'Vollzeit'),
-                'description': job.get('description', ''),
-                'requirements': job.get('requirements', ''),
-                'benefits': job.get('benefits', ''),
-                'salary_range': job.get('salary_range', ''),
-                'contact_email': job.get('contact_email', ''),
-                'contact_phone': job.get('contact_phone', ''),
-                'application_url': job.get('application_url', ''),
-                'created_by': job.get('created_by'),
-                'created_at': job.get('created_at'),
-                'updated_at': job.get('updated_at'),
-                'is_active': job.get('is_active', True),
-                'is_public': job.get('is_public', True),
-                'views': job.get('views', 0),
-                'applications': job.get('applications', 0),
-                'job_number': job.get('job_number'),
-                'images': job.get('images', [])
-            }
+            # Stelle sicher, dass job ein Dictionary ist
+            if hasattr(job, 'to_dict'):
+                # Falls es ein Job-Objekt ist, konvertiere es zu Dictionary
+                job_dict = job.to_dict()
+            else:
+                # Falls es bereits ein Dictionary ist
+                job_dict = {
+                    'id': str(job.get('_id', 'unknown')),
+                    'title': job.get('title', ''),
+                    'company': job.get('company', ''),
+                    'location': job.get('location', ''),
+                    'industry': job.get('industry', ''),
+                    'job_type': job.get('job_type', 'Vollzeit'),
+                    'description': job.get('description', ''),
+                    'requirements': job.get('requirements', ''),
+                    'benefits': job.get('benefits', ''),
+                    'salary_range': job.get('salary_range', ''),
+                    'contact_email': job.get('contact_email', ''),
+                    'contact_phone': job.get('contact_phone', ''),
+                    'application_url': job.get('application_url', ''),
+                    'created_by': job.get('created_by'),
+                    'created_at': job.get('created_at'),
+                    'updated_at': job.get('updated_at'),
+                    'is_active': job.get('is_active', True),
+                    'is_public': job.get('is_public', True),
+                    'views': job.get('views', 0),
+                    'applications': job.get('applications', 0),
+                    'job_number': job.get('job_number'),
+                    'images': job.get('images', [])
+                }
             jobs_data.append(job_dict)
         
         return render_template('jobs/index.html', 

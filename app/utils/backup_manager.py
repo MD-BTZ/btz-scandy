@@ -353,6 +353,19 @@ class BackupManager:
                                 restored_doc = self._deserialize_from_backup(doc)
                                 # IDs korrigieren
                                 fixed_doc = self._fix_id_for_restore(restored_doc)
+                                
+                                # Stelle sicher, dass _id korrekt ist
+                                if '_id' in fixed_doc:
+                                    if isinstance(fixed_doc['_id'], str) and len(fixed_doc['_id']) == 24:
+                                        try:
+                                            fixed_doc['_id'] = ObjectId(fixed_doc['_id'])
+                                        except:
+                                            # Falls keine gültige ObjectId, entferne das Feld
+                                            del fixed_doc['_id']
+                                    elif not isinstance(fixed_doc['_id'], ObjectId):
+                                        # Falls kein ObjectId, entferne das Feld
+                                        del fixed_doc['_id']
+                                
                                 restored_documents.append(fixed_doc)
                                 conversion_stats['total'] += 1
                                 
