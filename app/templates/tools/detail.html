@@ -170,9 +170,10 @@
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="card-title">Medien-Galerie</h2>
                         <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus mr-2"></i>Medien hinzufügen
+                            <i class="fas fa-plus mr-2"></i>Hinzufügen
                         </button>
                     </div>
+                    
                     <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
                         <!-- Medien werden hier dynamisch geladen -->
                     </div>
@@ -340,6 +341,31 @@
                     <!-- Wird per JavaScript gefüllt -->
                 </div>
             </div>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn" onclick="closeMediaModal()">Schließen</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Medien-Upload Modal -->
+<dialog id="mediaModal" class="modal">
+    <div class="modal-box max-w-2xl w-11/12">
+        <h3 class="font-bold text-lg mb-4">Medien hinzufügen</h3>
+        
+        <div class="space-y-4">
+            <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
+                <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
+                <p class="text-base-content/60 mb-4">Datei auswählen</p>
+                <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
+            </div>
+            
+            <div id="selectedModalFileName" class="text-sm text-base-content/60 hidden"></div>
+            
+            <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
+                <i class="fas fa-upload mr-2"></i>Hochladen
+            </button>
         </div>
 
         <div class="modal-action">
@@ -959,7 +985,15 @@ function closePdfModal() {
     }
 }
 
-function downloadPdf() {
+function downloadPdf(pdfUrl, filename) {
+    // Erstelle Download-Link
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = filename;
+    link.click();
+}
+
+function downloadPdfFromModal() {
     const iframe = document.getElementById('pdfIframe');
     const filename = document.getElementById('pdfTitle').textContent;
     
@@ -971,6 +1005,8 @@ function downloadPdf() {
         link.click();
     }
 }
+
+
 
 // Form-Handler
 document.getElementById('editForm').addEventListener('submit', function(e) {
@@ -1021,6 +1057,72 @@ document.getElementById('mediaCarouselModal').addEventListener('click', function
         closeMediaCarousel();
     }
 });
+
+// Modal-Funktionen
+function openMediaModal() {
+    document.getElementById('mediaModal').showModal();
+}
+
+function closeMediaModal() {
+    document.getElementById('mediaModal').close();
+}
+
+function updateModalMediaFileName() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    const selectedFileName = document.getElementById('selectedModalFileName');
+    
+    if (fileInput.files.length > 0) {
+        const fileName = fileInput.files[0].name;
+        selectedFileName.textContent = `Ausgewählte Datei: ${fileName}`;
+        selectedFileName.classList.remove('hidden');
+        uploadBtn.disabled = false;
+    } else {
+        selectedFileName.classList.add('hidden');
+        uploadBtn.disabled = true;
+    }
+}
+
+function uploadModalMedia() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    
+    if (!fileInput.files.length) {
+        alert('Bitte wählen Sie eine Datei aus');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hochladen...';
+    
+    fetch(`/media/tools/{{ tool.barcode }}/upload`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Medium erfolgreich hochgeladen!');
+            fileInput.value = '';
+            document.getElementById('selectedModalFileName').classList.add('hidden');
+            closeMediaModal();
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Hochladen');
+        }
+    })
+    .catch(error => {
+        console.error('Upload error:', error);
+        alert('Fehler beim Hochladen');
+    })
+    .finally(() => {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
+    });
+}
 
 // Seite laden
 document.addEventListener('DOMContentLoaded', function() {

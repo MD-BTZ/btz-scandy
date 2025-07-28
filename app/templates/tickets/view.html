@@ -376,9 +376,10 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="card-title">Medien-Galerie</h2>
                         <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus mr-2"></i>Medien hinzufügen
+                            <i class="fas fa-plus mr-2"></i>Hinzufügen
                         </button>
                     </div>
+                    
                     <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
                         <!-- Medien werden hier dynamisch geladen -->
                     </div>
@@ -554,15 +555,16 @@ function displayMediaPreview() {
         const isPdf = media.filename.toLowerCase().endsWith('.pdf');
         
         if (isPdf) {
-            // PDF-Vorschau
+            // PDF-Download-Link
             const pdfPreview = document.createElement('div');
             pdfPreview.className = 'w-full h-20 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity';
-            pdfPreview.onclick = () => openPdfModal(media.url, media.filename);
+            pdfPreview.onclick = () => downloadPdf(media.url, media.filename);
             
             pdfPreview.innerHTML = `
                 <div class="text-center">
                     <i class="fas fa-file-pdf text-red-500 text-lg mb-1"></i>
                     <p class="text-xs text-red-700 font-medium">PDF</p>
+                    <p class="text-xs text-red-600 truncate">${media.filename}</p>
                 </div>
             `;
             mediaContainer.appendChild(pdfPreview);
@@ -617,6 +619,8 @@ function openImageInNewTab() {
     }
 }
 
+
+
 // Medium löschen
 function deleteMedia(filename) {
     if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
@@ -629,15 +633,15 @@ function deleteMedia(filename) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Medium erfolgreich gelöscht!');
+            showToast('success', 'Medium erfolgreich gelöscht!');
             loadMediaGallery();
         } else {
-            alert(data.error || 'Fehler beim Löschen');
+            showToast('error', data.error || 'Fehler beim Löschen');
         }
     })
     .catch(error => {
         console.error('Delete error:', error);
-        alert('Fehler beim Löschen');
+        showToast('error', 'Fehler beim Löschen des Mediums');
     });
 }
 
@@ -654,10 +658,15 @@ function closeMediaModal() {
 function updateModalMediaFileName() {
     const fileInput = document.getElementById('modalMediaFile');
     const uploadBtn = document.getElementById('modalUploadBtn');
+    const selectedFileName = document.getElementById('selectedModalFileName');
     
     if (fileInput.files.length > 0) {
+        const fileName = fileInput.files[0].name;
+        selectedFileName.textContent = `Ausgewählte Datei: ${fileName}`;
+        selectedFileName.classList.remove('hidden');
         uploadBtn.disabled = false;
     } else {
+        selectedFileName.classList.add('hidden');
         uploadBtn.disabled = true;
     }
 }
@@ -891,7 +900,15 @@ function closePdfModal() {
     }
 }
 
-function downloadPdf() {
+function downloadPdf(pdfUrl, filename) {
+    // Erstelle Download-Link
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = filename;
+    link.click();
+}
+
+function downloadPdfFromModal() {
     const iframe = document.getElementById('pdfIframe');
     const filename = document.getElementById('pdfTitle').textContent;
     
@@ -913,19 +930,51 @@ function displayCarousel() {
     
     // Hauptbild anzeigen
     const currentMedia = mediaList[currentImageIndex];
-    carouselContainer.innerHTML = `
-        <img src="${currentMedia.url}" alt="Ticket Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
-    `;
+    const isPdf = currentMedia.filename.toLowerCase().endsWith('.pdf');
     
-    // Thumbnail-Navigation
+    if (isPdf) {
+        // PDF-Download anzeigen
+        carouselContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full">
+                <div class="bg-red-100 border-2 border-red-300 rounded-lg p-8 text-center">
+                    <i class="fas fa-file-pdf text-red-500 text-6xl mb-4"></i>
+                    <h3 class="text-xl font-bold text-red-700 mb-2">PDF-Datei</h3>
+                    <p class="text-red-600 mb-4">${currentMedia.filename}</p>
+                    <button onclick="downloadPdf('${currentMedia.url}', '${currentMedia.filename}')" 
+                            class="btn btn-primary">
+                        <i class="fas fa-download mr-2"></i>PDF herunterladen
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        // Bild anzeigen
+        carouselContainer.innerHTML = `
+            <img src="${currentMedia.url}" alt="Ticket Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
+        `;
+    }
+    
+    // Thumbnail-Navigation (nur für Bilder)
     thumbnailNav.innerHTML = '';
     mediaList.forEach((media, index) => {
-        const thumb = document.createElement('img');
-        thumb.src = media.url;
-        thumb.alt = 'Thumbnail';
-        thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
-        thumb.onclick = () => goToSlide(index);
-        thumbnailNav.appendChild(thumb);
+        const isMediaPdf = media.filename.toLowerCase().endsWith('.pdf');
+        
+        if (isMediaPdf) {
+            // PDF-Thumbnail
+            const thumb = document.createElement('div');
+            thumb.className = `w-12 h-12 bg-red-100 border-2 border-red-300 rounded flex items-center justify-center cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+            thumb.onclick = () => goToSlide(index);
+            thumb.innerHTML = '<i class="fas fa-file-pdf text-red-500 text-xs"></i>';
+            thumbnailNav.appendChild(thumb);
+        } else {
+            // Bild-Thumbnail
+            const thumb = document.createElement('img');
+            thumb.src = media.url;
+            thumb.alt = 'Thumbnail';
+            thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+            thumb.onclick = () => goToSlide(index);
+            thumbnailNav.appendChild(thumb);
+        }
     });
     
     updateCarouselPosition();
@@ -1024,34 +1073,21 @@ document.getElementById('mediaCarouselModal').addEventListener('click', function
 
 <!-- Medien-Upload Modal -->
 <dialog id="mediaModal" class="modal">
-    <div class="modal-box max-w-4xl w-11/12 h-4/5">
-        <h3 class="font-bold text-lg mb-4">Medien-Verwaltung</h3>
+    <div class="modal-box max-w-2xl w-11/12">
+        <h3 class="font-bold text-lg mb-4">Medien hinzufügen</h3>
         
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-            <!-- Upload-Bereich -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h4 class="font-semibold mb-4">Upload-Bereich</h4>
-                
-                <div class="space-y-4">
-                    <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
-                        <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
-                        <p class="text-base-content/60 mb-4">Drag & Drop Zone</p>
-                        <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
-                    </div>
-                    
-                    <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
-                        <i class="fas fa-upload mr-2"></i>Hochladen
-                    </button>
-                </div>
+        <div class="space-y-4">
+            <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
+                <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
+                <p class="text-base-content/60 mb-4">Datei auswählen</p>
+                <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
             </div>
             
-            <!-- Vorhandene Medien -->
-            <div class="bg-base-200 p-4 rounded-lg">
-                <h4 class="font-semibold mb-4">Vorhandene Medien</h4>
-                <div id="modal-media-list" class="grid grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                    <!-- Wird per JavaScript gefüllt -->
-                </div>
-            </div>
+            <div id="selectedModalFileName" class="text-sm text-base-content/60 hidden"></div>
+            
+            <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
+                <i class="fas fa-upload mr-2"></i>Hochladen
+            </button>
         </div>
 
         <div class="modal-action">

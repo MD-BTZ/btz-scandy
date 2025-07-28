@@ -183,7 +183,13 @@
                 <!-- Medien-Galerie -->
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
-                        <h2 class="card-title">Medien-Galerie</h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="card-title">Medien-Galerie</h2>
+                            <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
+                                <i class="fas fa-plus mr-2"></i>Hinzufügen
+                            </button>
+                        </div>
+                        
                         <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
                             <!-- Medien werden hier dynamisch geladen -->
                         </div>
@@ -538,11 +544,32 @@ function displayMediaPreview() {
         const mediaContainer = document.createElement('div');
         mediaContainer.className = 'relative group';
         
-        const img = document.createElement('img');
-        img.src = media.url;
-        img.alt = 'Job Vorschau';
-        img.className = 'w-full h-20 object-contain rounded-lg cursor-pointer bg-base-200';
-        img.onclick = () => openMediaCarousel(index);
+        // Prüfe ob es eine PDF-Datei ist
+        const isPdf = media.filename.toLowerCase().endsWith('.pdf');
+        
+        if (isPdf) {
+            // PDF-Download-Link
+            const pdfPreview = document.createElement('div');
+            pdfPreview.className = 'w-full h-20 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity';
+            pdfPreview.onclick = () => downloadPdf(media.url, media.filename);
+            
+            pdfPreview.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-file-pdf text-red-500 text-lg mb-1"></i>
+                    <p class="text-xs text-red-700 font-medium">PDF</p>
+                    <p class="text-xs text-red-600 truncate">${media.filename}</p>
+                </div>
+            `;
+            mediaContainer.appendChild(pdfPreview);
+        } else {
+            // Bild-Vorschau
+            const img = document.createElement('img');
+            img.src = media.url;
+            img.alt = 'Job Vorschau';
+            img.className = 'w-full h-20 object-contain rounded-lg cursor-pointer bg-base-200';
+            img.onclick = () => openMediaCarousel(index);
+            mediaContainer.appendChild(img);
+        }
         
         // Overlay mit Buttons
         const overlay = document.createElement('div');
@@ -595,6 +622,15 @@ function openImageInNewTab() {
         const currentMedia = mediaList[currentImageIndex];
         window.open(currentMedia.url, '_blank');
     }
+}
+
+// PDF-Download-Funktion
+function downloadPdf(pdfUrl, filename) {
+    // Erstelle Download-Link
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = filename;
+    link.click();
 }
 
 // Medium löschen
@@ -729,6 +765,74 @@ function setupCarouselEventListeners() {
     }, 100);
 }
 
+
+
+// Modal-Funktionen
+function openMediaModal() {
+    document.getElementById('mediaModal').showModal();
+}
+
+function closeMediaModal() {
+    document.getElementById('mediaModal').close();
+}
+
+function updateModalMediaFileName() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    const selectedFileName = document.getElementById('selectedModalFileName');
+    
+    if (fileInput.files.length > 0) {
+        const fileName = fileInput.files[0].name;
+        selectedFileName.textContent = `Ausgewählte Datei: ${fileName}`;
+        selectedFileName.classList.remove('hidden');
+        uploadBtn.disabled = false;
+    } else {
+        selectedFileName.classList.add('hidden');
+        uploadBtn.disabled = true;
+    }
+}
+
+function uploadModalMedia() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    
+    if (!fileInput.files.length) {
+        alert('Bitte wählen Sie eine Datei aus');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hochladen...';
+    
+    fetch(`/media/jobs/{{ job.id|string }}/upload`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Medium erfolgreich hochgeladen!');
+            fileInput.value = '';
+            document.getElementById('selectedModalFileName').classList.add('hidden');
+            closeMediaModal();
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Hochladen');
+        }
+    })
+    .catch(error => {
+        console.error('Upload error:', error);
+        alert('Fehler beim Hochladen');
+    })
+    .finally(() => {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
+    });
+}
+
 // Seite laden
 document.addEventListener('DOMContentLoaded', function() {
     // Medien-Galerie laden
@@ -768,6 +872,31 @@ document.getElementById('mediaCarouselModal').addEventListener('click', function
         <img id="modalImage" src="" alt="Bild-Vorschau" class="w-full h-auto max-h-96 object-contain">
     </div>
 </div>
+
+<!-- Medien-Upload Modal -->
+<dialog id="mediaModal" class="modal">
+    <div class="modal-box max-w-2xl w-11/12">
+        <h3 class="font-bold text-lg mb-4">Medien hinzufügen</h3>
+        
+        <div class="space-y-4">
+            <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
+                <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
+                <p class="text-base-content/60 mb-4">Datei auswählen</p>
+                <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
+            </div>
+            
+            <div id="selectedModalFileName" class="text-sm text-base-content/60 hidden"></div>
+            
+            <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
+                <i class="fas fa-upload mr-2"></i>Hochladen
+            </button>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn" onclick="closeMediaModal()">Schließen</button>
+        </div>
+    </div>
+</dialog>
 
 <!-- Medien-Carousel Modal -->
 <dialog id="mediaCarouselModal" class="modal">

@@ -8,8 +8,8 @@
         <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="label"><span class="label-text">Bereich</span></label>
-                    <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                    <label class="label"><span class="label-text">Spezifischer Bereich</span></label>
+                    <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}" placeholder="z.B. Metallwerkstatt, EDV-Support">
                 </div>
                 <div>
                     <label class="label"><span class="label-text">Fertigstellungstermin</span></label>

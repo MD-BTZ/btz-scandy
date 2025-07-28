@@ -89,9 +89,29 @@ def upload_media(entity_type, entity_id):
             loggers['errors'].error("Datei hat leeren Namen")
             return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'})
         
+        # Erweiterte Dateivalidierung
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'bmp', 'tiff'}
+        file_extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        
+        if file_extension not in allowed_extensions:
+            loggers['errors'].error(f"Ungültige Dateiendung: {file_extension}")
+            return jsonify({'success': False, 'error': f'Ungültiges Dateiformat. Erlaubt sind: {", ".join(allowed_extensions)}'})
+        
+        # Prüfe Dateigröße (max 50MB für Upload, wird dann automatisch komprimiert)
+        max_upload_size = 50 * 1024 * 1024  # 50MB
+        file.seek(0, 2)  # Gehe zum Ende der Datei
+        file_size = file.tell()
+        file.seek(0)  # Zurück zum Anfang
+        
+        loggers['user_actions'].info(f"Dateigröße: {file_size} bytes ({file_size/1024/1024:.2f} MB)")
+        
+        if file_size > max_upload_size:
+            loggers['errors'].error(f"Datei zu groß: {file_size} bytes")
+            return jsonify({'success': False, 'error': f'Datei zu groß. Maximum: {max_upload_size/1024/1024:.0f}MB'})
+        
         # Debug-Informationen
         loggers['user_actions'].info(f"Upload-Versuch: entity_type={entity_type}, entity_id={entity_id}")
-        loggers['user_actions'].info(f"Datei: {file.filename}, Größe: {file.content_length if hasattr(file, 'content_length') else 'unbekannt'}")
+        loggers['user_actions'].info(f"Datei: {file.filename}, Typ: {file_extension}, Größe: {file_size} bytes")
         
         # Medien direkt hochladen (ohne MediaManager)
         loggers['user_actions'].info("Lade Datei direkt hoch...")
@@ -120,32 +140,116 @@ def upload_media(entity_type, entity_id):
         
         file.save(file_path)
         
-        # Bild auf 1080p skalieren falls nötig
+        # Verbesserte Bildverarbeitung mit automatischer Skalierung
         try:
             from PIL import Image
+            import io
+            
+            # Lade das Bild
             with Image.open(file_path) as img:
-                # Prüfen ob Bild größer als 1080p ist
-                max_size = 1080
-                if img.width > max_size or img.height > max_size:
-                    # Seitenverhältnis beibehalten
-                    img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                    img.save(file_path, quality=95, optimize=True)
-                    loggers['user_actions'].info(f"Bild auf {img.width}x{img.height} skaliert")
-                else:
-                    loggers['user_actions'].info(f"Bild behält Originalgröße: {img.width}x{img.height}")
+                original_width, original_height = img.size
+                loggers['user_actions'].info(f"Original-Bildgröße: {original_width}x{original_height}")
+                
+                # Konvertiere zu RGB falls nötig (für JPEG-Kompatibilität)
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    # Erstelle weißes Hintergrundbild für transparente Bilder
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Automatische Skalierung basierend auf verschiedenen Kriterien
+                max_dimension = 1920  # Maximale Breite/Höhe
+                max_file_size = 5 * 1024 * 1024  # 5MB maximale Dateigröße
+                
+                # Skaliere wenn Bild zu groß ist
+                if original_width > max_dimension or original_height > max_dimension:
+                    # Berechne neue Größe mit Seitenverhältnis
+                    if original_width > original_height:
+                        new_width = max_dimension
+                        new_height = int(original_height * max_dimension / original_width)
+                    else:
+                        new_height = max_dimension
+                        new_width = int(original_width * max_dimension / original_height)
+                    
+                    # Skaliere das Bild
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    loggers['user_actions'].info(f"Bild skaliert auf: {new_width}x{new_height}")
+                
+                # Speichere mit optimierter Qualität
+                save_options = {
+                    'quality': 85,  # Gute Qualität, aber kompakter
+                    'optimize': True,
+                    'progressive': True  # Progressive JPEG für bessere Web-Performance
+                }
+                
+                # Speichere das Bild
+                img.save(file_path, **save_options)
+                
+                # Prüfe finale Dateigröße
+                final_size = os.path.getsize(file_path)
+                loggers['user_actions'].info(f"Finale Dateigröße: {final_size} bytes ({final_size/1024/1024:.2f} MB)")
+                
+                # Falls Datei immer noch zu groß, komprimiere weiter
+                if final_size > max_file_size:
+                    loggers['user_actions'].info("Datei immer noch zu groß, komprimiere weiter...")
+                    
+                    # Reduziere Qualität schrittweise
+                    for quality in [70, 60, 50, 40]:
+                        img.save(file_path, quality=quality, optimize=True, progressive=True)
+                        if os.path.getsize(file_path) <= max_file_size:
+                            loggers['user_actions'].info(f"Datei auf {quality}% Qualität komprimiert")
+                            break
+                    
+                    final_size = os.path.getsize(file_path)
+                    loggers['user_actions'].info(f"Finale komprimierte Größe: {final_size} bytes ({final_size/1024/1024:.2f} MB)")
+                
+                loggers['user_actions'].info(f"Bild erfolgreich verarbeitet: {img.size[0]}x{img.size[1]}")
+                
+        except ImportError:
+            loggers['errors'].error("PIL/Pillow nicht verfügbar - Bildverarbeitung übersprungen")
+            # Datei trotzdem behalten
         except Exception as e:
-            loggers['errors'].error(f"Fehler beim Skalieren: {e}")
-            # Datei trotzdem behalten, auch wenn Skalierung fehlschlägt
+            loggers['errors'].error(f"Fehler bei der Bildverarbeitung: {e}")
+            # Datei trotzdem behalten, auch wenn Verarbeitung fehlschlägt
+            import traceback
+            loggers['errors'].error(f"Bildverarbeitung Traceback: {traceback.format_exc()}")
         
         loggers['user_actions'].info(f"Datei gespeichert: {os.path.exists(file_path)}")
         loggers['user_actions'].info(f"Dateigröße: {os.path.getsize(file_path) if os.path.exists(file_path) else 'N/A'} bytes")
         
         loggers['user_actions'].info("=== UPLOAD ENDE ===")
-        return jsonify({
-            'success': True,
-            'message': 'Medien erfolgreich hochgeladen!',
-            'filename': unique_filename
-        })
+        
+        # Prüfe ob das Bild skaliert wurde
+        try:
+            from PIL import Image
+            with Image.open(file_path) as img:
+                final_size = os.path.getsize(file_path)
+                final_size_mb = final_size / 1024 / 1024
+                
+                # Erstelle Benachrichtigung basierend auf Verarbeitung
+                if final_size_mb > 1:  # Falls Datei größer als 1MB ist
+                    message = f'Medien erfolgreich hochgeladen! (Dateigröße: {final_size_mb:.1f}MB)'
+                else:
+                    message = 'Medien erfolgreich hochgeladen!'
+                    
+                return jsonify({
+                    'success': True,
+                    'message': message,
+                    'filename': unique_filename,
+                    'file_size': final_size,
+                    'file_size_mb': round(final_size_mb, 2)
+                })
+        except:
+            # Fallback falls Bildverarbeitung fehlschlägt
+            return jsonify({
+                'success': True,
+                'message': 'Medien erfolgreich hochgeladen!',
+                'filename': unique_filename
+            })
         
     except Exception as e:
         loggers['errors'].error(f"Upload-Fehler: {e}")

@@ -23,9 +23,9 @@
             <form method="POST" action="{{ url_for('tickets.update_details', id=ticket._id) }}" id="ticket_details_form" data-ajax="true">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="label"><span class="label-text">Bereich</span></label>
+                        <label class="label"><span class="label-text">Spezifischer Bereich</span></label>
                         {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                            <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}">
+                            <input type="text" name="bereich" class="input input-bordered w-full" value="{{ ticket.auftrag_details.bereich | default('', true) }}" placeholder="z.B. Metallwerkstatt, EDV-Support">
                         {% else %}
                             <input type="text" class="input input-bordered w-full bg-base-200" value="{{ ticket.auftrag_details.bereich | default('', true) }}" readonly>
                             <input type="hidden" name="bereich" value="{{ ticket.auftrag_details.bereich | default('', true) }}">

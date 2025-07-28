@@ -41,7 +41,7 @@ class MediaManager:
     
     @staticmethod
     def resize_image(image_path, max_size=MAX_IMAGE_SIZE):
-        """Skaliert Bild auf maximale Größe"""
+        """Skaliert Bild auf maximale Größe mit verbesserter Verarbeitung"""
         try:
             # Prüfe ob es eine SVG-Datei ist
             if image_path.lower().endswith('.svg'):
@@ -54,19 +54,76 @@ class MediaManager:
                 return True  # PDF-Dateien werden nicht skaliert
             
             with Image.open(image_path) as img:
-                # Konvertiere zu RGB falls nötig
+                original_width, original_height = img.size
+                loggers['user_actions'].info(f"Verarbeite Bild: {original_width}x{original_height}")
+                
+                # Konvertiere zu RGB falls nötig (für JPEG-Kompatibilität)
                 if img.mode in ('RGBA', 'LA', 'P'):
+                    # Erstelle weißes Hintergrundbild für transparente Bilder
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                elif img.mode != 'RGB':
                     img = img.convert('RGB')
                 
-                # Skaliere nur wenn nötig
-                if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
-                    img.thumbnail(max_size, Image.Resampling.LANCZOS)
-                    img.save(image_path, quality=85, optimize=True)
-                    loggers['user_actions'].info(f"Bild skaliert: {image_path}")
+                # Automatische Skalierung basierend auf verschiedenen Kriterien
+                max_dimension = 1920  # Maximale Breite/Höhe
+                max_file_size = 5 * 1024 * 1024  # 5MB maximale Dateigröße
                 
+                # Skaliere wenn Bild zu groß ist
+                if original_width > max_dimension or original_height > max_dimension:
+                    # Berechne neue Größe mit Seitenverhältnis
+                    if original_width > original_height:
+                        new_width = max_dimension
+                        new_height = int(original_height * max_dimension / original_width)
+                    else:
+                        new_height = max_dimension
+                        new_width = int(original_width * max_dimension / original_height)
+                    
+                    # Skaliere das Bild
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    loggers['user_actions'].info(f"Bild skaliert auf: {new_width}x{new_height}")
+                
+                # Speichere mit optimierter Qualität
+                save_options = {
+                    'quality': 85,  # Gute Qualität, aber kompakter
+                    'optimize': True,
+                    'progressive': True  # Progressive JPEG für bessere Web-Performance
+                }
+                
+                # Speichere das Bild
+                img.save(image_path, **save_options)
+                
+                # Prüfe finale Dateigröße
+                final_size = os.path.getsize(image_path)
+                loggers['user_actions'].info(f"Finale Dateigröße: {final_size} bytes ({final_size/1024/1024:.2f} MB)")
+                
+                # Falls Datei immer noch zu groß, komprimiere weiter
+                if final_size > max_file_size:
+                    loggers['user_actions'].info("Datei immer noch zu groß, komprimiere weiter...")
+                    
+                    # Reduziere Qualität schrittweise
+                    for quality in [70, 60, 50, 40]:
+                        img.save(image_path, quality=quality, optimize=True, progressive=True)
+                        if os.path.getsize(image_path) <= max_file_size:
+                            loggers['user_actions'].info(f"Datei auf {quality}% Qualität komprimiert")
+                            break
+                    
+                    final_size = os.path.getsize(image_path)
+                    loggers['user_actions'].info(f"Finale komprimierte Größe: {final_size} bytes ({final_size/1024/1024:.2f} MB)")
+                
+                loggers['user_actions'].info(f"Bild erfolgreich verarbeitet: {img.size[0]}x{img.size[1]}")
                 return True
+                
+        except ImportError:
+            loggers['errors'].error("PIL/Pillow nicht verfügbar - Bildverarbeitung übersprungen")
+            return False
         except Exception as e:
-            loggers['errors'].error(f"Fehler beim Skalieren: {e}")
+            loggers['errors'].error(f"Fehler bei der Bildverarbeitung: {e}")
+            import traceback
+            loggers['errors'].error(f"Bildverarbeitung Traceback: {traceback.format_exc()}")
             return False
     
     @staticmethod

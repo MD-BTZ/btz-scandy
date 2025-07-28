@@ -36,15 +36,15 @@
                 <img src="{{ url_for('static', filename='images/BTZ_logo.jpg') }}" 
                      alt="BTZ Logo" 
                      class="h-16 w-auto mx-auto mb-4">
-                <h2 class="text-xl font-semibold text-base-content/70">BTZ Köln - Werkstattauftrag</h2>
+                <h2 class="text-xl font-semibold text-base-content/70">BTZ Köln - Auftragsformular</h2>
             </div>
             {% endif %}
             <h1 class="text-3xl font-bold text-center mb-4">
                 <i class="fas fa-clipboard-list text-primary mr-3"></i>
-                Neuen Auftrag an die Werkstatt senden
+                Neuen Auftrag erstellen
             </h1>
             <p class="text-center text-base-content/70">
-                Erstellen Sie einen neuen Auftrag für die Werkstatt. Wir werden uns schnellstmöglich bei Ihnen melden.
+                Erstellen Sie einen neuen Auftrag Wir werden uns schnellstmöglich bei Ihnen melden.
             </p>
         </div>
 
@@ -70,13 +70,18 @@
                         </div>
                         <div class="form-control">
                             <label class="label">
-                                <span class="label-text font-semibold">Kategorie</span>
+                                <span class="label-text font-semibold">Bereich *</span>
                             </label>
-                            <select name="category" class="select select-bordered w-full">
-                                <option value="">Keine Kategorie</option>
-                                {% for cat in categories %}
-                                <option value="{{ cat }}">{{ cat }}</option>
-                                {% endfor %}
+                            <select name="category" class="select select-bordered w-full" required>
+                                <option value="">Bereich auswählen</option>
+                                <option value="Werkstatt">Werkstatt</option>
+                                <option value="IT-Support">IT-Support</option>
+                                <option value="Verwaltung">Verwaltung</option>
+                                <option value="Hausmeister">Hausmeister</option>
+                                <option value="Catering">Catering</option>
+                                <option value="Reinigung">Reinigung</option>
+                                <option value="Sicherheit">Sicherheit</option>
+                                <option value="Sonstiges">Sonstiges</option>
                             </select>
                         </div>
                     </div>
@@ -108,13 +113,13 @@
                         </div>
                     </div>
 
-                    <!-- Bereich -->
+                    <!-- Spezifischer Bereich -->
                     <div class="form-control mb-6">
                         <label class="label">
-                            <span class="label-text font-semibold">Bereich</span>
+                            <span class="label-text font-semibold">Spezifischer Bereich (optional)</span>
                         </label>
                         <input type="text" name="bereich" class="input input-bordered w-full" 
-                               placeholder="z.B. Metallwerkstatt">
+                               placeholder="z.B. Metallwerkstatt, EDV-Support, Gebäudereinigung">
                     </div>
 
                     <!-- Auftraggeber Typ -->
