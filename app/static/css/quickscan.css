@@ -1,4 +1,20 @@
 /* QuickScan Styles */
+
+/* Card States - Spezifischere Selektoren */
+#itemCard.selected,
+#workerCard.selected {
+    border-color: #fbbf24 !important;
+    background-color: rgba(251, 191, 36, 0.1) !important;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3) !important;
+}
+
+#itemCard.success,
+#workerCard.success {
+    border-color: #10b981 !important;
+    background-color: rgba(16, 185, 129, 0.1) !important;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3) !important;
+}
+
 .scan-area {
     position: relative;
     min-height: 60px;

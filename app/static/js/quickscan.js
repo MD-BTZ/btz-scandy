@@ -465,10 +465,10 @@ const QuickScan = {
     },
 
     setCardState(type, state) {
-        // type: 'item' oder 'worker', state: 'active', 'success', 'default'
+        // type: 'item' oder 'worker', state: 'selected', 'success', 'default'
         const card = document.getElementById(type === 'item' ? 'itemCard' : 'workerCard');
-        card.classList.remove('selected', 'success', 'active', 'default');
-        if (state === 'active') {
+        card.classList.remove('selected', 'success', 'default');
+        if (state === 'selected') {
             card.classList.add('selected');
         } else if (state === 'success') {
             card.classList.add('success');
@@ -497,7 +497,7 @@ const QuickScan = {
                     itemType = 'consumable';
                 } else {
                     this.showError("Artikel nicht gefunden", 'item');
-                    this.setCardState('item', 'active');
+                    this.setCardState('item', 'selected');
                     updateQuickScanButton(); // Button-Status aktualisieren
                     return;
                 }
@@ -532,7 +532,7 @@ const QuickScan = {
                 itemCardContent.innerHTML = html;
             }
             this.setCardState('item', 'success');
-            this.setCardState('worker', this.activeInputType === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
+            this.setCardState('worker', this.activeInputType === 'worker' ? 'selected' : (this.scannedWorker ? 'success' : 'default'));
             
             // Button-Status sofort aktualisieren
             setTimeout(() => updateQuickScanButton(), 100);
@@ -554,7 +554,7 @@ const QuickScan = {
             const result = await response.json();
             if (!result.success) {
                 this.showError(result.message || 'Mitarbeiter nicht gefunden', 'worker');
-                this.setCardState('worker', 'active');
+                this.setCardState('worker', 'selected');
                 updateQuickScanButton(); // Button-Status aktualisieren
                 return;
             }
@@ -570,7 +570,7 @@ const QuickScan = {
                 workerCardContent.innerHTML = html;
             }
             this.setCardState('worker', 'success');
-            this.setCardState('item', this.activeInputType === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
+            this.setCardState('item', this.activeInputType === 'item' ? 'selected' : (this.scannedItem ? 'success' : 'default'));
             
             // Button-Status sofort aktualisieren
             setTimeout(() => updateQuickScanButton(), 100);
@@ -867,7 +867,7 @@ const QuickScan = {
             if (itemCardContent) {
                 itemCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
             }
-            this.setCardState('item', 'active');
+            this.setCardState('item', 'selected');
             updateQuickScanButton();
         } else if (type === 'worker') {
             // Nur Worker-Eingabe zurücksetzen
@@ -876,7 +876,7 @@ const QuickScan = {
             if (workerCardContent) {
                 workerCardContent.innerHTML = `<p class='text-sm opacity-50'>Klicken &amp; Barcode scannen oder eingeben</p>`;
             }
-            this.setCardState('worker', 'active');
+            this.setCardState('worker', 'selected');
             updateQuickScanButton();
         } else {
             // Fallback: alles zurücksetzen
@@ -936,8 +936,8 @@ const QuickScan = {
             input.placeholder = type === 'item' ? 'Werkzeug/Verbrauchsgut scannen oder eingeben' : 'Mitarbeiter scannen oder eingeben';
         }
         // Kartenfarben setzen
-        this.setCardState('item', type === 'item' ? 'active' : (this.scannedItem ? 'success' : 'default'));
-        this.setCardState('worker', type === 'worker' ? 'active' : (this.scannedWorker ? 'success' : 'default'));
+        this.setCardState('item', type === 'item' ? 'selected' : (this.scannedItem ? 'success' : 'default'));
+        this.setCardState('worker', type === 'worker' ? 'selected' : (this.scannedWorker ? 'success' : 'default'));
         
         // Button-Status nach Kartenwechsel aktualisieren
         setTimeout(() => {
