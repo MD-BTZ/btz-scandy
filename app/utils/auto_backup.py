@@ -119,12 +119,13 @@ class AutoBackupScheduler:
             
             current_time = datetime.now()
             
-            # Lösche alle abgelaufenen Locks
+            # Lösche alle abgelaufenen Locks (älter als 1 Stunde)
+            expiry_time = current_time - timedelta(hours=1)
             result = mongodb.delete_many('system_locks', {
-    
+                'created_at': {'$lt': expiry_time}
             })
             
-            if result.deleted_count > 0:
+            if hasattr(result, 'deleted_count') and result.deleted_count > 0:
                 logger.info(f"{result.deleted_count} abgelaufene Locks bereinigt")
                 
         except Exception as e:

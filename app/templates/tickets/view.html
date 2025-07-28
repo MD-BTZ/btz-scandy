@@ -307,6 +307,32 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
                     </form>
                 </div>
             </div>
+
+            <!-- Ticket-Historie -->
+            <div class="card bg-base-100 shadow-xl mt-6">
+                <div class="card-body">
+                    <h3 class="card-title mb-4">
+                        <i class="fas fa-history mr-2"></i>
+                        Änderungshistorie
+                    </h3>
+                    
+                    <!-- History-Container -->
+                    <div id="historyContainer" class="space-y-3">
+                        <div class="flex justify-center items-center py-8">
+                            <div class="loading loading-spinner loading-md"></div>
+                            <span class="ml-2">Lade Historie...</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Mehr laden Button -->
+                    <div class="text-center mt-4">
+                        <button id="loadMoreHistory" class="btn btn-outline btn-sm" style="display: none;">
+                            <i class="fas fa-plus mr-2"></i>
+                            Mehr laden
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Rechte Spalte -->
@@ -1041,13 +1067,19 @@ function setupCarouselEventListeners() {
     }, 100);
 }
 
-// Medien-Galerie beim Laden der Seite laden
+// Medien-Galerie und Historie beim Laden der Seite laden
 document.addEventListener('DOMContentLoaded', function() {
     try {
         loadMediaGallery();
+        loadTicketHistory();
     } catch (error) {
-        console.error('Fehler beim Laden der Medien-Galerie:', error);
+        console.error('Fehler beim Laden der Medien-Galerie oder Historie:', error);
     }
+    
+    // Event Listener für "Mehr laden" Button
+    document.getElementById('loadMoreHistory').addEventListener('click', function() {
+        loadTicketHistory(true);
+    });
 });
 
 // Event Listeners für Carousel
@@ -1062,6 +1094,163 @@ document.addEventListener('keydown', function(e) {
         }
     }
 });
+
+// Ticket-Historie laden
+let historyOffset = 0;
+const historyLimit = 20;
+
+async function loadTicketHistory(loadMore = false) {
+    try {
+        if (!loadMore) {
+            historyOffset = 0;
+            document.getElementById('historyContainer').innerHTML = `
+                <div class="flex justify-center items-center py-8">
+                    <div class="loading loading-spinner loading-md"></div>
+                    <span class="ml-2">Lade Historie...</span>
+                </div>
+            `;
+        }
+        
+        const response = await fetch(`/api/tickets/{{ ticket.id }}/history?limit=${historyLimit}&offset=${historyOffset}`);
+        const data = await response.json();
+        
+        if (data.success && data.history) {
+            displayHistory(data.history, loadMore);
+            
+            // Zeige "Mehr laden" Button wenn es weitere Einträge gibt
+            const loadMoreBtn = document.getElementById('loadMoreHistory');
+            if (data.history.length === historyLimit) {
+                loadMoreBtn.style.display = 'block';
+                historyOffset += historyLimit;
+            } else {
+                loadMoreBtn.style.display = 'none';
+            }
+        } else {
+            if (!loadMore) {
+                document.getElementById('historyContainer').innerHTML = `
+                    <div class="text-center py-8 text-base-content/60">
+                        <i class="fas fa-history text-3xl mb-2"></i>
+                        <p>Noch keine Änderungen vorhanden</p>
+                    </div>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Historie:', error);
+        if (!loadMore) {
+            document.getElementById('historyContainer').innerHTML = `
+                <div class="text-center py-8 text-error">
+                    <i class="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                    <p>Fehler beim Laden der Historie</p>
+                </div>
+            `;
+        }
+    }
+}
+
+function displayHistory(history, append = false) {
+    const container = document.getElementById('historyContainer');
+    
+    if (!append) {
+        container.innerHTML = '';
+    }
+    
+    if (history.length === 0 && !append) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-base-content/60">
+                <i class="fas fa-history text-3xl mb-2"></i>
+                <p>Noch keine Änderungen vorhanden</p>
+            </div>
+        `;
+        return;
+    }
+    
+    history.forEach(entry => {
+        const historyItem = createHistoryItem(entry);
+        container.appendChild(historyItem);
+    });
+}
+
+function createHistoryItem(entry) {
+    const div = document.createElement('div');
+    div.className = 'border-l-4 border-base-300 pl-4 py-2';
+    
+    // Farbe basierend auf change_type
+    const typeColors = {
+        'create': 'border-success',
+        'status_change': 'border-warning', 
+        'assignment': 'border-info',
+        'message_added': 'border-primary',
+        'note_added': 'border-secondary',
+        'media_added': 'border-accent',
+        'media_deleted': 'border-error',
+        'update': 'border-base-300'
+    };
+    
+    div.className = div.className.replace('border-base-300', typeColors[entry.change_type] || 'border-base-300');
+    
+    // Icon basierend auf change_type
+    const typeIcons = {
+        'create': 'fas fa-plus-circle text-success',
+        'status_change': 'fas fa-exchange-alt text-warning',
+        'assignment': 'fas fa-user-plus text-info', 
+        'message_added': 'fas fa-comment text-primary',
+        'note_added': 'fas fa-sticky-note text-secondary',
+        'media_added': 'fas fa-upload text-accent',
+        'media_deleted': 'fas fa-trash text-error',
+        'update': 'fas fa-edit text-base-content'
+    };
+    
+    const icon = typeIcons[entry.change_type] || 'fas fa-edit text-base-content';
+    
+    div.innerHTML = `
+        <div class="flex items-start space-x-3">
+            <div class="flex-shrink-0 w-6 h-6 flex items-center justify-center">
+                <i class="${icon}"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                    <p class="text-sm font-medium text-base-content">
+                        ${getChangeDescription(entry)}
+                    </p>
+                    <p class="text-xs text-base-content/60">
+                        ${entry.formatted_date}
+                    </p>
+                </div>
+                <p class="text-xs text-base-content/60">
+                    von ${entry.changed_by}
+                </p>
+                ${entry.note ? `<p class="text-xs text-base-content/50 mt-1">${entry.note}</p>` : ''}
+            </div>
+        </div>
+    `;
+    
+    return div;
+}
+
+function getChangeDescription(entry) {
+    switch (entry.change_type) {
+        case 'create':
+            return entry.new_value;
+        case 'status_change':
+            return `Status: ${entry.old_value} → ${entry.new_value}`;
+        case 'assignment':
+            return `Zuweisung: ${entry.old_value} → ${entry.new_value}`;
+        case 'message_added':
+        case 'note_added':
+        case 'media_added':
+        case 'media_deleted':
+            return entry.new_value;
+        case 'update':
+            if (entry.old_value && entry.old_value !== 'Leer') {
+                return `${entry.field}: ${entry.old_value} → ${entry.new_value}`;
+            } else {
+                return `${entry.field} gesetzt: ${entry.new_value}`;
+            }
+        default:
+            return `${entry.field}: ${entry.old_value} → ${entry.new_value}`;
+    }
+}
 
 // Modal-Event-Listener
 document.getElementById('mediaCarouselModal').addEventListener('click', function(e) {

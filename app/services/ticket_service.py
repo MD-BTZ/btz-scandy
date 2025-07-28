@@ -76,6 +76,17 @@ class TicketService:
             result = mongodb.insert_one('tickets', ticket)
             ticket_id = str(result)
             
+            # History-Logging für Ticket-Erstellung
+            try:
+                from app.services.ticket_history_service import ticket_history_service
+                ticket_history_service.log_creation(
+                    ticket_id=ticket_id,
+                    created_by=created_by,
+                    ticket_data=ticket
+                )
+            except Exception as history_error:
+                logger.error(f"Fehler beim History-Logging für Ticket-Erstellung: {history_error}")
+            
             logger.info(f"Ticket erstellt: {ticket_id} von {created_by}")
             return True, 'Ticket wurde erfolgreich erstellt', ticket_id
             
@@ -289,6 +300,9 @@ class TicketService:
             if not ticket:
                 return False, 'Ticket nicht gefunden'
             
+            # Speichere alten Status für History
+            old_status = ticket.get('status', 'unbekannt')
+            
             # Status aktualisieren
             mongodb.update_one('tickets', 
                              {'_id': ticket_id}, 
@@ -297,6 +311,18 @@ class TicketService:
                                  'updated_at': datetime.now(),
                                  'updated_by': updated_by
                              }})
+            
+            # History-Logging für Status-Änderung
+            try:
+                from app.services.ticket_history_service import ticket_history_service
+                ticket_history_service.log_status_change(
+                    ticket_id=str(ticket_id),
+                    old_status=old_status,
+                    new_status=new_status,
+                    changed_by=updated_by
+                )
+            except Exception as history_error:
+                logger.error(f"Fehler beim History-Logging für Status-Änderung: {history_error}")
             
             # Benachrichtigung senden falls gewünscht
             if ticket.get('assigned_to') and ticket['assigned_to'] != updated_by:

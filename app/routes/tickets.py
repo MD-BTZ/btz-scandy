@@ -852,6 +852,17 @@ def add_message(ticket_id):
         
         logging.info(f"Nachricht erfolgreich gespeichert")
 
+        # History-Logging für Nachricht
+        try:
+            from app.services.ticket_history_service import ticket_history_service
+            ticket_history_service.log_message_added(
+                ticket_id=str(ticket_id),
+                message=message,
+                added_by=current_user.username
+            )
+        except Exception as history_error:
+            logging.error(f"Fehler beim History-Logging für Nachricht: {history_error}")
+
         # Hole die aktuelle Zeit für die Antwort
         created_at = datetime.now()
         formatted_date = created_at.strftime('%d.%m.%Y, %H:%M')
@@ -1079,6 +1090,9 @@ def update_status(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
+        # Speichere alten Status für History
+        old_status = ticket.get('status', 'unbekannt')
+        
         update_fields = {'status': new_status, 'updated_at': datetime.now()}
 
         # Automatische Zuweisung: Wenn Status von 'offen' auf etwas anderes wechselt und noch niemand zugewiesen ist
@@ -1094,6 +1108,18 @@ def update_status(id):
 
         if not result:
             return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren des Status'})
+
+        # History-Logging für Status-Änderung
+        try:
+            from app.services.ticket_history_service import ticket_history_service
+            ticket_history_service.log_status_change(
+                ticket_id=str(id),
+                old_status=old_status,
+                new_status=new_status,
+                changed_by=current_user.username
+            )
+        except Exception as history_error:
+            logging.error(f"Fehler beim History-Logging für Status-Änderung: {history_error}")
 
         # Spezielle Nachricht bei automatischer Zuweisung
         if new_status != 'offen' and (not ticket.get('assigned_to')):
@@ -1146,11 +1172,39 @@ def update_assignment(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
+        # Speichere alte Zuweisungen für History
+        old_assigned_users = []
+        
+        # Prüfe Legacy-Zuweisung
+        if ticket.get('assigned_to'):
+            old_assigned_users.append(ticket['assigned_to'])
+        
+        # Prüfe Mehrfach-Zuweisungen
+        existing_assignments = list(mongodb.find('ticket_assignments', {'ticket_id': str(ticket_id_for_update)}))
+        for assignment in existing_assignments:
+            if assignment.get('assigned_to') not in old_assigned_users:
+                old_assigned_users.append(assignment['assigned_to'])
+
         # Verwende den TicketService für die Mehrfachzuweisung
         ticket_service = TicketService()
         success, message = ticket_service.assign_ticket_multiple(str(ticket_id_for_update), assigned_users, current_user.username)
         
         if success:
+            # History-Logging für Zuweisungsänderung
+            try:
+                from app.services.ticket_history_service import ticket_history_service
+                old_assignment_str = ', '.join(old_assigned_users) if old_assigned_users else 'Nicht zugewiesen'
+                new_assignment_str = ', '.join(assigned_users) if assigned_users else 'Nicht zugewiesen'
+                
+                ticket_history_service.log_assignment(
+                    ticket_id=str(id),
+                    old_assignee=old_assignment_str,
+                    new_assignee=new_assignment_str,
+                    changed_by=current_user.username
+                )
+            except Exception as history_error:
+                logging.error(f"Fehler beim History-Logging für Zuweisungsänderung: {history_error}")
+                
             return jsonify({'success': True, 'message': message})
         else:
             return jsonify({'success': False, 'message': message})
@@ -1316,10 +1370,57 @@ def update_details(id):
         
         # Speichere oder aktualisiere die Auftragsdetails
         existing_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
-        if existing_details:
-            mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_query}, {'$set': auftrag_details_daten})
-        else:
-            mongodb.insert_one('auftrag_details', auftrag_details_daten)
+        
+        # History-Logging für Auftragsdetails-Änderungen
+        try:
+            from app.services.ticket_history_service import ticket_history_service
+            
+            # Vergleiche wichtige Felder für History
+            if existing_details:
+                # Prüfe auf Änderungen in wichtigen Feldern
+                important_fields = ['auftrag_an', 'bereich', 'beschreibung', 'prioritaet', 'deadline', 'fertigstellungstermin']
+                for field in important_fields:
+                    old_value = existing_details.get(field)
+                    new_value = auftrag_details_daten.get(field)
+                    
+                    if old_value != new_value:
+                        field_name = {
+                            'auftrag_an': 'Auftrag an',
+                            'bereich': 'Bereich',
+                            'beschreibung': 'Beschreibung',
+                            'prioritaet': 'Priorität',
+                            'deadline': 'Deadline',
+                            'fertigstellungstermin': 'Fertigstellungstermin'
+                        }.get(field, field)
+                        
+                        ticket_history_service.log_change(
+                            ticket_id=str(id),
+                            field=field_name,
+                            old_value=old_value,
+                            new_value=new_value,
+                            changed_by=current_user.username,
+                            change_type='update'
+                        )
+                
+                mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_query}, {'$set': auftrag_details_daten})
+            else:
+                # Neue Auftragsdetails erstellt
+                ticket_history_service.log_change(
+                    ticket_id=str(id),
+                    field='auftragsdetails',
+                    old_value=None,
+                    new_value='Auftragsdetails hinzugefügt',
+                    changed_by=current_user.username,
+                    change_type='update'
+                )
+                mongodb.insert_one('auftrag_details', auftrag_details_daten)
+        except Exception as history_error:
+            logging.error(f"Fehler beim History-Logging für Auftragsdetails: {history_error}")
+            # Führe Update/Insert trotzdem aus
+            if existing_details:
+                mongodb.update_one('auftrag_details', {'ticket_id': ticket_id_for_query}, {'$set': auftrag_details_daten})
+            else:
+                mongodb.insert_one('auftrag_details', auftrag_details_daten)
         
         # Verarbeite die Materialliste
         material_list = data.get('material_list', [])
@@ -1838,6 +1939,9 @@ def update_ticket(id):
     try:
         logging.info(f"DEBUG: update_ticket aufgerufen für ID: {id}")
         
+        # Import für History-Logging
+        from app.services.ticket_history_service import ticket_history_service
+        
         # Verwende die ursprüngliche ID direkt für das Update
         from bson import ObjectId
         try:
@@ -1847,11 +1951,14 @@ def update_ticket(id):
             # Falls das fehlschlägt, verwende die ursprüngliche ID als String
             ticket_id_for_update = id
 
-        # Prüfe ob das Ticket existiert
+        # Prüfe ob das Ticket existiert und speichere alte Werte für History
         ticket = mongodb.find_one('tickets', {'_id': ticket_id_for_update})
         if not ticket:
             logging.error(f"DEBUG: Ticket nicht gefunden für ID: {id}")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        # Speichere alte Werte für History-Logging
+        old_values = dict(ticket)
         
         logging.info(f"DEBUG: Ticket gefunden: {ticket.get('title', 'No Title')}")
         
@@ -1934,6 +2041,18 @@ def update_ticket(id):
             # Betrachte als erfolgreich, wenn die Operation erfolgreich war
             if result:
                 logging.info(f"DEBUG: Update erfolgreich")
+                
+                # History-Logging für alle Änderungen
+                try:
+                    ticket_history_service.log_bulk_update(
+                        ticket_id=str(id),
+                        updates=update_data,
+                        old_values=old_values,
+                        changed_by=current_user.username
+                    )
+                except Exception as history_error:
+                    logging.error(f"Fehler beim History-Logging: {history_error}")
+                
                 return jsonify({'success': True, 'message': 'Ticket erfolgreich aktualisiert'})
             else:
                 logging.error(f"DEBUG: Update fehlgeschlagen - Kein Dokument gefunden")

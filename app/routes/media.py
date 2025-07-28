@@ -235,6 +235,21 @@ def upload_media(entity_type, entity_id):
                 else:
                     message = 'Medien erfolgreich hochgeladen!'
                     
+                # History-Logging für Medien-Upload (nur bei Tickets)
+                if entity_type == 'tickets':
+                    try:
+                        from app.services.ticket_history_service import ticket_history_service
+                        ticket_history_service.log_change(
+                            ticket_id=str(entity_id),
+                            field='medien',
+                            old_value=None,
+                            new_value=f"Datei hochgeladen: {filename}",
+                            changed_by=current_user.username,
+                            change_type='media_added'
+                        )
+                    except Exception as history_error:
+                        loggers['errors'].error(f"Fehler beim History-Logging für Medien-Upload: {history_error}")
+                
                 return jsonify({
                     'success': True,
                     'message': message,
@@ -243,6 +258,21 @@ def upload_media(entity_type, entity_id):
                     'file_size_mb': round(final_size_mb, 2)
                 })
         except:
+            # History-Logging für Medien-Upload (nur bei Tickets) - Fallback
+            if entity_type == 'tickets':
+                try:
+                    from app.services.ticket_history_service import ticket_history_service
+                    ticket_history_service.log_change(
+                        ticket_id=str(entity_id),
+                        field='medien',
+                        old_value=None,
+                        new_value=f"Datei hochgeladen: {filename}",
+                        changed_by=current_user.username,
+                        change_type='media_added'
+                    )
+                except Exception as history_error:
+                    loggers['errors'].error(f"Fehler beim History-Logging für Medien-Upload: {history_error}")
+            
             # Fallback falls Bildverarbeitung fehlschlägt
             return jsonify({
                 'success': True,
@@ -291,6 +321,22 @@ def delete_media(entity_type, entity_id, filename):
         if os.path.exists(file_path):
             os.remove(file_path)
             loggers['user_actions'].info(f"Datei gelöscht: {file_path}")
+            
+            # History-Logging für Medien-Löschung (nur bei Tickets)
+            if entity_type == 'tickets':
+                try:
+                    from app.services.ticket_history_service import ticket_history_service
+                    ticket_history_service.log_change(
+                        ticket_id=str(entity_id),
+                        field='medien',
+                        old_value=f"Datei: {filename}",
+                        new_value=None,
+                        changed_by=current_user.username,
+                        change_type='media_deleted'
+                    )
+                except Exception as history_error:
+                    loggers['errors'].error(f"Fehler beim History-Logging für Medien-Löschung: {history_error}")
+            
             return jsonify({'success': True, 'message': 'Medium erfolgreich gelöscht!'})
         else:
             loggers['errors'].error(f"Datei nicht gefunden: {file_path}")
