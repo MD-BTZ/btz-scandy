@@ -43,6 +43,9 @@ class User(UserMixin):
                 
                 # Speichere das Feld automatisch in der Datenbank
                 self._save_timesheet_enabled(user_data['_id'], self.timesheet_enabled)
+            
+            # Handlungsfeld-Zuweisungen
+            self.handlungsfelder = user_data.get('handlungsfelder', [])
         else:
             self.id = None
             self.username = None
@@ -52,6 +55,7 @@ class User(UserMixin):
             self.is_teilnehmer = False
             self._active = True
             self.timesheet_enabled = False
+            self.handlungsfelder = []
     
     def get_id(self):
         return str(self.id)

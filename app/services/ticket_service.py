@@ -83,23 +83,31 @@ class TicketService:
             logger.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
             return False, f'Fehler beim Erstellen des Tickets: {str(e)}', None
     
-    def get_tickets_by_user(self, username: str, role: str) -> Dict[str, List[Dict[str, Any]]]:
+    def get_tickets_by_user(self, username: str, role: str, handlungsfelder: List[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Holt Tickets basierend auf Benutzerrolle
+        Holt Tickets basierend auf Benutzerrolle und Handlungsfeld-Zuweisungen
         
         Args:
             username: Benutzername
             role: Benutzerrolle
+            handlungsfelder: Liste der zugewiesenen Handlungsfelder (Ticket-Kategorien)
             
         Returns:
             Dict: Verschiedene Ticket-Listen
         """
         try:
-            print(f"DEBUG: Lade Tickets für Benutzer: {username}, Rolle: {role}")
+            print(f"DEBUG: Lade Tickets für Benutzer: {username}, Rolle: {role}, Handlungsfelder: {handlungsfelder}")
             
             # Debug: Prüfe alle Tickets in der Datenbank
             all_tickets_debug = list(mongodb.find('tickets', {}))
             print(f"DEBUG: Gesamtanzahl Tickets in DB: {len(all_tickets_debug)}")
+            
+            # Handlungsfeld-Filter für nicht-Admin/Mitarbeiter
+            handlungsfeld_filter = {}
+            if role not in ['admin', 'mitarbeiter'] and handlungsfelder:
+                # Für normale User: Nur Tickets aus zugewiesenen Handlungsfeldern
+                handlungsfeld_filter = {'category': {'$in': handlungsfelder}}
+                print(f"DEBUG: Handlungsfeld-Filter: {handlungsfeld_filter}")
             
             # Offene Tickets (nicht zugewiesene, offene Tickets)
             open_query = {
@@ -115,26 +123,57 @@ class TicketService:
                     {'deleted': {'$ne': True}}
                 ]
             }
+            
+            # Handlungsfeld-Filter zu offenen Tickets hinzufügen
+            if handlungsfeld_filter:
+                open_query['$and'].append(handlungsfeld_filter)
+            
             print(f"DEBUG: Offene Tickets Query: {open_query}")
             open_tickets = mongodb.find('tickets', open_query)
             open_tickets = list(open_tickets)
             print(f"DEBUG: Offene Tickets gefunden: {len(open_tickets)}")
             
-            # Zugewiesene Tickets
+            # Zugewiesene Tickets (unterstützt Mehrfachzuweisungen)
             if role in ['admin', 'mitarbeiter']:
                 # Für Admins/Mitarbeiter: Eigene zugewiesene Tickets + alle gelösten/geschlossenen
+                # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
+                user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
+                assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
+                
+                # Füge Legacy-Zuweisungen hinzu (falls keine Mehrfachzuweisungen vorhanden)
+                legacy_tickets = mongodb.find('tickets', {'assigned_to': username, 'deleted': {'$ne': True}})
+                legacy_ticket_ids = [str(ticket['_id']) for ticket in legacy_tickets]
+                
+                # Kombiniere beide Listen ohne Duplikate
+                all_assigned_ids = list(set(assigned_ticket_ids + legacy_ticket_ids))
+                
                 assigned_query = {
                     '$or': [
-                        {'assigned_to': username, 'deleted': {'$ne': True}},
+                        {'_id': {'$in': all_assigned_ids}, 'deleted': {'$ne': True}},
                         {'status': {'$in': ['gelöst', 'geschlossen']}, 'deleted': {'$ne': True}}
                     ]
                 }
             else:
                 # Für normale User: Nur eigene zugewiesene Tickets
+                # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
+                user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
+                assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
+                
+                # Füge Legacy-Zuweisungen hinzu (falls keine Mehrfachzuweisungen vorhanden)
+                legacy_tickets = mongodb.find('tickets', {'assigned_to': username, 'deleted': {'$ne': True}})
+                legacy_ticket_ids = [str(ticket['_id']) for ticket in legacy_tickets]
+                
+                # Kombiniere beide Listen ohne Duplikate
+                all_assigned_ids = list(set(assigned_ticket_ids + legacy_ticket_ids))
+                
                 assigned_query = {
-                    'assigned_to': username,
+                    '_id': {'$in': all_assigned_ids},
                     'deleted': {'$ne': True}
                 }
+                
+                # Handlungsfeld-Filter zu zugewiesenen Tickets hinzufügen
+                if handlungsfeld_filter:
+                    assigned_query = {'$and': [assigned_query, handlungsfeld_filter]}
             
             print(f"DEBUG: Zugewiesene Tickets Query: {assigned_query}")
             assigned_tickets = mongodb.find('tickets', assigned_query)
@@ -186,6 +225,14 @@ class TicketService:
                     
                     # Datetime-Felder konvertieren
                     ticket = self._convert_datetime_fields(ticket)
+                    
+                    # Lade Mehrfachzuweisungen für jedes Ticket
+                    ticket_assignments = self.get_ticket_assignments(str(ticket['_id']))
+                    if ticket_assignments:
+                        ticket['assigned_to'] = [assignment['assigned_to'] for assignment in ticket_assignments]
+                    elif ticket.get('assigned_to'):
+                        # Legacy-Support: Konvertiere Einzelzuweisung zu Liste
+                        ticket['assigned_to'] = [ticket['assigned_to']]
             
             # Sichere Sortierung mit None-Behandlung
             def safe_sort_key(ticket):
@@ -241,7 +288,24 @@ class TicketService:
             Optional[Dict]: Ticket-Daten oder None
         """
         try:
-            ticket = self.utility_service.find_document_by_id('tickets', ticket_id)
+            # Versuche verschiedene ID-Formate
+            ticket = None
+            
+            # Versuche zuerst mit String-ID
+            try:
+                ticket = mongodb.find_one('tickets', {'_id': ticket_id})
+            except:
+                pass
+            
+            # Falls nicht gefunden, versuche mit ObjectId
+            if not ticket:
+                try:
+                    from bson import ObjectId
+                    obj_id = ObjectId(ticket_id)
+                    ticket = mongodb.find_one('tickets', {'_id': obj_id})
+                except:
+                    pass
+            
             if ticket:
                 ticket = self._convert_datetime_fields(ticket)
                 ticket['id'] = str(ticket['_id'])
@@ -270,7 +334,7 @@ class TicketService:
             
             # Status aktualisieren
             mongodb.update_one('tickets', 
-                             {'_id': self.utility_service.convert_id_for_query(ticket_id)}, 
+                             {'_id': ticket_id}, 
                              {'$set': {
                                  'status': new_status,
                                  'updated_at': datetime.now(),
@@ -292,11 +356,25 @@ class TicketService:
     
     def assign_ticket(self, ticket_id: str, assigned_to: str, assigned_by: str) -> Tuple[bool, str]:
         """
-        Weist ein Ticket einem Benutzer zu
+        Weist ein Ticket einem Benutzer zu (Legacy-Methode für Einzelzuweisung)
         
         Args:
             ticket_id: Ticket-ID
             assigned_to: Benutzername des Zugewiesenen
+            assigned_by: Benutzername des Zuweisenden
+            
+        Returns:
+            Tuple: (success, message)
+        """
+        return self.assign_ticket_multiple(ticket_id, [assigned_to], assigned_by)
+    
+    def assign_ticket_multiple(self, ticket_id: str, assigned_users: List[str], assigned_by: str) -> Tuple[bool, str]:
+        """
+        Weist ein Ticket mehreren Benutzern zu
+        
+        Args:
+            ticket_id: Ticket-ID
+            assigned_users: Liste der Benutzernamen der Zugewiesenen
             assigned_by: Benutzername des Zuweisenden
             
         Returns:
@@ -307,30 +385,81 @@ class TicketService:
             if not ticket:
                 return False, 'Ticket nicht gefunden'
             
-            # Prüfe ob Benutzer existiert
-            assigned_user = mongodb.find_one('users', {'username': assigned_to})
-            if not assigned_user:
-                return False, 'Zugewiesener Benutzer nicht gefunden'
+            # Prüfe ob alle Benutzer existieren
+            valid_users = []
+            for username in assigned_users:
+                if username:  # Ignoriere leere Strings
+                    user = mongodb.find_one('users', {'username': username})
+                    if user:
+                        valid_users.append(username)
+                    else:
+                        logger.warning(f"Benutzer {username} nicht gefunden")
             
-            # Ticket zuweisen
+            # Lösche bestehende Zuweisungen
+            mongodb.delete_many('ticket_assignments', {'ticket_id': ticket_id})
+            
+            # Erstelle neue Zuweisungen
+            for username in valid_users:
+                assignment = {
+                    'ticket_id': ticket_id,
+                    'assigned_to': username,
+                    'assigned_by': assigned_by,
+                    'assigned_at': datetime.now()
+                }
+                mongodb.insert_one('ticket_assignments', assignment)
+            
+            # Aktualisiere das Ticket mit der ersten Zuweisung (für Kompatibilität)
+            primary_assignment = valid_users[0] if valid_users else None
             mongodb.update_one('tickets', 
-                             {'_id': self.utility_service.convert_id_for_query(ticket_id)}, 
+                             {'_id': ticket_id}, 
                              {'$set': {
-                                 'assigned_to': assigned_to,
+                                 'assigned_to': primary_assignment,
                                  'updated_at': datetime.now(),
                                  'updated_by': assigned_by
                              }})
             
-            # Benachrichtigung senden
-            if assigned_user.get('email'):
-                self.notification_service.notify_ticket_assignment(ticket, assigned_user['email'])
+            # Benachrichtigungen senden
+            for username in valid_users:
+                user = mongodb.find_one('users', {'username': username})
+                if user and user.get('email'):
+                    self.notification_service.notify_ticket_assignment(ticket, user['email'])
             
-            logger.info(f"Ticket zugewiesen: {ticket_id} -> {assigned_to} von {assigned_by}")
-            return True, f'Ticket erfolgreich {assigned_user.get("firstname", "")} {assigned_user.get("lastname", "")} zugewiesen'
+            logger.info(f"Ticket mehrfach zugewiesen: {ticket_id} -> {valid_users} von {assigned_by}")
+            return True, f'Ticket erfolgreich {len(valid_users)} Benutzern zugewiesen'
             
         except Exception as e:
-            logger.error(f"Fehler beim Zuweisen des Tickets: {str(e)}")
+            logger.error(f"Fehler beim Mehrfachzuweisen des Tickets: {str(e)}")
             return False, f'Fehler beim Zuweisen: {str(e)}'
+    
+    def get_ticket_assignments(self, ticket_id: str) -> List[Dict[str, Any]]:
+        """
+        Holt alle Zuweisungen für ein Ticket
+        
+        Args:
+            ticket_id: Ticket-ID
+            
+        Returns:
+            Liste der Zuweisungen
+        """
+        try:
+            assignments = mongodb.find('ticket_assignments', {'ticket_id': ticket_id})
+            return list(assignments)
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Ticket-Zuweisungen: {str(e)}")
+            return []
+    
+    def get_assigned_users(self, ticket_id: str) -> List[str]:
+        """
+        Holt alle zugewiesenen Benutzer für ein Ticket
+        
+        Args:
+            ticket_id: Ticket-ID
+            
+        Returns:
+            Liste der Benutzernamen
+        """
+        assignments = self.get_ticket_assignments(ticket_id)
+        return [assignment['assigned_to'] for assignment in assignments]
     
     def add_message_to_ticket(self, ticket_id: str, message: str, author: str) -> Tuple[bool, str]:
         """

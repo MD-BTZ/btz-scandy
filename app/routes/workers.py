@@ -778,42 +778,8 @@ def timesheet_list():
                         {'$cond': [{'$and': [{'$ne': ['$freitag_start', '']}, {'$ne': ['$freitag_tasks', '']}]}, 1, 0]}
                     ]
                 },
-                'created_at_de': {
-                    '$cond': {
-                        'if': {'$type': '$created_at'},
-                        'then': {
-                            '$cond': {
-                                'if': {'$eq': [{'$type': '$created_at'}, 'date']},
-                                'then': {
-                                    '$dateToString': {
-                                        'format': '%d.%m.%Y',
-                                        'date': '$created_at'
-                                    }
-                                },
-                                'else': '$created_at'
-                            }
-                        },
-                        'else': '$created_at'
-                    }
-                },
-                'updated_at_de': {
-                    '$cond': {
-                        'if': {'$type': '$updated_at'},
-                        'then': {
-                            '$cond': {
-                                'if': {'$eq': [{'$type': '$updated_at'}, 'date']},
-                                'then': {
-                                    '$dateToString': {
-                                        'format': '%d.%m.%Y',
-                                        'date': '$updated_at'
-                                    }
-                                },
-                                'else': '$updated_at'
-                            }
-                        },
-                        'else': '$updated_at'
-                    }
-                }
+                'created_at_de': '$created_at',
+                'updated_at_de': '$updated_at'
             }
         }
     ]
@@ -843,6 +809,42 @@ def timesheet_list():
     
     # MongoDB Aggregation ausführen
     timesheets = list(mongodb.db.timesheets.aggregate(pipeline))
+    
+    # Verarbeite datetime-Objekte nach der Abfrage
+    for ts in timesheets:
+        # Verarbeite created_at
+        if isinstance(ts.get('created_at'), dict) and ts['created_at'].get('__type__') == 'datetime':
+            try:
+                ts['created_at_de'] = datetime.fromisoformat(ts['created_at']['value']).strftime('%d.%m.%Y')
+            except:
+                ts['created_at_de'] = 'Unbekannt'
+        elif isinstance(ts.get('created_at'), datetime):
+            ts['created_at_de'] = ts['created_at'].strftime('%d.%m.%Y')
+        elif isinstance(ts.get('created_at'), str):
+            try:
+                parsed_date = datetime.strptime(ts['created_at'], '%Y-%m-%d %H:%M:%S')
+                ts['created_at_de'] = parsed_date.strftime('%d.%m.%Y')
+            except:
+                ts['created_at_de'] = ts['created_at']
+        else:
+            ts['created_at_de'] = 'Unbekannt'
+        
+        # Verarbeite updated_at
+        if isinstance(ts.get('updated_at'), dict) and ts['updated_at'].get('__type__') == 'datetime':
+            try:
+                ts['updated_at_de'] = datetime.fromisoformat(ts['updated_at']['value']).strftime('%d.%m.%Y')
+            except:
+                ts['updated_at_de'] = 'Unbekannt'
+        elif isinstance(ts.get('updated_at'), datetime):
+            ts['updated_at_de'] = ts['updated_at'].strftime('%d.%m.%Y')
+        elif isinstance(ts.get('updated_at'), str):
+            try:
+                parsed_date = datetime.strptime(ts['updated_at'], '%Y-%m-%d %H:%M:%S')
+                ts['updated_at_de'] = parsed_date.strftime('%d.%m.%Y')
+            except:
+                ts['updated_at_de'] = ts['updated_at']
+        else:
+            ts['updated_at_de'] = 'Unbekannt'
     
     # Python-Sortierung für Date-Felder (falls MongoDB-Sortierung nicht möglich war)
     if sort in ['created_desc', 'created_asc', 'updated_desc', 'updated_asc']:

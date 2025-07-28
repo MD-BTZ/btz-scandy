@@ -49,6 +49,139 @@ function showTab(tab) {
 
 // Debug: Prüfe ob Funktion verfügbar ist
 console.log('showTab Funktion verfügbar:', typeof showTab);
+
+// Filter-Funktionen
+function applyFilters() {
+    const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const priorityFilter = document.getElementById('priorityFilter').value;
+    const categoryFilter = document.getElementById('categoryFilter').value;
+    
+    // Alle sichtbaren Tabellen filtern
+    const visibleTable = getVisibleTable();
+    if (!visibleTable) return;
+    
+    const rows = visibleTable.querySelectorAll('tbody tr');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        let show = true;
+        
+        // Suchfilter
+        if (searchTerm) {
+            const text = row.textContent.toLowerCase();
+            if (!text.includes(searchTerm)) {
+                show = false;
+            }
+        }
+        
+        // Status Filter - suche nach Status-Badge
+        if (statusFilter && show) {
+            const statusBadge = row.querySelector('td .badge');
+            if (statusBadge) {
+                const status = statusBadge.textContent.toLowerCase().trim();
+                if (status !== statusFilter.toLowerCase()) {
+                    show = false;
+                }
+            }
+        }
+        
+        // Priorität Filter - suche nach Priorität-Badge
+        if (priorityFilter && show) {
+            const priorityBadges = row.querySelectorAll('td .badge');
+            if (priorityBadges.length >= 2) {
+                const priority = priorityBadges[1].textContent.toLowerCase().trim();
+                if (priority !== priorityFilter.toLowerCase()) {
+                    show = false;
+                }
+            }
+        }
+        
+        // Kategorie Filter - suche nach Kategorie-Zelle
+        if (categoryFilter && show) {
+            const cells = row.querySelectorAll('td');
+            let categoryFound = false;
+            cells.forEach(cell => {
+                const text = cell.textContent.toLowerCase().trim();
+                if (text === categoryFilter.toLowerCase()) {
+                    categoryFound = true;
+                }
+            });
+            if (!categoryFound) {
+                show = false;
+            }
+        }
+        
+        // Zeile anzeigen/verstecken
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    // "Keine Ergebnisse" Nachricht anzeigen/verstecken
+    updateNoResultsMessage(visibleTable, visibleCount);
+}
+
+function resetFilters() {
+    document.getElementById('searchFilter').value = '';
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('priorityFilter').value = '';
+    document.getElementById('categoryFilter').value = '';
+    applyFilters();
+}
+
+function getVisibleTable() {
+    const tableOpen = document.getElementById('table-open');
+    const tableAssigned = document.getElementById('table-assigned');
+    const tableAll = document.getElementById('table-all');
+    
+    if (tableOpen && tableOpen.style.display !== 'none') return tableOpen;
+    if (tableAssigned && tableAssigned.style.display !== 'none') return tableAssigned;
+    if (tableAll && tableAll.style.display !== 'none') return tableAll;
+    
+    return null;
+}
+
+function updateNoResultsMessage(table, visibleCount) {
+    // Entferne bestehende "Keine Ergebnisse" Nachricht
+    const existingMessage = table.querySelector('.no-results-message');
+    if (existingMessage) {
+        existingMessage.remove();
+    }
+    
+    // Füge neue Nachricht hinzu wenn keine Ergebnisse
+    if (visibleCount === 0) {
+        const tbody = table.querySelector('tbody');
+        if (tbody) {
+            // Bestimme die Anzahl der Spalten basierend auf der Tabellen-Header
+            const headerRow = table.querySelector('thead tr');
+            const columnCount = headerRow ? headerRow.querySelectorAll('th').length : 9;
+            
+            const messageRow = document.createElement('tr');
+            messageRow.className = 'no-results-message';
+            messageRow.innerHTML = `
+                <td colspan="${columnCount}" class="text-center py-8 text-base-content/60">
+                    <i class="fas fa-search text-2xl mb-2"></i>
+                    <p>Keine Tickets gefunden, die den Filterkriterien entsprechen.</p>
+                </td>
+            `;
+            tbody.appendChild(messageRow);
+        }
+    }
+}
+
+// Erweiterte showTab Funktion um Filter zu berücksichtigen
+const originalShowTab = showTab;
+showTab = function(tab) {
+    originalShowTab(tab);
+    // Filter nach Tab-Wechsel anwenden
+    setTimeout(applyFilters, 100);
+};
+
+// Initialisierung der Filter beim Laden der Seite
+document.addEventListener('DOMContentLoaded', function() {
+    // Filter beim ersten Laden anwenden
+    setTimeout(applyFilters, 100);
+});
 </script>
 
 <!-- Tickets JavaScript -->
@@ -74,6 +207,72 @@ console.log('showTab Funktion verfügbar:', typeof showTab);
                         {% if show_all_tickets %}
                         <a role="tab" class="tab" id="tab-all" onclick="showTab('all')">Alle Arbeitsaufträge</a>
                         {% endif %}
+                    </div>
+                    
+                    <!-- Globale Filter für alle Tabs -->
+                    <div class="mb-6 p-4 bg-base-200 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-3">
+                            <i class="fas fa-filter text-primary mr-2"></i>Filter
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- Suchfeld -->
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Suche</span>
+                                </label>
+                                <input type="text" id="searchFilter" placeholder="Titel, ID oder Beschreibung..." 
+                                       class="input input-bordered w-full" onkeyup="applyFilters()">
+                            </div>
+                            
+                            <!-- Status Filter -->
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Status</span>
+                                </label>
+                                <select id="statusFilter" class="select select-bordered w-full" onchange="applyFilters()">
+                                    <option value="">Alle Status</option>
+                                    <option value="offen">Offen</option>
+                                    <option value="in_bearbeitung">In Bearbeitung</option>
+                                    <option value="wartet_auf_antwort">Wartet auf Antwort</option>
+                                    <option value="gelöst">Gelöst</option>
+                                    <option value="geschlossen">Geschlossen</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Priorität Filter -->
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Priorität</span>
+                                </label>
+                                <select id="priorityFilter" class="select select-bordered w-full" onchange="applyFilters()">
+                                    <option value="">Alle Prioritäten</option>
+                                    <option value="niedrig">Niedrig</option>
+                                    <option value="normal">Normal</option>
+                                    <option value="hoch">Hoch</option>
+                                    <option value="dringend">Dringend</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Kategorie Filter -->
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Kategorie</span>
+                                </label>
+                                <select id="categoryFilter" class="select select-bordered w-full" onchange="applyFilters()">
+                                    <option value="">Alle Kategorien</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category }}">{{ category }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Filter zurücksetzen Button -->
+                        <div class="mt-4">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="resetFilters()">
+                                <i class="fas fa-times mr-2"></i>Filter zurücksetzen
+                            </button>
+                        </div>
                     </div>
                     <div id="table-open">
                         {% include 'tickets/_ticket_table_open.html' with context %}

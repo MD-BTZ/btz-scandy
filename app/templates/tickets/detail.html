@@ -168,23 +168,31 @@
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
                             {% if current_user.is_admin %}
-                                <form method="POST" action="{{ url_for('tickets.update_assignment', id=ticket.id) }}" id="assignmentForm">
-                                    <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
-                                        {% for user in users %}
-                                            <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
-                                                <input type="checkbox" 
-                                                       name="assigned_to" 
-                                                       value="{{ user['username'] }}" 
-                                                       class="checkbox checkbox-primary"
-                                                       {% if user['username'] in assigned_users %}checked{% endif %}>
-                                                <span>{{ user['username'] }}</span>
-                                            </label>
-                                        {% endfor %}
-                                    </div>
-                                    <button type="submit" class="btn btn-primary btn-sm w-full mb-2">Zuweisung speichern</button>
-                                </form>
+                                <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
+                                    {% for user in users %}
+                                        <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
+                                            <input type="checkbox" 
+                                                   name="assigned_users" 
+                                                   value="{{ user['username'] }}" 
+                                                   class="assignment-checkbox checkbox checkbox-primary"
+                                                   {% if user['username'] in assigned_users %}checked{% endif %}>
+                                            <span>{{ user['username'] }}</span>
+                                        </label>
+                                    {% endfor %}
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm w-full mb-2" onclick="updateTicketAssignments()">
+                                    <i class="fas fa-save mr-2"></i>Zuweisungen speichern
+                                </button>
                             {% else %}
-                                <span class="font-medium">{{ ticket.assigned_to or 'Nicht zugewiesen' }}</span>
+                                <div class="font-medium">
+                                    {% if assigned_users %}
+                                        {% for user in assigned_users %}
+                                            <span class="badge badge-primary mr-1">{{ user }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        Nicht zugewiesen
+                                    {% endif %}
+                                </div>
                             {% endif %}
                         </div>
                         <div>
@@ -237,34 +245,41 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Zuweisungs-Formular
-    const assignmentForm = document.getElementById('assignmentForm');
-    if (assignmentForm) {
-        assignmentForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const checkboxes = this.querySelectorAll('input[name="assigned_to"]:checked');
-            // Nehme nur den ersten ausgewählten Benutzer (oder null wenn keiner ausgewählt)
-            const assignedUser = checkboxes.length > 0 ? checkboxes[0].value : null;
-            
-            try {
-                const response = await fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ assigned_to: assignedUser })
-                });
-                
-                if (response.ok) {
-                    showToast('Zuweisung erfolgreich aktualisiert', 'success');
-                    setTimeout(() => window.location.reload(), 1000);
-                } else {
-                    const data = await response.json();
-                    showToast(data.message || 'Fehler beim Aktualisieren der Zuweisung', 'error');
-                }
-            } catch (error) {
-                showToast('Fehler beim Aktualisieren der Zuweisung', 'error');
+    // Mehrfachzuweisung-Funktion
+    function updateTicketAssignments() {
+        const checkboxes = document.querySelectorAll('input[name="assigned_users"]:checked');
+        const assignedUsers = Array.from(checkboxes).map(cb => cb.value);
+        
+        // Zeige Lade-Animation
+        const button = document.querySelector('button[onclick="updateTicketAssignments()"]');
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichere...';
+        
+        fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ assigned_users: assignedUsers })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Zuweisungen erfolgreich aktualisiert', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Fehler beim Aktualisieren der Zuweisungen', 'error');
             }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            showToast('Fehler beim Aktualisieren der Zuweisungen', 'error');
+        })
+        .finally(() => {
+            // Button zurücksetzen
+            button.disabled = false;
+            button.innerHTML = originalText;
         });
     }
 

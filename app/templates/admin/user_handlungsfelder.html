@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Handlungsfelder - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-base-content">
+                        <i class="fas fa-user-tag text-primary mr-3"></i>
+                        Handlungsfelder verwalten
+                    </h1>
+                    <p class="text-base-content/70 mt-2">
+                        Zuweisungen für {{ user.username }} ({{ user.role }})
+                    </p>
+                </div>
+                <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline">
+                    <i class="fas fa-arrow-left mr-2"></i>Zurück zur Benutzerverwaltung
+                </a>
+            </div>
+        </div>
+
+        <!-- Benutzer-Info -->
+        <div class="card bg-base-100 shadow-xl mb-6">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-user text-primary mr-2"></i>
+                    Benutzer-Informationen
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm opacity-70">Benutzername</p>
+                        <p class="font-semibold">{{ user.username }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm opacity-70">Rolle</p>
+                        <p class="font-semibold">{{ user.role }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm opacity-70">Status</p>
+                        <p class="font-semibold">
+                            {% if user.is_active %}
+                                <span class="badge badge-success">Aktiv</span>
+                            {% else %}
+                                <span class="badge badge-error">Inaktiv</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-sm opacity-70">Aktuelle Handlungsfelder</p>
+                        <p class="font-semibold">{{ user_handlungsfelder|length }} zugewiesen</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Handlungsfeld-Zuweisungen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-tags text-primary mr-2"></i>
+                    Handlungsfeld-Zuweisungen
+                </h2>
+                <p class="text-base-content/70 mb-6">
+                    Wählen Sie die Handlungsfelder aus, für die {{ user.username }} Tickets sehen und bearbeiten kann.
+                    Benutzer können nur Tickets aus ihren zugewiesenen Handlungsfeldern einsehen.
+                </p>
+
+                <form method="POST" id="handlungsfelderForm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for handlungsfeld in handlungsfelder %}
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-3">
+                                <input type="checkbox" 
+                                       name="handlungsfelder" 
+                                       value="{{ handlungsfeld }}"
+                                       class="checkbox checkbox-primary"
+                                       {% if handlungsfeld in user_handlungsfelder %}checked{% endif %}>
+                                <span class="label-text font-medium">{{ handlungsfeld }}</span>
+                            </label>
+                        </div>
+                        {% else %}
+                        <div class="col-span-full">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Keine Handlungsfelder verfügbar. Erstellen Sie zuerst Ticket-Kategorien im Admin-Dashboard.</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mt-8 flex gap-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>Zuweisungen speichern
+                        </button>
+                        <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline">
+                            Abbrechen
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Hinweise -->
+        <div class="mt-6">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <h4 class="font-bold">Hinweise zur Handlungsfeld-Verwaltung</h4>
+                    <ul class="mt-2 text-sm">
+                        <li>• Benutzer können nur Tickets aus ihren zugewiesenen Handlungsfeldern sehen</li>
+                        <li>• Admins und Mitarbeiter haben immer Zugriff auf alle Tickets</li>
+                        <li>• Handlungsfelder entsprechen den Ticket-Kategorien</li>
+                        <li>• Änderungen werden sofort wirksam</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('handlungsfelderForm');
+    
+    form.addEventListener('submit', function(e) {
+        // Zeige Lade-Indikator
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichere...';
+        
+        // Formular wird normal abgesendet
+    });
+});
+</script>
+{% endblock %} 

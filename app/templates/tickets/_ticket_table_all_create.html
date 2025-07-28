@@ -1,5 +1,3 @@
-<!-- Filter entfernt - alle Tickets werden ohne Filter angezeigt -->
-
 <!-- Tabelle für alle Tickets -->
 <div class="overflow-x-auto">
     <table class="table w-full">
@@ -46,7 +44,19 @@
                         {% else %}{{ ticket.priority|capitalize }}{% endif %}
                     </span>
                 </td>
-                <td>{{ ticket.assigned_to or '-' }}</td>
+                <td>
+                    {% if ticket.assigned_to %}
+                        {% if ticket.assigned_to is string %}
+                            {{ ticket.assigned_to }}
+                        {% else %}
+                            {% for user in ticket.assigned_to %}
+                                <span class="badge badge-primary mr-1">{{ user }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td>{{ ticket.created_by }}</td>
                 <td>
                     {% if ticket.auftrag_details and ticket.auftrag_details.kontakt %}

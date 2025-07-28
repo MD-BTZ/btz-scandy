@@ -1,19 +1,3 @@
-<!-- Filter für zugewiesene Tickets -->
-<div class="flex flex-wrap gap-2 mb-4">
-    <select class="select select-bordered w-full max-w-xs" name="status" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('status') %}selected{% endif %}>Status: Alle</option>
-        <option value="offen" {% if request.args.get('status') == 'offen' %}selected{% endif %}>Offen</option>
-        <option value="in_bearbeitung" {% if request.args.get('status') == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-        <option value="erledigt" {% if request.args.get('status') == 'erledigt' %}selected{% endif %}>Erledigt</option>
-    </select>
-    <select class="select select-bordered w-full max-w-xs" name="priority" onchange="this.form.submit()">
-        <option value="alle" {% if not request.args.get('priority') %}selected{% endif %}>Priorität: Alle</option>
-        <option value="niedrig" {% if request.args.get('priority') == 'niedrig' %}selected{% endif %}>Niedrig</option>
-        <option value="normal" {% if request.args.get('priority') == 'normal' %}selected{% endif %}>Normal</option>
-        <option value="hoch" {% if request.args.get('priority') == 'hoch' %}selected{% endif %}>Hoch</option>
-    </select>
-</div>
-
 <!-- Tabelle für zugewiesene Tickets -->
 <div class="overflow-x-auto">
     {% if assigned_tickets %}

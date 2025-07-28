@@ -1567,6 +1567,9 @@ def add_user():
             processed_data['password'] = password
             processed_data['password_confirm'] = password
         
+        # Handlungsfelder aus Formular holen
+        handlungsfelder = request.form.getlist('handlungsfelder')
+        
         # Benutzer erstellen mit AdminUserService
         user_data = {
             'username': processed_data['username'],
@@ -1576,7 +1579,7 @@ def add_user():
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
             'is_active': True,
-
+            'handlungsfelder': handlungsfelder
         }
         
         # Passwort nur hinzufügen falls angegeben
@@ -1622,7 +1625,13 @@ def add_user():
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                                  form_data=request.form)
     
-    return render_template('admin/user_form.html', roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+    # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+    handlungsfelder = get_ticket_categories_from_settings()
+    
+    return render_template('admin/user_form.html', 
+                         roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                         handlungsfelder=handlungsfelder,
+                         user_handlungsfelder=[])
 
 @bp.route('/migrate_users_to_workers', methods=['POST'])
 @admin_required
@@ -1692,9 +1701,15 @@ def edit_user(user_id):
     
     # GET-Request: Zeige das Formular mit den aktuellen Daten
     if request.method == 'GET':
+        # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+        handlungsfelder = get_ticket_categories_from_settings()
+        user_handlungsfelder = user.get('handlungsfelder', [])
+        
         return render_template('admin/user_form.html', 
                              user=user,
-                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                             handlungsfelder=handlungsfelder,
+                             user_handlungsfelder=user_handlungsfelder)
     
     # POST-Request: Verarbeite die Formulardaten
     try:
@@ -1710,9 +1725,18 @@ def edit_user(user_id):
         if not is_valid:
             for error in errors:
                 flash(error, 'error')
+            # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+            handlungsfelder = get_ticket_categories_from_settings()
+            user_handlungsfelder = user.get('handlungsfelder', [])
+            
             return render_template('admin/user_form.html', 
                                  user=user,
-                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                                 handlungsfelder=handlungsfelder,
+                                 user_handlungsfelder=user_handlungsfelder)
+        
+        # Handlungsfelder aus Formular holen
+        handlungsfelder = request.form.getlist('handlungsfelder')
         
         # Benutzer aktualisieren mit AdminUserService
         user_data = {
@@ -1722,7 +1746,7 @@ def edit_user(user_id):
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
-
+            'handlungsfelder': handlungsfelder
         }
         
         # Passwort hinzufügen falls angegeben
@@ -1736,20 +1760,38 @@ def edit_user(user_id):
             return redirect(url_for('admin.manage_users'))
         else:
             flash(message, 'error')
+            # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+            handlungsfelder = get_ticket_categories_from_settings()
+            user_handlungsfelder = user.get('handlungsfelder', [])
+            
             return render_template('admin/user_form.html', 
                                  user=user,
-                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+                                 roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                                 handlungsfelder=handlungsfelder,
+                                 user_handlungsfelder=user_handlungsfelder)
         
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
         flash('Fehler beim Aktualisieren des Benutzers', 'error')
+        # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+        handlungsfelder = get_ticket_categories_from_settings()
+        user_handlungsfelder = user.get('handlungsfelder', [])
+        
         return render_template('admin/user_form.html', 
                              user=user,
-                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+                             roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                             handlungsfelder=handlungsfelder,
+                             user_handlungsfelder=user_handlungsfelder)
+    
+    # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
+    handlungsfelder = get_ticket_categories_from_settings()
+    user_handlungsfelder = user.get('handlungsfelder', [])
     
     return render_template('admin/user_form.html', 
                          user=user,
-                         roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'])
+                         roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
+                         handlungsfelder=handlungsfelder,
+                         user_handlungsfelder=user_handlungsfelder)
 
 @bp.route('/notices')
 @admin_required
@@ -5311,3 +5353,69 @@ def fix_dashboard_simple():
             'tests': {},
             'database_info': {}
         }), 500
+
+# Handlungsfeld-Verwaltung
+@bp.route('/users/<user_id>/handlungsfelder', methods=['GET', 'POST'])
+@admin_required
+def manage_user_handlungsfelder(user_id):
+    """Verwaltet die Handlungsfeld-Zuweisungen eines Benutzers"""
+    try:
+        # Benutzer laden
+        user = mongodb.find_one('users', {'_id': user_id})
+        if not user:
+            flash('Benutzer nicht gefunden.', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        if request.method == 'POST':
+            # Handlungsfelder aus Formular holen
+            handlungsfelder = request.form.getlist('handlungsfelder')
+            
+            # Benutzer aktualisieren
+            mongodb.update_one('users', {'_id': user_id}, {
+                '$set': {'handlungsfelder': handlungsfelder}
+            })
+            
+            flash('Handlungsfelder erfolgreich aktualisiert.', 'success')
+            return redirect(url_for('admin.manage_users'))
+        
+        # Alle verfügbaren Handlungsfelder (Ticket-Kategorien) laden
+        handlungsfelder = get_ticket_categories_from_settings()
+        
+        # Aktuelle Zuweisungen des Benutzers
+        user_handlungsfelder = user.get('handlungsfelder', [])
+        
+        return render_template('admin/user_handlungsfelder.html',
+                             user=user,
+                             handlungsfelder=handlungsfelder,
+                             user_handlungsfelder=user_handlungsfelder)
+                             
+    except Exception as e:
+        logger.error(f"Fehler bei der Handlungsfeld-Verwaltung: {str(e)}")
+        flash('Fehler bei der Handlungsfeld-Verwaltung.', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+@bp.route('/users/<user_id>/handlungsfelder/update', methods=['POST'])
+@admin_required
+def update_user_handlungsfelder(user_id):
+    """Aktualisiert die Handlungsfeld-Zuweisungen eines Benutzers (JSON-API)"""
+    try:
+        # Handlungsfelder aus JSON-Request holen
+        data = request.get_json()
+        handlungsfelder = data.get('handlungsfelder', [])
+        
+        # Benutzer aktualisieren
+        mongodb.update_one('users', {'_id': user_id}, {
+            '$set': {'handlungsfelder': handlungsfelder}
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Handlungsfelder erfolgreich aktualisiert.'
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren der Handlungsfelder: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Aktualisieren der Handlungsfelder: {str(e)}'
+        })

@@ -31,39 +31,52 @@ function updateTicketStatus(newStatus) {
     });
 }
 
-function updateTicketAssignment(newAssignment) {
+function updateTicketAssignments() {
+    const checkboxes = document.querySelectorAll('input[name="assigned_users"]:checked');
+    const assignedUsers = Array.from(checkboxes).map(cb => cb.value);
+    
+    // Zeige Lade-Animation
+    const button = document.querySelector('button[onclick="updateTicketAssignments()"]');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichere...';
+    
     fetch(`/tickets/{{ ticket.id }}/update-assignment`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            assigned_to: newAssignment
-        })
+        body: JSON.stringify({ assigned_users: assignedUsers })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             if (typeof showToast !== 'undefined') {
-                showToast('Zuweisung erfolgreich aktualisiert', 'success');
+                showToast('Zuweisungen erfolgreich aktualisiert', 'success');
             } else {
-                alert('Zuweisung erfolgreich aktualisiert');
+                alert('Zuweisungen erfolgreich aktualisiert');
             }
+            setTimeout(() => window.location.reload(), 1000);
         } else {
             if (typeof showToast !== 'undefined') {
-                showToast('Fehler beim Aktualisieren der Zuweisung: ' + data.message, 'error');
+                showToast('Fehler beim Aktualisieren der Zuweisungen: ' + data.message, 'error');
             } else {
-                alert('Fehler beim Aktualisieren der Zuweisung: ' + data.message);
+                alert('Fehler beim Aktualisieren der Zuweisungen: ' + data.message);
             }
         }
     })
     .catch(error => {
         console.error('Fehler:', error);
         if (typeof showToast !== 'undefined') {
-            showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.', 'error');
+            showToast('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisungen.', 'error');
         } else {
-            alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisung.');
+            alert('Ein Fehler ist aufgetreten beim Aktualisieren der Zuweisungen.');
         }
+    })
+    .finally(() => {
+        // Button zurücksetzen
+        button.disabled = false;
+        button.innerHTML = originalText;
     });
 }
 
@@ -316,22 +329,31 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
                         <div>
                             <p class="text-sm opacity-70">Zugewiesen an</p>
                             {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                                <select id="assignmentSelect" class="select select-bordered w-full" onchange="updateTicketAssignment(this.value)">
-                                    <option value="">Nicht zugewiesen</option>
+                                <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
                                     {% for user in workers %}
-                                        <option value="{{ user.username }}" {% if ticket.assigned_to == user.username %}selected{% endif %}>
-                                            {{ user.firstname }} {{ user.lastname }} ({{ user.username }})
-                                        </option>
+                                        <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
+                                            <input type="checkbox" 
+                                                   name="assigned_users" 
+                                                   value="{{ user.username }}" 
+                                                   class="assignment-checkbox checkbox checkbox-primary"
+                                                   {% if user.username in assigned_users %}checked{% endif %}>
+                                            <span>{{ user.firstname }} {{ user.lastname }} ({{ user.username }})</span>
+                                        </label>
                                     {% endfor %}
-                                </select>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm w-full mb-2" onclick="updateTicketAssignments()">
+                                    <i class="fas fa-save mr-2"></i>Zuweisungen speichern
+                                </button>
                             {% else %}
-                                <p class="font-medium">
-                                    {% if ticket.assigned_to %}
-                                        {{ ticket.assigned_to }}
+                                <div class="font-medium">
+                                    {% if assigned_users %}
+                                        {% for user in assigned_users %}
+                                            <span class="badge badge-primary mr-1">{{ user }}</span>
+                                        {% endfor %}
                                     {% else %}
                                         Nicht zugewiesen
                                     {% endif %}
-                                </p>
+                                </div>
                             {% endif %}
                         </div>
                         <div>

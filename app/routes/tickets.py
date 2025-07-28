@@ -4,6 +4,7 @@ from app.models.mongodb_database import mongodb
 from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
 from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number
 from app.models.user import User
+from app.services.ticket_service import TicketService
 import logging
 from datetime import datetime
 from flask_login import current_user
@@ -623,7 +624,12 @@ def create():
     
     # Verwende den TicketService für alle Ticket-Operationen
     print(f"DEBUG: Lade Tickets für Benutzer: {current_user.username}, Rolle: {current_user.role}")
-    tickets_data = ticket_service.get_tickets_by_user(current_user.username, current_user.role)
+    
+    # Hole Handlungsfelder des Benutzers
+    handlungsfelder = getattr(current_user, 'handlungsfelder', [])
+    print(f"DEBUG: Handlungsfelder des Benutzers: {handlungsfelder}")
+    
+    tickets_data = ticket_service.get_tickets_by_user(current_user.username, current_user.role, handlungsfelder)
     open_tickets = tickets_data['open_tickets']
     assigned_tickets = tickets_data['assigned_tickets']
     all_tickets = tickets_data['all_tickets']
@@ -779,12 +785,21 @@ def view(ticket_id):
         users = mongodb.find('users', {'is_active': True})
         users = [dict(user) for user in users]
         
+        # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+        assigned_users_raw = mongodb.find('ticket_assignments', {'ticket_id': ticket_id_for_query})
+        assigned_users = [assignment['assigned_to'] for assignment in assigned_users_raw]
+        
+        # Falls keine Mehrfachzuweisungen vorhanden, verwende die Legacy-Zuweisung
+        if not assigned_users and ticket.get('assigned_to'):
+            assigned_users = [ticket['assigned_to']]
+        
         return render_template('tickets/view.html', 
                              ticket=ticket, 
                              messages=messages,
                              auftrag_details=auftrag_details,
                              categories=categories,
                              workers=users,
+                             assigned_users=assigned_users,
                              status_colors={
                                  'offen': 'info',
                                  'in_bearbeitung': 'warning',
@@ -905,7 +920,12 @@ def detail(id):
         users = [dict(user) for user in users]
 
         # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-        assigned_users = mongodb.find('ticket_assignments', {'ticket_id': convert_id_for_query(id)})
+        assigned_users_raw = mongodb.find('ticket_assignments', {'ticket_id': convert_id_for_query(id)})
+        assigned_users = [assignment['assigned_to'] for assignment in assigned_users_raw]
+        
+        # Falls keine Mehrfachzuweisungen vorhanden, verwende die Legacy-Zuweisung
+        if not assigned_users and ticket.get('assigned_to'):
+            assigned_users = [ticket['assigned_to']]
 
         # Hole alle Kategorien aus der settings Collection
         categories = get_ticket_categories_from_settings()
@@ -1096,18 +1116,22 @@ def update_status(id):
 @bp.route('/<id>/update-assignment', methods=['POST'])
 @login_required
 def update_assignment(id):
-    """Aktualisiert die Zuweisung eines Tickets"""
+    """Aktualisiert die Zuweisung eines Tickets (unterstützt Mehrfachzuweisungen)"""
     try:
         if not request.is_json:
             return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
 
         data = request.get_json()
-        assigned_to = data.get('assigned_to')
+        assigned_users = data.get('assigned_users', [])
         
-        # Wenn assigned_to leer ist, setze es auf None
-        if not assigned_to or assigned_to == "":
-            assigned_to = None
-
+        # Falls assigned_to noch verwendet wird (Legacy-Support)
+        if 'assigned_to' in data:
+            assigned_to = data.get('assigned_to')
+            if assigned_to:
+                assigned_users = [assigned_to]
+            else:
+                assigned_users = []
+        
         # Verwende die ursprüngliche ID direkt für das Update
         from bson import ObjectId
         try:
@@ -1122,13 +1146,14 @@ def update_assignment(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
-        # Aktualisiere die Zuweisung direkt im Ticket
-        result = mongodb.update_one('tickets', {'_id': ticket_id_for_update}, {'$set': {'assigned_to': assigned_to, 'updated_at': datetime.now()}})
+        # Verwende den TicketService für die Mehrfachzuweisung
+        ticket_service = TicketService()
+        success, message = ticket_service.assign_ticket_multiple(str(ticket_id_for_update), assigned_users, current_user.username)
         
-        if not result:
-            return jsonify({'success': False, 'message': 'Fehler beim Aktualisieren der Zuweisung'})
-
-        return jsonify({'success': True, 'message': 'Zuweisung erfolgreich aktualisiert'})
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message})
 
     except Exception as e:
         logging.error(f"Fehler beim Aktualisieren der Zuweisung: {str(e)}")
