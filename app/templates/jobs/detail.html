@@ -706,13 +706,25 @@ function setupCarouselEventListeners() {
         const nextBtn = document.getElementById('carousel-next');
         
         if (prevBtn) {
-            prevBtn.removeEventListener('click', prevSlide);
-            prevBtn.addEventListener('click', prevSlide);
+            // Entferne alle alten Event Listeners
+            prevBtn.replaceWith(prevBtn.cloneNode(true));
+            const newPrevBtn = document.getElementById('carousel-prev');
+            newPrevBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                prevSlide();
+            });
         }
         
         if (nextBtn) {
-            nextBtn.removeEventListener('click', nextSlide);
-            nextBtn.addEventListener('click', nextSlide);
+            // Entferne alle alten Event Listeners
+            nextBtn.replaceWith(nextBtn.cloneNode(true));
+            const newNextBtn = document.getElementById('carousel-next');
+            newNextBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                nextSlide();
+            });
         }
     }, 100);
 }

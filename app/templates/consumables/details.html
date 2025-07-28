@@ -447,31 +447,32 @@ function openImageInNewTab() {
 
 // Carousel Event Listeners
 function setupCarouselEventListeners() {
-    const prevBtn = document.getElementById('carousel-prev');
-    const nextBtn = document.getElementById('carousel-next');
-    const modal = document.getElementById('mediaCarouselModal');
-    
-    // Entferne alte Event Listeners
-    prevBtn.removeEventListener('click', prevSlide);
-    nextBtn.removeEventListener('click', nextSlide);
-    
-    // Füge neue Event Listeners hinzu
-    prevBtn.addEventListener('click', prevSlide);
-    nextBtn.addEventListener('click', nextSlide);
-    
-    // Keyboard Navigation
-    const handleKeyDown = (e) => {
-        if (e.key === 'ArrowLeft') {
-            prevSlide();
-        } else if (e.key === 'ArrowRight') {
-            nextSlide();
-        } else if (e.key === 'Escape') {
-            closeMediaCarousel();
+    setTimeout(() => {
+        const prevBtn = document.getElementById('carousel-prev');
+        const nextBtn = document.getElementById('carousel-next');
+        
+        if (prevBtn) {
+            // Entferne alle alten Event Listeners
+            prevBtn.replaceWith(prevBtn.cloneNode(true));
+            const newPrevBtn = document.getElementById('carousel-prev');
+            newPrevBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                prevSlide();
+            });
         }
-    };
-    
-    document.removeEventListener('keydown', handleKeyDown);
-    document.addEventListener('keydown', handleKeyDown);
+        
+        if (nextBtn) {
+            // Entferne alle alten Event Listeners
+            nextBtn.replaceWith(nextBtn.cloneNode(true));
+            const newNextBtn = document.getElementById('carousel-next');
+            newNextBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                nextSlide();
+            });
+        }
+    }, 100);
 }
 
 // Modal Event Listeners
