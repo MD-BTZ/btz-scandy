@@ -1100,8 +1100,8 @@ def delete_worker_permanent(barcode):
         # Barcode URL-dekodieren
         decoded_barcode = unquote(barcode)
         
-        # Prüfe ob der Mitarbeiter existiert
-        worker = mongodb.find_one('workers', {'barcode': decoded_barcode, 'deleted': {'$ne': True}})
+        # Prüfe ob der Mitarbeiter existiert (auch gelöschte)
+        worker = mongodb.find_one('workers', {'barcode': decoded_barcode})
         if not worker:
             return jsonify({'success': False, 'message': 'Mitarbeiter nicht gefunden'}), 404
             
@@ -1578,7 +1578,7 @@ def add_user():
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
-            'is_active': True,
+            'is_active': request.form.get('is_active') == 'on',
             'handlungsfelder': handlungsfelder
         }
         
@@ -1746,6 +1746,7 @@ def edit_user(user_id):
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
+            'is_active': request.form.get('is_active') == 'on',
             'handlungsfelder': handlungsfelder
         }
         

@@ -308,10 +308,12 @@ class AdminUserService:
             True wenn erfolgreich erstellt, False sonst
         """
         try:
-            # Prüfe ob bereits ein Mitarbeiter mit diesem Benutzernamen existiert
+            # Prüfe ob bereits ein Mitarbeiter mit diesem Benutzernamen oder dieser User-ID existiert (auch gelöschte)
             existing_worker = mongodb.find_one('workers', {
-                'username': user_data['username'],
-                'deleted': {'$ne': True}
+                '$or': [
+                    {'username': user_data['username']},
+                    {'user_id': user_id}
+                ]
             })
             
             if existing_worker:
@@ -321,10 +323,9 @@ class AdminUserService:
             # Generiere einen eindeutigen Barcode basierend auf dem Benutzernamen
             barcode = f"USER_{user_data['username'].upper()}"
             
-            # Prüfe ob der Barcode bereits existiert
+            # Prüfe ob der Barcode bereits existiert (auch gelöschte)
             existing_barcode = mongodb.find_one('workers', {
-                'barcode': barcode,
-                'deleted': {'$ne': True}
+                'barcode': barcode
             })
             
             if existing_barcode:
@@ -333,8 +334,7 @@ class AdminUserService:
                 while True:
                     new_barcode = f"{barcode}_{counter}"
                     existing = mongodb.find_one('workers', {
-                        'barcode': new_barcode,
-                        'deleted': {'$ne': True}
+                        'barcode': new_barcode
                     })
                     if not existing:
                         barcode = new_barcode
@@ -379,10 +379,9 @@ class AdminUserService:
             True wenn erfolgreich synchronisiert, False sonst
         """
         try:
-            # Finde den zugehörigen Mitarbeiter-Eintrag
+            # Finde den zugehörigen Mitarbeiter-Eintrag (auch gelöschte)
             worker = mongodb.find_one('workers', {
-                'user_id': user_id,
-                'deleted': {'$ne': True}
+                'user_id': user_id
             })
             
             if not worker:
@@ -428,10 +427,9 @@ class AdminUserService:
             True wenn erfolgreich deaktiviert, False sonst
         """
         try:
-            # Finde den zugehörigen Mitarbeiter-Eintrag
+            # Finde den zugehörigen Mitarbeiter-Eintrag (auch gelöschte)
             worker = mongodb.find_one('workers', {
-                'user_id': user_id,
-                'deleted': {'$ne': True}
+                'user_id': user_id
             })
             
             if not worker:

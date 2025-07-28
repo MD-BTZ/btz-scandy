@@ -106,6 +106,17 @@
                                    {% if request.form.timesheet_enabled or (user.timesheet_enabled if user) %}checked{% endif %} />
                         </label>
                     </div>
+                    
+                    <div class="form-control mt-4">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Benutzerkonto aktiv</span>
+                            <input type="checkbox" name="is_active" class="checkbox checkbox-primary" 
+                                   {% if request.form.is_active is not none %}{% if request.form.is_active %}checked{% endif %}{% elif user and user.is_active %}checked{% else %}checked{% endif %} />
+                        </label>
+                        <label class="label">
+                            <span class="label-text-alt text-info">Inaktive Benutzer können sich nicht anmelden.</span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Handlungsfeld-Zuweisungen -->
