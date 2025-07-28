@@ -330,4 +330,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Auftragsdetails erfolgreich initialisiert');
 });
 </script>
-{% endblock %} 
+
+<!-- Tickets JavaScript -->
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+{% endblock scripts %} 

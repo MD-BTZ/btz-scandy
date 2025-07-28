@@ -297,7 +297,7 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
         </div>
 
         <!-- Rechte Spalte -->
-        <div class="lg:col-span-1">
+        <div class="lg:col-span-1 space-y-6">
             <!-- Auftrag Status -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
@@ -348,8 +348,29 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
                 </div>
             </div>
 
+            <!-- Medien-Galerie -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="card-title">Medien-Galerie</h2>
+                        <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus mr-2"></i>Medien hinzufügen
+                        </button>
+                    </div>
+                    <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
+                        <!-- Medien werden hier dynamisch geladen -->
+                    </div>
+                    <div id="no-media-message" class="text-base-content/60 text-center py-4">
+                        Keine Medien vorhanden
+                    </div>
+                    <button id="openCarouselBtn" class="btn btn-primary btn-sm" style="display: none;" onclick="openMediaCarousel(0)">
+                        <i class="fas fa-images mr-2"></i>Galerie öffnen
+                    </button>
+                </div>
+            </div>
+
             <!-- Export-Button für Word-Dokument -->
-            <div class="card bg-base-100 shadow-xl mb-6">
+            <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="btn btn-accent w-full" target="_blank">
                         <i class="fas fa-file-word mr-2"></i> Auftrag als Word exportieren
@@ -358,7 +379,7 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
             </div>
 
             <!-- Button zum Öffnen der Auftragsdetails-Seite -->
-            <div class="card bg-base-100 shadow-xl mb-6">
+            <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <a href="{{ url_for('tickets.auftrag_details_page', id=ticket.id) }}" class="btn btn-primary w-full">
                         <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
@@ -444,5 +465,612 @@ function showToast(type, message) {
         toast.remove();
     }, 3000);
 }
+
+// Medien-Galerie Variablen
+let mediaList = [];
+let currentImageIndex = 0;
+
+// Medien-Galerie laden
+function loadMediaGallery() {
+    console.log('=== LOADING TICKET MEDIA GALLERY ===');
+    const ticketId = '{{ ticket.id }}';
+    
+    if (!ticketId) {
+        console.log('No ticket ID found');
+        return;
+    }
+    
+    const url = `/media/tickets/${ticketId}/list`;
+    console.log('Fetching from:', url);
+    
+    fetch(url)
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Media data:', data);
+            
+            if (data.success && data.media_list && data.media_list.length > 0) {
+                mediaList = data.media_list;
+                displayMediaPreview();
+            } else {
+                console.log('No media found');
+                document.getElementById('no-media-message').style.display = 'block';
+                document.getElementById('openCarouselBtn').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Medien:', error);
+        });
+}
+
+// Medien-Vorschau anzeigen
+function displayMediaPreview() {
+    const gallery = document.getElementById('media-preview-gallery');
+    const noMediaMessage = document.getElementById('no-media-message');
+    const openCarouselBtn = document.getElementById('openCarouselBtn');
+    
+    if (mediaList.length === 0) {
+        noMediaMessage.style.display = 'block';
+        openCarouselBtn.style.display = 'none';
+        return;
+    }
+    
+    noMediaMessage.style.display = 'none';
+    openCarouselBtn.style.display = 'block';
+    
+    // Zeige die ersten 4 Medien als Vorschau
+    const previewMedia = mediaList.slice(0, 4);
+    gallery.innerHTML = '';
+    
+    previewMedia.forEach((media, index) => {
+        const mediaContainer = document.createElement('div');
+        mediaContainer.className = 'relative group';
+        
+        // Prüfe ob es eine PDF-Datei ist
+        const isPdf = media.filename.toLowerCase().endsWith('.pdf');
+        
+        if (isPdf) {
+            // PDF-Vorschau
+            const pdfPreview = document.createElement('div');
+            pdfPreview.className = 'w-full h-20 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity';
+            pdfPreview.onclick = () => openPdfModal(media.url, media.filename);
+            
+            pdfPreview.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-file-pdf text-red-500 text-lg mb-1"></i>
+                    <p class="text-xs text-red-700 font-medium">PDF</p>
+                </div>
+            `;
+            mediaContainer.appendChild(pdfPreview);
+        } else {
+            // Bild-Vorschau
+            const img = document.createElement('img');
+            img.src = media.url;
+            img.alt = 'Ticket Vorschau';
+            img.className = 'w-full h-20 object-contain rounded-lg cursor-pointer bg-base-200';
+            img.onclick = () => openMediaCarousel(index);
+            mediaContainer.appendChild(img);
+        }
+        
+        // Overlay mit Buttons
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2';
+        
+        // Lösch-Button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-xs btn-circle btn-error';
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.title = 'Medium löschen';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteMedia(media.filename);
+        };
+        
+        overlay.appendChild(deleteBtn);
+        mediaContainer.appendChild(overlay);
+        gallery.appendChild(mediaContainer);
+    });
+}
+
+// Carousel öffnen
+function openMediaCarousel(startIndex = 0) {
+    currentImageIndex = startIndex;
+    displayCarousel();
+    document.getElementById('mediaCarouselModal').showModal();
+    setupCarouselEventListeners();
+}
+
+// Carousel schließen
+function closeMediaCarousel() {
+    document.getElementById('mediaCarouselModal').close();
+}
+
+// Vollbild-Button
+function openImageInNewTab() {
+    if (mediaList.length > 0) {
+        const currentMedia = mediaList[currentImageIndex];
+        window.open(currentMedia.url, '_blank');
+    }
+}
+
+// Medium löschen
+function deleteMedia(filename) {
+    if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
+        return;
+    }
+    
+    fetch(`/media/tickets/{{ ticket.id }}/delete/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Medium erfolgreich gelöscht!');
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Löschen');
+        }
+    })
+    .catch(error => {
+        console.error('Delete error:', error);
+        alert('Fehler beim Löschen');
+    });
+}
+
+// Medien-Modal Funktionen
+function openMediaModal() {
+    document.getElementById('mediaModal').showModal();
+    loadModalMediaList();
+}
+
+function closeMediaModal() {
+    document.getElementById('mediaModal').close();
+}
+
+function updateModalMediaFileName() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    
+    if (fileInput.files.length > 0) {
+        uploadBtn.disabled = false;
+    } else {
+        uploadBtn.disabled = true;
+    }
+}
+
+function uploadModalMedia() {
+    const fileInput = document.getElementById('modalMediaFile');
+    const uploadBtn = document.getElementById('modalUploadBtn');
+    
+    if (!fileInput.files.length) {
+        alert('Bitte wählen Sie eine Datei aus');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hochladen...';
+    
+    fetch(`/media/tickets/{{ ticket.id }}/upload`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Datei-Input zurücksetzen
+            fileInput.value = '';
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
+            
+            // Erfolgsmeldung anzeigen
+            alert('Medien erfolgreich hochgeladen!');
+            
+            // Medien-Listen neu laden
+            loadModalMediaList();
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Hochladen');
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
+        }
+    })
+    .catch(error => {
+        console.error('Upload error:', error);
+        alert('Fehler beim Hochladen');
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload mr-2"></i>Hochladen';
+    });
+}
+
+function loadModalMediaList() {
+    fetch(`/media/tickets/{{ ticket.id }}/list`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.media_list && data.media_list.length > 0) {
+                displayModalMediaList(data.media_list);
+            } else {
+                document.getElementById('modal-media-list').innerHTML = '<p class="text-base-content/60">Keine Medien vorhanden</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Modal-Medien:', error);
+            document.getElementById('modal-media-list').innerHTML = '<p class="text-base-content/60">Fehler beim Laden</p>';
+        });
+}
+
+function displayModalMediaList(mediaList) {
+    const container = document.getElementById('modal-media-list');
+    container.innerHTML = '';
+    
+    mediaList.forEach((media, index) => {
+        const mediaItem = document.createElement('div');
+        mediaItem.className = 'relative group';
+        
+        // Prüfe ob es eine PDF-Datei ist
+        const isPdf = media.filename.toLowerCase().endsWith('.pdf');
+        
+        if (isPdf) {
+            // PDF-Anzeige
+            mediaItem.innerHTML = `
+                <div class="relative">
+                    <div class="w-full h-24 bg-red-100 border-2 border-red-300 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-75 transition-opacity"
+                         onclick="openPdfModal('${media.url}', '${media.filename}')">
+                        <div class="text-center">
+                            <i class="fas fa-file-pdf text-red-500 text-2xl mb-1"></i>
+                            <p class="text-xs text-red-700 font-medium">PDF</p>
+                            <p class="text-xs text-red-600 truncate">${media.filename}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteModalMedia('${media.filename}')" 
+                            class="absolute top-1 right-1 btn btn-error btn-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        } else {
+            // Bild-Anzeige
+            mediaItem.innerHTML = `
+                <div class="relative">
+                    <img src="${media.url}" 
+                         alt="Medien ${index + 1}"
+                         class="w-full h-24 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
+                         onclick="openImageModal('${media.url}')">
+                    <button onclick="deleteModalMedia('${media.filename}')" 
+                            class="absolute top-1 right-1 btn btn-error btn-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        }
+        
+        container.appendChild(mediaItem);
+    });
+}
+
+function deleteModalMedia(filename) {
+    if (!confirm('Möchten Sie dieses Medium wirklich löschen?')) {
+        return;
+    }
+    
+    fetch(`/media/tickets/{{ ticket.id }}/delete/${filename}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Medium erfolgreich gelöscht!');
+            loadModalMediaList();
+            loadMediaGallery();
+        } else {
+            alert(data.error || 'Fehler beim Löschen');
+        }
+    })
+    .catch(error => {
+        console.error('Delete error:', error);
+        alert('Fehler beim Löschen');
+    });
+}
+
+function openImageModal(imageSrc) {
+    // Verwende das bestehende Bild-Modal oder erstelle ein neues
+    const modal = document.getElementById('imageModal') || createImageModal();
+    document.getElementById('modalImage').src = imageSrc;
+    modal.showModal();
+}
+
+function createImageModal() {
+    const modal = document.createElement('dialog');
+    modal.id = 'imageModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-box max-w-4xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Bild-Vorschau</h3>
+                <button onclick="closeImageModal()" class="btn btn-ghost btn-sm">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <img id="modalImage" src="" alt="Bild-Vorschau" class="w-full h-auto max-h-96 object-contain">
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.close();
+    }
+}
+
+// PDF-Modal Funktionen
+function openPdfModal(pdfUrl, filename) {
+    // Erstelle oder verwende bestehendes PDF-Modal
+    let pdfModal = document.getElementById('pdfModal');
+    if (!pdfModal) {
+        pdfModal = createPdfModal();
+    }
+    
+    // Setze PDF-URL und Dateiname
+    const pdfIframe = document.getElementById('pdfIframe');
+    const pdfTitle = document.getElementById('pdfTitle');
+    
+    pdfIframe.src = pdfUrl;
+    pdfTitle.textContent = filename;
+    
+    pdfModal.showModal();
+}
+
+function createPdfModal() {
+    const modal = document.createElement('dialog');
+    modal.id = 'pdfModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-box max-w-6xl w-11/12 h-4/5">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg" id="pdfTitle">PDF-Vorschau</h3>
+                <button onclick="closePdfModal()" class="btn btn-ghost btn-sm">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="h-full bg-base-100 rounded-lg overflow-hidden">
+                <iframe id="pdfIframe" 
+                        class="w-full h-full border-0" 
+                        frameborder="0">
+                </iframe>
+            </div>
+            <div class="modal-action">
+                <button onclick="downloadPdf()" class="btn btn-primary btn-sm">
+                    <i class="fas fa-download mr-2"></i>Herunterladen
+                </button>
+                <button onclick="closePdfModal()" class="btn btn-ghost btn-sm">Schließen</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closePdfModal() {
+    const modal = document.getElementById('pdfModal');
+    if (modal) {
+        // Iframe-Src zurücksetzen um Speicher freizugeben
+        const iframe = document.getElementById('pdfIframe');
+        if (iframe) {
+            iframe.src = '';
+        }
+        modal.close();
+    }
+}
+
+function downloadPdf() {
+    const iframe = document.getElementById('pdfIframe');
+    const filename = document.getElementById('pdfTitle').textContent;
+    
+    if (iframe && iframe.src) {
+        // Erstelle Download-Link
+        const link = document.createElement('a');
+        link.href = iframe.src;
+        link.download = filename;
+        link.click();
+    }
+}
+
+// Carousel anzeigen
+function displayCarousel() {
+    const carouselContainer = document.getElementById('carousel-image-container');
+    const thumbnailNav = document.getElementById('thumbnailNav');
+    
+    if (mediaList.length === 0) return;
+    
+    // Hauptbild anzeigen
+    const currentMedia = mediaList[currentImageIndex];
+    carouselContainer.innerHTML = `
+        <img src="${currentMedia.url}" alt="Ticket Bild" class="w-auto h-auto max-w-full max-h-full object-contain bg-base-100 rounded-lg" style="max-width: 100%; max-height: 100%;">
+    `;
+    
+    // Thumbnail-Navigation
+    thumbnailNav.innerHTML = '';
+    mediaList.forEach((media, index) => {
+        const thumb = document.createElement('img');
+        thumb.src = media.url;
+        thumb.alt = 'Thumbnail';
+        thumb.className = `w-12 h-12 object-cover rounded cursor-pointer ${index === currentImageIndex ? 'ring-2 ring-primary' : ''}`;
+        thumb.onclick = () => goToSlide(index);
+        thumbnailNav.appendChild(thumb);
+    });
+    
+    updateCarouselPosition();
+}
+
+// Carousel-Position aktualisieren
+function updateCarouselPosition() {
+    const prevBtn = document.getElementById('carousel-prev');
+    const nextBtn = document.getElementById('carousel-next');
+    
+    prevBtn.disabled = currentImageIndex === 0;
+    nextBtn.disabled = currentImageIndex === mediaList.length - 1;
+}
+
+// Zu Slide gehen
+function goToSlide(index) {
+    currentImageIndex = index;
+    displayCarousel();
+}
+
+// Nächster Slide
+function nextSlide() {
+    if (currentImageIndex < mediaList.length - 1) {
+        currentImageIndex++;
+        displayCarousel();
+    }
+}
+
+// Vorheriger Slide
+function prevSlide() {
+    if (currentImageIndex > 0) {
+        currentImageIndex--;
+        displayCarousel();
+    }
+}
+
+// Carousel Event Listeners einrichten
+function setupCarouselEventListeners() {
+    setTimeout(() => {
+        const prevBtn = document.getElementById('carousel-prev');
+        const nextBtn = document.getElementById('carousel-next');
+        
+        if (prevBtn) {
+            // Entferne alle alten Event Listeners
+            prevBtn.replaceWith(prevBtn.cloneNode(true));
+            const newPrevBtn = document.getElementById('carousel-prev');
+            newPrevBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                prevSlide();
+            });
+        }
+        
+        if (nextBtn) {
+            // Entferne alle alten Event Listeners
+            nextBtn.replaceWith(nextBtn.cloneNode(true));
+            const newNextBtn = document.getElementById('carousel-next');
+            newNextBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                nextSlide();
+            });
+        }
+    }, 100);
+}
+
+// Medien-Galerie beim Laden der Seite laden
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        loadMediaGallery();
+    } catch (error) {
+        console.error('Fehler beim Laden der Medien-Galerie:', error);
+    }
+});
+
+// Event Listeners für Carousel
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('mediaCarouselModal').open) {
+        if (e.key === 'ArrowLeft') {
+            prevSlide();
+        } else if (e.key === 'ArrowRight') {
+            nextSlide();
+        } else if (e.key === 'Escape') {
+            closeMediaCarousel();
+        }
+    }
+});
+
+// Modal-Event-Listener
+document.getElementById('mediaCarouselModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeMediaCarousel();
+    }
+});
 </script>
+
+<!-- Medien-Upload Modal -->
+<dialog id="mediaModal" class="modal">
+    <div class="modal-box max-w-4xl w-11/12 h-4/5">
+        <h3 class="font-bold text-lg mb-4">Medien-Verwaltung</h3>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            <!-- Upload-Bereich -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-semibold mb-4">Upload-Bereich</h4>
+                
+                <div class="space-y-4">
+                    <div class="border-2 border-dashed border-base-content/20 rounded-lg p-6 text-center">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-base-content/40 mb-4"></i>
+                        <p class="text-base-content/60 mb-4">Drag & Drop Zone</p>
+                        <input type="file" id="modalMediaFile" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf" class="file-input file-input-bordered w-full" onchange="updateModalMediaFileName()">
+                    </div>
+                    
+                    <button type="button" id="modalUploadBtn" class="btn btn-primary w-full" disabled onclick="uploadModalMedia()">
+                        <i class="fas fa-upload mr-2"></i>Hochladen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Vorhandene Medien -->
+            <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-semibold mb-4">Vorhandene Medien</h4>
+                <div id="modal-media-list" class="grid grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                    <!-- Wird per JavaScript gefüllt -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn" onclick="closeMediaModal()">Schließen</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Medien-Carousel Modal -->
+<dialog id="mediaCarouselModal" class="modal">
+    <div class="modal-box max-w-7xl w-11/12 h-4/5 bg-base-200">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Medien-Galerie</h3>
+            <button class="btn btn-sm btn-circle" onclick="closeMediaCarousel()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="carousel-container h-96 bg-base-100 rounded-lg relative">
+            <div id="carousel-image-container" class="h-full flex items-center justify-center p-4">
+                <!-- Hauptbild wird hier angezeigt -->
+            </div>
+            
+            <!-- Navigation Buttons -->
+            <button id="carousel-prev" class="btn btn-circle btn-primary absolute left-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button id="carousel-next" class="btn btn-circle btn-primary absolute right-4 top-1/2 transform -translate-y-1/2 z-50 hover:scale-110 transition-transform">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Vollbild Button -->
+            <button id="fullscreen-btn" class="btn btn-sm btn-secondary absolute top-4 right-4 z-50" onclick="openImageInNewTab()">
+                <i class="fas fa-external-link-alt mr-1"></i>Vollbild
+            </button>
+        </div>
+        
+        <!-- Thumbnail Navigation -->
+        <div id="thumbnailNav" class="mt-4 max-h-16 overflow-x-auto flex gap-2 p-2">
+            <!-- Thumbnails werden hier dynamisch geladen -->
+        </div>
+    </div>
+</dialog>
 {% endblock %} 

@@ -19,16 +19,22 @@ def convert_id_for_query(id_value: str) -> Union[str, ObjectId]:
     Konvertiert eine ID für Datenbankabfragen.
     Versucht zuerst mit String-ID, dann mit ObjectId.
     """
+    if not id_value:
+        return None
+        
     try:
         # Versuche zuerst mit String-ID (für importierte Daten)
-        return id_value
-    except:
+        return str(id_value)
+    except Exception as e:
+        print(f"DEBUG: String-Konvertierung fehlgeschlagen für {id_value}: {e}")
         # Falls das fehlschlägt, versuche ObjectId
         try:
+            from bson import ObjectId
             return ObjectId(id_value)
-        except:
+        except Exception as e2:
+            print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen für {id_value}: {e2}")
             # Falls auch das fehlschlägt, gib die ursprüngliche ID zurück
-            return id_value
+            return str(id_value)
 
 def normalize_id_for_database(id_value):
     """
@@ -46,13 +52,20 @@ def find_document_by_id(collection: str, id_value: str):
     Findet ein Dokument in einer Collection mit robuster ID-Behandlung.
     Versucht verschiedene ID-Formate: String, ObjectId, convert_id_for_query
     """
+    if not id_value:
+        print(f"DEBUG: Keine ID angegeben für Collection '{collection}'")
+        return None
+        
     print(f"DEBUG: Suche Dokument in Collection '{collection}' mit ID: {id_value}")
     
     # Versuche zuerst mit String-ID
-    doc = mongodb.find_one(collection, {'_id': id_value})
-    if doc:
-        print(f"DEBUG: Dokument mit String-ID gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
-        return doc
+    try:
+        doc = mongodb.find_one(collection, {'_id': id_value})
+        if doc:
+            print(f"DEBUG: Dokument mit String-ID gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
+            return doc
+    except Exception as e:
+        print(f"DEBUG: String-ID-Suche fehlgeschlagen: {e}")
     
     # Falls nicht gefunden, versuche mit ObjectId
     try:
@@ -66,13 +79,18 @@ def find_document_by_id(collection: str, id_value: str):
         print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
     
     # Falls immer noch nicht gefunden, versuche mit convert_id_for_query
-    doc = mongodb.find_one(collection, {'_id': convert_id_for_query(id_value)})
-    if doc:
-        print(f"DEBUG: Dokument mit convert_id_for_query gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
-    else:
-        print(f"DEBUG: Kein Dokument gefunden für ID: {id_value}")
+    try:
+        converted_id = convert_id_for_query(id_value)
+        if converted_id:
+            doc = mongodb.find_one(collection, {'_id': converted_id})
+            if doc:
+                print(f"DEBUG: Dokument mit convert_id_for_query gefunden: {doc.get('title', doc.get('name', 'Unknown'))}")
+                return doc
+    except Exception as e:
+        print(f"DEBUG: convert_id_for_query-Suche fehlgeschlagen: {e}")
     
-    return doc
+    print(f"DEBUG: Kein Dokument gefunden für ID: {id_value}")
+    return None
 
 @bp.route('/debug/tickets')
 @login_required
@@ -840,77 +858,83 @@ def add_message(ticket_id):
 @login_required
 def detail(id):
     """Zeigt die Details eines Tickets."""
-    print(f"DEBUG: Ticket-Detail aufgerufen für ID: {id}")
-    
-    # Robuste ID-Behandlung für verschiedene ID-Typen
-    ticket = find_document_by_id('tickets', id)
-    
-    if not ticket:
-        print(f"DEBUG: Ticket nicht gefunden für ID: {id}")
-        return render_template('404.html'), 404
-    
-    # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-    if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
-        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-        return redirect(url_for('tickets.create'))
-    
-    # Füge id-Feld hinzu (für Template-Kompatibilität)
-    ticket['id'] = str(ticket['_id'])
-    
-    # Konvertiere alle Datumsfelder zu datetime-Objekten
-    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-    for field in date_fields:
-        if ticket.get(field):
-            try:
-                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                ticket[field] = None
+    try:
+        print(f"DEBUG: Ticket-Detail aufgerufen für ID: {id}")
         
-    # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': convert_id_for_query(id)})
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
+        
+        if not ticket:
+            print(f"DEBUG: Ticket nicht gefunden für ID: {id}")
+            return render_template('404.html'), 404
+        
+        # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
+        if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+            flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
+            return redirect(url_for('tickets.create'))
+        
+        # Füge id-Feld hinzu (für Template-Kompatibilität)
+        ticket['id'] = str(ticket['_id'])
+        
+        # Konvertiere alle Datumsfelder zu datetime-Objekten
+        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                try:
+                    ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    ticket[field] = None
+            
+        # Hole die Notizen für das Ticket
+        notes = mongodb.find('ticket_notes', {'ticket_id': convert_id_for_query(id)})
 
-    # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': convert_id_for_query(id)})
+        # Hole die Nachrichten für das Ticket
+        messages = mongodb.find('ticket_messages', {'ticket_id': convert_id_for_query(id)})
 
-    # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': convert_id_for_query(id)})
-    
-    # Hole Materialliste
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': convert_id_for_query(id)}))
-    
-    # Hole Arbeitsliste
-    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)}))
+        # Hole die Auftragsdetails
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': convert_id_for_query(id)})
+        
+        # Hole Materialliste
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': convert_id_for_query(id)}))
+        
+        # Hole Arbeitsliste
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)}))
 
-    # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
-    users = mongodb.find('users', {'is_active': True})
-    users = [dict(user) for user in users]
+        # Hole alle Benutzer aus der Hauptdatenbank und wandle sie in Dicts um
+        users = mongodb.find('users', {'is_active': True})
+        users = [dict(user) for user in users]
 
-    # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
-    assigned_users = mongodb.find('ticket_assignments', {'ticket_id': convert_id_for_query(id)})
+        # Hole alle zugewiesenen Nutzer (Mehrfachzuweisung)
+        assigned_users = mongodb.find('ticket_assignments', {'ticket_id': convert_id_for_query(id)})
 
-    # Hole alle Kategorien aus der settings Collection
-    categories = get_ticket_categories_from_settings()
+        # Hole alle Kategorien aus der settings Collection
+        categories = get_ticket_categories_from_settings()
 
-    # Bestimme Berechtigungen
-    can_edit = current_user.role in ['admin', 'mitarbeiter'] or ticket.get('created_by') == current_user.username
-    can_assign = current_user.role in ['admin', 'mitarbeiter']
-    can_change_status = current_user.role in ['admin', 'mitarbeiter']
-    can_delete = current_user.role in ['admin', 'mitarbeiter']
+        # Bestimme Berechtigungen
+        can_edit = current_user.role in ['admin', 'mitarbeiter'] or ticket.get('created_by') == current_user.username
+        can_assign = current_user.role in ['admin', 'mitarbeiter']
+        can_change_status = current_user.role in ['admin', 'mitarbeiter']
+        can_delete = current_user.role in ['admin', 'mitarbeiter']
 
-    return render_template('tickets/detail.html', 
-                         ticket=ticket, 
-                         notes=notes,
-                         messages=messages,
-                         users=users,
-                         assigned_users=assigned_users,
-                         auftrag_details=auftrag_details,
-                         material_list=material_list,
-                         categories=categories,
-                         can_edit=can_edit,
-                         can_assign=can_assign,
-                         can_change_status=can_change_status,
-                         can_delete=can_delete,
-                         now=datetime.now())
+        return render_template('tickets/detail.html', 
+                             ticket=ticket, 
+                             notes=notes,
+                             messages=messages,
+                             users=users,
+                             assigned_users=assigned_users,
+                             auftrag_details=auftrag_details,
+                             material_list=material_list,
+                             categories=categories,
+                             can_edit=can_edit,
+                             can_assign=can_assign,
+                             can_change_status=can_change_status,
+                             can_delete=can_delete,
+                             now=datetime.now())
+                             
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Ticket-Details: {str(e)}")
+        flash('Fehler beim Laden der Ticket-Details.', 'error')
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/<id>/delete', methods=['POST'])
 @login_required
@@ -958,49 +982,55 @@ def delete(id):
 @bp.route('/<id>/auftrag-details-modal')
 @login_required
 def auftrag_details_modal(id):
-    # Robuste ID-Behandlung für verschiedene ID-Typen
-    ticket = find_document_by_id('tickets', id)
-    
-    if not ticket:
-        return render_template('404.html'), 404
-    
-    # Verwende die Ticket-ID für alle Abfragen
-    ticket_id_for_query = convert_id_for_query(id)
-    
-    # Füge id-Feld hinzu (für Template-Kompatibilität)
-    ticket['id'] = str(ticket['_id'])
-    
-    # Konvertiere alle Datumsfelder zu datetime-Objekten
-    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-    for field in date_fields:
-        if ticket.get(field):
-            try:
-                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                ticket[field] = None
+    try:
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         
-    # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
+        if not ticket:
+            return render_template('404.html'), 404
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+        
+        # Füge id-Feld hinzu (für Template-Kompatibilität)
+        ticket['id'] = str(ticket['_id'])
+        
+        # Konvertiere alle Datumsfelder zu datetime-Objekten
+        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                try:
+                    ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    ticket[field] = None
+            
+        # Hole die Notizen für das Ticket
+        notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
 
-    # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
+        # Hole die Nachrichten für das Ticket
+        messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
 
-    # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
-    
-    # Hole Materialliste
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
-    
-    # Hole Arbeitsliste
-    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)}))
+        # Hole die Auftragsdetails
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
+        
+        # Hole Materialliste
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
+        
+        # Hole Arbeitsliste
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': convert_id_for_query(id)}))
 
-    return render_template('tickets/auftrag_details_modal.html', 
-                         ticket=ticket, 
-                         notes=notes,
-                         messages=messages,
-                         auftrag_details=auftrag_details,
-                         material_list=material_list,
-                         arbeit_list=arbeit_list)
+        return render_template('tickets/auftrag_details_modal.html', 
+                             ticket=ticket, 
+                             notes=notes,
+                             messages=messages,
+                             auftrag_details=auftrag_details,
+                             material_list=material_list,
+                             arbeit_list=arbeit_list)
+                             
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Auftragsdetails-Modal: {str(e)}")
+        flash('Fehler beim Laden der Auftragsdetails.', 'error')
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/<id>/update-status', methods=['POST'])
 @login_required
@@ -1683,85 +1713,91 @@ def _handle_auftrag_creation(external=False):
 @bp.route('/<id>/auftrag-details')
 @login_required
 def auftrag_details_page(id):
-    # Robuste ID-Behandlung für verschiedene ID-Typen
-    ticket = find_document_by_id('tickets', id)
-    
-    if not ticket:
-        return render_template('404.html'), 404
-    
-    # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-    if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
-        flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-        return redirect(url_for('tickets.index'))
-    
-    # Füge id-Feld hinzu (für Template-Kompatibilität)
-    ticket['id'] = str(ticket['_id'])
-    
-    # Konvertiere alle Datumsfelder zu datetime-Objekten
-    date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
-    for field in date_fields:
-        if ticket.get(field):
-            try:
-                ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
-            except (ValueError, TypeError):
-                ticket[field] = None
-    
-    # Verwende die Ticket-ID für alle Abfragen
-    ticket_id_for_query = convert_id_for_query(id)
+    try:
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', id)
         
-    # Hole die Notizen für das Ticket
-    notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
+        if not ticket:
+            return render_template('404.html'), 404
+        
+        # Prüfe Berechtigungen: Admins/Mitarbeiter können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
+        if current_user.role not in ['admin', 'mitarbeiter'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+            flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
+            return redirect(url_for('tickets.index'))
+        
+        # Füge id-Feld hinzu (für Template-Kompatibilität)
+        ticket['id'] = str(ticket['_id'])
+        
+        # Konvertiere alle Datumsfelder zu datetime-Objekten
+        date_fields = ['created_at', 'updated_at', 'resolved_at', 'due_date']
+        for field in date_fields:
+            if ticket.get(field):
+                try:
+                    ticket[field] = datetime.strptime(ticket[field], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    ticket[field] = None
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(id)
+            
+        # Hole die Notizen für das Ticket
+        notes = mongodb.find('ticket_notes', {'ticket_id': ticket_id_for_query})
 
-    # Hole die Nachrichten für das Ticket
-    messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
+        # Hole die Nachrichten für das Ticket
+        messages = mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query})
 
-    # Hole die Auftragsdetails
-    auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
-    
-    # Hole Materialliste
-    material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
-    
-    # Hole Arbeitsliste
-    arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ticket_id_for_query}))
-    
-    # Verarbeite die ausgeführten Arbeiten aus den Auftragsdetails
-    arbeit_list = []
-    if auftrag_details and auftrag_details.get('ausgefuehrte_arbeiten'):
-        arbeit_zeilen = auftrag_details['ausgefuehrte_arbeiten'].split('\n')
-        for zeile in arbeit_zeilen:
-            if zeile.strip():
-                teile = zeile.split('|')
-                arbeit_list.append({
-                    'arbeit': teile[0] if len(teile) > 0 else '',
-                    'arbeitsstunden': float(teile[1]) if len(teile) > 1 and teile[1] else 0,
-                    'leistungskategorie': teile[2] if len(teile) > 2 else ''
-                })
-    
-    logging.info(f"DEBUG: arbeit_list für Ticket {id}: {arbeit_list}")
-    
-    # Füge die Auftragsdetails zum Ticket hinzu, damit das Template darauf zugreifen kann
-    if auftrag_details:
-        ticket['auftrag_details'] = auftrag_details
-        # Füge die Material- und Arbeitslisten hinzu
-        ticket['auftrag_details']['material_list'] = material_list
-        ticket['auftrag_details']['arbeit_list'] = arbeit_list
-    else:
-        # Falls keine Auftragsdetails vorhanden sind, verwende die Ticket-Daten als Fallback
-        ticket['auftrag_details'] = {
-            'bereich': ticket.get('category', ''),
-            'auftraggeber_name': ticket.get('created_by', ''),
-            'auftragsbeschreibung': ticket.get('description', ''),
-            'material_list': material_list,
-            'arbeit_list': arbeit_list
-        }
+        # Hole die Auftragsdetails
+        auftrag_details = mongodb.find_one('auftrag_details', {'ticket_id': ticket_id_for_query})
+        
+        # Hole Materialliste
+        material_list = list(mongodb.find('auftrag_material', {'ticket_id': ticket_id_for_query}))
+        
+        # Hole Arbeitsliste
+        arbeit_list = list(mongodb.find('auftrag_arbeit', {'ticket_id': ticket_id_for_query}))
+        
+        # Verarbeite die ausgeführten Arbeiten aus den Auftragsdetails
+        arbeit_list = []
+        if auftrag_details and auftrag_details.get('ausgefuehrte_arbeiten'):
+            arbeit_zeilen = auftrag_details['ausgefuehrte_arbeiten'].split('\n')
+            for zeile in arbeit_zeilen:
+                if zeile.strip():
+                    teile = zeile.split('|')
+                    arbeit_list.append({
+                        'arbeit': teile[0] if len(teile) > 0 else '',
+                        'arbeitsstunden': float(teile[1]) if len(teile) > 1 and teile[1] else 0,
+                        'leistungskategorie': teile[2] if len(teile) > 2 else ''
+                    })
+        
+        logging.info(f"DEBUG: arbeit_list für Ticket {id}: {arbeit_list}")
+        
+        # Füge die Auftragsdetails zum Ticket hinzu, damit das Template darauf zugreifen kann
+        if auftrag_details:
+            ticket['auftrag_details'] = auftrag_details
+            # Füge die Material- und Arbeitslisten hinzu
+            ticket['auftrag_details']['material_list'] = material_list
+            ticket['auftrag_details']['arbeit_list'] = arbeit_list
+        else:
+            # Falls keine Auftragsdetails vorhanden sind, verwende die Ticket-Daten als Fallback
+            ticket['auftrag_details'] = {
+                'bereich': ticket.get('category', ''),
+                'auftraggeber_name': ticket.get('created_by', ''),
+                'auftragsbeschreibung': ticket.get('description', ''),
+                'material_list': material_list,
+                'arbeit_list': arbeit_list
+            }
 
-    return render_template('tickets/auftrag_details_page.html', 
-                         ticket=ticket, 
-                         notes=notes,
-                         messages=messages,
-                         auftrag_details=auftrag_details,
-                         material_list=material_list,
-                         arbeit_list=arbeit_list)
+        return render_template('tickets/auftrag_details_page.html', 
+                             ticket=ticket, 
+                             notes=notes,
+                             messages=messages,
+                             auftrag_details=auftrag_details,
+                             material_list=material_list,
+                             arbeit_list=arbeit_list)
+                             
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Auftragsdetails-Seite: {str(e)}")
+        flash('Fehler beim Laden der Auftragsdetails.', 'error')
+        return redirect(url_for('tickets.create'))
 
 @bp.route('/<id>/update-ticket', methods=['POST'])
 @login_required

@@ -173,4 +173,7 @@
 {% if not current_user.is_authenticated %}
 </body>
 </html>
-{% endif %} 
+{% endif %}
+
+<!-- Tickets JavaScript -->
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script> 

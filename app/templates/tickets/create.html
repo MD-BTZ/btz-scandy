@@ -50,7 +50,10 @@ function showTab(tab) {
 // Debug: Prüfe ob Funktion verfügbar ist
 console.log('showTab Funktion verfügbar:', typeof showTab);
 </script>
-{% endblock %}
+
+<!-- Tickets JavaScript -->
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+{% endblock head %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">

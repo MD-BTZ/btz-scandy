@@ -2,6 +2,7 @@ from flask import Blueprint, request, redirect, url_for, flash, jsonify, current
 from flask_login import login_required, current_user
 from app.utils.decorators import mitarbeiter_required
 from app.utils.logger import loggers
+import os
 # Temporärer Import-Fix
 try:
     from app.utils.media_manager import MediaManager
@@ -31,7 +32,6 @@ bp = Blueprint('media', __name__)
 
 @bp.route('/<entity_type>/<entity_id>/upload', methods=['POST'])
 @login_required
-@mitarbeiter_required
 def upload_media(entity_type, entity_id):
     """Universeller Medien-Upload für alle Entitäten"""
     # Imports am Anfang
@@ -46,17 +46,41 @@ def upload_media(entity_type, entity_id):
         loggers['user_actions'].info(f"Request-Form: {list(request.form.keys())}")
         
         # Validierung
-        allowed_entities = ['jobs', 'tools', 'consumables']
+        allowed_entities = ['jobs', 'tools', 'consumables', 'tickets']
         if entity_type not in allowed_entities:
             loggers['errors'].error(f"Ungültiger Entitätstyp: {entity_type}")
             return jsonify({'success': False, 'error': 'Ungültiger Entitätstyp'})
         
+        # Berechtigungsprüfung
+        if entity_type == 'tickets':
+            # Für Tickets: Benutzer können Medien zu ihren eigenen Tickets hochladen
+            from app.models.mongodb_database import mongodb
+            ticket = mongodb.find_one('tickets', {'_id': entity_id})
+            if not ticket:
+                return jsonify({'success': False, 'error': 'Ticket nicht gefunden'})
+            
+            # Prüfe ob Benutzer das Ticket erstellt hat oder Admin/Mitarbeiter ist
+            if (current_user.role not in ['admin', 'mitarbeiter'] and 
+                ticket.get('created_by') != current_user.username):
+                return jsonify({'success': False, 'error': 'Keine Berechtigung für dieses Ticket'})
+        else:
+            # Für andere Entitäten: Nur Mitarbeiter und Admins
+            if current_user.role not in ['admin', 'mitarbeiter']:
+                return jsonify({'success': False, 'error': 'Keine Berechtigung'})
+        
         # Datei prüfen
-        if 'file' not in request.files:
-            loggers['errors'].error("Keine 'file' Datei in request.files gefunden")
+        file = None
+        if 'file' in request.files:
+            file = request.files['file']
+            loggers['user_actions'].info("Datei unter 'file' gefunden")
+        elif 'media' in request.files:
+            file = request.files['media']
+            loggers['user_actions'].info("Datei unter 'media' gefunden")
+        else:
+            loggers['errors'].error("Keine Datei in request.files gefunden")
+            loggers['errors'].error(f"Verfügbare Keys: {list(request.files.keys())}")
             return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'})
         
-        file = request.files['file']
         loggers['user_actions'].info(f"Datei gefunden: {file.filename}")
         loggers['user_actions'].info(f"Datei-Objekt: {type(file)}")
         loggers['user_actions'].info(f"Datei-Attribute: {dir(file)}")
@@ -131,56 +155,106 @@ def upload_media(entity_type, entity_id):
 
 @bp.route('/<entity_type>/<entity_id>/delete/<filename>', methods=['POST'])
 @login_required
-@mitarbeiter_required
 def delete_media(entity_type, entity_id, filename):
-    """Einzelnes Medium löschen"""
+    """Löscht eine Mediendatei"""
     try:
+        loggers['user_actions'].info(f"=== DELETE START === entity_type={entity_type}, entity_id={entity_id}, filename={filename}")
+        
         # Validierung
-        allowed_entities = ['jobs', 'tools', 'consumables']
+        allowed_entities = ['jobs', 'tools', 'consumables', 'tickets']
         if entity_type not in allowed_entities:
             return jsonify({'success': False, 'error': 'Ungültiger Entitätstyp'})
         
-        # Medium löschen
-        if MediaManager.delete_media(filename, entity_type, entity_id):
+        # Berechtigungsprüfung
+        if entity_type == 'tickets':
+            # Für Tickets: Benutzer können Medien von ihren eigenen Tickets löschen
+            from app.models.mongodb_database import mongodb
+            ticket = mongodb.find_one('tickets', {'_id': entity_id})
+            if not ticket:
+                return jsonify({'success': False, 'error': 'Ticket nicht gefunden'})
+            
+            # Prüfe ob Benutzer das Ticket erstellt hat oder Admin/Mitarbeiter ist
+            if (current_user.role not in ['admin', 'mitarbeiter'] and 
+                ticket.get('created_by') != current_user.username):
+                return jsonify({'success': False, 'error': 'Keine Berechtigung für dieses Ticket'})
+        else:
+            # Für andere Entitäten: Nur Mitarbeiter und Admins
+            if current_user.role not in ['admin', 'mitarbeiter']:
+                return jsonify({'success': False, 'error': 'Keine Berechtigung'})
+        
+        # Datei löschen
+        file_path = os.path.join(current_app.root_path, 'static', 'uploads', entity_type, str(entity_id), filename)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            loggers['user_actions'].info(f"Datei gelöscht: {file_path}")
             return jsonify({'success': True, 'message': 'Medium erfolgreich gelöscht!'})
         else:
-            return jsonify({'success': False, 'error': 'Fehler beim Löschen'})
-        
+            loggers['errors'].error(f"Datei nicht gefunden: {file_path}")
+            return jsonify({'success': False, 'error': 'Datei nicht gefunden'})
+            
     except Exception as e:
-        loggers['errors'].error(f"Delete-Fehler: {e}")
-        return jsonify({'success': False, 'error': f'Fehler beim Löschen: {str(e)}'})
+        loggers['errors'].error(f"Fehler beim Löschen: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<entity_type>/<entity_id>/list')
 def get_media_list(entity_type, entity_id):
-    """Liste aller Medien einer Entität"""
+    """Listet alle Medien für eine Entität auf"""
     try:
-        media_list = MediaManager.get_media_list(entity_type, entity_id)
-        media_folder = MediaManager.get_media_folder_path(entity_type, entity_id)
+        loggers['user_actions'].info(f"=== LIST START === entity_type={entity_type}, entity_id={entity_id}")
         
-        # URLs für Frontend erstellen
-        media_urls = []
-        for filename in media_list:
-            media_urls.append({
-                'filename': filename,
-                'url': f"/static/{media_folder}/{filename}",
-                'thumbnail_url': f"/static/{media_folder}/{filename}"
-            })
+        # Validierung
+        allowed_entities = ['jobs', 'tools', 'consumables', 'tickets']
+        if entity_type not in allowed_entities:
+            return jsonify({'success': False, 'error': 'Ungültiger Entitätstyp'})
+        
+        # Ordner-Pfad
+        upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', entity_type, str(entity_id))
+        loggers['user_actions'].info(f"Suche Medien in: {upload_folder}")
+        
+        # Prüfe ob Ordner existiert
+        if not os.path.exists(upload_folder):
+            loggers['user_actions'].info(f"Ordner existiert: {os.path.exists(upload_folder)}")
+            os.makedirs(upload_folder, exist_ok=True)
+            loggers['user_actions'].info(f"Ordner erstellt: {os.path.exists(upload_folder)}")
+        
+        # Alle Dateien im Ordner
+        all_files = os.listdir(upload_folder)
+        loggers['user_actions'].info(f"Alle Dateien im Ordner: {all_files}")
+        
+        # Medien-Liste erstellen
+        media_list = []
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf'}
+        
+        for filename in all_files:
+            file_path = os.path.join(upload_folder, filename)
+            if os.path.isfile(file_path):
+                # Dateiendung prüfen
+                file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+                is_allowed = file_ext in allowed_extensions
+                
+                loggers['user_actions'].info(f"Datei übersprungen: {filename} (ist_datei={os.path.isfile(file_path)}, erlaubt={is_allowed})")
+                
+                if is_allowed:
+                    # Relative URL für Frontend
+                    relative_url = f"/static/uploads/{entity_type}/{entity_id}/{filename}"
+                    media_list.append({
+                        'filename': filename,
+                        'url': relative_url,
+                        'size': os.path.getsize(file_path)
+                    })
+        
+        loggers['user_actions'].info(f"Medien-Liste: {media_list}")
         
         return jsonify({
             'success': True,
-            'media_list': media_urls,
-            'count': len(media_urls),
-            'folder_path': media_folder
+            'media_list': media_list,
+            'count': len(media_list)
         })
         
     except Exception as e:
-        loggers['errors'].error(f"List-Fehler: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'media_list': [],
-            'count': 0
-        })
+        loggers['errors'].error(f"Fehler beim Laden der Medien: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<entity_type>/<entity_id>/count')
 def get_media_count(entity_type, entity_id):
@@ -265,7 +339,7 @@ def simple_upload_test(entity_type, entity_id):
     <body>
         <h1>Upload Test für {entity_type}/{entity_id}</h1>
         <form method="post" enctype="multipart/form-data">
-            <input type="file" name="media" accept="image/*">
+            <input type="file" name="media" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf">
             <button type="submit">Upload</button>
         </form>
         <a href="/jobs/{entity_id}/edit">Zurück zur Bearbeitung</a>

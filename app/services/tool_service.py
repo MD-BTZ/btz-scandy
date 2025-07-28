@@ -300,6 +300,15 @@ class ToolService:
             if current_lending:
                 tool['current_borrower'] = current_lending.get('worker_name', 'Unbekannt')
                 tool['lending_date'] = current_lending.get('lent_at')
+                tool['is_available'] = False
+                tool['lent_to_worker_barcode'] = current_lending.get('worker_barcode')
+                tool['lent_to_worker_name'] = current_lending.get('worker_name', 'Unbekannt')
+                tool['lent_at'] = current_lending.get('lent_at')
+            else:
+                tool['is_available'] = True
+                tool['lent_to_worker_barcode'] = None
+                tool['lent_to_worker_name'] = None
+                tool['lent_at'] = None
             
             # Ausleihhistorie hinzufügen
             lending_history = self._get_lending_service().get_tool_lending_history(barcode)

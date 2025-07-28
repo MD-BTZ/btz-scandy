@@ -8,7 +8,12 @@ function isTicketPage() {
 
 // Globale Funktionen
 window.showToast = function(type, message) {
-    const container = document.getElementById('toastContainer');
+    const container = document.getElementById('toastContainer') || document.getElementById('toast-container');
+    if (!container) {
+        console.warn('Toast container nicht gefunden');
+        return;
+    }
+    
     const toast = document.createElement('div');
     toast.className = `alert ${type === 'error' ? 'alert-error' : 'alert-success'} mb-2`;
     
@@ -27,7 +32,11 @@ window.showToast = function(type, message) {
     container.appendChild(toast);
     setTimeout(() => {
         toast.classList.add('fade-out');
-        setTimeout(() => container.removeChild(toast), 300);
+        setTimeout(() => {
+            if (container.contains(toast)) {
+                container.removeChild(toast);
+            }
+        }, 300);
     }, 3000);
 };
 

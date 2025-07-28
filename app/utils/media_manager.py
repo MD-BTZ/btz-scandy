@@ -9,7 +9,7 @@ import io
 class MediaManager:
     """Universelles Medien-Management-System"""
     
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf'}
     MAX_IMAGES_PER_ENTITY = 10
     MAX_IMAGE_SIZE = (1920, 1080)  # 1080p
     
@@ -43,6 +43,16 @@ class MediaManager:
     def resize_image(image_path, max_size=MAX_IMAGE_SIZE):
         """Skaliert Bild auf maximale Größe"""
         try:
+            # Prüfe ob es eine SVG-Datei ist
+            if image_path.lower().endswith('.svg'):
+                loggers['user_actions'].info(f"SVG-Datei übersprungen: {image_path}")
+                return True  # SVG-Dateien werden nicht skaliert
+            
+            # Prüfe ob es eine PDF-Datei ist
+            if image_path.lower().endswith('.pdf'):
+                loggers['user_actions'].info(f"PDF-Datei übersprungen: {image_path}")
+                return True  # PDF-Dateien werden nicht skaliert
+            
             with Image.open(image_path) as img:
                 # Konvertiere zu RGB falls nötig
                 if img.mode in ('RGBA', 'LA', 'P'):

@@ -459,6 +459,8 @@
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/version-updater.js') }}" defer></script>
 
+    {% block scripts %}{% endblock %}
+
     <!-- Styles für die Scanner-Animation -->
     <style>
         @keyframes scanner {
