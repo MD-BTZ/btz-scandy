@@ -34,6 +34,7 @@ class AdminBackupService:
                             'name': backup_file.name,
                             'size': stat.st_size,
                             'created': stat.st_mtime,
+                            'type': 'json',
                             'filename': backup_file.name,
                             'size_mb': round(stat.st_size / (1024 * 1024), 2),
                             'modified': datetime.fromtimestamp(stat.st_mtime),

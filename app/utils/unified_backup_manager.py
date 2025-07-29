@@ -94,28 +94,91 @@ class UnifiedBackupManager:
         try:
             temp_dir = Path(tempfile.mkdtemp())
             backup_path = temp_dir / backup_name
+            backup_path.mkdir(exist_ok=True)
             
             # MongoDB-Verbindungsdaten
             mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/scandy")
             db_name = os.environ.get("MONGO_INITDB_DATABASE", "scandy")
             
-            # mongodump ausführen
-            cmd = [
-                '/usr/bin/mongodump',
-                '--uri', mongo_uri,
-                '--out', str(backup_path),
-                '--gzip'
-            ]
-            
             print(f"  📊 Erstelle MongoDB-Backup...")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
-            if result.returncode == 0:
-                print(f"  ✅ MongoDB-Backup erstellt")
+            # Versuche mongodump zu verwenden
+            try:
+                cmd = [
+                    'mongodump',
+                    '--uri', mongo_uri,
+                    '--out', str(backup_path),
+                    '--gzip'
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if result.returncode == 0:
+                    print(f"  ✅ MongoDB-Backup mit mongodump erstellt")
+                    return backup_path
+                else:
+                    print(f"  ⚠️  mongodump fehlgeschlagen, verwende Python-Backup: {result.stderr}")
+                    raise Exception("mongodump nicht verfügbar")
+                    
+            except (FileNotFoundError, Exception):
+                # Fallback: Python-basiertes Backup
+                print(f"  🔄 Verwende Python-basiertes MongoDB-Backup...")
+                
+                from app.models.mongodb_database import mongodb
+                from datetime import datetime
+                
+                # Collections die gesichert werden sollen
+                collections = [
+                    'tools', 'workers', 'consumables', 'lendings', 
+                    'consumable_usages', 'tickets', 'users', 'settings',
+                    'homepage_notices', 'work_times', 'jobs', 'timesheets',
+                    'auftrag_details', 'auftrag_material', 'email_config', 
+                    'email_settings', 'system_logs'
+                ]
+                
+                backup_data = {
+                    'metadata': {
+                        'created_at': datetime.now().isoformat(),
+                        'version': '2.0',
+                        'datatype_preservation': True,
+                        'collections': []
+                    },
+                    'data': {}
+                }
+                
+                for collection_name in collections:
+                    try:
+                        # Alle Dokumente aus der Collection laden
+                        documents = list(mongodb.find(collection_name, {}))
+                        
+                        if documents:
+                            # Dokumente für Backup vorbereiten
+                            backup_documents = []
+                            for doc in documents:
+                                # ObjectId zu String konvertieren
+                                if '_id' in doc:
+                                    doc['_id'] = str(doc['_id'])
+                                backup_documents.append(doc)
+                            
+                            backup_data['data'][collection_name] = backup_documents
+                            backup_data['metadata']['collections'].append({
+                                'name': collection_name,
+                                'count': len(backup_documents)
+                            })
+                            
+                            print(f"    ✅ Collection {collection_name}: {len(backup_documents)} Dokumente")
+                            
+                    except Exception as e:
+                        print(f"    ⚠️  Fehler bei Collection {collection_name}: {e}")
+                        continue
+                
+                # Backup-Datei speichern
+                backup_file = backup_path / f"{backup_name}.json"
+                with open(backup_file, 'w', encoding='utf-8') as f:
+                    json.dump(backup_data, f, ensure_ascii=False, indent=2, default=str)
+                
+                print(f"  ✅ Python-basiertes MongoDB-Backup erstellt")
                 return backup_path
-            else:
-                print(f"  ❌ MongoDB-Backup fehlgeschlagen: {result.stderr}")
-                return None
                 
         except Exception as e:
             print(f"  ❌ Fehler beim MongoDB-Backup: {e}")

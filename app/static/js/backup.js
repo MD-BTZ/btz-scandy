@@ -38,13 +38,9 @@ function formatFileSize(bytes) {
 }
 
 function showToast(type, message) {
-    // Verwende die zentrale window.showToast Funktion
-    if (typeof window.showToast === 'function') {
-        window.showToast(type, message);
-    } else {
-        // Fallback für den Fall, dass window.showToast nicht verfügbar ist
-        alert(`${type.toUpperCase()}: ${message}`);
-    }
+    // Fallback für den Fall, dass window.showToast nicht verfügbar ist
+    console.log(`${type.toUpperCase()}: ${message}`);
+    alert(`${type.toUpperCase()}: ${message}`);
 }
 
 // Backups laden
@@ -449,8 +445,8 @@ function setupBackupHandlers() {
             }
             
             const fileName = fileInput.files[0].name.toLowerCase();
-            if (!fileName.endsWith('.zip')) {
-                showToast('error', 'Nur .zip-Dateien erlaubt!');
+            if (!fileName.endsWith('.zip') && !fileName.endsWith('.json')) {
+                showToast('error', 'Nur .zip- und .json-Dateien erlaubt!');
                 return;
             }
             

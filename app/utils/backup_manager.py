@@ -57,66 +57,11 @@ class BackupManager:
         
         return doc
     
-    def _validate_backup_data(self, backup_data):
-        """
-        Validiert Backup-Daten vor der Wiederherstellung
-        """
-        if not isinstance(backup_data, dict):
-            return False, "Backup-Daten sind kein gültiges Dictionary"
-        
-        # Prüfe ob es das neue Format ist
-        if 'data' in backup_data:
-            data_section = backup_data['data']
-        else:
-            # Altes Format
-            data_section = backup_data
-        
-        # Für neue Backups: jobs ist erforderlich
-        # Für alte Backups: jobs ist optional
-        required_collections = ['tools', 'workers', 'consumables', 'settings']
-        
-        # Prüfe ob es ein neues Backup mit jobs ist
-        has_jobs = 'jobs' in data_section
-        if has_jobs:
-            required_collections.append('jobs')
-        
-        missing_collections = [coll for coll in required_collections if coll not in data_section]
-        
-        if missing_collections:
-            return False, f"Fehlende Collections im Backup: {missing_collections}"
-        
-        total_docs = sum(len(docs) for docs in data_section.values())
-        if total_docs == 0:
-            return False, "Backup enthält keine Dokumente"
-        
-        backup_type = "neues" if has_jobs else "altes"
-        return True, f"{backup_type.capitalize()} Backup ist gültig mit {total_docs} Dokumenten in {len(data_section)} Collections"
-        
-    def _serialize_for_backup(self, obj):
-        """
-        Serialisiert Python-Objekte für JSON-Export mit Datentyp-Erhaltung
-        """
-        if isinstance(obj, datetime):
-            return {
-                '__type__': 'datetime',
-                'value': obj.isoformat()
-            }
-        elif isinstance(obj, ObjectId):
-            return {
-                '__type__': 'ObjectId',
-                'value': str(obj)
-            }
-        elif isinstance(obj, dict):
-            return {k: self._serialize_for_backup(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._serialize_for_backup(item) for item in obj]
-        else:
-            return obj
-
     def _deserialize_from_backup(self, obj):
         """
         Deserialisiert Objekte aus Backup mit Datentyp-Wiederherstellung
         Unterstützt sowohl neue (mit __type__) als auch alte Backup-Formate
+        ERWEITERT für bessere Kompatibilität mit älteren Versionen
         """
         if isinstance(obj, dict):
             # Neues Format mit __type__ Markierungen
@@ -143,12 +88,14 @@ class BackupManager:
                             result[k] = ObjectId(v)
                         except:
                             result[k] = v  # Fallback zu String
-                    # Datetime-Felder konvertieren - ERWEITERTE LISTE
+                    # Datetime-Felder konvertieren - ERWEITERTE LISTE für ältere Versionen
                     elif k in ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp', 
                               'lent_at', 'returned_at', 'due_date', 'resolved_at', 'used_at', 'start_date', 
-                              'end_date', 'created', 'modified', 'last_updated'] and isinstance(v, str):
+                              'end_date', 'created', 'modified', 'last_updated', 'time', 'datetime',
+                              'created_date', 'updated_date', 'modified_date', 'deleted_date',
+                              'lent_date', 'returned_date', 'due_date', 'resolved_date', 'used_date'] and isinstance(v, str):
                         try:
-                            # Versuche verschiedene Datetime-Formate
+                            # ERWEITERTE Liste von Datetime-Formaten für ältere Versionen
                             formats = [
                                 '%Y-%m-%d %H:%M:%S.%f',  # 2025-06-27 14:13:12.387000
                                 '%Y-%m-%d %H:%M:%S',     # 2025-06-27 14:13:12
@@ -156,7 +103,17 @@ class BackupManager:
                                 '%Y-%m-%dT%H:%M:%S.%f',  # 2025-06-27T14:13:12.387000
                                 '%Y-%m-%dT%H:%M:%S',     # 2025-06-27T14:13:12
                                 '%Y-%m-%dT%H:%M:%S.%fZ', # ISO mit Z
-                                '%Y-%m-%dT%H:%M:%SZ'     # ISO mit Z
+                                '%Y-%m-%dT%H:%M:%SZ',    # ISO mit Z
+                                '%d.%m.%Y %H:%M:%S',     # 27.06.2025 14:13:12 (deutsches Format)
+                                '%d.%m.%Y',              # 27.06.2025
+                                '%d/%m/%Y %H:%M:%S',     # 27/06/2025 14:13:12
+                                '%d/%m/%Y',              # 27/06/2025
+                                '%m/%d/%Y %H:%M:%S',     # 06/27/2025 14:13:12
+                                '%m/%d/%Y',              # 06/27/2025
+                                '%Y-%m-%d %H:%M',        # 2025-06-27 14:13
+                                '%d.%m.%Y %H:%M',        # 27.06.2025 14:13
+                                '%Y%m%d_%H%M%S',        # 20250627_141312
+                                '%Y%m%d',                # 20250627
                             ]
                             
                             for fmt in formats:
@@ -170,14 +127,191 @@ class BackupManager:
                                 try:
                                     result[k] = datetime.fromisoformat(v.replace('Z', '+00:00'))
                                 except ValueError:
-                                    result[k] = v  # Fallback zu String
+                                    # Letzter Fallback: Versuche Unix-Timestamp
+                                    try:
+                                        timestamp = float(v)
+                                        result[k] = datetime.fromtimestamp(timestamp)
+                                    except (ValueError, TypeError):
+                                        result[k] = v  # Fallback zu String
                         except:
                             result[k] = v
+                    # Boolean-Felder konvertieren (für ältere Versionen)
+                    elif k in ['deleted', 'active', 'enabled', 'disabled', 'is_active', 'is_deleted', 
+                              'is_enabled', 'is_disabled', 'available', 'unavailable', 'in_use', 
+                              'borrowed', 'returned', 'completed', 'pending', 'resolved', 'open'] and isinstance(v, str):
+                        # Konvertiere String-Booleans zu echten Booleans
+                        if v.lower() in ['true', '1', 'yes', 'ja', 'on', 'enabled', 'active']:
+                            result[k] = True
+                        elif v.lower() in ['false', '0', 'no', 'nein', 'off', 'disabled', 'inactive']:
+                            result[k] = False
+                        else:
+                            result[k] = v  # Fallback zu String
+                    # Numerische Felder konvertieren (für ältere Versionen)
+                    elif k in ['quantity', 'min_quantity', 'max_quantity', 'amount', 'count', 'total', 
+                              'price', 'cost', 'value', 'number', 'id', 'user_id', 'tool_id', 
+                              'worker_id', 'consumable_id', 'ticket_id', 'job_id'] and isinstance(v, str):
+                        try:
+                            # Versuche zu int konvertieren
+                            if '.' in v:
+                                result[k] = float(v)
+                            else:
+                                result[k] = int(v)
+                        except (ValueError, TypeError):
+                            result[k] = v  # Fallback zu String
                     else:
                         result[k] = self._deserialize_from_backup(v)
                 return result
         elif isinstance(obj, list):
             return [self._deserialize_from_backup(item) for item in obj]
+        else:
+            return obj
+
+    def _detect_old_backup_format(self, backup_data):
+        """
+        Erkennt das Format eines alten Backups und gibt Informationen zurück
+        """
+        try:
+            format_info = {
+                'is_old_format': False,
+                'version_estimate': 'unknown',
+                'collections_found': [],
+                'total_documents': 0,
+                'has_metadata': False,
+                'has_datatype_preservation': False,
+                'format_type': 'unknown'
+            }
+            
+            # Prüfe ob es das neue Format ist
+            if isinstance(backup_data, dict) and 'metadata' in backup_data and 'data' in backup_data:
+                format_info['has_metadata'] = True
+                format_info['has_datatype_preservation'] = backup_data['metadata'].get('datatype_preservation', False)
+                format_info['format_type'] = 'new'
+                
+                if format_info['has_datatype_preservation']:
+                    format_info['version_estimate'] = '2.0+'
+                else:
+                    format_info['version_estimate'] = '1.0-1.9'
+                
+                data_section = backup_data['data']
+            else:
+                # Altes Format
+                format_info['is_old_format'] = True
+                format_info['format_type'] = 'old'
+                data_section = backup_data
+            
+            # Analysiere Collections
+            if isinstance(data_section, dict):
+                format_info['collections_found'] = list(data_section.keys())
+                format_info['total_documents'] = sum(len(docs) for docs in data_section.values() if isinstance(docs, list))
+                
+                # Schätze Version basierend auf vorhandenen Collections
+                if 'jobs' in data_section:
+                    format_info['version_estimate'] = '1.5+'
+                elif 'tickets' in data_section:
+                    format_info['version_estimate'] = '1.0+'
+                else:
+                    format_info['version_estimate'] = 'pre-1.0'
+            
+            return format_info
+            
+        except Exception as e:
+            print(f"Fehler beim Erkennen des Backup-Formats: {e}")
+            return {
+                'is_old_format': True,
+                'version_estimate': 'unknown',
+                'collections_found': [],
+                'total_documents': 0,
+                'has_metadata': False,
+                'has_datatype_preservation': False,
+                'format_type': 'unknown'
+            }
+
+    def _validate_backup_data(self, backup_data):
+        """
+        Validiert Backup-Daten vor der Wiederherstellung
+        ERWEITERT für bessere Kompatibilität mit älteren Versionen
+        """
+        if not isinstance(backup_data, dict):
+            return False, "Backup-Daten sind kein gültiges Dictionary"
+        
+        # Prüfe ob es das neue Format ist
+        if 'data' in backup_data:
+            data_section = backup_data['data']
+            # Einfache Format-Erkennung ohne rekursive Aufrufe
+            has_metadata = True
+            has_datatype_preservation = backup_data.get('metadata', {}).get('datatype_preservation', False)
+            is_old_format = False
+        else:
+            # Altes Format
+            data_section = backup_data
+            has_metadata = False
+            has_datatype_preservation = False
+            is_old_format = True
+        
+        # Schätze Version basierend auf vorhandenen Collections
+        if 'jobs' in data_section:
+            version_estimate = '1.5+'
+        elif 'tickets' in data_section:
+            version_estimate = '1.0+'
+        else:
+            version_estimate = 'pre-1.0'
+        
+        # ERWEITERTE Validierung für verschiedene Backup-Versionen
+        if is_old_format or version_estimate == 'pre-1.0':
+            # Sehr alte Backups - minimale Anforderungen
+            required_collections = ['tools', 'workers']
+            optional_collections = ['consumables', 'settings', 'lendings', 'tickets', 'jobs']
+        elif version_estimate == '1.0+':
+            # Version 1.0+ Backups
+            required_collections = ['tools', 'workers', 'consumables', 'settings']
+            optional_collections = ['lendings', 'tickets', 'jobs']
+        elif version_estimate == '1.5+':
+            # Version 1.5+ Backups
+            required_collections = ['tools', 'workers', 'consumables', 'settings', 'tickets']
+            optional_collections = ['lendings', 'jobs']
+        else:
+            # Neue Backups (2.0+)
+            required_collections = ['tools', 'workers', 'consumables', 'settings', 'tickets', 'jobs']
+            optional_collections = ['lendings']
+        
+        # Prüfe erforderliche Collections
+        missing_required = [coll for coll in required_collections if coll not in data_section]
+        if missing_required:
+            return False, f"Fehlende erforderliche Collections im Backup: {missing_required}"
+        
+        # Prüfe ob überhaupt Daten vorhanden sind
+        total_docs = sum(len(docs) for docs in data_section.values() if isinstance(docs, list))
+        if total_docs == 0:
+            return False, "Backup enthält keine Dokumente"
+        
+        # Erstelle detaillierte Validierungsnachricht
+        found_collections = [coll for coll in required_collections + optional_collections if coll in data_section]
+        validation_message = f"Backup ist gültig ({version_estimate} Format)"
+        validation_message += f" mit {total_docs} Dokumenten in {len(found_collections)} Collections"
+        
+        if is_old_format:
+            validation_message += " (altes Format - Konvertierung wird empfohlen)"
+        
+        return True, validation_message
+        
+    def _serialize_for_backup(self, obj):
+        """
+        Serialisiert Python-Objekte für JSON-Export mit Datentyp-Erhaltung
+        """
+        if isinstance(obj, datetime):
+            return {
+                '__type__': 'datetime',
+                'value': obj.isoformat()
+            }
+        elif isinstance(obj, ObjectId):
+            return {
+                '__type__': 'ObjectId',
+                'value': str(obj)
+            }
+        elif isinstance(obj, dict):
+            return {k: self._serialize_for_backup(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._serialize_for_backup(item) for item in obj]
         else:
             return obj
 
@@ -305,51 +439,78 @@ class BackupManager:
             with open(backup_path, 'r', encoding='utf-8') as f:
                 backup_data = json.load(f)
             
-            # Prüfe Backup-Format (alt vs. neu)
-            if 'metadata' in backup_data and 'data' in backup_data:
-                # Neues Format mit Datentyp-Informationen
-                print("Erkennung: Neues Backup-Format mit Datentyp-Informationen")
+            # ERWEITERTE Backup-Format-Erkennung (ohne rekursive Aufrufe)
+            if 'data' in backup_data:
+                # Neues Format mit Metadata
+                has_metadata = True
+                has_datatype_preservation = backup_data.get('metadata', {}).get('datatype_preservation', False)
                 data_section = backup_data['data']
+                format_type = 'new'
+                print("Erkennung: Neues Backup-Format mit Datentyp-Informationen")
             else:
-                # Altes Format - verwende direkt
-                print("Erkennung: Altes Backup-Format - Konvertierung erforderlich")
+                # Altes Format
+                has_metadata = False
+                has_datatype_preservation = False
                 data_section = backup_data
+                format_type = 'old'
+                print("Erkennung: Altes Backup-Format - Erweiterte Konvertierung erforderlich")
             
-            # Backup-Daten validieren (mit spezieller Behandlung für alte Backups)
+            # Schätze Version basierend auf vorhandenen Collections
+            if 'jobs' in data_section:
+                version_estimate = '1.5+'
+            elif 'tickets' in data_section:
+                version_estimate = '1.0+'
+            else:
+                version_estimate = 'pre-1.0'
+            
+            collections_found = list(data_section.keys())
+            total_documents = sum(len(docs) for docs in data_section.values() if isinstance(docs, list))
+            
+            print(f"Backup-Format erkannt: {format_type} ({version_estimate})")
+            print(f"Collections gefunden: {collections_found}")
+            print(f"Gesamte Dokumente: {total_documents}")
+            
+            # Backup-Daten validieren mit erweiterter Unterstützung für alte Formate
             is_valid, validation_message = self._validate_backup_data({'data': data_section})
             if not is_valid:
-                # Bei alten Backups: Versuche Validierung ohne jobs-Collection
-                if 'jobs' not in data_section:
-                    print("Altes Backup erkannt - versuche Validierung ohne jobs-Collection")
-                    # Temporäre Validierung nur für alte Backups
-                    old_backup_required = ['tools', 'workers', 'consumables', 'settings']
-                    missing_old = [coll for coll in old_backup_required if coll not in data_section]
-                    if not missing_old:
-                        is_valid = True
-                        validation_message = f"Altes Backup ist gültig mit {sum(len(docs) for docs in data_section.values())} Dokumenten"
-                    else:
-                        print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
-                        return False
-                else:
-                    print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
-                    return False
+                print(f"Backup-Validierung fehlgeschlagen: {validation_message}")
+                return False
             
             print(f"Backup-Validierung erfolgreich: {validation_message}")
             
+            # ERWEITERTE Wiederherstellung mit besserer Fehlerbehandlung
+            restore_stats = {
+                'total_collections': 0,
+                'successful_collections': 0,
+                'failed_collections': 0,
+                'total_documents': 0,
+                'conversion_errors': 0,
+                'format_warnings': []
+            }
+            
             # Collections wiederherstellen
             for collection, documents in data_section.items():
+                restore_stats['total_collections'] += 1
+                
                 try:
                     # Collection leeren
                     mongodb.db[collection].delete_many({})
                     
-                    # Dokumente wiederherstellen mit Datentyp-Wiederherstellung
+                    # Dokumente wiederherstellen mit erweiterter Datentyp-Wiederherstellung
                     if documents:
                         restored_documents = []
-                        conversion_stats = {'total': 0, 'id_converted': 0, 'datetime_converted': 0, 'errors': 0}
+                        conversion_stats = {
+                            'total': 0, 
+                            'id_converted': 0, 
+                            'datetime_converted': 0, 
+                            'boolean_converted': 0,
+                            'numeric_converted': 0,
+                            'errors': 0
+                        }
                         
                         for doc in documents:
                             try:
-                                # Deserialisiere mit Datentyp-Wiederherstellung
+                                # ERWEITERTE Deserialisierung mit Datentyp-Wiederherstellung
                                 restored_doc = self._deserialize_from_backup(doc)
                                 # IDs korrigieren
                                 fixed_doc = self._fix_id_for_restore(restored_doc)
@@ -369,37 +530,64 @@ class BackupManager:
                                 restored_documents.append(fixed_doc)
                                 conversion_stats['total'] += 1
                                 
-                                # Statistiken sammeln
+                                # ERWEITERTE Statistiken sammeln
                                 if '_id' in fixed_doc and isinstance(fixed_doc['_id'], ObjectId):
                                     conversion_stats['id_converted'] += 1
                                 
-                                datetime_fields = ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp']
+                                # Datetime-Konvertierungen zählen
+                                datetime_fields = ['created_at', 'updated_at', 'modified_at', 'deleted_at', 'date', 'timestamp',
+                                                 'lent_at', 'returned_at', 'due_date', 'resolved_at', 'used_at', 'start_date', 'end_date']
                                 for field in datetime_fields:
                                     if field in fixed_doc and isinstance(fixed_doc[field], datetime):
                                         conversion_stats['datetime_converted'] += 1
                                         break
+                                
+                                # Boolean-Konvertierungen zählen
+                                boolean_fields = ['deleted', 'active', 'enabled', 'disabled', 'is_active', 'is_deleted']
+                                for field in boolean_fields:
+                                    if field in fixed_doc and isinstance(fixed_doc[field], bool):
+                                        conversion_stats['boolean_converted'] += 1
+                                        break
+                                
+                                # Numerische Konvertierungen zählen
+                                numeric_fields = ['quantity', 'min_quantity', 'max_quantity', 'amount', 'count', 'total']
+                                for field in numeric_fields:
+                                    if field in fixed_doc and isinstance(fixed_doc[field], (int, float)):
+                                        conversion_stats['numeric_converted'] += 1
+                                        break
                                         
                             except Exception as e:
-                                print(f"Fehler bei Dokument-Konvertierung: {e}")
+                                print(f"Fehler bei Dokument-Konvertierung in {collection}: {e}")
                                 conversion_stats['errors'] += 1
+                                restore_stats['conversion_errors'] += 1
                                 # Versuche das ursprüngliche Dokument zu verwenden
                                 restored_documents.append(doc)
                         
                         # Dokumente in die Datenbank einfügen
                         mongodb.db[collection].insert_many(restored_documents)
-                        print(f"Collection {collection}: {len(restored_documents)} Dokumente wiederhergestellt")
+                        restore_stats['successful_collections'] += 1
+                        restore_stats['total_documents'] += len(restored_documents)
+                        
+                        print(f"✅ Collection {collection}: {len(restored_documents)} Dokumente wiederhergestellt")
                         print(f"  - Konvertierungen: {conversion_stats['id_converted']} IDs, {conversion_stats['datetime_converted']} Datetimes")
+                        print(f"  - Zusätzlich: {conversion_stats['boolean_converted']} Booleans, {conversion_stats['numeric_converted']} Numerische")
                         if conversion_stats['errors'] > 0:
-                            print(f"  - Fehler: {conversion_stats['errors']}")
+                            print(f"  - ⚠️  Fehler: {conversion_stats['errors']}")
                         
                 except Exception as e:
-                    print(f"Fehler beim Wiederherstellen von {collection}: {e}")
-                    # Bei Fehler: Versuche ohne ID-Korrektur
+                    print(f"❌ Fehler beim Wiederherstellen von {collection}: {e}")
+                    restore_stats['failed_collections'] += 1
+                    
+                    # Bei Fehler: Versuche ohne ID-Korrektur (Fallback für sehr alte Backups)
                     try:
                         mongodb.db[collection].insert_many(documents)
-                        print(f"Collection {collection}: {len(documents)} Dokumente ohne ID-Korrektur wiederhergestellt")
+                        print(f"🔄 Collection {collection}: {len(documents)} Dokumente ohne ID-Korrektur wiederhergestellt (Fallback)")
+                        restore_stats['successful_collections'] += 1
+                        restore_stats['total_documents'] += len(documents)
+                        restore_stats['format_warnings'].append(f"{collection}: Fallback-Modus verwendet")
                     except Exception as e2:
-                        print(f"Kritischer Fehler bei {collection}: {e2}")
+                        print(f"💥 Kritischer Fehler bei {collection}: {e2}")
+                        restore_stats['failed_collections'] += 1
             
             # Nach der Wiederherstellung: Kategorien-Inkonsistenz beheben
             self._fix_category_inconsistency()
@@ -415,6 +603,24 @@ class BackupManager:
                 
             except Exception as e:
                 print(f"Fehler bei automatischen Dashboard-Fixes: {e}")
+            
+            # ERWEITERTE Wiederherstellungs-Zusammenfassung
+            print(f"\n📊 Backup-Wiederherstellung abgeschlossen:")
+            print(f"   - Format: {format_info['format_type']} ({format_info['version_estimate']})")
+            print(f"   - Collections: {restore_stats['successful_collections']}/{restore_stats['total_collections']} erfolgreich")
+            print(f"   - Dokumente: {restore_stats['total_documents']} wiederhergestellt")
+            print(f"   - Konvertierungsfehler: {restore_stats['conversion_errors']}")
+            
+            if restore_stats['failed_collections'] > 0:
+                print(f"   - ⚠️  Fehlgeschlagene Collections: {restore_stats['failed_collections']}")
+            
+            if restore_stats['format_warnings']:
+                print(f"   - ⚠️  Format-Warnungen: {len(restore_stats['format_warnings'])}")
+                for warning in restore_stats['format_warnings']:
+                    print(f"     • {warning}")
+            
+            if format_info['is_old_format']:
+                print(f"   - 💡 Empfehlung: Konvertieren Sie das Backup in das neue Format für bessere Kompatibilität")
             
             return True
             
@@ -659,6 +865,149 @@ class BackupManager:
             
         except Exception as e:
             return False, f"Fehler beim Testen des Backups: {str(e)}"
+    
+    def test_old_backup_format(self, backup_filename):
+        """
+        Testet ein altes Backup-Format ohne Wiederherstellung
+        Gibt detaillierte Informationen über Kompatibilität und Probleme zurück
+        """
+        try:
+            backup_path = self.backup_dir / backup_filename
+            if not backup_path.exists():
+                return False, "Backup-Datei nicht gefunden"
+            
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            # ERWEITERTE Format-Analyse
+            format_info = self._detect_old_backup_format(backup_data)
+            
+            # Backup validieren
+            is_valid, validation_message = self._validate_backup_data(backup_data)
+            
+            # Detaillierte Analyse der Collections
+            collection_analysis = {}
+            if format_info['has_metadata']:
+                data_section = backup_data['data']
+            else:
+                data_section = backup_data
+            
+            for collection_name, documents in data_section.items():
+                if isinstance(documents, list):
+                    analysis = {
+                        'count': len(documents),
+                        'sample_documents': [],
+                        'field_types': {},
+                        'potential_issues': []
+                    }
+                    
+                    # Analysiere die ersten 3 Dokumente als Beispiel
+                    for i, doc in enumerate(documents[:3]):
+                        if isinstance(doc, dict):
+                            sample_doc = {}
+                            for field, value in doc.items():
+                                sample_doc[field] = {
+                                    'type': type(value).__name__,
+                                    'value': str(value)[:50] + '...' if len(str(value)) > 50 else str(value)
+                                }
+                                
+                                # Prüfe auf potenzielle Probleme
+                                if field == '_id' and isinstance(value, str) and len(value) != 24:
+                                    analysis['potential_issues'].append(f"Ungültige ObjectId in Dokument {i+1}")
+                                elif field in ['created_at', 'updated_at', 'date'] and isinstance(value, str):
+                                    try:
+                                        datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                                    except ValueError:
+                                        analysis['potential_issues'].append(f"Ungültiges Datetime-Format in {field} (Dokument {i+1})")
+                            
+                            analysis['sample_documents'].append(sample_doc)
+                    
+                    collection_analysis[collection_name] = analysis
+            
+            # Erstelle detaillierten Bericht
+            report = {
+                'filename': backup_filename,
+                'file_size': backup_path.stat().st_size,
+                'format_info': format_info,
+                'is_valid': is_valid,
+                'validation_message': validation_message,
+                'collection_analysis': collection_analysis,
+                'compatibility_score': 0,
+                'recommendations': []
+            }
+            
+            # Berechne Kompatibilitäts-Score
+            compatibility_score = 100
+            
+            if format_info['is_old_format']:
+                compatibility_score -= 20
+                report['recommendations'].append("Backup ist im alten Format - Konvertierung empfohlen")
+            
+            if not is_valid:
+                compatibility_score -= 30
+                report['recommendations'].append("Backup-Validierung fehlgeschlagen")
+            
+            # Prüfe auf potenzielle Probleme
+            total_issues = sum(len(analysis['potential_issues']) for analysis in collection_analysis.values())
+            if total_issues > 0:
+                compatibility_score -= min(total_issues * 5, 30)
+                report['recommendations'].append(f"{total_issues} potenzielle Datentyp-Probleme gefunden")
+            
+            # Prüfe auf fehlende wichtige Collections
+            important_collections = ['tools', 'workers', 'consumables']
+            missing_important = [coll for coll in important_collections if coll not in collection_analysis]
+            if missing_important:
+                compatibility_score -= 15
+                report['recommendations'].append(f"Fehlende wichtige Collections: {missing_important}")
+            
+            report['compatibility_score'] = max(compatibility_score, 0)
+            
+            # Füge Empfehlungen basierend auf Score hinzu
+            if report['compatibility_score'] >= 80:
+                report['recommendations'].append("Backup sollte problemlos wiederhergestellt werden können")
+            elif report['compatibility_score'] >= 60:
+                report['recommendations'].append("Backup kann wiederhergestellt werden, aber mit Einschränkungen")
+            elif report['compatibility_score'] >= 40:
+                report['recommendations'].append("Backup kann versucht werden wiederherzustellen, aber mit erheblichen Problemen")
+            else:
+                report['recommendations'].append("Backup ist wahrscheinlich nicht kompatibel - Konvertierung erforderlich")
+            
+            return True, report
+            
+        except Exception as e:
+            return False, f"Fehler beim Testen des Backup-Formats: {str(e)}"
+
+    def analyze_backup_compatibility(self, backup_filename):
+        """
+        Analysiert die Kompatibilität eines Backups mit der aktuellen Version
+        """
+        try:
+            success, result = self.test_old_backup_format(backup_filename)
+            if not success:
+                return False, result
+            
+            report = result
+            
+            print(f"\n🔍 Backup-Kompatibilitätsanalyse: {backup_filename}")
+            print(f"   - Format: {report['format_info']['format_type']} ({report['format_info']['version_estimate']})")
+            print(f"   - Größe: {report['file_size'] / 1024:.1f} KB")
+            print(f"   - Gültigkeit: {'✅' if report['is_valid'] else '❌'}")
+            print(f"   - Kompatibilitäts-Score: {report['compatibility_score']}/100")
+            
+            print(f"\n📊 Collections-Analyse:")
+            for collection, analysis in report['collection_analysis'].items():
+                print(f"   - {collection}: {analysis['count']} Dokumente")
+                if analysis['potential_issues']:
+                    print(f"     ⚠️  Probleme: {len(analysis['potential_issues'])}")
+            
+            print(f"\n💡 Empfehlungen:")
+            for recommendation in report['recommendations']:
+                print(f"   - {recommendation}")
+            
+            return True, report
+            
+        except Exception as e:
+            return False, f"Fehler bei der Kompatibilitätsanalyse: {str(e)}"
     
     def _cleanup_old_backups(self, keep=10):
         """Löscht alte Backups, behält nur die letzten 'keep'"""
