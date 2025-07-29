@@ -165,7 +165,7 @@ const QuickScan = {
                     const upperValue = value.toUpperCase();
                     if (upperValue === 'DANCE') {
                         QuickScan.showDancingEmojis();
-                        showToast('success', '🦓 Zebra-Party! 🦓');
+                        showQuickScanToast('success', '🦓 Zebra-Party! 🦓');
                         activeInput.value = '';
                         return;
                     }
@@ -611,7 +611,7 @@ const QuickScan = {
             const data = await response.json();
 
             if (data.success) {
-                showToast('success', data.message || 'Vorgang erfolgreich!');
+                showQuickScanToast('success', data.message || 'Vorgang erfolgreich!');
                 
                 // Schließe das Modal
                 const modal = document.getElementById('quickScanModal');
@@ -821,7 +821,7 @@ const QuickScan = {
                 zIndex: 99999
             });
         }, 250);
-        showToast('success', '🎉 SCANDY! 🎉');
+        showQuickScanToast('success', '🎉 SCANDY! 🎉');
     },
 
     showDancingEmojis() {
@@ -859,7 +859,7 @@ const QuickScan = {
 
     showError(message, type = null) {
         console.error("Fehler:", message);
-        showToast('error', message);
+        showQuickScanToast('error', message);
         if (type === 'item') {
             // Nur Item-Eingabe zurücksetzen
             this.scannedItem = null;
@@ -910,7 +910,7 @@ const QuickScan = {
             this.setCardState('item', 'success');
             updateQuickScanButton();
         } else {
-            showToast('error', 'Bitte eine gültige Menge eingeben.');
+            showQuickScanToast('error', 'Bitte eine gültige Menge eingeben.');
         }
     },
 
@@ -988,7 +988,7 @@ const QuickScan = {
                 });
                 const data = await response.json();
                 if (data.success) {
-                    showToast('success', data.message || 'Vorgang erfolgreich!');
+                    showQuickScanToast('success', data.message || 'Vorgang erfolgreich!');
                     const modal = document.getElementById('quickScanModal');
                     if (modal) modal.close();
                     this.reset();
@@ -999,7 +999,7 @@ const QuickScan = {
                 this.showError('Fehler bei der Verarbeitung');
             }
         } else {
-            showToast('error', 'Bitte geben Sie einen Barcode ein oder scannen Sie Items');
+            showQuickScanToast('error', 'Bitte geben Sie einen Barcode ein oder scannen Sie Items');
         }
     },
 
@@ -1024,7 +1024,7 @@ const QuickScan = {
             }
         } catch (error) {
             console.error("Fehler bei manueller Eingabe:", error);
-            showToast('error', 'Fehler bei der Verarbeitung der Eingabe');
+            showQuickScanToast('error', 'Fehler bei der Verarbeitung der Eingabe');
         }
     },
 
@@ -1059,13 +1059,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!isAuthenticated) {
                 // Zeige Meldung für nicht eingeloggte Benutzer
-                showToast('warning', 'QuickScan ist nur für eingeloggte Benutzer verfügbar');
+                showQuickScanToast('warning', 'QuickScan ist nur für eingeloggte Benutzer verfügbar');
                 return;
             }
             
             if (isTeilnehmer) {
                 // Zeige Meldung für Teilnehmer
-                showToast('warning', 'QuickScan ist für Teilnehmer nicht verfügbar');
+                showQuickScanToast('warning', 'QuickScan ist für Teilnehmer nicht verfügbar');
                 return;
             }
             
@@ -1087,20 +1087,25 @@ function updateBufferDisplay(buffer, isWorker = false) {
 }
 
 // Neue Toast-Funktion für unten rechts
-function showToast(type, message) {
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        document.body.appendChild(container);
+function showQuickScanToast(type, message) {
+    // Verwende globale showToast Funktion oder Fallback
+    if (typeof window.showToast === 'function') {
+        window.showToast(type, message);
+    } else {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
     }
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-' + type;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
 }
 
 // Globale Funktion für Button-Status-Update

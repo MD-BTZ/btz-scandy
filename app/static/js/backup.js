@@ -37,10 +37,14 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function showToast(type, message) {
-    // Fallback für den Fall, dass window.showToast nicht verfügbar ist
-    console.log(`${type.toUpperCase()}: ${message}`);
-    alert(`${type.toUpperCase()}: ${message}`);
+function showBackupToast(type, message) {
+    // Verwende globale showToast Funktion oder Fallback
+    if (typeof window.showToast === 'function') {
+        window.showBackupToast(type, message);
+    } else {
+        console.log(`${type.toUpperCase()}: ${message}`);
+        alert(`${type.toUpperCase()}: ${message}`);
+    }
 }
 
 // Backups laden
@@ -131,20 +135,20 @@ async function loadBackups() {
                 `;
             }
         } else {
-            showToast('error', 'Fehler beim Laden der Backups: ' + (data.message || 'Unbekannter Fehler'));
+            showBackupToast('error', 'Fehler beim Laden der Backups: ' + (data.message || 'Unbekannter Fehler'));
         }
     } catch (error) {
         console.error('Fehler beim Laden der Backups:', error);
         
         // Spezifische Fehlerbehandlung
         if (error.name === 'TypeError' && error.message.includes('JSON')) {
-            showToast('error', 'Server hat eine ungültige Antwort gesendet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.');
+            showBackupToast('error', 'Server hat eine ungültige Antwort gesendet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.');
         } else if (error.message.includes('HTTP 500')) {
-            showToast('error', 'Server-Fehler beim Laden der Backups. Bitte kontaktieren Sie den Administrator.');
+            showBackupToast('error', 'Server-Fehler beim Laden der Backups. Bitte kontaktieren Sie den Administrator.');
         } else if (error.message.includes('HTTP 403')) {
-            showToast('error', 'Keine Berechtigung zum Laden der Backups.');
+            showBackupToast('error', 'Keine Berechtigung zum Laden der Backups.');
         } else {
-            showToast('error', 'Fehler beim Laden der Backups: ' + error.message);
+            showBackupToast('error', 'Fehler beim Laden der Backups: ' + error.message);
         }
         
         // Zeige Fehlermeldung in der Tabelle
@@ -192,7 +196,7 @@ function setupBackupButtonHandlers() {
 // Vereinheitlichtes Backup erstellen (mit Medien)
 async function createUnifiedBackup() {
     try {
-        showToast('info', 'Vereinheitlichtes Backup wird erstellt...');
+        showBackupToast('info', 'Vereinheitlichtes Backup wird erstellt...');
         
         const response = await fetch('/backup/create', {
             method: 'POST',
@@ -208,21 +212,21 @@ async function createUnifiedBackup() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('success', data.message || 'Vereinheitlichtes Backup erfolgreich erstellt');
+            showBackupToast('success', data.message || 'Vereinheitlichtes Backup erfolgreich erstellt');
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
         console.error('Fehler beim Erstellen des vereinheitlichten Backups:', error);
-        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
     }
 }
 
 // Backup ohne Medien erstellen
 async function createBackupNoMedia() {
     try {
-        showToast('info', 'Backup ohne Medien wird erstellt...');
+        showBackupToast('info', 'Backup ohne Medien wird erstellt...');
         
         const response = await fetch('/backup/create', {
             method: 'POST',
@@ -238,14 +242,14 @@ async function createBackupNoMedia() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('success', data.message || 'Backup ohne Medien erfolgreich erstellt');
+            showBackupToast('success', data.message || 'Backup ohne Medien erfolgreich erstellt');
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
         console.error('Fehler beim Erstellen des Backups ohne Medien:', error);
-        showToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Erstellen des Backups: ' + error.message);
     }
 }
 
@@ -260,7 +264,7 @@ async function importJsonBackup() {
         if (!file) return;
         
         try {
-            showToast('info', 'JSON-Backup wird importiert...');
+            showBackupToast('info', 'JSON-Backup wird importiert...');
             
             const formData = new FormData();
             formData.append('json_file', file);
@@ -273,14 +277,14 @@ async function importJsonBackup() {
             const data = await response.json();
             
             if (data.success) {
-                showToast('success', data.message || 'JSON-Backup erfolgreich importiert');
+                showBackupToast('success', data.message || 'JSON-Backup erfolgreich importiert');
                 loadBackups();
             } else {
-                showToast('error', data.message || 'Fehler beim Importieren des JSON-Backups');
+                showBackupToast('error', data.message || 'Fehler beim Importieren des JSON-Backups');
             }
         } catch (error) {
             console.error('Fehler beim Importieren des JSON-Backups:', error);
-            showToast('error', 'Fehler beim Importieren des JSON-Backups: ' + error.message);
+            showBackupToast('error', 'Fehler beim Importieren des JSON-Backups: ' + error.message);
         }
     };
     input.click();
@@ -289,7 +293,7 @@ async function importJsonBackup() {
 // Native MongoDB Backup erstellen
 async function createNativeBackup() {
     try {
-        showToast('info', 'Native MongoDB Backup wird erstellt...');
+        showBackupToast('info', 'Native MongoDB Backup wird erstellt...');
         
         const response = await fetch('/admin/backup/create-native', {
             method: 'POST',
@@ -301,21 +305,21 @@ async function createNativeBackup() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             loadBackups(); // Liste aktualisieren
         } else {
-            showToast('error', data.message);
+            showBackupToast('error', data.message);
         }
     } catch (error) {
         console.error('Fehler beim Erstellen des nativen Backups:', error);
-        showToast('error', 'Fehler beim Erstellen des nativen Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Erstellen des nativen Backups: ' + error.message);
     }
 }
 
 // Hybrides Backup erstellen
 async function createHybridBackup() {
     try {
-        showToast('info', 'Hybrides Backup wird erstellt...');
+        showBackupToast('info', 'Hybrides Backup wird erstellt...');
         
         const response = await fetch('/admin/backup/create-hybrid', {
             method: 'POST',
@@ -327,14 +331,14 @@ async function createHybridBackup() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             loadBackups(); // Liste aktualisieren
         } else {
-            showToast('error', data.message);
+            showBackupToast('error', data.message);
         }
     } catch (error) {
         console.error('Fehler beim Erstellen des hybriden Backups:', error);
-        showToast('error', 'Fehler beim Erstellen des hybriden Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Erstellen des hybriden Backups: ' + error.message);
     }
 }
 
@@ -352,10 +356,10 @@ async function downloadCurrentDatabase() {
             // Lade das gerade erstellte Backup herunter
             window.location.href = `/admin/backup/download/${data.filename}`;
         } else {
-            showToast('error', data.message || 'Fehler beim Erstellen des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Erstellen des Backups');
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Herunterladen der Datenbank: ' + error.message);
+        showBackupToast('error', 'Fehler beim Herunterladen der Datenbank: ' + error.message);
     }
 }
 
@@ -364,7 +368,7 @@ async function downloadBackup(filename) {
     try {
         window.location.href = `/admin/backup/download/${filename}`;
     } catch (error) {
-        showToast('error', 'Fehler beim Herunterladen des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Herunterladen des Backups: ' + error.message);
     }
 }
 
@@ -390,13 +394,13 @@ async function restoreBackup(filename) {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', 'Backup wurde erfolgreich wiederhergestellt. Die Seite wird neu geladen.');
+            showBackupToast('success', 'Backup wurde erfolgreich wiederhergestellt. Die Seite wird neu geladen.');
             setTimeout(() => window.location.reload(), 2000);
         } else {
-            showToast('error', data.message || 'Fehler beim Wiederherstellen des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Wiederherstellen des Backups');
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Wiederherstellen des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Wiederherstellen des Backups: ' + error.message);
     }
 }
 
@@ -418,13 +422,13 @@ async function deleteBackup(filename) {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', 'Backup wurde erfolgreich gelöscht');
+            showBackupToast('success', 'Backup wurde erfolgreich gelöscht');
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Löschen des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Löschen des Backups');
         }
     } catch (error) {
-        showToast('error', 'Fehler beim Löschen des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Löschen des Backups: ' + error.message);
     }
 }
 
@@ -440,25 +444,25 @@ function setupBackupHandlers() {
             const fileInput = uploadForm.querySelector('input[type="file"]');
             
             if (!fileInput.files.length) {
-                showToast('error', 'Bitte wählen Sie eine Datei aus');
+                showBackupToast('error', 'Bitte wählen Sie eine Datei aus');
                 return;
             }
             
             const fileName = fileInput.files[0].name.toLowerCase();
             if (!fileName.endsWith('.zip') && !fileName.endsWith('.json')) {
-                showToast('error', 'Nur .zip- und .json-Dateien erlaubt!');
+                showBackupToast('error', 'Nur .zip- und .json-Dateien erlaubt!');
                 return;
             }
             
             // Prüfe Dateigröße
             if (fileInput.files[0].size === 0) {
-                showToast('error', 'Die ausgewählte Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                showBackupToast('error', 'Die ausgewählte Datei ist leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
                 return;
             }
             
             // Mindestgröße für ZIP-Dateien
             if (fileInput.files[0].size < 1000) {
-                showToast('error', 'Die ausgewählte Datei ist zu klein für ein gültiges Backup. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                showBackupToast('error', 'Die ausgewählte Datei ist zu klein für ein gültiges Backup. Bitte wählen Sie eine gültige Backup-Datei aus.');
                 return;
             }
             
@@ -471,18 +475,18 @@ function setupBackupHandlers() {
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    showToast('success', 'Backup erfolgreich hochgeladen und aktiviert');
+                    showBackupToast('success', 'Backup erfolgreich hochgeladen und aktiviert');
                     loadBackups();
                     uploadForm.reset();
                 } else {
-                    showToast('error', data.message || 'Fehler beim Hochladen des Backups');
+                    showBackupToast('error', data.message || 'Fehler beim Hochladen des Backups');
                 }
             } catch (error) {
                 console.error('Fehler beim Hochladen des Backups:', error);
                 if (error.name === 'TypeError' && error.message.includes('JSON')) {
-                    showToast('error', 'Die hochgeladene Datei ist ungültig oder leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
+                    showBackupToast('error', 'Die hochgeladene Datei ist ungültig oder leer. Bitte wählen Sie eine gültige Backup-Datei aus.');
                 } else {
-                    showToast('error', 'Fehler beim Hochladen des Backups: ' + error.message);
+                    showBackupToast('error', 'Fehler beim Hochladen des Backups: ' + error.message);
                 }
             }
         });
@@ -581,14 +585,14 @@ async function startAutoBackup() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             loadAutoBackupStatus();
         } else {
-            showToast('error', data.message);
+            showBackupToast('error', data.message);
         }
     } catch (error) {
         console.error('Fehler beim Starten:', error);
-        showToast('error', 'Fehler beim Starten');
+        showBackupToast('error', 'Fehler beim Starten');
     }
 }
 
@@ -605,14 +609,14 @@ async function stopAutoBackup() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             loadAutoBackupStatus();
         } else {
-            showToast('error', data.message);
+            showBackupToast('error', data.message);
         }
     } catch (error) {
         console.error('Fehler beim Stoppen:', error);
-        showToast('error', 'Fehler beim Stoppen');
+        showBackupToast('error', 'Fehler beim Stoppen');
     }
 }
 
@@ -632,7 +636,7 @@ function initBackupConversion() {
 
 async function convertAllOldBackups() {
     try {
-        showToast('info', 'Konvertiere alle alten Backups...');
+        showBackupToast('info', 'Konvertiere alle alten Backups...');
         
         const response = await fetch('/admin/backup/convert-all-old', {
             method: 'POST',
@@ -644,24 +648,24 @@ async function convertAllOldBackups() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             if (data.converted_backups && data.converted_backups.length > 0) {
                 console.log('Konvertierte Backups:', data.converted_backups);
             }
             // Lade Backups neu
             loadBackups();
         } else {
-            showToast('error', data.message || 'Fehler bei der Massenkonvertierung');
+            showBackupToast('error', data.message || 'Fehler bei der Massenkonvertierung');
         }
     } catch (error) {
         console.error('Fehler bei der Massenkonvertierung:', error);
-        showToast('error', 'Fehler bei der Massenkonvertierung: ' + error.message);
+        showBackupToast('error', 'Fehler bei der Massenkonvertierung: ' + error.message);
     }
 }
 
 async function listOldBackups() {
     try {
-        showToast('info', 'Lade alte Backups...');
+        showBackupToast('info', 'Lade alte Backups...');
         
         const response = await fetch('/admin/backup/list-old');
         
@@ -669,13 +673,13 @@ async function listOldBackups() {
         
         if (data.status === 'success') {
             displayOldBackups(data.old_backups);
-            showToast('success', `${data.count} alte Backups gefunden`);
+            showBackupToast('success', `${data.count} alte Backups gefunden`);
         } else {
-            showToast('error', data.message || 'Fehler beim Auflisten alter Backups');
+            showBackupToast('error', data.message || 'Fehler beim Auflisten alter Backups');
         }
     } catch (error) {
         console.error('Fehler beim Auflisten alter Backups:', error);
-        showToast('error', 'Fehler beim Auflisten alter Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Auflisten alter Backups: ' + error.message);
     }
 }
 
@@ -728,7 +732,7 @@ function displayOldBackups(oldBackups) {
 
 async function convertSingleBackup(filename) {
     try {
-        showToast('info', `Konvertiere Backup: ${filename}`);
+        showBackupToast('info', `Konvertiere Backup: ${filename}`);
         
         const response = await fetch(`/admin/backup/convert-old/${filename}`, {
             method: 'POST',
@@ -740,16 +744,16 @@ async function convertSingleBackup(filename) {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showToast('success', data.message);
+            showBackupToast('success', data.message);
             // Lade Backups neu
             loadBackups();
             // Aktualisiere alte Backups Liste
             listOldBackups();
         } else {
-            showToast('error', data.message || 'Fehler beim Konvertieren des Backups');
+            showBackupToast('error', data.message || 'Fehler beim Konvertieren des Backups');
         }
     } catch (error) {
         console.error('Fehler beim Konvertieren des Backups:', error);
-        showToast('error', 'Fehler beim Konvertieren des Backups: ' + error.message);
+        showBackupToast('error', 'Fehler beim Konvertieren des Backups: ' + error.message);
     }
 } 

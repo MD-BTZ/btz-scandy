@@ -56,10 +56,10 @@
                 .then(result => {
                     log('Rückgabe Ergebnis:', result);
                     if (result.success) {
-                        showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+                        showLendingToast('success', 'Werkzeug erfolgreich zurückgegeben');
                         setTimeout(() => window.location.reload(), 1000);
                     } else {
-                        showToast('error', result.message || 'Fehler bei der Rückgabe');
+                        showLendingToast('error', result.message || 'Fehler bei der Rückgabe');
                         if (button) {
                             button.disabled = false;
                             button.style.opacity = '1';
@@ -67,7 +67,7 @@
                     }
                 })
                 .catch(error => {
-                    showToast('error', 'Ein Fehler ist aufgetreten');
+                    showLendingToast('error', 'Ein Fehler ist aufgetreten');
                     if (button) {
                         button.disabled = false;
                         button.style.opacity = '1';
@@ -93,14 +93,14 @@
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showToast('success', 'Werkzeug erfolgreich ausgeliehen');
+                showLendingToast('success', 'Werkzeug erfolgreich ausgeliehen');
                 setTimeout(() => window.location.reload(), 1000);
             } else {
-                showToast('error', result.message || 'Fehler bei der Ausleihe');
+                showLendingToast('error', result.message || 'Fehler bei der Ausleihe');
             }
         })
         .catch(error => {
-            showToast('error', 'Ein Fehler ist aufgetreten');
+            showLendingToast('error', 'Ein Fehler ist aufgetreten');
         });
     }
 
@@ -122,14 +122,14 @@
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showToast('success', 'Material erfolgreich entnommen');
+                showLendingToast('success', 'Material erfolgreich entnommen');
                 setTimeout(() => window.location.reload(), 1000);
             } else {
-                showToast('error', result.message || 'Fehler bei der Materialentnahme');
+                showLendingToast('error', result.message || 'Fehler bei der Materialentnahme');
             }
         })
         .catch(error => {
-            showToast('error', 'Ein Fehler ist aufgetreten');
+            showLendingToast('error', 'Ein Fehler ist aufgetreten');
         });
     }
 
@@ -279,33 +279,38 @@
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showToast('success', 'Auftragsdetails erfolgreich gespeichert');
+                showLendingToast('success', 'Auftragsdetails erfolgreich gespeichert');
                 setTimeout(() => {
                     window.location.href = `/tickets/${ticketId}/auftrag-details`;
                 }, 1000);
             } else {
-                showToast('error', result.message || 'Fehler beim Speichern');
+                showLendingToast('error', result.message || 'Fehler beim Speichern');
             }
         })
         .catch(error => {
-            showToast('error', 'Ein Fehler ist aufgetreten');
+            showLendingToast('error', 'Ein Fehler ist aufgetreten');
         });
     };
 
     // Toast-Funktion
-    function showToast(type, message) {
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type} fixed bottom-4 right-4 z-50`;
-        toast.innerHTML = `
-            <div class="alert alert-${type}">
-                <span>${message}</span>
-            </div>
-        `;
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
+    function showLendingToast(type, message) {
+        // Verwende globale showToast Funktion oder Fallback
+        if (typeof window.showToast === 'function') {
+            window.showLendingToast(type, message);
+        } else {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type} fixed bottom-4 right-4 z-50`;
+            toast.innerHTML = `
+                <div class="alert alert-${type}">
+                    <span>${message}</span>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
     }
 
     // Globale returnItem-Funktion für manuelle Ausleihe
@@ -346,10 +351,10 @@
                         .then(response => response.json())
                         .then(result => {
                             if (result.success) {
-                                showToast('success', 'Werkzeug erfolgreich zurückgegeben');
+                                showLendingToast('success', 'Werkzeug erfolgreich zurückgegeben');
                                 resolve(true);
                             } else {
-                                showToast('error', result.message || 'Fehler bei der Rückgabe');
+                                showLendingToast('error', result.message || 'Fehler bei der Rückgabe');
                                 if (button) {
                                     button.disabled = false;
                                     button.style.opacity = '1';
@@ -359,7 +364,7 @@
                         })
                         .catch(error => {
                             console.error('Fehler bei der Rückgabe:', error);
-                            showToast('error', 'Ein Fehler ist aufgetreten');
+                            showLendingToast('error', 'Ein Fehler ist aufgetreten');
                             if (button) {
                                 button.disabled = false;
                                 button.style.opacity = '1';
