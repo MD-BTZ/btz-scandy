@@ -38,12 +38,78 @@ function formatFileSize(bytes) {
 }
 
 function showBackupToast(type, message) {
-    // Verwende globale showToast Funktion oder Fallback
+    // Robuste Toast-Funktion für Backup
+    const showToast = () => {
+        if (typeof window.showToast === 'function') {
+            try {
+                window.showToast(type, message);
+                return;
+            } catch (e) {
+                console.warn('window.showToast failed, using fallback:', e);
+            }
+        }
+        
+        // Fallback: Eigene Toast-Implementierung
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'fixed bottom-4 right-4 z-[9999] flex flex-col gap-2';
+            document.body.appendChild(container);
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type} rounded-lg shadow-lg p-4 pr-12 relative min-w-[300px] max-w-[400px]`;
+        
+        // Farben basierend auf Typ
+        const colors = {
+            success: { bg: '#10b981', color: '#ffffff', icon: '✓' },
+            error: { bg: '#ef4444', color: '#ffffff', icon: '✕' },
+            info: { bg: '#3b82f6', color: '#ffffff', icon: 'ℹ' },
+            warning: { bg: '#f59e0b', color: '#ffffff', icon: '⚠' }
+        };
+        
+        const color = colors[type] || colors.info;
+        toast.style.backgroundColor = color.bg;
+        toast.style.color = color.color;
+        
+        toast.innerHTML = `
+            <div class="flex items-start">
+                <div class="flex-shrink-0 mr-3">
+                    <span class="text-lg font-bold">${color.icon}</span>
+                </div>
+                <div class="flex-1">
+                    <span class="text-sm font-medium">${message}</span>
+                </div>
+                <button class="close-btn absolute top-2 right-2 text-white hover:text-gray-200 transition-colors duration-200" onclick="this.parentElement.parentElement.remove()">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Nach 6 Sekunden ausblenden
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 6000);
+    };
+    
+    // Versuche sofort, falls window.showToast bereits verfügbar ist
     if (typeof window.showToast === 'function') {
-        window.showBackupToast(type, message);
+        showToast();
     } else {
-        console.log(`${type.toUpperCase()}: ${message}`);
-        alert(`${type.toUpperCase()}: ${message}`);
+        // Warte auf DOMContentLoaded oder timeout
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showToast);
+        } else {
+            // Fallback: Warte kurz und versuche dann
+            setTimeout(showToast, 100);
+        }
     }
 }
 
