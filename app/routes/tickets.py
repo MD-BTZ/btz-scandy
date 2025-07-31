@@ -2,11 +2,13 @@ from flask import Blueprint, render_template, request, jsonify, session, redirec
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
-from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number
+from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number, get_departments_from_settings
 from app.models.user import User
 from app.services.ticket_service import TicketService
 import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
@@ -579,7 +581,7 @@ def create():
     # Prüfe ob Ticketsystem aktiviert ist
     if not is_feature_enabled('ticket_system'):
         flash('Ticketsystem ist deaktiviert', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
     
     if request.method == 'POST':
         try:
@@ -610,25 +612,105 @@ def create():
                 return redirect(url_for('tickets.detail', ticket_id=ticket_id))
             else:
                 flash(message, 'error')
-                return render_template('tickets/create.html', form_data=ticket_data)
+                # Bei Fehlern müssen wir auch die Ticket-Listen laden
+                categories = get_ticket_categories_from_settings()
+                departments = get_departments_from_settings()
+                show_all_tickets = current_user.role in ['admin', 'mitarbeiter']
+                return render_template('tickets/create.html', 
+                                     form_data=ticket_data,
+                                     categories=categories,
+                                     departments=departments,
+                                     show_all_tickets=show_all_tickets,
+                                     open_tickets=[],
+                                     assigned_tickets=[],
+                                     all_tickets=[],
+                                     status_colors={},
+                                     priority_colors={})
                 
         except Exception as e:
             logger.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
             flash('Fehler beim Erstellen des Tickets', 'error')
-            return render_template('tickets/create.html', form_data=ticket_data)
+            # Bei Fehlern müssen wir auch die Ticket-Listen laden
+            categories = get_ticket_categories_from_settings()
+            departments = get_departments_from_settings()
+            show_all_tickets = current_user.role in ['admin', 'mitarbeiter']
+            return render_template('tickets/create.html', 
+                                 form_data=ticket_data,
+                                 categories=categories,
+                                 departments=departments,
+                                 show_all_tickets=show_all_tickets,
+                                 open_tickets=[],
+                                 assigned_tickets=[],
+                                 all_tickets=[],
+                                 status_colors={},
+                                 priority_colors={})
     
     # GET Request - Formular anzeigen
     try:
         categories = get_ticket_categories_from_settings()
         departments = get_departments_from_settings()
         
+        # Prüfe ob der User ein Admin ist (für "Alle Tickets" Tab)
+        show_all_tickets = current_user.role in ['admin', 'mitarbeiter']
+        
+        # Lade Ticket-Daten für die verschiedenen Tabs
+        # Offene Tickets (für alle Benutzer)
+        open_tickets_query = {'status': {'$in': ['offen', 'in_bearbeitung', 'wartet_auf_antwort']}}
+        open_tickets = list(mongodb.find('tickets', open_tickets_query, sort=[('created_at', -1)]))
+        
+        # Zugewiesene Tickets (für aktuellen Benutzer)
+        assigned_tickets_query = {
+            '$or': [
+                {'assigned_to': current_user.username},
+                {'created_by': current_user.username}
+            ]
+        }
+        assigned_tickets = list(mongodb.find('tickets', assigned_tickets_query, sort=[('created_at', -1)]))
+        
+        # Alle Tickets (nur für Admin/Mitarbeiter)
+        all_tickets = []
+        if show_all_tickets:
+            all_tickets = list(mongodb.find('tickets', {}, sort=[('created_at', -1)]))
+        
+        # Füge ID-Felder hinzu und konvertiere ObjectId zu String
+        for ticket_list in [open_tickets, assigned_tickets, all_tickets]:
+            for ticket in ticket_list:
+                ticket['id'] = str(ticket['_id'])
+                
+                # Berechne message_count für jedes Ticket
+                ticket_id_for_query = convert_id_for_query(ticket['id'])
+                message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket_id_for_query})
+                ticket['message_count'] = message_count
+                
+        # Status und Priorität Colors
+        status_colors = {
+            'offen': 'info',
+            'in_bearbeitung': 'warning',
+            'wartet_auf_antwort': 'warning',
+            'gelöst': 'success',
+            'geschlossen': 'ghost'
+        }
+        
+        priority_colors = {
+            'niedrig': 'ghost',
+            'normal': 'info',
+            'hoch': 'warning',
+            'dringend': 'error'
+        }
+        
         return render_template('tickets/create.html',
                              categories=categories,
-                             departments=departments)
+                             departments=departments,
+                             show_all_tickets=show_all_tickets,
+                             open_tickets=open_tickets,
+                             assigned_tickets=assigned_tickets,
+                             all_tickets=all_tickets,
+                             status_colors=status_colors,
+                             priority_colors=priority_colors)
     except Exception as e:
         logger.error(f"Fehler beim Laden des Ticket-Formulars: {str(e)}")
         flash('Fehler beim Laden des Formulars', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
 
 @bp.route('/view/<ticket_id>')
 @login_required

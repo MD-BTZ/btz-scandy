@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.services.job_service import JobService
-from app.models.mongodb_database import get_mongodb
+from app.models.mongodb_database import get_mongodb, is_feature_enabled
 from app.utils.decorators import mitarbeiter_required
 from app.utils.logger import loggers
 
@@ -16,6 +16,11 @@ bp = Blueprint('jobs', __name__)
 @bp.route('/')
 def job_list():
     """Job-Übersicht"""
+    # Prüfe ob Jobbörse aktiviert ist
+    if not is_feature_enabled('job_board'):
+        flash('Jobbörse ist deaktiviert', 'error')
+        return redirect(url_for('main.index'))
+    
     try:
         # Filter aus Request
         filters = {}
@@ -140,6 +145,11 @@ def job_list():
 @mitarbeiter_required
 def create_job():
     """Job erstellen"""
+    # Prüfe ob Jobbörse aktiviert ist
+    if not is_feature_enabled('job_board'):
+        flash('Jobbörse ist deaktiviert', 'error')
+        return redirect(url_for('main.index'))
+    
     if request.method == 'POST':
         try:
             data = {
@@ -196,6 +206,11 @@ def create_job():
 @bp.route('/<job_id>')
 def job_detail(job_id):
     """Job-Details"""
+    # Prüfe ob Jobbörse aktiviert ist
+    if not is_feature_enabled('job_board'):
+        flash('Jobbörse ist deaktiviert', 'error')
+        return redirect(url_for('main.index'))
+    
     try:
         loggers['user_actions'].info(f"Job-Detail abgerufen für ID: {job_id}")
         job = JobService.get_job_by_id(job_id)
@@ -218,6 +233,10 @@ def job_detail(job_id):
 @mitarbeiter_required
 def edit_job(job_id):
     """Job bearbeiten"""
+    # Prüfe ob Jobbörse aktiviert ist
+    if not is_feature_enabled('job_board'):
+        flash('Jobbörse ist deaktiviert', 'error')
+        return redirect(url_for('main.index'))
     try:
         job = JobService.get_job_by_id(job_id)
         if not job:
@@ -270,6 +289,11 @@ def edit_job(job_id):
 @mitarbeiter_required
 def delete_job(job_id):
     """Job löschen"""
+    # Prüfe ob Jobbörse aktiviert ist
+    if not is_feature_enabled('job_board'):
+        flash('Jobbörse ist deaktiviert', 'error')
+        return redirect(url_for('main.index'))
+    
     try:
         success = JobService.delete_job(job_id, current_user)
         if success:

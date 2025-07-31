@@ -19,11 +19,11 @@ def index():
     # Prüfe ob Verbrauchsmaterial-Feature aktiviert ist
     if not is_feature_enabled('consumables'):
         flash('Verbrauchsmaterial-Verwaltung ist deaktiviert', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
     
     try:
         # Hole alle Verbrauchsmaterialien
-        consumables = list(mongodb.find('consumables', {}).sort('name', 1))
+        consumables = list(mongodb.find('consumables', {}, sort=[('name', 1)]))
         
         # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
@@ -36,7 +36,7 @@ def index():
     except Exception as e:
         logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}")
         flash('Fehler beim Laden der Verbrauchsmaterialien', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required

@@ -1527,11 +1527,42 @@ def manage_users():
     """Benutzerverwaltung"""
     try:
         users = AdminUserService.get_all_users()
-        return render_template('admin/users.html', users=users)
+        
+        # Prüfe auf abgelaufene Konten
+        today = datetime.now().date()
+        expired_users = []
+        
+        for user in users:
+            if user.get('expiry_date'):
+                # Verarbeite verschiedene Datumsformate
+                expiry_date = user['expiry_date']
+                if isinstance(expiry_date, str):
+                    try:
+                        expiry_date = datetime.strptime(expiry_date, '%Y-%m-%d').date()
+                    except ValueError:
+                        continue
+                elif isinstance(expiry_date, datetime):
+                    expiry_date = expiry_date.date()
+                
+                # Markiere als abgelaufen wenn das Datum überschritten ist
+                if expiry_date < today:
+                    user['is_expired'] = True
+                    expired_users.append(user)
+                else:
+                    user['is_expired'] = False
+            else:
+                user['is_expired'] = False
+        
+        # Warnung anzeigen wenn abgelaufene Konten existieren
+        if expired_users:
+            expired_count = len(expired_users)
+            flash(f'Warnung: {expired_count} Benutzerkonto(s) sind abgelaufen und sollten überprüft werden!', 'warning')
+        
+        return render_template('admin/users.html', users=users, expired_users=expired_users)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Benutzer: {e}")
         flash('Fehler beim Laden der Benutzer', 'error')
-        return render_template('admin/users.html', users=[])
+        return render_template('admin/users.html', users=[], expired_users=[])
 
 @bp.route('/add_user', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -1570,6 +1601,16 @@ def add_user():
         # Handlungsfelder aus Formular holen
         handlungsfelder = request.form.getlist('handlungsfelder')
         
+        # Ablaufdatum verarbeiten
+        expiry_date = None
+        expiry_date_str = request.form.get('expiry_date', '').strip()
+        if expiry_date_str:
+            try:
+                expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d')
+            except ValueError:
+                flash('Ungültiges Ablaufdatum-Format', 'error')
+                expiry_date = None
+        
         # Benutzer erstellen mit AdminUserService
         user_data = {
             'username': processed_data['username'],
@@ -1579,7 +1620,8 @@ def add_user():
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
             'is_active': request.form.get('is_active') == 'on',
-            'handlungsfelder': handlungsfelder
+            'handlungsfelder': handlungsfelder,
+            'expiry_date': expiry_date
         }
         
         # Passwort nur hinzufügen falls angegeben
@@ -1738,6 +1780,16 @@ def edit_user(user_id):
         # Handlungsfelder aus Formular holen
         handlungsfelder = request.form.getlist('handlungsfelder')
         
+        # Ablaufdatum verarbeiten
+        expiry_date = None
+        expiry_date_str = request.form.get('expiry_date', '').strip()
+        if expiry_date_str:
+            try:
+                expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d')
+            except ValueError:
+                flash('Ungültiges Ablaufdatum-Format', 'error')
+                expiry_date = None
+        
         # Benutzer aktualisieren mit AdminUserService
         user_data = {
             'username': processed_data['username'],
@@ -1747,7 +1799,8 @@ def edit_user(user_id):
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
             'is_active': request.form.get('is_active') == 'on',
-            'handlungsfelder': handlungsfelder
+            'handlungsfelder': handlungsfelder,
+            'expiry_date': expiry_date
         }
         
         # Passwort hinzufügen falls angegeben
@@ -2028,7 +2081,7 @@ def system():
 def get_software():
     """Gibt alle Software-Pakete zurück"""
     try:
-        software_list = mongodb.find('software', {}).sort('name', 1)
+        software_list = mongodb.find('software', {}, sort=[('name', 1)])
         return jsonify({
             'success': True,
             'software': list(software_list)
@@ -2124,7 +2177,7 @@ def delete_software(software_id):
 def get_user_groups_admin():
     """Gibt alle Nutzergruppen zurück"""
     try:
-        groups = mongodb.find('user_groups', {}).sort('name', 1)
+        groups = mongodb.find('user_groups', {}, sort=[('name', 1)])
         return jsonify({
             'success': True,
             'groups': list(groups)
@@ -2275,10 +2328,10 @@ def software_management():
             return redirect(url_for('admin.dashboard'))
         
         # Hole alle Software-Pakete
-        software_list = list(mongodb.find('software', {}).sort('name', 1))
+        software_list = list(mongodb.find('software', {}, sort=[('name', 1)]))
         
         # Hole alle Nutzergruppen
-        groups_list = list(mongodb.find('user_groups', {}).sort('name', 1))
+        groups_list = list(mongodb.find('user_groups', {}, sort=[('name', 1)]))
         
         return render_template('admin/software_management.html',
                              software_list=software_list,
@@ -2297,15 +2350,9 @@ def feature_settings():
         if request.method == 'POST':
             # Feature-Einstellungen verarbeiten
             features = {
-                'tools': request.form.get('feature_tools') == 'on',
-                'software_management': request.form.get('feature_software_management') == 'on',
-                'job_board': request.form.get('feature_job_board') == 'on',
-                'weekly_reports': request.form.get('feature_weekly_reports') == 'on',
                 'ticket_system': request.form.get('feature_ticket_system') == 'on',
-                'timesheet': request.form.get('feature_timesheet') == 'on',
-                'lending_system': request.form.get('feature_lending_system') == 'on',
-                'consumables': request.form.get('feature_consumables') == 'on',
-                'media_management': request.form.get('feature_media_management') == 'on'
+                'job_board': request.form.get('feature_job_board') == 'on',
+                'weekly_reports': request.form.get('feature_weekly_reports') == 'on'
             }
             
             # Einstellungen speichern

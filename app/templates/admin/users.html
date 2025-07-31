@@ -114,13 +114,19 @@
                     <th>Rolle</th>
                     <th>Email</th>
                     <th>Status</th>
+                    <th>Ablaufdatum</th>
                     <th>Aktionen</th>
                 </tr>
             </thead>
             <tbody>
                 {% for user in users %}
-                <tr class="hover">
-                    <td>{{ user.username }}</td>
+                <tr class="hover {% if user.get('is_expired') %}bg-error/10{% endif %}">
+                    <td>
+                        {% if user.get('is_expired') %}
+                            <i class="fas fa-exclamation-triangle text-error mr-1" title="Konto abgelaufen"></i>
+                        {% endif %}
+                        {{ user.username }}
+                    </td>
                     <td>
                         {% if user.role == 'admin' %}
                             <span class="badge badge-error">Admin</span>
@@ -134,10 +140,37 @@
                     </td>
                     <td>{{ user.email or '-' }}</td>
                     <td>
-                        {% if user.is_active %}
+                        {% if user.get('is_expired') %}
+                            <span class="badge badge-error">
+                                <i class="fas fa-clock mr-1"></i>Abgelaufen
+                            </span>
+                        {% elif user.is_active %}
                             <span class="badge badge-success">Aktiv</span>
                         {% else %}
                             <span class="badge badge-ghost">Inaktiv</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.expiry_date %}
+                            {% if user.get('is_expired') %}
+                                <span class="text-error font-bold">
+                                    {% if user.expiry_date.strftime %}
+                                        {{ user.expiry_date.strftime('%d.%m.%Y') }}
+                                    {% else %}
+                                        {{ user.expiry_date }}
+                                    {% endif %}
+                                </span>
+                            {% else %}
+                                <span class="text-warning">
+                                    {% if user.expiry_date.strftime %}
+                                        {{ user.expiry_date.strftime('%d.%m.%Y') }}
+                                    {% else %}
+                                        {{ user.expiry_date }}
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-base-content/60">-</span>
                         {% endif %}
                     </td>
 

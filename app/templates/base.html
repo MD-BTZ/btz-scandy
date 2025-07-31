@@ -201,8 +201,8 @@
             </a>
             {% endif %}
             
-            {# Ticketsystem für alle eingeloggten Benutzer #}
-            {% if current_user.is_authenticated %}
+            {# Ticketsystem für alle eingeloggten Benutzer - nur wenn Feature aktiviert #}
+            {% if current_user.is_authenticated and features_enabled.get('ticket_system', True) %}
             <a href="{{ url_for('tickets.create') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'tickets.create' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
@@ -215,8 +215,8 @@
             </a>
             {% endif %}
 
-            {# Wochenplan-Link für alle authentifizierten Benutzer (Mitarbeiter, Admins, Anwender und Teilnehmer) #}
-            {% if current_user.is_authenticated and current_user.timesheet_enabled %}
+            {# Wochenplan-Link für alle authentifizierten Benutzer - nur wenn Feature aktiviert #}
+            {% if current_user.is_authenticated and current_user.timesheet_enabled and features_enabled.get('weekly_reports', False) %}
             <a href="{{ url_for('workers.timesheet_list') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint.startswith('workers.timesheet') %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0 relative">
@@ -229,8 +229,8 @@
             </a>
             {% endif %}
             
-            {# Auftragserstellung - für alle Benutzer #}
-            {% if current_user.is_authenticated %}
+            {# Auftragserstellung - für alle Benutzer - nur wenn Ticketsystem aktiviert #}
+            {% if current_user.is_authenticated and features_enabled.get('ticket_system', True) %}
             <a href="{{ url_for('tickets.public_create_order') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'tickets.public_create_order' %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -240,8 +240,8 @@
             </a>
             {% endif %}
             
-            {# Jobbörse - für alle authentifizierten Benutzer #}
-            {% if current_user.is_authenticated %}
+            {# Jobbörse - für alle authentifizierten Benutzer - nur wenn Feature aktiviert #}
+            {% if current_user.is_authenticated and features_enabled.get('job_board', False) %}
             <a href="{{ url_for('jobs.job_list') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'jobs' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">

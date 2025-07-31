@@ -25,7 +25,7 @@ def get_software_presets():
     """Holt die Software-Pakete aus der Datenbank"""
     from app.models.mongodb_database import mongodb
     try:
-        software_list = list(mongodb.find('software', {}).sort('name', 1))
+        software_list = list(mongodb.find('software', {}, sort=[('name', 1)]))
         return software_list
     except:
         return []
@@ -34,7 +34,7 @@ def get_user_groups():
     """Holt die Nutzergruppen aus der Datenbank"""
     from app.models.mongodb_database import mongodb
     try:
-        groups_list = list(mongodb.find('user_groups', {}).sort('name', 1))
+        groups_list = list(mongodb.find('user_groups', {}, sort=[('name', 1)]))
         return groups_list
     except:
         return []
@@ -46,11 +46,11 @@ def index():
     # Prüfe ob Werkzeuge-Feature aktiviert ist
     if not is_feature_enabled('tools'):
         flash('Werkzeuge-Verwaltung ist deaktiviert', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
     
     try:
         # Hole alle Werkzeuge
-        tools = list(mongodb.find('tools', {}).sort('name', 1))
+        tools = list(mongodb.find('tools', {}, sort=[('name', 1)]))
         
         # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
@@ -63,7 +63,7 @@ def index():
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
         flash('Fehler beim Laden der Werkzeuge', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -73,7 +73,7 @@ def add():
     # Prüfe ob Werkzeuge-Feature aktiviert ist
     if not is_feature_enabled('tools'):
         flash('Werkzeuge-Verwaltung ist deaktiviert', 'error')
-        return redirect(url_for('index.index'))
+        return redirect(url_for('main.index'))
     
     if request.method == 'POST':
         try:

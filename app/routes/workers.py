@@ -727,6 +727,11 @@ def migrate_timesheet_dates():
 @login_required
 def timesheet_list():
     """Zeigt die Wochenberichte für den aktuellen Benutzer an (für alle Rollen mit timesheet_enabled)"""
+    # Prüfe ob Wochenberichte global aktiviert sind
+    if not is_feature_enabled('weekly_reports'):
+        flash('Das Wochenberichte-System ist deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
+    
     # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
@@ -909,6 +914,11 @@ def teilnehmer_timesheet_list():
 @bp.route('/timesheet/new', methods=['GET', 'POST'])
 @login_required
 def timesheet_create():
+    # Prüfe ob Wochenberichte global aktiviert sind
+    if not is_feature_enabled('weekly_reports'):
+        flash('Das Wochenberichte-System ist deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
+    
     # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
@@ -943,6 +953,11 @@ def timesheet_create():
 @bp.route('/timesheet/<string:ts_id>/edit', methods=['GET', 'POST'])
 @login_required
 def timesheet_edit(ts_id):
+    # Prüfe ob Wochenberichte global aktiviert sind
+    if not is_feature_enabled('weekly_reports'):
+        flash('Das Wochenberichte-System ist deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
+    
     # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')
@@ -1007,6 +1022,11 @@ def timesheet_edit(ts_id):
 @bp.route('/timesheet/<string:ts_id>/download')
 @login_required
 def timesheet_download(ts_id):
+    # Prüfe ob Wochenberichte global aktiviert sind
+    if not is_feature_enabled('weekly_reports'):
+        flash('Das Wochenberichte-System ist deaktiviert.', 'error')
+        return redirect(url_for('main.index'))
+    
     # Prüfe ob Wochenbericht-Feature für den Benutzer aktiviert ist
     if not current_user.timesheet_enabled:
         flash('Das Wochenbericht-Feature ist für Ihren Account deaktiviert.', 'error')

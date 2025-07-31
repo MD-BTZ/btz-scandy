@@ -23,7 +23,7 @@ def log_request_info():
 def get_workers():
     """Gibt alle aktiven Mitarbeiter zurück"""
     try:
-        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}).sort([('lastname', 1), ('firstname', 1)]))
+        workers = list(mongodb.find('workers', {'deleted': {'$ne': True}}, sort=[('lastname', 1), ('firstname', 1)]))
         return jsonify({
             'success': True,
             'workers': workers
@@ -333,7 +333,7 @@ def get_consumable_forecast(barcode):
 def get_notices():
     """Gibt alle aktiven Hinweise zurück"""
     try:
-        notices = list(mongodb.find('homepage_notices', {'is_active': True}).sort([('priority', -1), ('created_at', -1)]))
+        notices = list(mongodb.find('homepage_notices', {'is_active': True}, sort=[('priority', -1), ('created_at', -1)]))
         return jsonify({'success': True, 'notices': notices})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

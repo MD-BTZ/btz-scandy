@@ -103,7 +103,7 @@
                         <label class="label cursor-pointer">
                             <span class="label-text">Wochenplan aktivieren</span>
                             <input type="checkbox" name="timesheet_enabled" class="checkbox checkbox-primary" 
-                                   {% if request.form.timesheet_enabled or (user.timesheet_enabled if user) %}checked{% endif %} />
+                                   {% if (request.form and request.form.timesheet_enabled == 'on') or (not request.form and user and user.timesheet_enabled) %}checked{% endif %} />
                         </label>
                     </div>
                     
@@ -111,10 +111,26 @@
                         <label class="label cursor-pointer">
                             <span class="label-text">Benutzerkonto aktiv</span>
                             <input type="checkbox" name="is_active" class="checkbox checkbox-primary" 
-                                   {% if request.form.is_active is not none %}{% if request.form.is_active %}checked{% endif %}{% elif user and user.is_active %}checked{% else %}checked{% endif %} />
+                                   {% if (request.form and request.form.is_active == 'on') or (not request.form and user and user.is_active) or (not request.form and not user) %}checked{% endif %} />
                         </label>
                         <label class="label">
                             <span class="label-text-alt text-info">Inaktive Benutzer können sich nicht anmelden.</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Ablaufdatum -->
+                    <div class="form-control mt-4">
+                        <label class="label" for="expiry_date">
+                            <span class="label-text">Konto läuft ab am (optional)</span>
+                        </label>
+                        <input type="date" id="expiry_date" name="expiry_date" 
+                               value="{{ request.form.expiry_date or (user.expiry_date.strftime('%Y-%m-%d') if user and user.expiry_date) or '' }}" 
+                               class="input input-bordered w-full" />
+                        <label class="label">
+                            <span class="label-text-alt text-warning">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                Nach diesem Datum wird das Konto als abgelaufen markiert und eine Warnung angezeigt.
+                            </span>
                         </label>
                     </div>
                 </div>

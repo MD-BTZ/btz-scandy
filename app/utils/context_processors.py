@@ -170,6 +170,25 @@ def inject_unfilled_timesheet_days():
         logger.error(f"Fehler beim Berechnen der fehlenden Wochenberichte: {str(e)}")
         return {'unfilled_timesheet_days': 0}
 
+def inject_feature_settings():
+    """Injiziert Feature-Einstellungen in alle Templates für Menü-Kontrolle"""
+    try:
+        from app.models.mongodb_database import get_feature_settings
+        feature_settings = get_feature_settings()
+        return {'features_enabled': feature_settings}
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Feature-Einstellungen für Templates: {str(e)}")
+        return {
+            'features_enabled': {
+                'tools': True,
+                'consumables': True,
+                'lending_system': True,
+                'ticket_system': True,
+                'job_board': False,
+                'weekly_reports': False
+            }
+        }
+
 def register_context_processors(app):
     """Registriert alle Context Processors"""
     app.context_processor(inject_colors)
@@ -177,3 +196,4 @@ def register_context_processors(app):
     app.context_processor(inject_version)
     app.context_processor(inject_app_labels)
     app.context_processor(inject_unfilled_timesheet_days)
+    app.context_processor(inject_feature_settings)
