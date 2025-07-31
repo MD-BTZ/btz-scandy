@@ -44,6 +44,7 @@ def index():
                                worker_stats={'total': 0, 'by_department': []},
                                ticket_stats={'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0},
                                duplicate_barcodes=[],
+                               overdue_loans=[],
                                notices=[])
         
         # Verwende den zentralen Statistics Service
@@ -55,6 +56,7 @@ def index():
             worker_stats = stats['worker_stats']
             ticket_stats = stats['ticket_stats']
             duplicate_barcodes = stats['duplicate_barcodes']
+            overdue_loans = stats['overdue_loans']
             notices = StatisticsService.get_notices()
         except Exception as e:
             current_app.logger.error(f"Fehler beim Laden der Statistiken: {str(e)}")
@@ -65,6 +67,7 @@ def index():
             worker_stats = {'total': 0, 'by_department': []}
             ticket_stats = {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0}
             duplicate_barcodes = []
+            overdue_loans = []
             notices = []
         
         # Wähle das Template basierend auf der Benutzerrolle
@@ -81,6 +84,7 @@ def index():
                            worker_stats=worker_stats,
                            ticket_stats=ticket_stats,
                            duplicate_barcodes=duplicate_barcodes,
+                           overdue_loans=overdue_loans,
                            notices=notices)
         
     except Exception as e:
@@ -93,6 +97,7 @@ def index():
                            worker_stats={'total': 0, 'by_department': []},
                            ticket_stats={'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0},
                            duplicate_barcodes=[],
+                           overdue_loans=[],
                            notices=[])
 
 @bp.route('/emergency-admin')

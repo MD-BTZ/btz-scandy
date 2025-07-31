@@ -31,6 +31,7 @@
     <option value="">Alle Status</option>
     <option value="verfügbar">Verfügbar</option>
     <option value="ausgeliehen">Ausgeliehen</option>
+    <option value="überfällig">Überfällig</option>
     <option value="defekt">Defekt</option>
 </select>
 {% endblock %}
@@ -42,6 +43,8 @@
 <th>Kategorie</th>
 <th>Standort</th>
 <th>Status</th>
+<th>Ausgeliehen seit</th>
+<th>Ausgeliehen bis</th>
 <th class="text-right">Aktionen</th>
 {% endblock %}
 
@@ -87,6 +90,11 @@
                 <i class="fas fa-tools"></i>
                 Ausgeliehen
             </div>
+        {% elif tool.status == 'überfällig' %}
+            <div class="badge badge-error gap-1">
+                <i class="fas fa-exclamation-triangle"></i>
+                Überfällig
+            </div>
         {% elif tool.status == 'defekt' %}
             <div class="badge badge-error gap-1">
                 <i class="fas fa-wrench"></i>
@@ -94,6 +102,28 @@
             </div>
         {% else %}
             <div class="badge badge-ghost gap-1">{{ tool.status|capitalize }}</div>
+        {% endif %}
+    </td>
+    <td>
+        {% if tool.lent_at and (tool.status == 'ausgeliehen' or tool.status == 'überfällig') %}
+            <span class="text-sm">{{ tool.lent_at | datetime if tool.lent_at else '-' }}</span>
+            {% if tool.lent_to_worker_name %}
+                <div class="text-xs text-base-content/60">an {{ tool.lent_to_worker_name }}</div>
+            {% endif %}
+        {% else %}
+            <span class="text-base-content/40">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if tool.expected_return_date and (tool.status == 'ausgeliehen' or tool.status == 'überfällig') %}
+            <span class="text-sm {% if tool.status == 'überfällig' %}text-error font-bold{% else %}text-warning{% endif %}">
+                {{ tool.expected_return_date | datetime if tool.expected_return_date else 'Nicht festgelegt' }}
+            </span>
+            {% if tool.status == 'überfällig' %}
+                <div class="text-xs text-error">(Überfällig)</div>
+            {% endif %}
+        {% else %}
+            <span class="text-base-content/40">-</span>
         {% endif %}
     </td>
     <td class="text-right">

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker
 from app.models.mongodb_database import mongodb
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.utils.decorators import not_teilnehmer_required
 from app.services.lending_service import LendingService
 import logging
@@ -28,6 +28,7 @@ def process():
         item_barcode = data.get('item_barcode')
         worker_barcode = data.get('worker_barcode')
         action = data.get('action')
+        expected_return_date = data.get('expected_return_date')
         
         if not all([item_barcode, worker_barcode, action]):
             return jsonify({'error': 'Fehlende Parameter'}), 400
@@ -72,6 +73,17 @@ def process():
                     'worker_barcode': worker_barcode,
                     'lent_at': datetime.now()
                 }
+                
+                # Expected Return Date hinzufügen falls vorhanden
+                if expected_return_date:
+                    try:
+                        # Parse das Datum vom Frontend (YYYY-MM-DD)
+                        return_date = datetime.strptime(expected_return_date, '%Y-%m-%d')
+                        lending_data['expected_return_date'] = return_date
+                    except ValueError:
+                        logger.warning(f"Ungültiges Rückgabedatum-Format: {expected_return_date}")
+                        # Standard: 2 Wochen falls Parsing fehlschlägt
+                        lending_data['expected_return_date'] = datetime.now() + timedelta(days=14)
                 mongodb.insert_one('lendings', lending_data)
                 
                 # Status des Werkzeugs aktualisieren

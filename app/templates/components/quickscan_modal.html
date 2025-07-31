@@ -57,6 +57,29 @@
     </div>
 </dialog>
 
+<!-- Return Date Modal -->
+<dialog id="returnDateModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Rückgabedatum festlegen</h3>
+        <div class="space-y-4">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Voraussichtliche Rückgabe</span>
+                </label>
+                <input type="date" id="returnDateInput" class="input input-bordered" style="height: 3rem; line-height: 1.5; padding: 0.5rem 1rem;">
+            </div>
+            <div class="text-sm text-base-content/60 mt-2">
+                <i class="fas fa-info-circle mr-1"></i>
+                Standard: 2 Wochen ab heute. Sie können das Datum anpassen.
+            </div>
+            <div class="flex justify-end space-x-4">
+                <button type="button" onclick="QuickScan.closeReturnDateModal()" class="btn btn-ghost">Abbrechen</button>
+                <button type="button" onclick="QuickScan.confirmReturnDate()" class="btn btn-primary">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</dialog>
+
 <!-- JsBarcode Library -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
@@ -140,4 +163,6 @@
             e.target.value = '';
         }
     });
+
+
 </script> 

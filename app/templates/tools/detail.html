@@ -148,13 +148,13 @@
                     {% if tool.additional_software %}
                     <div class="mt-4">
                         <label class="label">
-                            <span class="label-text font-semibold">Zusätzliche Software</span>
+                            <span class="label-text font-semibold">Installierte Software</span>
                         </label>
                         <div class="flex flex-wrap gap-2">
                             {% for software_id in tool.additional_software %}
                                 {% set software = software_presets|selectattr("_id", "equalto", software_id)|first %}
                                 {% if software %}
-                                <span class="badge badge-outline">{{ software.name }}</span>
+                                <span class="badge badge-primary">{{ software.name }}</span>
                                 {% else %}
                                 <span class="badge badge-outline">{{ software_id }}</span>
                                 {% endif %}
@@ -177,10 +177,11 @@
                         <table class="table table-zebra w-full">
                             <thead>
                                 <tr>
-                                    <th>Datum</th>
+                                    <th>Ausgeliehen</th>
                                     <th>Mitarbeiter</th>
                                     <th>Status</th>
-                                    <th>Rückgabe</th>
+                                    <th>Geplante Rückgabe</th>
+                                    <th>Tatsächliche Rückgabe</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -196,6 +197,18 @@
                                         <span class="badge {% if lending.returned_at %}badge-success{% else %}badge-warning{% endif %}">
                                             {{ lending.status }}
                                         </span>
+                                    </td>
+                                    <td>
+                                        {% if lending.expected_return_date %}
+                                            <span class="{% if not lending.returned_at and lending.expected_return_date.date() < now().date() %}text-error font-bold{% else %}text-warning{% endif %}">
+                                                {{ lending.expected_return_date | datetime }}
+                                                {% if not lending.returned_at and lending.expected_return_date.date() < now().date() %}
+                                                    <span class="text-xs">(Überfällig)</span>
+                                                {% endif %}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-base-content/40">Nicht festgelegt</span>
+                                        {% endif %}
                                     </td>
                                     <td>{{ lending.returned_at | datetime if lending.returned_at else '-' }}</td>
                                 </tr>
@@ -229,9 +242,19 @@
                                     <i class="fas fa-check"></i>
                                     Verfügbar
                                 </div>
-                            {% else %}
+                            {% elif tool.status == 'überfällig' %}
                                 <div class="badge badge-error gap-2">
-                                    <i class="fas fa-times"></i>
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    Überfällig
+                                </div>
+                            {% elif tool.status == 'defekt' %}
+                                <div class="badge badge-error gap-2">
+                                    <i class="fas fa-wrench"></i>
+                                    Defekt
+                                </div>
+                            {% else %}
+                                <div class="badge badge-warning gap-2">
+                                    <i class="fas fa-tools"></i>
                                     Ausgeliehen
                                 </div>
                             {% endif %}
@@ -253,6 +276,20 @@
                             </label>
                             <p>{{ tool.lent_at | datetime if tool.lent_at else 'Unbekannt' }}</p>
                         </div>
+                        
+                        {% if tool.expected_return_date %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Bis</span>
+                            </label>
+                            <p class="{% if tool.expected_return_date and tool.expected_return_date.date() < now().date() %}text-error font-bold{% else %}text-warning{% endif %}">
+                                {{ tool.expected_return_date | datetime if tool.expected_return_date else 'Nicht festgelegt' }}
+                                {% if tool.expected_return_date and tool.expected_return_date.date() < now().date() %}
+                                    <span class="ml-2 text-xs">(Überfällig)</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
                         {% endif %}
                     </div>
                 </div>
@@ -289,22 +326,14 @@
                     
                     <div class="space-y-2">
                         {% if tool.is_available %}
-                            <button onclick="lendTool()" class="btn btn-primary w-full">
-                                <i class="fas fa-hand-holding mr-2"></i>Ausleihen
+                            <button onclick="returnTool()" class="btn btn-success w-full" disabled>
+                                <i class="fas fa-hand-holding mr-2"></i>QuickScan verwenden
                             </button>
                         {% else %}
-                            <button onclick="returnTool()" class="btn btn-success w-full">
-                                <i class="fas fa-undo mr-2"></i>Zurückgeben
+                            <button onclick="returnTool()" class="btn btn-success w-full" disabled>
+                                <i class="fas fa-undo mr-2"></i>QuickScan verwenden
                             </button>
                         {% endif %}
-                        
-                        <button onclick="editTool()" class="btn btn-outline w-full">
-                            <i class="fas fa-edit mr-2"></i>Bearbeiten
-                        </button>
-                        
-                        <button onclick="showUpdateBarcodeModal()" class="btn btn-outline w-full">
-                            <i class="fas fa-barcode mr-2"></i>Barcode ändern
-                        </button>
                     </div>
                 </div>
             </div>
@@ -455,7 +484,7 @@
                 
                 <div class="form-control">
                     <label class="label">
-                        <span class="label-text">Zusätzliche Software</span>
+                        <span class="label-text">Installierte Software</span>
                     </label>
                     <div class="space-y-2 max-h-40 overflow-y-auto border border-base-300 rounded-lg p-3">
                         {% for software in software_presets %}
@@ -468,10 +497,14 @@
                             {% endif %}
                         </label>
                         {% endfor %}
-                        <div class="mt-2">
-                            <input type="text" name="custom_software" class="input input-bordered input-sm w-full" 
-                                   placeholder="Weitere Software hinzufügen..." maxlength="200">
-                        </div>
+                        {% if not software_presets %}
+                        <p class="text-sm text-base-content/60 text-center py-2">
+                            Keine Software verfügbar.<br>
+                            <a href="{{ url_for('admin.software_management') }}" class="link link-primary">
+                                → Software-Verwaltung öffnen
+                            </a>
+                        </p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -1359,5 +1392,113 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// Edit-Modal öffnen und Software aus Nutzergruppen automatisch markieren
+function editTool() {
+    // Software-IDs aus Nutzergruppen sammeln
+    const userGroupSoftware = new Set();
+    
+    // Gehe durch alle ausgewählten Nutzergruppen
+    const selectedUserGroups = {{ tool.user_groups | default([]) | tojson }};
+    const userGroupsData = {{ user_groups | tojson }};
+    
+    selectedUserGroups.forEach(groupId => {
+        const group = userGroupsData.find(g => g._id === groupId);
+        if (group && group.software) {
+            group.software.forEach(softwareId => {
+                userGroupSoftware.add(softwareId);
+            });
+        }
+    });
+    
+    // Bereits ausgewählte Software aus dem Tool
+    const toolSoftware = {{ tool.additional_software | default([]) | tojson }};
+    toolSoftware.forEach(softwareId => {
+        userGroupSoftware.add(softwareId);
+    });
+    
+    // Modal öffnen
+    document.getElementById('editModal').showModal();
+    
+    // Nach dem Öffnen: Software-Checkboxen entsprechend markieren
+    setTimeout(() => {
+        const softwareCheckboxes = document.querySelectorAll('input[name="additional_software"]');
+        softwareCheckboxes.forEach(checkbox => {
+            if (userGroupSoftware.has(checkbox.value)) {
+                checkbox.checked = true;
+            }
+        });
+    }, 100);
+}
+
+// Modal schließen
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+// Barcode-Update Modal öffnen
+function showUpdateBarcodeModal() {
+    document.getElementById('oldBarcode').value = '{{ tool.barcode }}';
+    document.getElementById('newBarcode').value = '';
+    document.getElementById('updateBarcodeModal').showModal();
+}
+
+// Barcode aktualisieren
+function updateBarcode(event) {
+    event.preventDefault();
+    
+    const oldBarcode = document.getElementById('oldBarcode').value;
+    const newBarcode = document.getElementById('newBarcode').value;
+    
+    if (!newBarcode.trim()) {
+        showToast('error', 'Bitte geben Sie einen neuen Barcode ein');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('new_barcode', newBarcode);
+    
+    fetch(`/tools/${oldBarcode}/update_barcode`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            document.getElementById('updateBarcodeModal').close();
+            setTimeout(() => {
+                window.location.href = data.redirect;
+            }, 1000);
+        } else {
+            showToast('error', data.message || 'Fehler beim Aktualisieren des Barcodes');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Ein Fehler ist aufgetreten');
+    });
+}
+
+// Einfache Toast-Funktion (fallback)
+function showToast(type, message) {
+    // Versuche zuerst die globale Toast-Funktion, falls vorhanden
+    if (window.toast && typeof window.toast.show === 'function') {
+        window.toast.show(message, type);
+        return;
+    }
+    
+    // Fallback: einfaches Alert für wichtige Nachrichten
+    if (type === 'error') {
+        alert('Fehler: ' + message);
+    } else if (type === 'success') {
+        alert('Erfolg: ' + message);
+    } else {
+        alert(message);
+    }
+}
 </script>
 {% endblock %} 

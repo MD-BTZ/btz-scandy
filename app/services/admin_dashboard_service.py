@@ -212,6 +212,16 @@ class AdminDashboardService:
             logger.error(f"Fehler beim Laden der Materialnutzung: {str(e)}")
             return {'usage_data': [], 'period_days': 30}
 
+    @staticmethod  
+    def get_overdue_loans() -> List[Dict[str, Any]]:
+        """Findet alle überfälligen Ausleihen für das Admin-Dashboard"""
+        try:
+            from app.services.statistics_service import StatisticsService
+            return StatisticsService._get_overdue_loans()
+        except Exception as e:
+            logger.error(f"Fehler beim Laden überfälliger Ausleihen: {str(e)}")
+            return []
+
     @staticmethod
     def get_warnings() -> Dict[str, List[Dict[str, Any]]]:
         """Hole alle Warnungen für das Dashboard"""
@@ -241,21 +251,44 @@ class AdminDashboardService:
             except Exception as e:
                 logger.error(f"Fehler beim Laden defekter Tools: {e}")
             
-            # Überfällige Ausleihen
+            # Überfällige Ausleihen - nutze die neue Logik basierend auf expected_return_date
             try:
-                # Hole alle nicht zurückgegebenen Ausleihen
-                active_lendings = list(mongodb.find('lendings', {'returned_at': {'$exists': False}}))
+                overdue_loans = AdminDashboardService.get_overdue_loans()
+                
+                for loan in overdue_loans:
+                    try:
+                        warnings['overdue_lendings'].append({
+                            'tool_name': loan.get('tool_name', 'Unbekanntes Tool'),
+                            'tool_barcode': loan.get('tool_barcode', ''),
+                            'worker_name': loan.get('worker_name', 'Unbekannt'), 
+                            'worker_barcode': loan.get('worker_barcode', ''),
+                            'days_overdue': loan.get('days_overdue', 0),
+                            'expected_return_date': loan.get('expected_return_date'),
+                            'severity': 'error' if loan.get('days_overdue', 0) > 7 else 'warning'
+                        })
+                    except Exception as e:
+                        logger.warning(f"Fehler bei überfälliger Ausleihe: {e}")
+                        continue
+            except Exception as e:
+                logger.error(f"Fehler beim Laden überfälliger Ausleihen: {e}")
+
+            # Legacy-Fallback für alte Ausleihen ohne expected_return_date
+            try:
+                active_lendings = list(mongodb.find('lendings', {
+                    'returned_at': {'$exists': False},
+                    'expected_return_date': {'$exists': False}
+                }))
                 
                 for lending in active_lendings:
                     try:
                         # Sichere Dokumentverarbeitung
                         lending = AdminDashboardService._safe_document_processing(lending, ['lent_at', 'due_date'])
                         
-                        # Prüfe ob überfällig (mehr als 7 Tage)
+                        # Prüfe ob überfällig (mehr als 14 Tage ohne expected_return_date)
                         lent_at = lending.get('lent_at')
                         if lent_at and isinstance(lent_at, datetime):
                             days_overdue = (datetime.now() - lent_at).days
-                            if days_overdue > 7:
+                            if days_overdue > 14:
                                 tool = mongodb.find_one('tools', {'barcode': lending.get('tool_barcode', '')})
                                 worker = mongodb.find_one('workers', {'barcode': lending.get('worker_barcode', '')})
                                 

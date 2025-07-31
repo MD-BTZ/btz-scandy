@@ -38,6 +38,7 @@ from app.services.admin_notification_service import AdminNotificationService
 from app.services.admin_ticket_service import AdminTicketService
 from app.services.admin_debug_service import AdminDebugService
 from app.services.admin_system_settings_service import AdminSystemSettingsService
+from app.services.excel_export_service import ExcelExportService
 
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
@@ -2297,9 +2298,9 @@ def edit_user_group(group_id):
             'updated_at': datetime.now()
         }
         
-        result = mongodb.update_one('user_groups', {'_id': ObjectId(group_id)}, {'$set': update_data})
+        success = mongodb.update_one('user_groups', {'_id': ObjectId(group_id)}, {'$set': update_data})
         
-        if result.modified_count > 0:
+        if success:
             return jsonify({
                 'success': True,
                 'message': f'Nutzergruppe "{name}" erfolgreich aktualisiert'
@@ -2307,7 +2308,7 @@ def edit_user_group(group_id):
         else:
             return jsonify({
                 'success': False,
-                'message': 'Nutzergruppe nicht gefunden'
+                'message': 'Nutzergruppe nicht gefunden oder keine Änderungen'
             })
             
     except Exception as e:
@@ -4876,6 +4877,35 @@ def fix_lending_inconsistencies():
             'success': False,
             'message': f'Fehler beim Beheben der Inkonsistenzen: {str(e)}'
         }), 500
+
+@bp.route('/export_excel_detailed')
+@admin_required
+def export_excel_detailed():
+    """Exportiert alle Scandy-Daten in eine detaillierte Excel-Datei"""
+    try:
+        logger.info(f"Detaillierter Excel-Export gestartet von Benutzer: {current_user.username}")
+        
+        # Erstelle Excel-Export
+        export_service = ExcelExportService()
+        excel_file = export_service.generate_complete_export()
+        
+        # Generiere Dateinamen mit Zeitstempel
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'scandy_detailliert_{timestamp}.xlsx'
+        
+        logger.info(f"Detaillierter Excel-Export erfolgreich erstellt: {filename}")
+        
+        return send_file(
+            excel_file,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        logger.error(f"Fehler beim detaillierten Excel-Export: {str(e)}", exc_info=True)
+        flash('Fehler beim Generieren des detaillierten Excel-Exports', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/debug/validate-lending-consistency', methods=['GET'])
 @admin_required

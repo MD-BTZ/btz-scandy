@@ -25,10 +25,17 @@
                         <div class="stat-title">Ausgeliehen</div>
                         <div class="stat-value text-warning">{{ tool_stats.lent }}</div>
                     </div>
+                    {% if overdue_loans %}
+                    <div class="stat">
+                        <div class="stat-title">Überfällig</div>
+                        <div class="stat-value text-error">{{ overdue_loans|length }}</div>
+                    </div>
+                    {% else %}
                     <div class="stat">
                         <div class="stat-title">Defekt</div>
                         <div class="stat-value text-error">{{ tool_stats.defect }}</div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -148,6 +155,34 @@
     <div class="alert alert-warning">
         <i class="fas fa-exclamation-triangle"></i>
         <span>Warnung: {{ duplicate_barcodes|length }} doppelte Barcodes gefunden. Bitte überprüfen Sie die Daten.</span>
+    </div>
+    {% endif %}
+
+    <!-- Überfällige Ausleihen Warnung -->
+    {% if overdue_loans %}
+    <div class="alert alert-error">
+        <i class="fas fa-clock"></i>
+        <div class="flex-1">
+            <h3 class="font-bold">{{ overdue_loans|length }} überfällige Ausleihe{{ "n" if overdue_loans|length != 1 else "" }} gefunden!</h3>
+            <div class="text-sm mt-2">
+                {% for loan in overdue_loans[:3] %}
+                <div class="mb-1">
+                    <strong>{{ loan.tool_name }}</strong> an {{ loan.worker_name }} 
+                    ({{ loan.days_overdue }} Tag{{ "e" if loan.days_overdue != 1 else "" }} überfällig)
+                </div>
+                {% endfor %}
+                {% if overdue_loans|length > 3 %}
+                <div class="mt-2 text-xs opacity-80">
+                    ... und {{ overdue_loans|length - 3 }} weitere
+                </div>
+                {% endif %}
+            </div>
+            <div class="mt-3">
+                <a href="{{ url_for('tools.index') }}?statusFilter=überfällig" class="btn btn-sm btn-error">
+                    <i class="fas fa-list mr-2"></i>Alle überfälligen anzeigen
+                </a>
+            </div>
+        </div>
     </div>
     {% endif %}
 

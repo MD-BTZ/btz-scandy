@@ -52,6 +52,51 @@ def index():
         # Hole alle Werkzeuge
         tools = list(mongodb.find('tools', {}, sort=[('name', 1)]))
         
+        # Erweitere Tools um Ausleihe-Informationen
+        for tool in tools:
+            # Prüfe aktuelle Ausleihe für jedes Tool
+            current_lending = mongodb.find_one('lendings', {
+                'tool_barcode': tool.get('barcode'),
+                'returned_at': None
+            })
+            
+            if current_lending:
+                # Hole Mitarbeiter-Info
+                worker = mongodb.find_one('workers', {
+                    'barcode': current_lending.get('worker_barcode'),
+                    'deleted': {'$ne': True}
+                })
+                
+                tool['is_available'] = False
+                tool['lent_to_worker_name'] = f"{worker['firstname']} {worker['lastname']}" if worker else 'Unbekannt'
+                tool['lent_at'] = current_lending.get('lent_at')
+                tool['expected_return_date'] = current_lending.get('expected_return_date')
+                
+                # Prüfe ob das Werkzeug überfällig ist
+                if current_lending.get('expected_return_date'):
+                    expected_date = current_lending['expected_return_date']
+                    # Konvertiere String zu datetime falls nötig
+                    if isinstance(expected_date, str):
+                        try:
+                            expected_date = datetime.strptime(expected_date, '%Y-%m-%d')
+                        except ValueError:
+                            expected_date = None
+                    
+                    # Prüfe ob überfällig
+                    if expected_date and expected_date.date() < datetime.now().date():
+                        tool['status'] = 'überfällig'
+                    else:
+                        tool['status'] = 'ausgeliehen'
+                else:
+                    tool['status'] = 'ausgeliehen'
+            else:
+                tool['is_available'] = True
+                tool['lent_to_worker_name'] = None
+                tool['lent_at'] = None
+                tool['expected_return_date'] = None
+                if not tool.get('status'):
+                    tool['status'] = 'verfügbar'
+        
         # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
@@ -59,7 +104,8 @@ def index():
         return render_template('tools/index.html',
                              tools=tools,
                              categories=categories,
-                             locations=locations)
+                             locations=locations,
+                             now=datetime.now)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
         flash('Fehler beim Laden der Werkzeuge', 'error')
@@ -165,7 +211,8 @@ def detail(barcode):
                              locations=locations,
                              software_presets=software_presets,
                              user_groups=user_groups,
-                             lending_history=tool.get('lending_history', []))
+                             lending_history=tool.get('lending_history', []),
+                             now=datetime.now)
                              
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeug-Details: {str(e)}", exc_info=True)
@@ -191,10 +238,7 @@ def edit(barcode):
             'additional_software': request.form.getlist('additional_software')
         }
         
-        # Custom Software hinzufügen
-        custom_software = request.form.get('custom_software', '').strip()
-        if custom_software:
-            tool_data['additional_software'].extend([s.strip() for s in custom_software.split(',') if s.strip()])
+
         
         # Custom Nutzergruppe hinzufügen
         custom_user_group = request.form.get('custom_user_group', '').strip()

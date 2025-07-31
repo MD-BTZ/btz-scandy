@@ -963,41 +963,25 @@ const QuickScan = {
         
         // Normale Logik für gescannte Items
         if (this.scannedItem && this.scannedWorker) {
-            try {
-                // Bestimme Aktion für Werkzeuge: 'lend' oder 'return'
-                let action = 'lend';
-                if (this.scannedItem.type !== 'consumable') {
-                    if (this.scannedItem.status === 'ausgeliehen') {
-                        action = 'return';
-                    }
-                } else {
-                    action = 'consume';
+            // Bestimme Aktion für Werkzeuge: 'lend' oder 'return'
+            let action = 'lend';
+            if (this.scannedItem.type !== 'consumable') {
+                if (this.scannedItem.status === 'ausgeliehen') {
+                    action = 'return';
                 }
-                const response = await fetch('/api/quickscan/process_lending', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        item_barcode: this.scannedItem.barcode,
-                        worker_barcode: this.scannedWorker.barcode,
-                        action: action,
-                        item_type: this.scannedItem.type,
-                        quantity: this.scannedItem.type === 'consumable' ? (this.currentProcess.quantity || 1) : 1
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showQuickScanToast('success', data.message || 'Vorgang erfolgreich!');
-                    const modal = document.getElementById('quickScanModal');
-                    if (modal) modal.close();
-                    this.reset();
-                } else {
-                    this.showError(data.message || 'Fehler bei der Verarbeitung');
-                }
-            } catch (error) {
-                this.showError('Fehler bei der Verarbeitung');
+            } else {
+                action = 'consume';
             }
+
+            // Prüfe ob es sich um eine neue Werkzeug-Ausleihe handelt
+            if (this.scannedItem.type !== 'consumable' && action === 'lend') {
+                // Öffne Return Date Modal für neue Werkzeug-Ausleihen
+                this.openReturnDateModal();
+                return;
+            }
+
+            // Für alle anderen Fälle: direkt ausführen
+            await this.executeAction(action);
         } else {
             showQuickScanToast('error', 'Bitte geben Sie einen Barcode ein oder scannen Sie Items');
         }
@@ -1034,6 +1018,87 @@ const QuickScan = {
         buttons.forEach(button => {
             button.disabled = false;
         });
+    },
+
+    // Return Date Modal Funktionen
+    openReturnDateModal() {
+        // Standard-Datum auf 2 Wochen in der Zukunft setzen
+        const today = new Date();
+        const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
+        const formattedDate = twoWeeksFromNow.toISOString().split('T')[0];
+        
+        document.getElementById('returnDateInput').value = formattedDate;
+        document.getElementById('returnDateModal').showModal();
+    },
+
+    closeReturnDateModal() {
+        document.getElementById('returnDateModal').close();
+    },
+
+    async confirmReturnDate() {
+        const returnDate = document.getElementById('returnDateInput').value;
+        if (!returnDate) {
+            showQuickScanToast('error', 'Bitte wählen Sie ein Rückgabedatum aus');
+            return;
+        }
+        
+        // Speichere das Rückgabedatum im currentProcess
+        this.currentProcess.returnDate = returnDate;
+        
+        // Schließe das Modal
+        this.closeReturnDateModal();
+        
+        // Führe die eigentliche Aktion aus
+        await this.executeAction('lend');
+    },
+
+    // Neue Funktion für die eigentliche Aktionsausführung
+    async executeAction(action) {
+        if (!this.scannedItem || !this.scannedWorker) {
+            showQuickScanToast('error', 'Bitte scannen Sie zuerst Werkzeug und Mitarbeiter');
+            return;
+        }
+
+        try {
+            // Daten für die API zusammenstellen
+            const requestData = {
+                item_barcode: this.scannedItem.barcode,
+                worker_barcode: this.scannedWorker.barcode,
+                action: action
+            };
+
+            // Return Date hinzufügen falls vorhanden
+            if (this.currentProcess.returnDate) {
+                requestData.expected_return_date = this.currentProcess.returnDate;
+            }
+
+            // Menge für Verbrauchsgüter hinzufügen
+            if (this.scannedItem.type === 'consumable') {
+                requestData.quantity = this.currentProcess.quantity || 1;
+            }
+
+            // API-Aufruf an den neuen Quick Scan Endpoint
+            const response = await fetch('/quick_scan/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            const data = await response.json();
+            
+            if (data.error) {
+                showQuickScanToast('error', data.error);
+            } else {
+                showQuickScanToast('success', data.message);
+                this.reset();
+                document.getElementById('quickScanModal').close();
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showQuickScanToast('error', 'Ein Fehler ist aufgetreten');
+        }
     }
 };
 

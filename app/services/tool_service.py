@@ -316,15 +316,40 @@ class ToolService:
                 tool['lent_to_worker_barcode'] = current_lending.get('worker_barcode')
                 tool['lent_to_worker_name'] = current_lending.get('worker_name', 'Unbekannt')
                 tool['lent_at'] = current_lending.get('lent_at')
+                tool['expected_return_date'] = current_lending.get('expected_return_date')
+                
+                # Prüfe ob das Werkzeug überfällig ist
+                if current_lending.get('expected_return_date'):
+                    expected_date = current_lending['expected_return_date']
+                    # Konvertiere String zu datetime falls nötig
+                    if isinstance(expected_date, str):
+                        try:
+                            expected_date = datetime.strptime(expected_date, '%Y-%m-%d')
+                        except ValueError:
+                            expected_date = None
+                    
+                    # Prüfe ob überfällig
+                    if expected_date and expected_date.date() < datetime.now().date():
+                        tool['status'] = 'überfällig'
+                    else:
+                        tool['status'] = 'ausgeliehen'
+                else:
+                    tool['status'] = 'ausgeliehen'
             else:
                 tool['is_available'] = True
                 tool['lent_to_worker_barcode'] = None
                 tool['lent_to_worker_name'] = None
                 tool['lent_at'] = None
+                tool['expected_return_date'] = None
+                if not tool.get('status'):
+                    tool['status'] = 'verfügbar'
             
             # Ausleihhistorie hinzufügen
             lending_history = self._get_lending_service().get_tool_lending_history(barcode)
             tool['lending_history'] = lending_history
+            
+            # Software aus Nutzergruppen automatisch hinzufügen
+            tool = self._merge_software_from_user_groups(tool)
             
             return tool
             
@@ -577,4 +602,53 @@ class ToolService:
             else:
                 # Feld ist None oder nicht vorhanden, setze auf None
                 tool[field] = None
-        return tool 
+        return tool
+    
+    def _merge_software_from_user_groups(self, tool: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Führt Software aus Nutzergruppen mit der bereits vorhandenen Software zusammen
+        
+        Args:
+            tool: Tool-Dictionary
+            
+        Returns:
+            Dict: Tool mit zusammengeführter Software
+        """
+        try:
+            # Bestehende additional_software holen
+            current_software = set(tool.get('additional_software', []))
+            
+            # User Groups des Tools holen
+            user_groups = tool.get('user_groups', [])
+            if not user_groups:
+                return tool
+            
+            # Software aus jeder Nutzergruppe sammeln
+            for group_id in user_groups:
+                try:
+                    # Nutzergruppe aus Datenbank laden - ObjectId konvertieren falls nötig
+                    from bson import ObjectId
+                    query_id = group_id
+                    if isinstance(group_id, str):
+                        try:
+                            query_id = ObjectId(group_id)
+                        except Exception:
+                            # Falls String keine gültige ObjectId ist, als String verwenden
+                            query_id = group_id
+                    
+                    group = mongodb.find_one('user_groups', {'_id': query_id})
+                    if group and group.get('software'):
+                        # Software der Gruppe hinzufügen
+                        for software_id in group['software']:
+                            current_software.add(software_id)
+                except Exception as e:
+                    logger.warning(f"Fehler beim Laden der Nutzergruppe {group_id}: {str(e)}")
+            
+            # Zurück zur Liste konvertieren und Tool aktualisieren
+            tool['additional_software'] = list(current_software)
+            
+            return tool
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Zusammenführen der Software aus Nutzergruppen: {str(e)}")
+            return tool 

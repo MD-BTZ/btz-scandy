@@ -32,13 +32,17 @@ class StatisticsService:
             # Bestandsprognose
             consumables_forecast = MongoDBTool.get_consumables_forecast()
             
+            # Überfällige Ausleihen
+            overdue_loans = StatisticsService._get_overdue_loans()
+            
             return {
                 'tool_stats': base_stats['tool_stats'],
                 'consumable_stats': base_stats['consumable_stats'],
                 'worker_stats': base_stats['worker_stats'],
                 'ticket_stats': ticket_stats,
                 'duplicate_barcodes': duplicate_barcodes,
-                'consumables_forecast': consumables_forecast
+                'consumables_forecast': consumables_forecast,
+                'overdue_loans': overdue_loans
             }
             
         except Exception as e:
@@ -84,6 +88,65 @@ class StatisticsService:
             return {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0}
     
     @staticmethod
+    def _get_overdue_loans() -> List[Dict[str, Any]]:
+        """Findet alle überfälligen Ausleihen"""
+        try:
+            today = datetime.now().date()
+            
+            # Finde alle aktiven Ausleihen mit Rückgabedatum
+            active_loans = list(mongodb.find('lendings', {
+                'returned_at': None,
+                'expected_return_date': {'$exists': True, '$ne': None}
+            }))
+            
+            overdue_loans = []
+            
+            for loan in active_loans:
+                expected_date = loan.get('expected_return_date')
+                if not expected_date:
+                    continue
+                
+                # Konvertiere String zu datetime falls nötig
+                if isinstance(expected_date, str):
+                    try:
+                        expected_date = datetime.strptime(expected_date, '%Y-%m-%d')
+                    except ValueError:
+                        continue
+                
+                # Prüfe ob überfällig
+                if expected_date.date() < today:
+                    # Hole Tool-Informationen
+                    tool = mongodb.find_one('tools', {'barcode': loan.get('tool_barcode')})
+                    
+                    # Hole Mitarbeiter-Informationen
+                    worker = mongodb.find_one('workers', {
+                        'barcode': loan.get('worker_barcode'),
+                        'deleted': {'$ne': True}
+                    })
+                    
+                    # Berechne Tage überfällig
+                    days_overdue = (today - expected_date.date()).days
+                    
+                    overdue_loans.append({
+                        'tool_name': tool.get('name') if tool else 'Unbekanntes Werkzeug',
+                        'tool_barcode': loan.get('tool_barcode'),
+                        'worker_name': f"{worker['firstname']} {worker['lastname']}" if worker else 'Unbekannt',
+                        'worker_barcode': loan.get('worker_barcode'),
+                        'expected_return_date': expected_date,
+                        'days_overdue': days_overdue,
+                        'lent_at': loan.get('lent_at')
+                    })
+            
+            # Sortiere nach Anzahl der überfälligen Tage (absteigend)
+            overdue_loans.sort(key=lambda x: x['days_overdue'], reverse=True)
+            
+            return overdue_loans
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Berechnen überfälliger Ausleihen: {str(e)}")
+            return []
+    
+    @staticmethod
     def _get_fallback_statistics() -> Dict[str, Any]:
         """Fallback-Statistiken bei Fehlern"""
         return {
@@ -92,7 +155,8 @@ class StatisticsService:
             'worker_stats': {'total': 0, 'by_department': []},
             'ticket_stats': {'total': 0, 'open': 0, 'in_progress': 0, 'closed': 0},
             'duplicate_barcodes': [],
-            'consumables_forecast': []
+            'consumables_forecast': [],
+            'overdue_loans': []
         }
     
     @staticmethod

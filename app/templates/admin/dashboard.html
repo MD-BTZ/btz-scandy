@@ -14,6 +14,21 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
+    <!-- Quick Actions -->
+    <div class="mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold">Admin Dashboard</h1>
+            <div class="flex gap-2">
+                <a href="{{ url_for('admin.export_all_data') }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-download mr-2"></i>Standard Export
+                </a>
+                <a href="{{ url_for('admin.export_excel_detailed') }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-file-excel mr-2"></i>Detaillierter Excel Export
+                </a>
+            </div>
+        </div>
+    </div>
+    
     <!-- Statistik-Karten: immer eigene Zeile -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
         <!-- {{ app_labels.tools.name }}-Statistiken -->
@@ -129,7 +144,7 @@
     </div>
 
     <!-- Warnungen und Hinweise: eigene Zeile -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
         <!-- {{ app_labels.tools.name }}-Warnungen -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
@@ -146,7 +161,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for tool in tool_warnings %}
+                            {% for tool in warnings.defect_tools %}
                             <tr>
                                 <td>{{ tool.name }}</td>
                                 <td>
@@ -182,18 +197,64 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for consumable in consumable_warnings %}
+                            {% for consumable in warnings.low_stock_consumables %}
                             <tr>
-                                <td>{{ consumable.message }}</td>
+                                <td>{{ consumable.name }}</td>
                                 <td>
-                                    <span class="badge badge-{{ consumable.type }}">
-                                        <i class="fas fa-{{ consumable.icon }}"></i>
+                                    <span class="badge badge-{{ consumable.severity }}">
+                                        {{ consumable.status }}
                                     </span>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
                                 <td colspan="2" class="text-center">Keine Warnungen</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Überfällige Ausleihen -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="fas fa-clock text-error"></i>
+                    Überfällige Ausleihen
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Werkzeug</th>
+                                <th>Mitarbeiter</th>
+                                <th>Tage überfällig</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for loan in warnings.overdue_lendings %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('tools.detail', barcode=loan.tool_barcode) }}" class="link link-primary">
+                                        {{ loan.tool_name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('workers.details', original_barcode=loan.worker_barcode) }}" class="link link-primary">
+                                        {{ loan.worker_name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge badge-{{ loan.severity }}">
+                                        {{ loan.days_overdue }} Tag{{ "e" if loan.days_overdue != 1 else "" }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center">Keine überfälligen Ausleihen</td>
                             </tr>
                             {% endfor %}
                         </tbody>

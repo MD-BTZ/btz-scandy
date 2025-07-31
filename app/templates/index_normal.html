@@ -89,6 +89,15 @@
                             {{ tool_stats.lent }}
                         </span>
                     </div>
+                    {% if overdue_loans and overdue_loans|length > 0 %}
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm">Überfällig</span>
+                        <span class="badge badge-error gap-2">
+                            <i class="fas fa-clock"></i>
+                            {{ overdue_loans|length }}
+                        </span>
+                    </div>
+                    {% endif %}
                     <div class="flex justify-between items-center">
                         <span class="text-sm">Defekt</span>
                         <span class="badge badge-error gap-2">

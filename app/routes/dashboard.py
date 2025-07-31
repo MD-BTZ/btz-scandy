@@ -23,4 +23,5 @@ def index():
     return render_template('dashboard/index.html',
                          stats=stats,
                          consumables_forecast=stats['consumables_forecast'],
-                         duplicate_barcodes=stats['duplicate_barcodes']) 
+                         duplicate_barcodes=stats['duplicate_barcodes'],
+                         overdue_loans=stats['overdue_loans']) 
