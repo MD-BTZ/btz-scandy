@@ -372,3 +372,95 @@ class LazyMongoDB:
         return getattr(get_mongodb(), name)
 
 mongodb = LazyMongoDB() 
+
+def get_feature_settings():
+    """Holt alle Feature-Einstellungen"""
+    try:
+        # Fallback: Standard-Einstellungen wenn MongoDB nicht verfügbar
+        default_settings = {
+            'tools': True,
+            'consumables': True,
+            'workers': True,
+            'lending_system': True,
+            'ticket_system': True,
+            'timesheet': True,
+            'media_management': True,
+            'software_management': False,
+            'job_board': False,
+            'weekly_reports': False
+        }
+        
+        # Versuche MongoDB zu verwenden
+        try:
+            settings = {}
+            rows = mongodb.find('settings', {'key': {'$regex': '^feature_'}})
+            
+            for row in rows:
+                feature_name = row['key'].replace('feature_', '')
+                settings[feature_name] = row.get('value', False)
+            
+            # Kombiniere mit Standard-Einstellungen
+            for key, value in default_settings.items():
+                if key not in settings:
+                    settings[key] = value
+            
+            return settings
+        except:
+            # Fallback zu Standard-Einstellungen
+            return default_settings
+            
+    except Exception as e:
+        print(f"Fehler beim Laden der Feature-Einstellungen: {e}")
+        return {
+            'tools': True,
+            'consumables': True,
+            'workers': True,
+            'lending_system': True,
+            'ticket_system': True,
+            'timesheet': True,
+            'media_management': True,
+            'software_management': False,
+            'job_board': False,
+            'weekly_reports': False
+        }
+
+def set_feature_setting(feature_name, enabled):
+    """Setzt eine Feature-Einstellung"""
+    try:
+        mongodb.update_one('settings', 
+                         {'key': f'feature_{feature_name}'}, 
+                         {'$set': {'value': enabled}}, 
+                         upsert=True)
+        return True
+    except Exception as e:
+        print(f"Fehler beim Setzen der Feature-Einstellung: {e}")
+        return False
+
+def is_feature_enabled(feature_name):
+    """Prüft ob ein Feature aktiviert ist"""
+    try:
+        # Standard-Einstellungen
+        default_settings = {
+            'tools': True,
+            'consumables': True,
+            'workers': True,
+            'lending_system': True,
+            'ticket_system': True,
+            'timesheet': True,
+            'media_management': True,
+            'software_management': False,
+            'job_board': False,
+            'weekly_reports': False
+        }
+        
+        # Versuche aus MongoDB zu lesen
+        try:
+            setting = mongodb.find_one('settings', {'key': f'feature_{feature_name}'})
+            return setting.get('value', default_settings.get(feature_name, False)) if setting else default_settings.get(feature_name, False)
+        except:
+            # Fallback zu Standard-Einstellungen
+            return default_settings.get(feature_name, False)
+            
+    except Exception as e:
+        print(f"Fehler beim Prüfen der Feature-Einstellung: {e}")
+        return True  # Standardmäßig aktiviert für Sicherheit 

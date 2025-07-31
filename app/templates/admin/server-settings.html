@@ -294,27 +294,104 @@
                     </form>
                 </div>
             </div>
-
-            <!-- System-Info -->
+            
+            <!-- Software-Verwaltung -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
                     <h2 class="card-title text-xl mb-4">
-                        <i class="fas fa-info-circle text-primary mr-2"></i>
-                        System-Information
+                        <i class="fas fa-desktop text-primary mr-2"></i>
+                        Software-Verwaltung
                     </h2>
                     
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-center py-2">
-                            <span class="text-sm font-medium">Backup-Format:</span>
-                            <span class="badge badge-primary">ZIP v2.0</span>
+                    <div class="space-y-4">
+                        <!-- Software hinzufügen -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Neue Software hinzufügen</h3>
+                            <form id="addSoftwareForm" class="space-y-3">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">Name</span>
+                                        </label>
+                                        <input type="text" name="name" class="input input-bordered input-sm" required>
+                                    </div>
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">Kategorie</span>
+                                        </label>
+                                        <input type="text" name="category" class="input input-bordered input-sm" placeholder="z.B. Office, CAD, Grafik">
+                                    </div>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Beschreibung</span>
+                                    </label>
+                                    <textarea name="description" class="textarea textarea-bordered textarea-sm h-16" placeholder="Optionale Beschreibung"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-plus mr-2"></i>Software hinzufügen
+                                </button>
+                            </form>
                         </div>
-                        <div class="flex justify-between items-center py-2">
-                            <span class="text-sm font-medium">Medien-Support:</span>
-                            <span class="badge badge-success">Aktiviert</span>
+                        
+                        <!-- Software-Liste -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Verfügbare Software</h3>
+                            <div id="softwareList" class="space-y-2 max-h-60 overflow-y-auto">
+                                <!-- Wird per JavaScript geladen -->
+                            </div>
                         </div>
-                        <div class="flex justify-between items-center py-2">
-                            <span class="text-sm font-medium">Komprimierung:</span>
-                            <span class="badge badge-info">ZIP_DEFLATED</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Nutzergruppen-Verwaltung -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-users text-primary mr-2"></i>
+                        Nutzergruppen-Verwaltung
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <!-- Nutzergruppe hinzufügen -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Neue Nutzergruppe hinzufügen</h3>
+                            <form id="addUserGroupForm" class="space-y-3">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">Name</span>
+                                        </label>
+                                        <input type="text" name="name" class="input input-bordered input-sm" required>
+                                    </div>
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">Beschreibung</span>
+                                        </label>
+                                        <input type="text" name="description" class="input input-bordered input-sm" placeholder="z.B. Teilnehmer Laptops">
+                                    </div>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">Software-Pakete</span>
+                                    </label>
+                                    <div id="softwareCheckboxes" class="space-y-2 max-h-40 overflow-y-auto border border-base-300 rounded-lg p-3">
+                                        <!-- Wird per JavaScript geladen -->
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-plus mr-2"></i>Nutzergruppe hinzufügen
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- Nutzergruppen-Liste -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Verfügbare Nutzergruppen</h3>
+                            <div id="userGroupsList" class="space-y-2 max-h-60 overflow-y-auto">
+                                <!-- Wird per JavaScript geladen -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -416,5 +493,243 @@ function closeIconSelector() {
     currentIconInput = null;
     currentIconPreview = null;
 }
+
+// Software-Verwaltung
+let softwareList = [];
+let userGroupsList = [];
+
+// Software laden
+async function loadSoftware() {
+    try {
+        const response = await fetch('/admin/software');
+        const data = await response.json();
+        
+        if (data.success) {
+            softwareList = data.software;
+            renderSoftwareList();
+            renderSoftwareCheckboxes();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Software:', error);
+        showToast('error', 'Fehler beim Laden der Software');
+    }
+}
+
+// Software-Liste rendern
+function renderSoftwareList() {
+    const container = document.getElementById('softwareList');
+    if (!container) return;
+    
+    if (softwareList.length === 0) {
+        container.innerHTML = '<p class="text-base-content/60 text-sm">Keine Software vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = softwareList.map(software => `
+        <div class="flex items-center justify-between p-2 bg-base-100 rounded border">
+            <div class="flex-1">
+                <div class="font-medium">${software.name}</div>
+                ${software.category ? `<div class="text-sm text-base-content/60">Kategorie: ${software.category}</div>` : ''}
+                ${software.description ? `<div class="text-sm text-base-content/60">${software.description}</div>` : ''}
+            </div>
+            <button onclick="deleteSoftware('${software._id}', '${software.name}')" class="btn btn-error btn-xs">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+// Software-Checkboxes rendern
+function renderSoftwareCheckboxes() {
+    const container = document.getElementById('softwareCheckboxes');
+    if (!container) return;
+    
+    if (softwareList.length === 0) {
+        container.innerHTML = '<p class="text-base-content/60 text-sm">Keine Software verfügbar</p>';
+        return;
+    }
+    
+    container.innerHTML = softwareList.map(software => `
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="software" value="${software._id}" class="checkbox checkbox-sm">
+            <span class="text-sm">${software.name}</span>
+            ${software.category ? `<span class="text-xs text-base-content/60">(${software.category})</span>` : ''}
+        </label>
+    `).join('');
+}
+
+// Software hinzufügen
+document.getElementById('addSoftwareForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch('/admin/software/add', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            this.reset();
+            await loadSoftware();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Hinzufügen der Software:', error);
+        showToast('error', 'Fehler beim Hinzufügen der Software');
+    }
+});
+
+// Software löschen
+async function deleteSoftware(id, name) {
+    if (!confirm(`Möchten Sie die Software "${name}" wirklich löschen?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/software/delete/${id}`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            await loadSoftware();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen der Software:', error);
+        showToast('error', 'Fehler beim Löschen der Software');
+    }
+}
+
+// Nutzergruppen laden
+async function loadUserGroups() {
+    try {
+        const response = await fetch('/admin/user_groups');
+        const data = await response.json();
+        
+        if (data.success) {
+            userGroupsList = data.groups;
+            renderUserGroupsList();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Nutzergruppen:', error);
+        showToast('error', 'Fehler beim Laden der Nutzergruppen');
+    }
+}
+
+// Nutzergruppen-Liste rendern
+function renderUserGroupsList() {
+    const container = document.getElementById('userGroupsList');
+    if (!container) return;
+    
+    if (userGroupsList.length === 0) {
+        container.innerHTML = '<p class="text-base-content/60 text-sm">Keine Nutzergruppen vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = userGroupsList.map(group => {
+        const softwareNames = group.software ? group.software.map(swId => {
+            const software = softwareList.find(s => s._id === swId);
+            return software ? software.name : 'Unbekannte Software';
+        }).join(', ') : 'Keine Software';
+        
+        return `
+            <div class="flex items-center justify-between p-2 bg-base-100 rounded border">
+                <div class="flex-1">
+                    <div class="font-medium">${group.name}</div>
+                    ${group.description ? `<div class="text-sm text-base-content/60">${group.description}</div>` : ''}
+                    <div class="text-sm text-base-content/60">Software: ${softwareNames || 'Keine'}</div>
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="editUserGroup('${group._id}')" class="btn btn-outline btn-xs">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="deleteUserGroup('${group._id}', '${group.name}')" class="btn btn-error btn-xs">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Nutzergruppe hinzufügen
+document.getElementById('addUserGroupForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch('/admin/user_groups/add', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            this.reset();
+            // Checkboxes zurücksetzen
+            this.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+            await loadUserGroups();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Hinzufügen der Nutzergruppe:', error);
+        showToast('error', 'Fehler beim Hinzufügen der Nutzergruppe');
+    }
+});
+
+// Nutzergruppe löschen
+async function deleteUserGroup(id, name) {
+    if (!confirm(`Möchten Sie die Nutzergruppe "${name}" wirklich löschen?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/user_groups/delete/${id}`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            await loadUserGroups();
+        } else {
+            showToast('error', data.message);
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen der Nutzergruppe:', error);
+        showToast('error', 'Fehler beim Löschen der Nutzergruppe');
+    }
+}
+
+// Nutzergruppe bearbeiten
+function editUserGroup(id) {
+    // TODO: Implementiere Edit-Modal
+    alert('Edit-Funktion wird noch implementiert');
+}
+
+// Seite laden
+document.addEventListener('DOMContentLoaded', function() {
+    loadSoftware();
+    loadUserGroups();
+});
 </script>
 {% endblock %} 

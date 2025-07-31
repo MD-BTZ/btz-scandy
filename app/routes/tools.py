@@ -5,6 +5,7 @@ from app.utils.decorators import admin_required, login_required, mitarbeiter_req
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime
 import logging
+from app.models.mongodb_database import mongodb, is_feature_enabled
 
 # Blueprint mit URL-Präfix definieren
 bp = Blueprint('tools', __name__, url_prefix='/tools')
@@ -20,90 +21,124 @@ def get_tool_service():
         tool_service = ToolService()
     return tool_service
 
+def get_software_presets():
+    """Holt die Software-Pakete aus der Datenbank"""
+    from app.models.mongodb_database import mongodb
+    try:
+        software_list = list(mongodb.find('software', {}).sort('name', 1))
+        return software_list
+    except:
+        return []
+
+def get_user_groups():
+    """Holt die Nutzergruppen aus der Datenbank"""
+    from app.models.mongodb_database import mongodb
+    try:
+        groups_list = list(mongodb.find('user_groups', {}).sort('name', 1))
+        return groups_list
+    except:
+        return []
+
 @bp.route('/')
 @login_required
-@not_teilnehmer_required
 def index():
-    """Zeigt alle Werkzeuge an"""
+    """Werkzeuge-Übersicht"""
+    # Prüfe ob Werkzeuge-Feature aktiviert ist
+    if not is_feature_enabled('tools'):
+        flash('Werkzeuge-Verwaltung ist deaktiviert', 'error')
+        return redirect(url_for('index.index'))
+    
     try:
-        # Hole alle Werkzeuge über den Service
-        tool_service = get_tool_service()
-        tools = tool_service.get_all_tools()
+        # Hole alle Werkzeuge
+        tools = list(mongodb.find('tools', {}).sort('name', 1))
         
-        # Hole Kategorien und Standorte aus den Settings
+        # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
         
         return render_template('tools/index.html',
-                           tools=tools,
-                           categories=categories,
-                           locations=locations,
-                           is_admin=current_user.is_admin)
-                           
+                             tools=tools,
+                             categories=categories,
+                             locations=locations)
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}", exc_info=True)
-        return render_template('tools/index.html',
-                           tools=[],
-                           categories=[],
-                           locations=[],
-                           is_admin=current_user.is_admin)
+        logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
+        flash('Fehler beim Laden der Werkzeuge', 'error')
+        return redirect(url_for('index.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@not_teilnehmer_required
 def add():
-    """Fügt ein neues Werkzeug hinzu"""
+    """Neues Werkzeug hinzufügen"""
+    # Prüfe ob Werkzeuge-Feature aktiviert ist
+    if not is_feature_enabled('tools'):
+        flash('Werkzeuge-Verwaltung ist deaktiviert', 'error')
+        return redirect(url_for('index.index'))
+    
     if request.method == 'POST':
         try:
             # Formulardaten sammeln
             tool_data = {
-                'name': request.form.get('name'),
-                'barcode': request.form.get('barcode'),
-                'description': request.form.get('description'),
-                'category': request.form.get('category'),
-                'location': request.form.get('location'),
-                'status': request.form.get('status', 'verfügbar')
+                'name': request.form.get('name', '').strip(),
+                'barcode': request.form.get('barcode', '').strip(),
+                'category': request.form.get('category', '').strip(),
+                'location': request.form.get('location', '').strip(),
+                'description': request.form.get('description', '').strip(),
+                'status': request.form.get('status', 'verfügbar'),
+                'serial_number': request.form.get('serial_number', ''),
+                'invoice_number': request.form.get('invoice_number', ''),
+                'mac_address': request.form.get('mac_address', ''),
+                'mac_address_wlan': request.form.get('mac_address_wlan', ''),
+                'user_groups': request.form.getlist('user_groups'),
+                'additional_software': request.form.getlist('additional_software')
             }
             
-            # Werkzeug über Service erstellen
+            # Custom Software und Nutzergruppen hinzufügen
+            custom_software = request.form.get('custom_software', '').strip()
+            if custom_software:
+                tool_data['additional_software'].extend([s.strip() for s in custom_software.split(',') if s.strip()])
+            
+            custom_user_group = request.form.get('custom_user_group', '').strip()
+            if custom_user_group:
+                tool_data['user_groups'].append(custom_user_group)
+            
+            # Validierung
+            if not tool_data['name'] or not tool_data['barcode']:
+                flash('Name und Barcode sind erforderlich', 'error')
+                return render_template('tools/add.html', form_data=tool_data)
+            
+            # Werkzeug erstellen
             tool_service = get_tool_service()
-            success, message, barcode = tool_service.create_tool(tool_data)
+            success, message = tool_service.create_tool(tool_data)
             
             if success:
                 flash(message, 'success')
                 return redirect(url_for('tools.index'))
             else:
                 flash(message, 'error')
-                # Hole Kategorien und Standorte für das Template
-                categories = get_categories_from_settings()
-                locations = get_locations_from_settings()
+                return render_template('tools/add.html', form_data=tool_data)
                 
-                # Gebe die Formulardaten zurück an das Template
-                return render_template('tools/add.html',
-                                   categories=categories,
-                                   locations=locations,
-                                   form_data=tool_data)
-            
         except Exception as e:
-            logger.error(f"Fehler beim Hinzufügen des Werkzeugs: {str(e)}", exc_info=True)
-            flash('Fehler beim Hinzufügen des Werkzeugs', 'error')
-            # Hole Kategorien und Standorte für das Template
-            categories = get_categories_from_settings()
-            locations = get_locations_from_settings()
-            
-            # Gebe die Formulardaten zurück an das Template
-            return render_template('tools/add.html',
-                               categories=categories,
-                               locations=locations,
-                               form_data=request.form.to_dict())
-            
-    else:
-        # GET: Zeige Formular
+            logger.error(f"Fehler beim Erstellen des Werkzeugs: {str(e)}")
+            flash('Fehler beim Erstellen des Werkzeugs', 'error')
+            return render_template('tools/add.html', form_data=tool_data)
+    
+    # GET Request - Formular anzeigen
+    try:
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
+        software_presets = get_software_presets()
+        user_groups = get_user_groups()
         
         return render_template('tools/add.html',
-                           categories=categories,
-                           locations=locations)
+                             categories=categories,
+                             locations=locations,
+                             software_presets=software_presets,
+                             user_groups=user_groups)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des Formulars: {str(e)}")
+        flash('Fehler beim Laden des Formulars', 'error')
+        return redirect(url_for('tools.index'))
 
 @bp.route('/<barcode>')
 @login_required
@@ -121,11 +156,15 @@ def detail(barcode):
         # Hole Kategorien und Standorte
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
+        software_presets = get_software_presets()
+        user_groups = get_user_groups()
         
         return render_template('tools/detail.html',
                              tool=tool,
                              categories=categories,
                              locations=locations,
+                             software_presets=software_presets,
+                             user_groups=user_groups,
                              lending_history=tool.get('lending_history', []))
                              
     except Exception as e:
@@ -143,8 +182,24 @@ def edit(barcode):
             'name': request.form.get('name'),
             'description': request.form.get('description'),
             'category': request.form.get('category'),
-            'location': request.form.get('location')
+            'location': request.form.get('location'),
+            'serial_number': request.form.get('serial_number', ''),
+            'invoice_number': request.form.get('invoice_number', ''),
+            'mac_address': request.form.get('mac_address', ''),
+            'mac_address_wlan': request.form.get('mac_address_wlan', ''),
+            'user_groups': request.form.getlist('user_groups'),
+            'additional_software': request.form.getlist('additional_software')
         }
+        
+        # Custom Software hinzufügen
+        custom_software = request.form.get('custom_software', '').strip()
+        if custom_software:
+            tool_data['additional_software'].extend([s.strip() for s in custom_software.split(',') if s.strip()])
+        
+        # Custom Nutzergruppe hinzufügen
+        custom_user_group = request.form.get('custom_user_group', '').strip()
+        if custom_user_group:
+            tool_data['user_groups'].append(custom_user_group)
         
         # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
         form_status = request.form.get('status')

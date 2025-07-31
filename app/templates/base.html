@@ -350,6 +350,16 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{{ url_for('admin.software_management') }}" class="{% if request.endpoint and 'admin.software_management' in request.endpoint %}active{% endif %}">
+                                <i class="fas fa-desktop mr-2"></i>Software & Nutzergruppen
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('admin.feature_settings') }}" class="{% if request.endpoint and 'admin.feature_settings' in request.endpoint %}active{% endif %}">
+                                <i class="fas fa-toggle-on mr-2"></i>Feature-Einstellungen
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ url_for('admin.manage_users') }}" class="{% if request.endpoint and 'admin.manage_users' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-users-cog mr-2"></i>Benutzerverwaltung
                             </a>

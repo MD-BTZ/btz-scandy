@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from app.models.mongodb_models import MongoDBWorker
-from app.models.mongodb_database import mongodb
+from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required, teilnehmer_required
 from app.utils.database_helpers import get_departments_from_settings
 from datetime import datetime, timedelta

@@ -69,6 +69,100 @@
                         <p class="text-base-content/80">{{ tool.description }}</p>
                     </div>
                     {% endif %}
+                    
+                    <!-- Neue optionale Felder -->
+                    {% if tool.serial_number or tool.invoice_number or tool.mac_address or tool.mac_address_wlan or tool.installed_software or tool.user_groups %}
+                    <div class="divider">
+                        <span class="text-sm font-medium text-base-content/70">Zusätzliche Informationen</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% if tool.serial_number %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Seriennummer</span>
+                            </label>
+                            <p class="text-lg font-mono">{{ tool.serial_number }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if tool.invoice_number %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">Rechnungsnummer</span>
+                            </label>
+                            <p class="text-lg">{{ tool.invoice_number }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if tool.mac_address %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">MAC-Adresse (LAN)</span>
+                            </label>
+                            <p class="text-lg font-mono">{{ tool.mac_address }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if tool.mac_address_wlan %}
+                        <div>
+                            <label class="label">
+                                <span class="label-text font-semibold">MAC-Adresse (WLAN)</span>
+                            </label>
+                            <p class="text-lg font-mono">{{ tool.mac_address_wlan }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if tool.installed_software %}
+                    <div class="mt-4">
+                        <label class="label">
+                            <span class="label-text font-semibold">Installierte Software</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            {% for software in tool.installed_software %}
+                            <span class="badge badge-outline">{{ software }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if tool.user_groups %}
+                    <div class="mt-4">
+                        <label class="label">
+                            <span class="label-text font-semibold">Nutzergruppen</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            {% for group_id in tool.user_groups %}
+                                {% set group = user_groups|selectattr("_id", "equalto", group_id)|first %}
+                                {% if group %}
+                                <span class="badge badge-primary">{{ group.name }}</span>
+                                {% else %}
+                                <span class="badge badge-outline">{{ group_id }}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if tool.additional_software %}
+                    <div class="mt-4">
+                        <label class="label">
+                            <span class="label-text font-semibold">Zusätzliche Software</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            {% for software_id in tool.additional_software %}
+                                {% set software = software_presets|selectattr("_id", "equalto", software_id)|first %}
+                                {% if software %}
+                                <span class="badge badge-outline">{{ software.name }}</span>
+                                {% else %}
+                                <span class="badge badge-outline">{{ software_id }}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
                 </div>
             </div>
 
@@ -245,10 +339,11 @@
 
 <!-- Edit Modal -->
 <dialog id="editModal" class="modal">
-    <div class="modal-box max-w-2xl w-11/12 max-h-[90vh] overflow-y-auto">
+    <div class="modal-box max-w-4xl w-11/12 max-h-[90vh] overflow-y-auto">
         <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
         <form method="POST" id="editForm" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Grundlegende Informationen -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Name</span>
@@ -296,6 +391,88 @@
                         <span class="label-text">Beschreibung</span>
                     </label>
                     <textarea name="description" class="textarea textarea-bordered h-20">{{ tool.description or '' }}</textarea>
+                </div>
+            </div>
+            
+            <!-- Optionale Informationen -->
+            <div class="divider">
+                <span class="text-sm font-medium text-base-content/70">Optionale Informationen</span>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Seriennummer</span>
+                    </label>
+                    <input type="text" name="serial_number" class="input input-bordered" value="{{ tool.serial_number or '' }}" maxlength="100">
+                </div>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Rechnungsnummer</span>
+                    </label>
+                    <input type="text" name="invoice_number" class="input input-bordered" value="{{ tool.invoice_number or '' }}" maxlength="100">
+                </div>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">MAC-Adresse (LAN)</span>
+                    </label>
+                    <input type="text" name="mac_address" class="input input-bordered" value="{{ tool.mac_address or '' }}" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX">
+                </div>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">MAC-Adresse (WLAN)</span>
+                    </label>
+                    <input type="text" name="mac_address_wlan" class="input input-bordered" value="{{ tool.mac_address_wlan or '' }}" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX">
+                </div>
+            </div>
+            
+            <!-- Software und Nutzergruppen -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Nutzergruppen</span>
+                    </label>
+                    <div class="space-y-2 max-h-40 overflow-y-auto border border-base-300 rounded-lg p-3">
+                        {% for group in user_groups %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="user_groups" value="{{ group._id }}" class="checkbox checkbox-sm" 
+                                   {% if tool.user_groups and group._id in tool.user_groups %}checked{% endif %}>
+                            <span class="text-sm">{{ group.name }}</span>
+                            {% if group.description %}
+                            <span class="text-xs text-base-content/60">({{ group.description }})</span>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                        <div class="mt-2">
+                            <input type="text" name="custom_user_group" class="input input-bordered input-sm w-full" 
+                                   placeholder="Weitere Nutzergruppe hinzufügen..." maxlength="100">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Zusätzliche Software</span>
+                    </label>
+                    <div class="space-y-2 max-h-40 overflow-y-auto border border-base-300 rounded-lg p-3">
+                        {% for software in software_presets %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="additional_software" value="{{ software._id }}" class="checkbox checkbox-sm" 
+                                   {% if tool.additional_software and software._id in tool.additional_software %}checked{% endif %}>
+                            <span class="text-sm">{{ software.name }}</span>
+                            {% if software.category %}
+                            <span class="text-xs text-base-content/60">({{ software.category }})</span>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                        <div class="mt-2">
+                            <input type="text" name="custom_software" class="input input-bordered input-sm w-full" 
+                                   placeholder="Weitere Software hinzufügen..." maxlength="200">
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -1160,6 +1337,27 @@ function downloadPdf(url, filename) {
 document.addEventListener('DOMContentLoaded', function() {
     // Medien-Galerie laden
     loadMediaGallery();
+    
+    // MAC-Adresse Formatierung
+    function formatMacAddress(input) {
+        let value = input.value.replace(/[^0-9A-Fa-f]/g, '');
+        let formatted = '';
+        for (let i = 0; i < value.length && i < 12; i++) {
+            if (i > 0 && i % 2 === 0) {
+                formatted += ':';
+            }
+            formatted += value[i];
+        }
+        input.value = formatted.toUpperCase();
+    }
+    
+    // MAC-Adresse Formatierung anwenden
+    const macAddressInputs = document.querySelectorAll('input[name="mac_address"], input[name="mac_address_wlan"]');
+    macAddressInputs.forEach(input => {
+        input.addEventListener('input', function(e) {
+            formatMacAddress(e.target);
+        });
+    });
 });
 </script>
 {% endblock %} 

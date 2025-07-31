@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import current_user
-from app.models.mongodb_database import mongodb
+from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
@@ -16,26 +16,27 @@ logger = logging.getLogger(__name__)
 @not_teilnehmer_required
 def index():
     """Zeigt alle Verbrauchsmaterialien an"""
+    # Prüfe ob Verbrauchsmaterial-Feature aktiviert ist
+    if not is_feature_enabled('consumables'):
+        flash('Verbrauchsmaterial-Verwaltung ist deaktiviert', 'error')
+        return redirect(url_for('index.index'))
+    
     try:
-        consumables = ConsumableService.get_all_consumables()
+        # Hole alle Verbrauchsmaterialien
+        consumables = list(mongodb.find('consumables', {}).sort('name', 1))
         
-        # Hole Kategorien und Standorte aus den Settings
+        # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
         
         return render_template('consumables/index.html',
-                           consumables=consumables,
-                           categories=categories,
-                           locations=locations,
-                           is_admin=current_user.is_admin)
-                           
+                             consumables=consumables,
+                             categories=categories,
+                             locations=locations)
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}", exc_info=True)
-        return render_template('consumables/index.html',
-                           consumables=[],
-                           categories=[],
-                           locations=[],
-                           is_admin=current_user.is_admin)
+        logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}")
+        flash('Fehler beim Laden der Verbrauchsmaterialien', 'error')
+        return redirect(url_for('index.index'))
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required

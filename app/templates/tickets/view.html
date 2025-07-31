@@ -4,7 +4,236 @@
 
 {% block head %}
 {{ super() }}
+<style>
+/* Dezente Button-Styles für elegantes Design */
+.btn, button {
+    background-color: #6b7280 !important;
+    color: white !important;
+    border: 1px solid #4b5563 !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+.btn:hover, button:hover {
+    background-color: #4b5563 !important;
+    color: white !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+.btn-primary {
+    background-color: #6b7280 !important;
+    color: white !important;
+}
+
+.btn-primary:hover {
+    background-color: #4b5563 !important;
+    color: white !important;
+}
+
+/* Spezifische Styles für verschiedene Button-Typen - dezenter */
+.bg-blue-600 {
+    background-color: #6b7280 !important;
+    color: white !important;
+}
+
+.bg-blue-600:hover {
+    background-color: #4b5563 !important;
+    color: white !important;
+}
+
+.bg-green-600 {
+    background-color: #10b981 !important;
+    color: white !important;
+}
+
+.bg-green-600:hover {
+    background-color: #059669 !important;
+    color: white !important;
+}
+
+.bg-purple-600 {
+    background-color: #8b5cf6 !important;
+    color: white !important;
+}
+
+.bg-purple-600:hover {
+    background-color: #7c3aed !important;
+    color: white !important;
+}
+
+/* Textarea und Input Styles */
+.textarea, input, select {
+    background-color: white !important;
+    color: #1f2937 !important;
+    border: 1px solid #d1d5db !important;
+}
+
+/* Toast Styles */
+.toast {
+    z-index: 9999;
+}
+
+/* Loading Spinner */
+.loading {
+    color: #6b7280 !important;
+}
+</style>
 <script>
+// Nachrichten-Funktionen für das neue Layout
+function loadPublicMessages() {
+    console.log('loadPublicMessages aufgerufen');
+    
+    const container = document.getElementById('public-messages-container');
+    if (!container) {
+        console.error('Container public-messages-container nicht gefunden');
+        return;
+    }
+    
+    console.log('Container gefunden, lade Nachrichten...');
+    container.innerHTML = '<div class="flex justify-center py-4"><div class="loading loading-spinner"></div></div>';
+    
+    const url = `/tickets/{{ ticket.id }}/messages?type=public`;
+    console.log('Fetch URL:', url);
+    
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+    })
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Response data:', data);
+            if (data.success) {
+                displayPublicMessages(data.messages);
+            } else {
+                container.innerHTML = `<div class="alert alert-error">Fehler: ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Nachrichten:', error);
+            container.innerHTML = '<div class="alert alert-error">Fehler beim Laden der Nachrichten</div>';
+        });
+}
+
+function displayPublicMessages(messages) {
+    const container = document.getElementById('public-messages-container');
+    container.innerHTML = '';
+    
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-comments text-2xl mb-2"></i>
+                <p>Keine Nachrichten vorhanden</p>
+            </div>
+        `;
+        return;
+    }
+    
+    messages.forEach(message => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat ${message.sender === '{{ current_user.username }}' ? 'chat-end' : 'chat-start'}`;
+        
+        const isOwnMessage = message.sender === '{{ current_user.username }}';
+        
+        messageDiv.innerHTML = `
+            <div class="chat-header opacity-50 text-xs">
+                ${message.sender} • ${message.formatted_date}
+            </div>
+            <div class="chat-bubble chat-bubble-primary ${isOwnMessage ? 'chat-bubble-primary' : ''}">
+                ${message.message}
+            </div>
+        `;
+        
+        container.appendChild(messageDiv);
+    });
+    
+    // Scroll zum Ende
+    container.scrollTop = container.scrollHeight;
+}
+
+function sendPublicMessage() {
+    const input = document.getElementById('publicMessageInput');
+    const message = input.value.trim();
+    
+    if (!message) {
+        showToast('Bitte geben Sie eine Nachricht ein.', 'warning');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('type', 'public');
+    
+    // Button deaktivieren
+    const button = document.querySelector('.send-message-button');
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Sende...';
+    
+    fetch(`/tickets/{{ ticket.id }}/add-message`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            input.value = '';
+            loadPublicMessages();
+            showToast('Nachricht gesendet', 'success');
+        } else {
+            showToast('Fehler: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Fehler:', error);
+        showToast('Fehler beim Senden der Nachricht', 'error');
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>Senden';
+    });
+}
+
+// Event Listener für DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded - Lade Nachrichten...');
+    try {
+        // Lade initial Nachrichten
+        loadPublicMessages();
+    } catch (error) {
+        console.error('Fehler beim Laden der Nachrichten:', error);
+    }
+});
+
+// Auch direkt beim Laden des Scripts aufrufen
+console.log('Nachrichten-Script geladen - rufe loadPublicMessages auf...');
+setTimeout(function() {
+    console.log('Timeout - versuche loadPublicMessages aufzurufen...');
+    if (typeof loadPublicMessages === 'function') {
+        console.log('loadPublicMessages ist eine Funktion - rufe auf...');
+        loadPublicMessages();
+    } else {
+        console.error('loadPublicMessages ist keine Funktion!');
+        console.log('Verfügbare Funktionen:', Object.keys(window).filter(key => typeof window[key] === 'function'));
+    }
+}, 100);
+
+// Zusätzlich beim Laden der Seite
+window.addEventListener('load', function() {
+    console.log('Window loaded - versuche loadPublicMessages aufzurufen...');
+    if (typeof loadPublicMessages === 'function') {
+        console.log('loadPublicMessages ist eine Funktion - rufe auf...');
+        loadPublicMessages();
+    } else {
+        console.error('loadPublicMessages ist keine Funktion!');
+    }
+});
+
+// Globale Funktionen für onchange Events - müssen vor den Events verfügbar sein
 // Globale Funktionen für onchange Events - müssen vor den Events verfügbar sein
 function updateTicketStatus(newStatus) {
     fetch(`/tickets/{{ ticket.id }}/update-status`, {
@@ -155,287 +384,231 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
 {% endblock %}
 
 {% block content %}
+
 <div class="container mx-auto px-4 py-8">
-    <!-- Zurück Button -->
-    <div class="mb-6">
-        <a href="{{ url_for('tickets.create') }}" class="btn btn-outline">
-            <i class="fas fa-arrow-left mr-2"></i>
-            Zurück zur Übersicht
-        </a>
+    <!-- Ticket Header -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">
+                    Auftrag #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}
+                </h1>
+                <p class="text-gray-600 mt-2">{{ ticket.description }}</p>
+            </div>
+            <div class="text-right">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                    {% if ticket.status == 'offen' %}bg-yellow-100 text-yellow-800
+                    {% elif ticket.status == 'in_arbeit' %}bg-blue-100 text-blue-800
+                    {% elif ticket.status == 'wartend' %}bg-orange-100 text-orange-800
+                    {% elif ticket.status == 'abgeschlossen' %}bg-green-100 text-green-800
+                    {% else %}bg-red-100 text-red-800{% endif %}">
+                    {{ ticket.status|title }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+                <strong>Erstellt von:</strong> {{ ticket.created_by }}
+            </div>
+            <div>
+                <strong>Zugewiesen an:</strong> 
+                {% if ticket.assigned_to %}{{ ticket.assigned_to }}{% else %}Nicht zugewiesen{% endif %}
+            </div>
+            <div>
+                <strong>Priorität:</strong> 
+                <span class="capitalize">{{ ticket.priority }}</span>
+            </div>
+            <div>
+                <strong>Kategorie:</strong> {{ ticket.category or 'Keine Kategorie' }}
+            </div>
+            <div>
+                <strong>Erstellt am:</strong> {{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else 'Unbekannt' }}
+            </div>
+            {% if ticket.due_date %}
+            <div>
+                <strong>Fälligkeitsdatum:</strong> {{ ticket.due_date.strftime('%d.%m.%Y %H:%M') }}
+            </div>
+            {% endif %}
+        </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Linke Spalte -->
-        <div class="lg:col-span-2">
-            <!-- Auftrag Details -->
-            <div class="card bg-base-100 shadow-xl mb-6">
-                <div class="card-body">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Auftrag #{{ ticket.ticket_number or ticket.id }}: {{ ticket.title }}</h2>
-                        <span class="badge badge-{{ status_colors[ticket.status] }}">{{ ticket.status }}</span>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <p class="text-sm opacity-70">Erstellt von</p>
-                            <p>{{ ticket.created_by }}</p>
-                            <p class="text-sm opacity-70 mt-2">Erstellt am</p>
-                            <p>{{ ticket.created_at|datetime if ticket.created_at else '-' }}</p>
-                            <p class="text-sm opacity-70 mt-2">Priorität</p>
-                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                                <select id="prioritySelect" class="select select-bordered w-full">
-                                    <option value="niedrig" {% if ticket.priority == 'niedrig' %}selected{% endif %}>Niedrig</option>
-                                    <option value="normal" {% if ticket.priority == 'normal' %}selected{% endif %}>Normal</option>
-                                    <option value="hoch" {% if ticket.priority == 'hoch' %}selected{% endif %}>Hoch</option>
-                                    <option value="kritisch" {% if ticket.priority == 'kritisch' %}selected{% endif %}>Kritisch</option>
-                                </select>
-                            {% else %}
-                                <p>{{ ticket.priority }}</p>
-                            {% endif %}
-                        </div>
-                        <div>
-                            <p class="text-sm opacity-70">Handlungsfeld</p>
-                            <select id="categoryInput" class="select select-bordered w-full">
-                                <option value="">Kein Handlungsfeld</option>
-                                {% for category in categories %}
-                                <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>
-                                    {{ category }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <p class="text-sm opacity-70 mt-2">Fällig am</p>
-                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                                <input type="datetime-local" id="dueDateInput" class="input input-bordered w-full" 
-                                       value="{% if ticket.due_date %}{% if ticket.due_date is string %}{{ ticket.due_date }}{% else %}{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
-                            {% else %}
-                                <p>{{ ticket.due_date | datetime if ticket.due_date else 'Nicht gesetzt' }}</p>
-                            {% endif %}
-                            <div>
-                                <p class="text-sm opacity-70">Geschätzte Zeit</p>
-                                <div class="flex items-center gap-2">
-                                    {% if current_user.role in ['admin', 'mitarbeiter'] or ticket.assigned_to == current_user.username %}
-                                        <input type="number" id="estimatedTimeInput" class="input input-bordered w-full" 
-                                               value="{{ ticket.estimated_time|int if ticket.estimated_time else '' }}"
-                                               min="0" step="1">
-                                        <span class="text-sm opacity-70">Minuten</span>
-                                        <button type="button" class="btn btn-primary btn-sm" onclick="saveTicketChanges()">
-                                            <i class="fas fa-save mr-2"></i>Speichern
-                                        </button>
-                                    {% else %}
-                                        <p>{{ ticket.estimated_time|int if ticket.estimated_time else '-' }} Min.</p>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="divider"></div>
-                    <div>
-                        <h3 class="font-bold mb-2">Beschreibung:</h3>
-                        <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
-                    </div>
-                    {% if auftrag_details %}
-                    <div class="divider"></div>
-                    <div>
-                        <h3 class="font-bold mb-2">Auftragsdetails:</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <p class="text-sm opacity-70">Bereich</p>
-                                <p>{{ auftrag_details.bereich or 'Nicht angegeben' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Auftraggeber</p>
-                                <p>
-                                    {% if auftrag_details.auftraggeber_intern %}
-                                        Intern
-                                    {% elif auftrag_details.auftraggeber_extern %}
-                                        Extern: {{ auftrag_details.auftraggeber_name }}
-                                    {% else %}
-                                        Nicht angegeben
-                                    {% endif %}
-                                </p>
-                                <p class="text-sm opacity-70 mt-2">Kontakt</p>
-                                <p>{{ auftrag_details.kontakt or 'Nicht angegeben' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-sm opacity-70">Fertigstellungstermin</p>
-                                <p>{{ auftrag_details.fertigstellungstermin_formatted or 'Nicht gesetzt' }}</p>
-                                <p class="text-sm opacity-70 mt-2">Arbeitsstunden (Summe)</p>
-                                <p>{{ auftrag_details.total_arbeitsstunden or '0' }} Stunden</p>
-                            </div>
-                        </div>
-                        {% if auftrag_details.ausgefuehrte_arbeiten_nur_text %}
-                        <div class="mt-4">
-                            <p class="text-sm opacity-70">Ausgeführte Arbeiten</p>
-                            <p class="whitespace-pre-wrap">{{ auftrag_details.ausgefuehrte_arbeiten_nur_text }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
+        <!-- Linke Spalte: Ticket-Aktionen -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">Ticket-Aktionen</h3>
+                
+                <!-- Status ändern -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Status ändern</label>
+                    <select onchange="updateTicketStatus(this.value)" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
+                        <option value="in_arbeit" {% if ticket.status == 'in_arbeit' %}selected{% endif %}>In Arbeit</option>
+                        <option value="wartend" {% if ticket.status == 'wartend' %}selected{% endif %}>Wartend</option>
+                        <option value="abgeschlossen" {% if ticket.status == 'abgeschlossen' %}selected{% endif %}>Abgeschlossen</option>
+                        <option value="abgebrochen" {% if ticket.status == 'abgebrochen' %}selected{% endif %}>Abgebrochen</option>
+                    </select>
                 </div>
-            </div>
 
-            <!-- Kommunikation -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title mb-4">Kommunikation</h3>
-                    <div class="messages-container mb-4" style="max-height: 400px; overflow-y: auto;">
-                        {% if messages %}
-                            {% for message in messages %}
-                            <div class="chat {{ 'chat-end' if message.is_admin else 'chat-start' }}">
-                                <div class="chat-header">
-                                    {{ message.sender }}
-                                    <time class="text-xs opacity-50">{{ message.created_at|datetime if message.created_at else '-' }}</time>
-                                </div>
-                                <div class="chat-bubble {{ 'chat-bubble-primary' if message.is_admin else 'chat-bubble-secondary' }}">
-                                    {{ message.message }}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <p class="text-base-content/60">Noch keine Nachrichten vorhanden.</p>
-                        {% endif %}
+                <!-- Zuweisung ändern -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Zuweisung</label>
+                    <div class="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2">
+                        {% for user in workers %}
+                        <label class="flex items-center">
+                            <input type="checkbox" name="assigned_users" value="{{ user.username }}"
+                                   {% if user.username in assigned_users %}checked{% endif %}
+                                   class="rounded border-gray-300 text-blue-600">
+                            <span class="ml-2 text-sm">{{ user.firstname }} {{ user.lastname }} ({{ user.username }})</span>
+                        </label>
+                        {% endfor %}
                     </div>
-                    <form id="messageForm" class="mt-4">
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Neue Nachricht</span>
-                            </label>
-                            <textarea name="message" class="textarea textarea-bordered h-24" 
-                                    placeholder="Ihre Nachricht hier..." required></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-4">
-                            <i class="fas fa-paper-plane mr-2"></i>
-                            Nachricht senden
+                    <button onclick="updateTicketAssignments()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        Zuweisung speichern
+                    </button>
+                </div>
+
+                <!-- Ticket-Details bearbeiten -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Kategorie</label>
+                    <select id="categoryInput" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        {% for category in categories %}
+                            <option value="{{ category }}" {% if ticket.category == category %}selected{% endif %}>{{ category }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Geschätzte Zeit (Minuten)</label>
+                    <input type="number" id="estimatedTimeInput" step="1" min="0" 
+                           value="{{ ticket.estimated_time or 0 }}" 
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Fälligkeitsdatum</label>
+                    <input type="datetime-local" id="dueDateInput" 
+                           value="{% if ticket.due_date %}{{ ticket.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+
+                <button onclick="saveTicketChanges()" class="w-full px-4 py-2 rounded-md mb-6 font-medium bg-blue-600 text-white hover:bg-blue-700">
+                    Änderungen speichern
+                </button>
+
+
+
+                <!-- Export und Details Buttons -->
+                <div class="border-t pt-4 mb-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Export-Button für Word-Dokument -->
+                        <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 text-center text-sm" target="_blank">
+                            <i class="fas fa-file-word mr-1"></i>
+                            Word Export
+                        </a>
+                        
+                        <!-- Button zum Öffnen der Auftragsdetails-Seite -->
+                        <a href="{{ url_for('tickets.auftrag_details_page', id=ticket.id) }}" class="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 text-center text-sm">
+                            <i class="fas fa-clipboard-list mr-1"></i>
+                            Details
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Medien-Sektion -->
+                <div class="border-t pt-4">
+                    <h4 class="text-md font-semibold mb-3">
+                        <i class="fas fa-images mr-2"></i>
+                        Medien
+                    </h4>
+                    
+                    <button onclick="openMediaModal()" class="w-full bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 mb-3">
+                        <i class="fas fa-upload mr-2"></i>
+                        Medien hochladen
+                    </button>
+                    
+                    <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-3">
+                        <!-- Medien werden hier dynamisch geladen -->
+                    </div>
+                    
+                    <div id="no-media-message" class="text-gray-500 text-center py-4 text-sm" style="display: none;">
+                        Keine Medien vorhanden
+                    </div>
+                    
+                    <button id="openCarouselBtn" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" style="display: none;" onclick="openMediaCarousel(0)">
+                        <i class="fas fa-images mr-2"></i>
+                        Alle Medien anzeigen
+                    </button>
+                </div>
+
+
+            </div>
+        </div>
+
+        <!-- Rechte Spalte: Nachrichten und Historie -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Nachrichten-Sektion -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">
+                    <i class="fas fa-comments mr-2"></i>
+                    Nachrichten
+                </h3>
+                
+                <!-- Nachrichten Form -->
+                <div class="message-form mb-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Nachricht</span>
+                        </label>
+                        <textarea id="publicMessageInput" class="textarea textarea-bordered" 
+                                  placeholder="Schreiben Sie eine Nachricht..." rows="3"></textarea>
+                    </div>
+                    <div class="flex justify-end mt-2">
+                        <button class="btn btn-primary send-message-button" onclick="sendPublicMessage()">
+                            <i class="fas fa-paper-plane mr-1"></i>
+                            Senden
                         </button>
-                    </form>
+                    </div>
+                </div>
+                
+                <!-- Nachrichten Container -->
+                <div id="public-messages-container" class="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    <div class="flex justify-center items-center py-8">
+                        <div class="loading loading-spinner loading-md"></div>
+                        <span class="ml-2">Lade Nachrichten...</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Ticket-Historie -->
-            <div class="card bg-base-100 shadow-xl mt-6">
-                <div class="card-body">
-                    <h3 class="card-title mb-4">
-                        <i class="fas fa-history mr-2"></i>
-                        Änderungshistorie
-                    </h3>
-                    
-                    <!-- History-Container -->
-                    <div id="historyContainer" class="space-y-3">
-                        <div class="flex justify-center items-center py-8">
-                            <div class="loading loading-spinner loading-md"></div>
-                            <span class="ml-2">Lade Historie...</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Mehr laden Button -->
-                    <div class="text-center mt-4">
-                        <button id="loadMoreHistory" class="btn btn-outline btn-sm" style="display: none;">
-                            <i class="fas fa-plus mr-2"></i>
-                            Mehr laden
-                        </button>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">
+                    <i class="fas fa-history mr-2"></i>
+                    Änderungshistorie
+                </h3>
+                
+                <!-- History-Container -->
+                <div id="historyContainer" class="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    <div class="flex justify-center items-center py-8">
+                        <div class="loading loading-spinner loading-md"></div>
+                        <span class="ml-2">Lade Historie...</span>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Rechte Spalte -->
-        <div class="lg:col-span-1 space-y-6">
-            <!-- Auftrag Status -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h3 class="card-title mb-4">Auftrag Status</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <p class="text-sm opacity-70">Status</p>
-                            <select id="statusSelect" class="select select-bordered w-full" onchange="updateTicketStatus(this.value)">
-                                <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
-                                <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>
-                                <option value="wartet_auf_antwort" {% if ticket.status == 'wartet_auf_antwort' %}selected{% endif %}>Wartet auf Antwort</option>
-                                <option value="gelöst" {% if ticket.status == 'gelöst' %}selected{% endif %}>Gelöst</option>
-                                <option value="geschlossen" {% if ticket.status == 'geschlossen' %}selected{% endif %}>Geschlossen</option>
-                            </select>
-                        </div>
-                        <div>
-                            <p class="text-sm opacity-70">Zugewiesen an</p>
-                            {% if current_user.role in ['admin', 'mitarbeiter'] %}
-                                <div class="max-h-48 overflow-y-auto border rounded-lg p-2 mb-2">
-                                    {% for user in workers %}
-                                        <label class="flex items-center space-x-2 p-2 hover:bg-base-200 rounded cursor-pointer">
-                                            <input type="checkbox" 
-                                                   name="assigned_users" 
-                                                   value="{{ user.username }}" 
-                                                   class="assignment-checkbox checkbox checkbox-primary"
-                                                   {% if user.username in assigned_users %}checked{% endif %}>
-                                            <span>{{ user.firstname }} {{ user.lastname }} ({{ user.username }})</span>
-                                        </label>
-                                    {% endfor %}
-                                </div>
-                                <button type="button" class="btn btn-primary btn-sm w-full mb-2" onclick="updateTicketAssignments()">
-                                    <i class="fas fa-save mr-2"></i>Zuweisungen speichern
-                                </button>
-                            {% else %}
-                                <div class="font-medium">
-                                    {% if assigned_users %}
-                                        {% for user in assigned_users %}
-                                            <span class="badge badge-primary mr-1">{{ user }}</span>
-                                        {% endfor %}
-                                    {% else %}
-                                        Nicht zugewiesen
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                        </div>
-                        <div>
-                            <p class="text-sm opacity-70">Letzte Aktualisierung</p>
-                            <p class="font-medium">{{ ticket.updated_at|datetime if ticket.updated_at else '-' }}</p>
-                        </div>
-                        {% if ticket.resolved_at %}
-                        <div>
-                            <p class="text-sm opacity-70">Gelöst am</p>
-                            <p class="font-medium">{{ ticket.resolved_at|datetime if ticket.resolved_at else '-' }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Medien-Galerie -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="card-title">Medien-Galerie</h2>
-                        <button onclick="openMediaModal()" class="btn btn-primary btn-sm">
-                            <i class="fas fa-plus mr-2"></i>Hinzufügen
-                        </button>
-                    </div>
-                    
-                    <div id="media-preview-gallery" class="grid grid-cols-2 gap-2 mb-4">
-                        <!-- Medien werden hier dynamisch geladen -->
-                    </div>
-                    <div id="no-media-message" class="text-base-content/60 text-center py-4">
-                        Keine Medien vorhanden
-                    </div>
-                    <button id="openCarouselBtn" class="btn btn-primary btn-sm" style="display: none;" onclick="openMediaCarousel(0)">
-                        <i class="fas fa-images mr-2"></i>Galerie öffnen
+                
+                <!-- Mehr laden Button -->
+                <div class="text-center mt-4">
+                    <button id="loadMoreHistory" class="btn btn-outline btn-sm" style="display: none;">
+                        <i class="fas fa-plus mr-2"></i>
+                        Mehr laden
                     </button>
                 </div>
             </div>
-
-            <!-- Export-Button für Word-Dokument -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <a href="{{ url_for('tickets.export_ticket', id=ticket.id) }}" class="btn btn-accent w-full" target="_blank">
-                        <i class="fas fa-file-word mr-2"></i> Auftrag als Word exportieren
-                    </a>
-                </div>
-            </div>
-
-            <!-- Button zum Öffnen der Auftragsdetails-Seite -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <a href="{{ url_for('tickets.auftrag_details_page', id=ticket.id) }}" class="btn btn-primary w-full">
-                        <i class="fas fa-clipboard-list mr-2"></i> Auftragsdetails bearbeiten
-                    </a>
-                </div>
-            </div>
         </div>
+
+
+
+
     </div>
 </div>
 {% endblock %}
@@ -443,60 +616,7 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
 {% block scripts %}
 {{ super() }}
 <script>
-document.getElementById('messageForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const data = {
-        message: formData.get('message')
-    };
-    
-    fetch(`/tickets/{{ ticket.id }}/message`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Nachricht erfolgreich gesendet
-            const messageInput = this.querySelector('textarea[name="message"]');
-            messageInput.value = ''; // Formular leeren
-            
-            // Neue Nachricht zur UI hinzufügen
-            const messagesContainer = document.querySelector('.messages-container');
-            const newMessage = document.createElement('div');
-            newMessage.className = 'chat chat-end';
-            
-            newMessage.innerHTML = `
-                <div class="chat-header">
-                    ${data.message.sender}
-                    <time class="text-xs opacity-50">${data.message.created_at}</time>
-                </div>
-                <div class="chat-bubble chat-bubble-primary">
-                    ${data.message.text}
-                </div>
-            `;
-            
-            // Wenn keine Nachrichten vorhanden sind, entferne die "Keine Nachrichten" Meldung
-            const noMessages = messagesContainer.querySelector('.text-base-content\\/60');
-            if (noMessages) {
-                noMessages.remove();
-            }
-            
-            messagesContainer.appendChild(newMessage);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        } else {
-            alert(data.message || 'Fehler beim Senden der Nachricht');
-        }
-    })
-    .catch(error => {
-        console.error('Fehler:', error);
-        alert('Ein Fehler ist aufgetreten');
-    });
-});
+// Alte messageForm Event-Listener entfernt - wird durch das neue Layout ersetzt
 
 
 function showToast(type, message) {
@@ -1253,9 +1373,14 @@ function getChangeDescription(entry) {
 }
 
 // Modal-Event-Listener
-document.getElementById('mediaCarouselModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeMediaCarousel();
+document.addEventListener('DOMContentLoaded', function() {
+    const mediaCarouselModal = document.getElementById('mediaCarouselModal');
+    if (mediaCarouselModal) {
+        mediaCarouselModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeMediaCarousel();
+            }
+        });
     }
 });
 </script>

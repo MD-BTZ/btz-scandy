@@ -122,6 +122,12 @@ class ToolService:
                 'category': tool_data.get('category'),
                 'location': tool_data.get('location'),
                 'status': tool_data.get('status', 'verfügbar'),
+                'serial_number': tool_data.get('serial_number', ''),
+                'invoice_number': tool_data.get('invoice_number', ''),
+                'mac_address': tool_data.get('mac_address', ''),
+                'mac_address_wlan': tool_data.get('mac_address_wlan', ''),
+                'user_groups': tool_data.get('user_groups', []),
+                'additional_software': tool_data.get('additional_software', []),
                 'created_at': datetime.now(),
                 'modified_at': datetime.now(),
                 'deleted': False
@@ -183,6 +189,12 @@ class ToolService:
                 'category': tool_data.get('category', tool.get('category')),
                 'location': tool_data.get('location', tool.get('location')),
                 'status': new_status,
+                'serial_number': tool_data.get('serial_number', tool.get('serial_number', '')),
+                'invoice_number': tool_data.get('invoice_number', tool.get('invoice_number', '')),
+                'mac_address': tool_data.get('mac_address', tool.get('mac_address', '')),
+                'mac_address_wlan': tool_data.get('mac_address_wlan', tool.get('mac_address_wlan', '')),
+                'user_groups': tool_data.get('user_groups', tool.get('user_groups', [])),
+                'additional_software': tool_data.get('additional_software', tool.get('additional_software', [])),
                 'modified_at': datetime.now()
             }
             

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string, current_app
 from app.models.mongodb_models import MongoDBTicket
-from app.models.mongodb_database import mongodb
+from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
 from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number
 from app.models.user import User
@@ -575,104 +575,60 @@ def analyze_ticket(ticket_id):
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create():
-    """Erstellt ein neues Ticket."""
-    # Verwende den TicketService
-    from app.services.ticket_service import TicketService
-    ticket_service = TicketService()
+    """Erstellt ein neues Ticket"""
+    # Prüfe ob Ticketsystem aktiviert ist
+    if not is_feature_enabled('ticket_system'):
+        flash('Ticketsystem ist deaktiviert', 'error')
+        return redirect(url_for('index.index'))
     
     if request.method == 'POST':
         try:
-            # Prüfe ob die Anfrage JSON enthält
-            if request.is_json:
-                data = request.get_json()
-            else:
-                data = {
-                    'title': request.form.get('title'),
-                    'description': request.form.get('description'),
-                    'priority': request.form.get('priority', 'normal'),
-                    'category': request.form.get('category'),
-                    'due_date': request.form.get('due_date'),
-                    'estimated_time': request.form.get('estimated_time')
-                }
-
+            # Ticket-Daten sammeln
+            ticket_data = {
+                'title': request.form.get('title', '').strip(),
+                'description': request.form.get('description', '').strip(),
+                'category': request.form.get('category', '').strip(),
+                'priority': request.form.get('priority', 'normal'),
+                'status': 'offen',
+                'created_by': current_user.id,
+                'created_at': datetime.now(),
+                'assigned_to': None,
+                'department': request.form.get('department', '').strip()
+            }
+            
+            # Validierung
+            if not ticket_data['title'] or not ticket_data['description']:
+                flash('Titel und Beschreibung sind erforderlich', 'error')
+                return render_template('tickets/create.html', form_data=ticket_data)
+            
             # Ticket erstellen
-            success, message, ticket_id = ticket_service.create_ticket(data, current_user.username)
-
+            ticket_service = get_ticket_service()
+            success, message, ticket_id = ticket_service.create_ticket(ticket_data)
+            
             if success:
-                if request.is_json:
-                    return jsonify({
-                        'success': True,
-                        'message': message,
-                        'ticket_id': ticket_id
-                    })
                 flash(message, 'success')
-                return redirect(url_for('tickets.create'))
+                return redirect(url_for('tickets.detail', ticket_id=ticket_id))
             else:
-                if request.is_json:
-                    return jsonify({'success': False, 'message': message}), 400
                 flash(message, 'error')
-                return redirect(url_for('tickets.create'))
+                return render_template('tickets/create.html', form_data=ticket_data)
                 
         except Exception as e:
-            if request.is_json:
-                return jsonify({
-                    'success': False,
-                    'message': f'Fehler beim Erstellen des Tickets: {str(e)}'
-                }), 500
-            flash(f'Fehler beim Erstellen des Tickets: {str(e)}', 'error')
-            return redirect(url_for('tickets.create'))
+            logger.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
+            flash('Fehler beim Erstellen des Tickets', 'error')
+            return render_template('tickets/create.html', form_data=ticket_data)
     
-    # Verwende den TicketService für alle Ticket-Operationen
-    print(f"DEBUG: Lade Tickets für Benutzer: {current_user.username}, Rolle: {current_user.role}")
-    
-    # Hole Handlungsfelder des Benutzers
-    handlungsfelder = getattr(current_user, 'handlungsfelder', [])
-    print(f"DEBUG: Handlungsfelder des Benutzers: {handlungsfelder}")
-    
-    tickets_data = ticket_service.get_tickets_by_user(current_user.username, current_user.role, handlungsfelder)
-    open_tickets = tickets_data['open_tickets']
-    assigned_tickets = tickets_data['assigned_tickets']
-    all_tickets = tickets_data['all_tickets']
-    
-    print(f"DEBUG: Route erhalten: {len(open_tickets)} offene, {len(assigned_tickets)} zugewiesene, {len(all_tickets)} alle Tickets")
-    
-    # Debug: Zeige Details der ersten Tickets
-    if open_tickets:
-        print(f"DEBUG: Erstes offenes Ticket: {open_tickets[0].get('title', 'Kein Titel')} (ID: {open_tickets[0].get('id', 'Keine ID')})")
-    if assigned_tickets:
-        print(f"DEBUG: Erstes zugewiesenes Ticket: {assigned_tickets[0].get('title', 'Kein Titel')} (ID: {assigned_tickets[0].get('id', 'Keine ID')})")
-    
-    # Hole alle Kategorien aus der settings Collection
-    categories = get_ticket_categories_from_settings()
-    
-    # Für Admins, Mitarbeiter und Teilnehmer: Hole alle Mitarbeiter
-    workers = []
-    if current_user.role in ['admin', 'mitarbeiter', 'teilnehmer']:
-        workers = list(mongodb.find('users', {'role': {'$in': ['admin', 'mitarbeiter']}}))
-    
-    print(f"DEBUG: Rendere Template mit {len(open_tickets)} offenen, {len(assigned_tickets)} zugewiesenen, {len(all_tickets)} allen Tickets")
-            
-    return render_template('tickets/create.html', 
-                         assigned_tickets=assigned_tickets,
-                         open_tickets=open_tickets,
-                         all_tickets=all_tickets,
-                         workers=workers,
-                         show_all_tickets=current_user.role in ['admin', 'mitarbeiter', 'teilnehmer'],
-                         categories=categories,
-                         now=datetime.now(),
-                         status_colors={
-                             'offen': 'info',
-                             'in_bearbeitung': 'warning',
-                             'wartet_auf_antwort': 'warning',
-                             'gelöst': 'success',
-                             'geschlossen': 'ghost'
-                         },
-                         priority_colors={
-                             'niedrig': 'secondary',
-                             'normal': 'primary',
-                             'hoch': 'error',
-                             'dringend': 'error'
-                         })
+    # GET Request - Formular anzeigen
+    try:
+        categories = get_ticket_categories_from_settings()
+        departments = get_departments_from_settings()
+        
+        return render_template('tickets/create.html',
+                             categories=categories,
+                             departments=departments)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des Ticket-Formulars: {str(e)}")
+        flash('Fehler beim Laden des Formulars', 'error')
+        return redirect(url_for('index.index'))
 
 @bp.route('/view/<ticket_id>')
 @login_required
@@ -813,7 +769,44 @@ def view(ticket_id):
         flash('Fehler beim Laden der Nachrichten.', 'error')
         return redirect(url_for('tickets.create'))
 
-@bp.route('/<ticket_id>/message', methods=['POST'])
+@bp.route('/<ticket_id>/messages')
+@login_required
+def get_ticket_messages(ticket_id):
+    """Lädt Nachrichten für ein Ticket"""
+    logging.info(f"get_ticket_messages aufgerufen für Ticket {ticket_id}")
+    try:
+        # Robuste ID-Behandlung für verschiedene ID-Typen
+        ticket = find_document_by_id('tickets', ticket_id)
+        if not ticket:
+            return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        # Verwende die Ticket-ID für alle Abfragen
+        ticket_id_for_query = convert_id_for_query(ticket_id)
+        
+        # Hole alle Nachrichten für das Ticket
+        all_messages = list(mongodb.find('ticket_messages', {'ticket_id': ticket_id_for_query}))
+        
+        # Sortiere Nachrichten nach Datum (älteste zuerst)
+        all_messages.sort(key=lambda x: x.get('created_at', datetime.min))
+        
+        # Formatiere Datum für jede Nachricht
+        for msg in all_messages:
+            if isinstance(msg.get('created_at'), datetime):
+                msg['formatted_date'] = msg['created_at'].strftime('%d.%m.%Y %H:%M')
+            else:
+                msg['formatted_date'] = str(msg.get('created_at', ''))
+        
+        logging.info(f"Nachrichten erfolgreich geladen: {len(all_messages)} Nachrichten")
+        return jsonify({
+            'success': True,
+            'messages': all_messages
+        })
+        
+    except Exception as e:
+        logging.error(f"Fehler beim Laden der Nachrichten: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/<ticket_id>/add-message', methods=['POST'])
 @login_required
 def add_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu"""
@@ -827,13 +820,8 @@ def add_message(ticket_id):
         # Verwende die Ticket-ID für alle Abfragen
         ticket_id_for_query = convert_id_for_query(ticket_id)
         
-        # Hole die Nachricht aus dem Request
-        if not request.is_json:
-            logging.error("Ungültiges Anfrageformat (kein JSON)")
-            return jsonify({'success': False, 'message': 'Ungültiges Anfrageformat'}), 400
-            
-        data = request.get_json()
-        message = data['message'].strip()
+        # Hole die Nachricht aus dem Request (FormData für Datei-Upload)
+        message = request.form.get('message', '').strip()
         if not message:
             logging.error("Leere Nachricht")
             return jsonify({'success': False, 'message': 'Nachricht darf nicht leer sein'}), 400
@@ -857,7 +845,7 @@ def add_message(ticket_id):
             from app.services.ticket_history_service import ticket_history_service
             ticket_history_service.log_message_added(
                 ticket_id=str(ticket_id),
-                message=message,
+                message="Nachricht gesendet",  # Kein Inhalt, nur dass eine Nachricht gesendet wurde
                 added_by=current_user.username
             )
         except Exception as history_error:

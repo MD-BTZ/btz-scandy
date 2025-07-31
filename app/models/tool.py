@@ -16,6 +16,14 @@ class Tool(BaseModel):
         self.deleted = kwargs.get('deleted', False)
         self.created_at = kwargs.get('created_at', datetime.now())
         self.updated_at = kwargs.get('updated_at', datetime.now())
+        
+        # Neue optionale Felder
+        self.serial_number = kwargs.get('serial_number', '')
+        self.invoice_number = kwargs.get('invoice_number', '')
+        self.mac_address = kwargs.get('mac_address', '')
+        self.mac_address_wlan = kwargs.get('mac_address_wlan', '')
+        self.user_groups = kwargs.get('user_groups', [])
+        self.additional_software = kwargs.get('additional_software', [])
 
     @staticmethod
     def get_all_with_status():
@@ -195,7 +203,13 @@ class Tool(BaseModel):
             'image_path': self.image_path,
             'deleted': self.deleted,
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'updated_at': self.updated_at,
+            'serial_number': self.serial_number,
+            'invoice_number': self.invoice_number,
+            'mac_address': self.mac_address,
+            'mac_address_wlan': self.mac_address_wlan,
+            'user_groups': self.user_groups,
+            'additional_software': self.additional_software
         }
         
         if hasattr(self, '_id') and self._id:
