@@ -44,7 +44,6 @@
 <th>Standort</th>
 <th>Status</th>
 {% if feature_settings.get('software_management', False) %}
-<th>Software</th>
 <th>Nutzergruppen</th>
 {% endif %}
 <th>Ausgeliehen seit</th>
@@ -109,22 +108,6 @@
         {% endif %}
     </td>
     {% if feature_settings.get('software_management', False) %}
-    <td>
-        {% if tool.additional_software %}
-            <div class="flex flex-wrap gap-1">
-                {% for software_id in tool.additional_software %}
-                    {% set software = software_presets|selectattr("_id", "equalto", software_id)|first %}
-                    {% if software %}
-                    <span class="badge badge-sm badge-outline">{{ software.name }}</span>
-                    {% else %}
-                    <span class="badge badge-sm badge-ghost">{{ software_id }}</span>
-                    {% endif %}
-                {% endfor %}
-            </div>
-        {% else %}
-            <span class="text-base-content/40 text-sm">-</span>
-        {% endif %}
-    </td>
     <td>
         {% if tool.user_groups %}
             <div class="flex flex-wrap gap-1">
