@@ -127,7 +127,7 @@
                         {% for group in user_groups %}
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" name="user_groups" value="{{ group._id }}" class="checkbox checkbox-sm" 
-                                   {% if form_data and group._id in form_data.user_groups %}checked{% endif %}>
+                                   {% if form_data and group._id|string in form_data.user_groups %}checked{% endif %}>
                             <span class="text-sm">{{ group.name }}</span>
                             {% if group.description %}
                             <span class="text-xs text-base-content/60">({{ group.description }})</span>
@@ -147,7 +147,7 @@
                         {% for software in software_presets %}
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" name="additional_software" value="{{ software._id }}" class="checkbox checkbox-sm" 
-                                   {% if form_data and software._id in form_data.additional_software %}checked{% endif %}>
+                                   {% if form_data and software._id|string in form_data.additional_software %}checked{% endif %}>
                             <span class="text-sm">{{ software.name }}</span>
                             {% if software.category %}
                             <span class="text-xs text-base-content/60">({{ software.category }})</span>
