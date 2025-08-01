@@ -120,8 +120,17 @@ def add():
             # Software-Management Daten nur hinzufügen, wenn Feature aktiviert ist
             feature_settings = get_feature_settings_safe()
             if feature_settings.get('software_management', False):
-                tool_data['user_groups'] = request.form.getlist('user_groups')
-                tool_data['additional_software'] = request.form.getlist('additional_software')
+                user_groups_data = request.form.getlist('user_groups')
+                additional_software_data = request.form.getlist('additional_software')
+                tool_data['user_groups'] = user_groups_data
+                tool_data['additional_software'] = additional_software_data
+                print(f"DEBUG: Software-Management aktiviert")
+                print(f"DEBUG: user_groups = {user_groups_data}")
+                print(f"DEBUG: additional_software = {additional_software_data}")
+            else:
+                print(f"DEBUG: Software-Management deaktiviert")
+                tool_data['user_groups'] = []
+                tool_data['additional_software'] = []
             
 
             
@@ -241,8 +250,17 @@ def edit(barcode):
         # Software-Management Daten nur hinzufügen, wenn Feature aktiviert ist
         feature_settings = get_feature_settings_safe()
         if feature_settings.get('software_management', False):
-            tool_data['user_groups'] = request.form.getlist('user_groups')
-            tool_data['additional_software'] = request.form.getlist('additional_software')
+            user_groups_data = request.form.getlist('user_groups')
+            additional_software_data = request.form.getlist('additional_software')
+            tool_data['user_groups'] = user_groups_data
+            tool_data['additional_software'] = additional_software_data
+            print(f"DEBUG EDIT: Software-Management aktiviert")
+            print(f"DEBUG EDIT: user_groups = {user_groups_data}")
+            print(f"DEBUG EDIT: additional_software = {additional_software_data}")
+        else:
+            print(f"DEBUG EDIT: Software-Management deaktiviert")
+            tool_data['user_groups'] = []
+            tool_data['additional_software'] = []
         
         # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
         form_status = request.form.get('status')

@@ -161,6 +161,9 @@ class ToolService:
                 'deleted': False
             }
             
+            print(f"DEBUG SERVICE CREATE: user_groups = {tool['user_groups']}")
+            print(f"DEBUG SERVICE CREATE: additional_software = {tool['additional_software']}")
+            
             # Werkzeug in Datenbank speichern
             result = mongodb.insert_one('tools', tool)
             
@@ -225,6 +228,9 @@ class ToolService:
                 'additional_software': tool_data.get('additional_software', tool.get('additional_software', [])),
                 'modified_at': datetime.now()
             }
+            
+            print(f"DEBUG SERVICE UPDATE: user_groups = {update_data['user_groups']}")
+            print(f"DEBUG SERVICE UPDATE: additional_software = {update_data['additional_software']}")
             
             if new_barcode != barcode:
                 update_data['barcode'] = new_barcode
