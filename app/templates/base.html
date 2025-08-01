@@ -343,17 +343,18 @@
                                 <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
                             </a>
                         </li>
-                        {% if current_user.is_admin %}
                         <li>
                             <a href="{{ url_for('admin.system') }}" class="{% if request.endpoint and 'admin.system' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-cogs mr-2"></i>Systemverwaltung
                             </a>
                         </li>
+                        {% if feature_settings.get('software_management', False) %}
                         <li>
                             <a href="{{ url_for('admin.software_management') }}" class="{% if request.endpoint and 'admin.software_management' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-desktop mr-2"></i>Software & Nutzergruppen
                             </a>
                         </li>
+                        {% endif %}
                         <li>
                             <a href="{{ url_for('admin.feature_settings') }}" class="{% if request.endpoint and 'admin.feature_settings' in request.endpoint %}active{% endif %}">
                                 <i class="fas fa-toggle-on mr-2"></i>Feature-Einstellungen

@@ -380,8 +380,12 @@ def get_feature_settings():
         default_settings = {
             'tools': True,
             'consumables': True,
+            'workers': True,
             'lending_system': True,
             'ticket_system': True,
+            'timesheet': True,
+            'media_management': True,
+            'software_management': False,
             'job_board': False,
             'weekly_reports': False,
             # Werkzeug-Felder (standardmäßig aktiviert)
@@ -453,8 +457,12 @@ def is_feature_enabled(feature_name):
         default_settings = {
             'tools': True,
             'consumables': True,
+            'workers': True,
             'lending_system': True,
             'ticket_system': True,
+            'timesheet': True,
+            'media_management': True,
+            'software_management': False,
             'job_board': False,
             'weekly_reports': False,
             # Werkzeug-Felder (standardmäßig aktiviert)

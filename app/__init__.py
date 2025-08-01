@@ -394,11 +394,23 @@ def create_app(test_config=None):
                 'geschlossen': 'secondary'
             },
             'priority_colors': {
-                'niedrig': 'info',
+                'niedrig': 'secondary',
                 'normal': 'primary',
-                'hoch': 'warning',
-                'kritisch': 'error'
+                'hoch': 'error',
+                'dringend': 'error'
             }
         }
+    
+    # ===== CONTEXT PROCESSOR FÜR FEATURE-EINSTELLUNGEN =====
+    @app.context_processor
+    def feature_processor():
+        """Injiziert Feature-Einstellungen in alle Templates"""
+        try:
+            from app.models.mongodb_database import get_feature_settings
+            feature_settings = get_feature_settings()
+            return {'feature_settings': feature_settings}
+        except Exception as e:
+            app.logger.warning(f"Fehler beim Laden der Feature-Einstellungen: {e}")
+            return {'feature_settings': {}}
 
     return app
