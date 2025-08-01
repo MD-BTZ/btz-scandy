@@ -43,6 +43,10 @@
 <th>Kategorie</th>
 <th>Standort</th>
 <th>Status</th>
+{% if feature_settings.get('software_management', False) %}
+<th>Software</th>
+<th>Nutzergruppen</th>
+{% endif %}
 <th>Ausgeliehen seit</th>
 <th>Ausgeliehen bis</th>
 <th class="text-right">Aktionen</th>
@@ -104,6 +108,40 @@
             <div class="badge badge-ghost gap-1">{{ tool.status|capitalize }}</div>
         {% endif %}
     </td>
+    {% if feature_settings.get('software_management', False) %}
+    <td>
+        {% if tool.additional_software %}
+            <div class="flex flex-wrap gap-1">
+                {% for software_id in tool.additional_software %}
+                    {% set software = software_presets|selectattr("_id", "equalto", software_id)|first %}
+                    {% if software %}
+                    <span class="badge badge-sm badge-outline">{{ software.name }}</span>
+                    {% else %}
+                    <span class="badge badge-sm badge-ghost">{{ software_id }}</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <span class="text-base-content/40 text-sm">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if tool.user_groups %}
+            <div class="flex flex-wrap gap-1">
+                {% for group_id in tool.user_groups %}
+                    {% set group = user_groups|selectattr("_id", "equalto", group_id)|first %}
+                    {% if group %}
+                    <span class="badge badge-sm badge-primary">{{ group.name }}</span>
+                    {% else %}
+                    <span class="badge badge-sm badge-ghost">{{ group_id }}</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <span class="text-base-content/40 text-sm">-</span>
+        {% endif %}
+    </td>
+    {% endif %}
     <td>
         {% if tool.lent_at and (tool.status == 'ausgeliehen' or tool.status == 'überfällig') %}
             <span class="text-sm">{{ tool.lent_at | datetime if tool.lent_at else '-' }}</span>

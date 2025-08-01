@@ -74,10 +74,18 @@ def index():
         categories = get_categories_from_settings()
         locations = get_locations_from_settings()
         
+        # Hole Software und Nutzergruppen für Software-Management Feature
+        software_presets = get_software_presets()
+        user_groups = get_user_groups()
+        feature_settings = get_feature_settings_safe()
+        
         return render_template('tools/index.html',
                              tools=tools,
                              categories=categories,
-                             locations=locations)
+                             locations=locations,
+                             software_presets=software_presets,
+                             user_groups=user_groups,
+                             feature_settings=feature_settings)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
         flash('Fehler beim Laden der Werkzeuge', 'error')
