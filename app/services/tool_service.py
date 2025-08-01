@@ -54,8 +54,36 @@ class ToolService:
                     if current_lending:
                         tool['is_borrowed'] = True
                         tool['current_borrower'] = current_lending.get('worker_name', 'Unbekannt')
+                        tool['lent_to_worker_barcode'] = current_lending.get('worker_barcode')
+                        tool['lent_to_worker_name'] = current_lending.get('worker_name', 'Unbekannt')
+                        tool['lent_at'] = current_lending.get('lent_at')
+                        tool['expected_return_date'] = current_lending.get('expected_return_date')
+                        
+                        # Prüfe ob das Werkzeug überfällig ist
+                        if current_lending.get('expected_return_date'):
+                            expected_date = current_lending['expected_return_date']
+                            # Konvertiere String zu datetime falls nötig
+                            if isinstance(expected_date, str):
+                                try:
+                                    expected_date = datetime.strptime(expected_date, '%Y-%m-%d')
+                                except ValueError:
+                                    expected_date = None
+                            
+                            # Prüfe ob überfällig
+                            if expected_date and expected_date.date() < datetime.now().date():
+                                tool['status'] = 'überfällig'
+                            else:
+                                tool['status'] = 'ausgeliehen'
+                        else:
+                            tool['status'] = 'ausgeliehen'
                     else:
                         tool['is_borrowed'] = False
+                        tool['lent_to_worker_barcode'] = None
+                        tool['lent_to_worker_name'] = None
+                        tool['lent_at'] = None
+                        tool['expected_return_date'] = None
+                        if not tool.get('status'):
+                            tool['status'] = 'verfügbar'
                     
                     processed_tools.append(tool)
                 except Exception as tool_error:
