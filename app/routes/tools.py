@@ -149,7 +149,7 @@ def add():
             
             # Werkzeug erstellen
             tool_service = get_tool_service()
-            success, message = tool_service.create_tool(tool_data)
+            success, message, barcode = tool_service.create_tool(tool_data)
             
             if success:
                 flash(message, 'success')
