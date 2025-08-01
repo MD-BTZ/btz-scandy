@@ -411,6 +411,11 @@ def get_feature_settings():
                 if key not in settings:
                     settings[key] = value
             
+            # Kern-Features, die immer aktiviert sein sollten
+            core_features = ['tools', 'consumables', 'workers', 'lending_system']
+            for feature in core_features:
+                settings[feature] = True
+            
             return settings
         except:
             # Fallback zu Standard-Einstellungen
@@ -473,6 +478,11 @@ def is_feature_enabled(feature_name):
             'tool_field_user_groups': True,
             'tool_field_software': True
         }
+        
+        # Kern-Features, die immer aktiviert sein sollten
+        core_features = ['tools', 'consumables', 'workers', 'lending_system']
+        if feature_name in core_features:
+            return True
         
         # Versuche aus MongoDB zu lesen
         try:
