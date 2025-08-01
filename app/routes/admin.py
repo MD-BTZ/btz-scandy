@@ -1557,7 +1557,10 @@ def manage_users():
         # Warnung anzeigen wenn abgelaufene Konten existieren
         if expired_users:
             expired_count = len(expired_users)
-            flash(f'Warnung: {expired_count} Benutzerkonto(s) sind abgelaufen und sollten überprüft werden!', 'warning')
+            if expired_count == 1:
+                flash(f'Warnung: 1 Benutzerkonto ist abgelaufen und sollte überprüft werden!', 'warning')
+            else:
+                flash(f'Warnung: {expired_count} Benutzerkonten sind abgelaufen und sollten überprüft werden!', 'warning')
         
         return render_template('admin/users.html', users=users, expired_users=expired_users)
     except Exception as e:
