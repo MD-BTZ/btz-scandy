@@ -2354,7 +2354,14 @@ def feature_settings():
         if request.method == 'POST':
             # Feature-Einstellungen verarbeiten
             features = {
+                'tools': request.form.get('feature_tools') == 'on',
+                'consumables': request.form.get('feature_consumables') == 'on',
+                'workers': request.form.get('feature_workers') == 'on',
+                'lending_system': request.form.get('feature_lending_system') == 'on',
                 'ticket_system': request.form.get('feature_ticket_system') == 'on',
+                'timesheet': request.form.get('feature_timesheet') == 'on',
+                'media_management': request.form.get('feature_media_management') == 'on',
+                'software_management': request.form.get('feature_software_management') == 'on',
                 'job_board': request.form.get('feature_job_board') == 'on',
                 'weekly_reports': request.form.get('feature_weekly_reports') == 'on',
                 # Werkzeug-Felder

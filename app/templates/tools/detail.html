@@ -71,7 +71,7 @@
                     {% endif %}
                     
                     <!-- Neue optionale Felder -->
-                    {% if tool.serial_number or tool.invoice_number or tool.mac_address or tool.mac_address_wlan or tool.installed_software or tool.user_groups %}
+                    {% if tool.serial_number or tool.invoice_number or tool.mac_address or tool.mac_address_wlan or (feature_settings.get('software_management', False) and (tool.additional_software or tool.user_groups)) %}
                     <div class="divider">
                         <span class="text-sm font-medium text-base-content/70">Zusätzliche Informationen</span>
                     </div>
@@ -114,38 +114,7 @@
                         {% endif %}
                     </div>
                     
-                    {% if tool.installed_software %}
-                    <div class="mt-4">
-                        <label class="label">
-                            <span class="label-text font-semibold">Installierte Software</span>
-                        </label>
-                        <div class="flex flex-wrap gap-2">
-                            {% for software in tool.installed_software %}
-                            <span class="badge badge-outline">{{ software }}</span>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    
-                    {% if tool.user_groups %}
-                    <div class="mt-4">
-                        <label class="label">
-                            <span class="label-text font-semibold">Nutzergruppen</span>
-                        </label>
-                        <div class="flex flex-wrap gap-2">
-                            {% for group_id in tool.user_groups %}
-                                {% set group = user_groups|selectattr("_id", "equalto", group_id)|first %}
-                                {% if group %}
-                                <span class="badge badge-primary">{{ group.name }}</span>
-                                {% else %}
-                                <span class="badge badge-outline">{{ group_id }}</span>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    
-                    {% if tool.additional_software %}
+                    {% if feature_settings.get('software_management', False) and tool.additional_software %}
                     <div class="mt-4">
                         <label class="label">
                             <span class="label-text font-semibold">Installierte Software</span>
@@ -157,6 +126,24 @@
                                 <span class="badge badge-primary">{{ software.name }}</span>
                                 {% else %}
                                 <span class="badge badge-outline">{{ software_id }}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if feature_settings.get('software_management', False) and tool.user_groups %}
+                    <div class="mt-4">
+                        <label class="label">
+                            <span class="label-text font-semibold">Nutzergruppen</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            {% for group_id in tool.user_groups %}
+                                {% set group = user_groups|selectattr("_id", "equalto", group_id)|first %}
+                                {% if group %}
+                                <span class="badge badge-primary">{{ group.name }}</span>
+                                {% else %}
+                                <span class="badge badge-outline">{{ group_id }}</span>
                                 {% endif %}
                             {% endfor %}
                         </div>

@@ -106,10 +106,14 @@ def add():
                 'serial_number': request.form.get('serial_number', ''),
                 'invoice_number': request.form.get('invoice_number', ''),
                 'mac_address': request.form.get('mac_address', ''),
-                'mac_address_wlan': request.form.get('mac_address_wlan', ''),
-                'user_groups': request.form.getlist('user_groups'),
-                'additional_software': request.form.getlist('additional_software')
+                'mac_address_wlan': request.form.get('mac_address_wlan', '')
             }
+            
+            # Software-Management Daten nur hinzufügen, wenn Feature aktiviert ist
+            feature_settings = get_feature_settings_safe()
+            if feature_settings.get('software_management', False):
+                tool_data['user_groups'] = request.form.getlist('user_groups')
+                tool_data['additional_software'] = request.form.getlist('additional_software')
             
 
             
@@ -223,14 +227,14 @@ def edit(barcode):
             'serial_number': request.form.get('serial_number', ''),
             'invoice_number': request.form.get('invoice_number', ''),
             'mac_address': request.form.get('mac_address', ''),
-            'mac_address_wlan': request.form.get('mac_address_wlan', ''),
-            'user_groups': request.form.getlist('user_groups'),
-            'additional_software': request.form.getlist('additional_software')
+            'mac_address_wlan': request.form.get('mac_address_wlan', '')
         }
         
-
-        
-
+        # Software-Management Daten nur hinzufügen, wenn Feature aktiviert ist
+        feature_settings = get_feature_settings_safe()
+        if feature_settings.get('software_management', False):
+            tool_data['user_groups'] = request.form.getlist('user_groups')
+            tool_data['additional_software'] = request.form.getlist('additional_software')
         
         # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
         form_status = request.form.get('status')

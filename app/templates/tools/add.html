@@ -117,6 +117,7 @@
                 </div>
                 {% endif %}
                 
+                {% if feature_settings.get('software_management', False) %}
                 {% if feature_settings.get('tool_field_user_groups', True) %}
                 <div class="form-control">
                     <label class="label">
@@ -155,6 +156,7 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% endif %}
                 {% endif %}
                 
                 <div class="form-control">
