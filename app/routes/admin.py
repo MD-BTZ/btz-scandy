@@ -2353,7 +2353,14 @@ def feature_settings():
             features = {
                 'ticket_system': request.form.get('feature_ticket_system') == 'on',
                 'job_board': request.form.get('feature_job_board') == 'on',
-                'weekly_reports': request.form.get('feature_weekly_reports') == 'on'
+                'weekly_reports': request.form.get('feature_weekly_reports') == 'on',
+                # Werkzeug-Felder
+                'tool_field_serial_number': request.form.get('tool_field_serial_number') == 'on',
+                'tool_field_invoice_number': request.form.get('tool_field_invoice_number') == 'on',
+                'tool_field_mac_address': request.form.get('tool_field_mac_address') == 'on',
+                'tool_field_mac_address_wlan': request.form.get('tool_field_mac_address_wlan') == 'on',
+                'tool_field_user_groups': request.form.get('tool_field_user_groups') == 'on',
+                'tool_field_software': request.form.get('tool_field_software') == 'on'
             }
             
             # Einstellungen speichern

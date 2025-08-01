@@ -72,6 +72,109 @@
                 
                 <div class="divider"></div>
                 
+                <!-- Werkzeug-Felder -->
+                <div class="space-y-4">
+                    <h2 class="text-xl font-semibold mb-4">Werkzeug-Felder</h2>
+                    <p class="text-sm text-base-content/60 mb-4">
+                        Wählen Sie, welche optionalen Felder bei Werkzeugen angezeigt werden sollen
+                    </p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        <!-- Seriennummer -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-hashtag mr-2"></i>
+                                    Seriennummer
+                                </span>
+                                <input type="checkbox" name="tool_field_serial_number" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_serial_number', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Seriennummer-Eingabefeld anzeigen
+                            </div>
+                        </div>
+                        
+                        <!-- Rechnungsnummer -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-receipt mr-2"></i>
+                                    Rechnungsnummer
+                                </span>
+                                <input type="checkbox" name="tool_field_invoice_number" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_invoice_number', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Rechnungsnummer-Eingabefeld anzeigen
+                            </div>
+                        </div>
+                        
+                        <!-- MAC-Adresse (LAN) -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-ethernet mr-2"></i>
+                                    MAC-Adresse (LAN)
+                                </span>
+                                <input type="checkbox" name="tool_field_mac_address" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_mac_address', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                LAN MAC-Adresse-Eingabefeld anzeigen
+                            </div>
+                        </div>
+                        
+                        <!-- MAC-Adresse (WLAN) -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-wifi mr-2"></i>
+                                    MAC-Adresse (WLAN)
+                                </span>
+                                <input type="checkbox" name="tool_field_mac_address_wlan" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_mac_address_wlan', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                WLAN MAC-Adresse-Eingabefeld anzeigen
+                            </div>
+                        </div>
+                        
+                        <!-- Nutzergruppen -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-users mr-2"></i>
+                                    Nutzergruppen
+                                </span>
+                                <input type="checkbox" name="tool_field_user_groups" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_user_groups', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Nutzergruppen-Auswahl anzeigen
+                            </div>
+                        </div>
+                        
+                        <!-- Software -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-desktop mr-2"></i>
+                                    Installierte Software
+                                </span>
+                                <input type="checkbox" name="tool_field_software" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('tool_field_software', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Software-Auswahl anzeigen
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
                 <!-- Speichern Button -->
                 <div class="flex justify-end">
                     <button type="submit" class="btn btn-primary">

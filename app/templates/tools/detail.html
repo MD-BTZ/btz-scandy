@@ -317,26 +317,7 @@
                 </div>
             </div>
 
-            <!-- Aktionen -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title">
-                        <i class="fas fa-cogs text-primary mr-2"></i>Aktionen
-                    </h2>
-                    
-                    <div class="space-y-2">
-                        {% if tool.is_available %}
-                            <button onclick="returnTool()" class="btn btn-success w-full" disabled>
-                                <i class="fas fa-hand-holding mr-2"></i>QuickScan verwenden
-                            </button>
-                        {% else %}
-                            <button onclick="returnTool()" class="btn btn-success w-full" disabled>
-                                <i class="fas fa-undo mr-2"></i>QuickScan verwenden
-                            </button>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+
         </div>
     </div>
 </div>
@@ -424,42 +405,56 @@
             </div>
             
             <!-- Optionale Informationen -->
+            {% if feature_settings.get('tool_field_serial_number', True) or feature_settings.get('tool_field_invoice_number', True) or feature_settings.get('tool_field_mac_address', True) or feature_settings.get('tool_field_mac_address_wlan', True) or feature_settings.get('tool_field_user_groups', True) or feature_settings.get('tool_field_software', True) %}
             <div class="divider">
                 <span class="text-sm font-medium text-base-content/70">Optionale Informationen</span>
             </div>
+            {% endif %}
             
+            {% if feature_settings.get('tool_field_serial_number', True) or feature_settings.get('tool_field_invoice_number', True) or feature_settings.get('tool_field_mac_address', True) or feature_settings.get('tool_field_mac_address_wlan', True) %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {% if feature_settings.get('tool_field_serial_number', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Seriennummer</span>
                     </label>
                     <input type="text" name="serial_number" class="input input-bordered" value="{{ tool.serial_number or '' }}" maxlength="100">
                 </div>
+                {% endif %}
                 
+                {% if feature_settings.get('tool_field_invoice_number', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Rechnungsnummer</span>
                     </label>
                     <input type="text" name="invoice_number" class="input input-bordered" value="{{ tool.invoice_number or '' }}" maxlength="100">
                 </div>
+                {% endif %}
                 
+                {% if feature_settings.get('tool_field_mac_address', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">MAC-Adresse (LAN)</span>
                     </label>
                     <input type="text" name="mac_address" class="input input-bordered" value="{{ tool.mac_address or '' }}" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX">
                 </div>
+                {% endif %}
                 
+                {% if feature_settings.get('tool_field_mac_address_wlan', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">MAC-Adresse (WLAN)</span>
                     </label>
                     <input type="text" name="mac_address_wlan" class="input input-bordered" value="{{ tool.mac_address_wlan or '' }}" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX">
                 </div>
+                {% endif %}
             </div>
+            {% endif %}
             
             <!-- Software und Nutzergruppen -->
+            {% if feature_settings.get('tool_field_user_groups', True) or feature_settings.get('tool_field_software', True) %}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {% if feature_settings.get('tool_field_user_groups', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Nutzergruppen</span>
@@ -475,13 +470,11 @@
                             {% endif %}
                         </label>
                         {% endfor %}
-                        <div class="mt-2">
-                            <input type="text" name="custom_user_group" class="input input-bordered input-sm w-full" 
-                                   placeholder="Weitere Nutzergruppe hinzufügen..." maxlength="100">
-                        </div>
                     </div>
                 </div>
+                {% endif %}
                 
+                {% if feature_settings.get('tool_field_software', True) %}
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Installierte Software</span>
@@ -507,7 +500,9 @@
                         {% endif %}
                     </div>
                 </div>
+                {% endif %}
             </div>
+            {% endif %}
             
             <div class="modal-action flex flex-wrap gap-2 justify-end">
                 <button type="submit" class="btn btn-primary">

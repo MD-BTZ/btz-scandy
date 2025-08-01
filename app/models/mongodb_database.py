@@ -383,7 +383,14 @@ def get_feature_settings():
             'lending_system': True,
             'ticket_system': True,
             'job_board': False,
-            'weekly_reports': False
+            'weekly_reports': False,
+            # Werkzeug-Felder (standardmäßig aktiviert)
+            'tool_field_serial_number': True,
+            'tool_field_invoice_number': True,
+            'tool_field_mac_address': True,
+            'tool_field_mac_address_wlan': True,
+            'tool_field_user_groups': True,
+            'tool_field_software': True
         }
         
         # Versuche MongoDB zu verwenden
@@ -417,7 +424,14 @@ def get_feature_settings():
             'media_management': True,
             'software_management': False,
             'job_board': False,
-            'weekly_reports': False
+            'weekly_reports': False,
+            # Werkzeug-Felder (standardmäßig aktiviert)
+            'tool_field_serial_number': True,
+            'tool_field_invoice_number': True,
+            'tool_field_mac_address': True,
+            'tool_field_mac_address_wlan': True,
+            'tool_field_user_groups': True,
+            'tool_field_software': True
         }
 
 def set_feature_setting(feature_name, enabled):
@@ -442,7 +456,14 @@ def is_feature_enabled(feature_name):
             'lending_system': True,
             'ticket_system': True,
             'job_board': False,
-            'weekly_reports': False
+            'weekly_reports': False,
+            # Werkzeug-Felder (standardmäßig aktiviert)
+            'tool_field_serial_number': True,
+            'tool_field_invoice_number': True,
+            'tool_field_mac_address': True,
+            'tool_field_mac_address_wlan': True,
+            'tool_field_user_groups': True,
+            'tool_field_software': True
         }
         
         # Versuche aus MongoDB zu lesen

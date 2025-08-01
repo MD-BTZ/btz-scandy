@@ -11,6 +11,23 @@ from app.models.mongodb_database import mongodb, is_feature_enabled
 bp = Blueprint('tools', __name__, url_prefix='/tools')
 logger = logging.getLogger(__name__) # Logger für dieses Modul
 
+def get_feature_settings_safe():
+    """Lädt Feature-Einstellungen sicher mit Fallback"""
+    try:
+        from app.models.mongodb_database import get_feature_settings
+        return get_feature_settings()
+    except Exception as e:
+        logger.warning(f"Fehler beim Laden der Feature-Einstellungen: {str(e)}")
+        # Fallback zu Standard-Einstellungen
+        return {
+            'tool_field_serial_number': True,
+            'tool_field_invoice_number': True,
+            'tool_field_mac_address': True,
+            'tool_field_mac_address_wlan': True,
+            'tool_field_user_groups': True,
+            'tool_field_software': True
+        }
+
 # ToolService wird bei Bedarf initialisiert
 tool_service = None
 
@@ -139,19 +156,20 @@ def add():
                 'additional_software': request.form.getlist('additional_software')
             }
             
-            # Custom Software und Nutzergruppen hinzufügen
-            custom_software = request.form.get('custom_software', '').strip()
-            if custom_software:
-                tool_data['additional_software'].extend([s.strip() for s in custom_software.split(',') if s.strip()])
+
             
-            custom_user_group = request.form.get('custom_user_group', '').strip()
-            if custom_user_group:
-                tool_data['user_groups'].append(custom_user_group)
+
             
             # Validierung
             if not tool_data['name'] or not tool_data['barcode']:
                 flash('Name und Barcode sind erforderlich', 'error')
-                return render_template('tools/add.html', form_data=tool_data)
+                return render_template('tools/add.html', 
+                                     form_data=tool_data,
+                                     categories=get_categories_from_settings(),
+                                     locations=get_locations_from_settings(),
+                                     software_presets=get_software_presets(),
+                                     user_groups=get_user_groups(),
+                                     feature_settings=get_feature_settings_safe())
             
             # Werkzeug erstellen
             tool_service = get_tool_service()
@@ -162,12 +180,24 @@ def add():
                 return redirect(url_for('tools.index'))
             else:
                 flash(message, 'error')
-                return render_template('tools/add.html', form_data=tool_data)
+                return render_template('tools/add.html', 
+                                     form_data=tool_data,
+                                     categories=get_categories_from_settings(),
+                                     locations=get_locations_from_settings(),
+                                     software_presets=get_software_presets(),
+                                     user_groups=get_user_groups(),
+                                     feature_settings=get_feature_settings_safe())
                 
         except Exception as e:
             logger.error(f"Fehler beim Erstellen des Werkzeugs: {str(e)}")
             flash('Fehler beim Erstellen des Werkzeugs', 'error')
-            return render_template('tools/add.html', form_data=tool_data)
+            return render_template('tools/add.html', 
+                                 form_data=tool_data,
+                                 categories=get_categories_from_settings(),
+                                 locations=get_locations_from_settings(),
+                                 software_presets=get_software_presets(),
+                                 user_groups=get_user_groups(),
+                                 feature_settings=get_feature_settings_safe())
     
     # GET Request - Formular anzeigen
     try:
@@ -180,7 +210,8 @@ def add():
                              categories=categories,
                              locations=locations,
                              software_presets=software_presets,
-                             user_groups=user_groups)
+                             user_groups=user_groups,
+                             feature_settings=get_feature_settings_safe())
     except Exception as e:
         logger.error(f"Fehler beim Laden des Formulars: {str(e)}")
         flash('Fehler beim Laden des Formulars', 'error')
@@ -205,6 +236,9 @@ def detail(barcode):
         software_presets = get_software_presets()
         user_groups = get_user_groups()
         
+        # Feature-Einstellungen laden
+        feature_settings = get_feature_settings_safe()
+        
         return render_template('tools/detail.html',
                              tool=tool,
                              categories=categories,
@@ -212,6 +246,7 @@ def detail(barcode):
                              software_presets=software_presets,
                              user_groups=user_groups,
                              lending_history=tool.get('lending_history', []),
+                             feature_settings=feature_settings,
                              now=datetime.now)
                              
     except Exception as e:
@@ -240,10 +275,7 @@ def edit(barcode):
         
 
         
-        # Custom Nutzergruppe hinzufügen
-        custom_user_group = request.form.get('custom_user_group', '').strip()
-        if custom_user_group:
-            tool_data['user_groups'].append(custom_user_group)
+
         
         # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
         form_status = request.form.get('status')

@@ -175,18 +175,30 @@ def inject_feature_settings():
     try:
         from app.models.mongodb_database import get_feature_settings
         feature_settings = get_feature_settings()
-        return {'features_enabled': feature_settings}
+        return {
+            'features_enabled': feature_settings,
+            'feature_settings': feature_settings
+        }
     except Exception as e:
         logger.error(f"Fehler beim Laden der Feature-Einstellungen für Templates: {str(e)}")
+        fallback_settings = {
+            'tools': True,
+            'consumables': True,
+            'lending_system': True,
+            'ticket_system': True,
+            'job_board': False,
+            'weekly_reports': False,
+            # Werkzeug-Felder (standardmäßig aktiviert)
+            'tool_field_serial_number': True,
+            'tool_field_invoice_number': True,
+            'tool_field_mac_address': True,
+            'tool_field_mac_address_wlan': True,
+            'tool_field_user_groups': True,
+            'tool_field_software': True
+        }
         return {
-            'features_enabled': {
-                'tools': True,
-                'consumables': True,
-                'lending_system': True,
-                'ticket_system': True,
-                'job_board': False,
-                'weekly_reports': False
-            }
+            'features_enabled': fallback_settings,
+            'feature_settings': fallback_settings
         }
 
 def register_context_processors(app):
