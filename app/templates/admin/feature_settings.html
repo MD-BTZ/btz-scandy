@@ -23,21 +23,6 @@
                     <h2 class="text-xl font-semibold mb-4">System-Features</h2>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Ticketsystem -->
-                        <div class="form-control">
-                            <label class="label cursor-pointer">
-                                <span class="label-text">
-                                    <i class="fas fa-ticket-alt mr-2"></i>
-                                    Ticketsystem
-                                </span>
-                                <input type="checkbox" name="feature_ticket_system" class="toggle toggle-primary" 
-                                       {% if feature_settings.get('ticket_system', True) %}checked{% endif %}>
-                            </label>
-                            <div class="text-sm text-base-content/60 ml-6">
-                                Support-Tickets und Anfragen
-                            </div>
-                        </div>
-                        
                         <!-- Jobbörse -->
                         <div class="form-control">
                             <label class="label cursor-pointer">
@@ -65,6 +50,36 @@
                             </label>
                             <div class="text-sm text-base-content/60 ml-6">
                                 Automatische Wochenberichte und Statistiken
+                            </div>
+                        </div>
+                        
+                        <!-- Software-Management -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-desktop mr-2"></i>
+                                    Software-Management
+                                </span>
+                                <input type="checkbox" name="feature_software_management" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('software_management', False) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Verwaltung von Software-Paketen und Nutzergruppen
+                            </div>
+                        </div>
+                        
+                        <!-- Ticketsystem -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-ticket-alt mr-2"></i>
+                                    Ticketsystem
+                                </span>
+                                <input type="checkbox" name="feature_ticket_system" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('ticket_system', True) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Support-Tickets und Anfragen
                             </div>
                         </div>
                     </div>

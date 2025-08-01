@@ -66,53 +66,9 @@ def index():
         return redirect(url_for('main.index'))
     
     try:
-        # Hole alle Werkzeuge
-        tools = list(mongodb.find('tools', {}, sort=[('name', 1)]))
-        
-        # Erweitere Tools um Ausleihe-Informationen
-        for tool in tools:
-            # Prüfe aktuelle Ausleihe für jedes Tool
-            current_lending = mongodb.find_one('lendings', {
-                'tool_barcode': tool.get('barcode'),
-                'returned_at': None
-            })
-            
-            if current_lending:
-                # Hole Mitarbeiter-Info
-                worker = mongodb.find_one('workers', {
-                    'barcode': current_lending.get('worker_barcode'),
-                    'deleted': {'$ne': True}
-                })
-                
-                tool['is_available'] = False
-                tool['lent_to_worker_name'] = f"{worker['firstname']} {worker['lastname']}" if worker else 'Unbekannt'
-                tool['lent_at'] = current_lending.get('lent_at')
-                tool['expected_return_date'] = current_lending.get('expected_return_date')
-                
-                # Prüfe ob das Werkzeug überfällig ist
-                if current_lending.get('expected_return_date'):
-                    expected_date = current_lending['expected_return_date']
-                    # Konvertiere String zu datetime falls nötig
-                    if isinstance(expected_date, str):
-                        try:
-                            expected_date = datetime.strptime(expected_date, '%Y-%m-%d')
-                        except ValueError:
-                            expected_date = None
-                    
-                    # Prüfe ob überfällig
-                    if expected_date and expected_date.date() < datetime.now().date():
-                        tool['status'] = 'überfällig'
-                    else:
-                        tool['status'] = 'ausgeliehen'
-                else:
-                    tool['status'] = 'ausgeliehen'
-            else:
-                tool['is_available'] = True
-                tool['lent_to_worker_name'] = None
-                tool['lent_at'] = None
-                tool['expected_return_date'] = None
-                if not tool.get('status'):
-                    tool['status'] = 'verfügbar'
+        # Hole alle Werkzeuge über den ToolService (filtert automatisch gelöschte)
+        tool_service = get_tool_service()
+        tools = tool_service.get_all_tools()
         
         # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()
@@ -121,8 +77,7 @@ def index():
         return render_template('tools/index.html',
                              tools=tools,
                              categories=categories,
-                             locations=locations,
-                             now=datetime.now)
+                             locations=locations)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Werkzeuge: {str(e)}")
         flash('Fehler beim Laden der Werkzeuge', 'error')
