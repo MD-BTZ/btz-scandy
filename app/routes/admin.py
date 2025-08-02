@@ -5,7 +5,6 @@ from app.models.mongodb_models import MongoDBUser
 from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
-from flask import current_app
 import colorsys
 import logging
 from datetime import datetime, timedelta
@@ -14,7 +13,6 @@ import openpyxl
 from io import BytesIO
 import time
 from PIL import Image
-import io
 from app.config.config import Config
 from app.models.mongodb_database import mongodb, get_feature_settings, set_feature_setting, is_feature_enabled
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
@@ -98,23 +96,167 @@ def create_multi_sheet_excel(data_dict):
         ws = wb.create_sheet(title=sheet_name)
         
         if data and len(data) > 0:
-            # Header aus den ersten Datenzeilen
-            headers = list(data[0].keys())
-            
-            # Header schreiben
-            for col, header in enumerate(headers, 1):
-                ws.cell(row=1, column=col, value=header)
-            
-            # Daten schreiben
-            for row, item in enumerate(data, 2):
-                for col, key in enumerate(headers, 1):
-                    value = item.get(key, '')
-                    ws.cell(row=row, column=col, value=value)
+            # Spezielle Behandlung für Tools und Consumables
+            if sheet_name == 'Werkzeuge':
+                _create_enhanced_tools_sheet(ws, data)
+            elif sheet_name == 'Verbrauchsmaterial':
+                _create_enhanced_consumables_sheet(ws, data)
+            else:
+                # Standard-Behandlung für andere Sheets
+                headers = list(data[0].keys())
+                
+                # Header schreiben
+                for col, header in enumerate(headers, 1):
+                    ws.cell(row=1, column=col, value=header)
+                
+                # Daten schreiben
+                for row, item in enumerate(data, 2):
+                    for col, key in enumerate(headers, 1):
+                        value = item.get(key, '')
+                        ws.cell(row=row, column=col, value=value)
     
     output = BytesIO()
     wb.save(output)
     output.seek(0)
     return output
+
+def _resolve_user_group_names(group_ids):
+    """Löst Nutzergruppen-IDs zu Namen auf"""
+    try:
+        if not group_ids:
+            return ''
+        
+        group_names = []
+        for group_id in group_ids:
+            try:
+                from bson import ObjectId
+                # Versuche ObjectId Konvertierung
+                query_id = group_id
+                if isinstance(group_id, str) and len(group_id) == 24:
+                    try:
+                        query_id = ObjectId(group_id)
+                    except:
+                        query_id = group_id
+                
+                # Lade Nutzergruppe aus Datenbank
+                group = mongodb.find_one('user_groups', {'_id': query_id})
+                if group:
+                    group_names.append(group.get('name', str(group_id)))
+                else:
+                    group_names.append(str(group_id))
+            except Exception:
+                group_names.append(str(group_id))
+        
+        return ', '.join(group_names)
+    except Exception:
+        return ', '.join([str(gid) for gid in group_ids]) if group_ids else ''
+
+def _create_enhanced_tools_sheet(ws, tools_data):
+    """Erstellt eine erweiterte Tools-Tabelle mit allen Feldern"""
+    try:
+        # Lade Custom Fields für dynamische Header
+        try:
+            from app.services.custom_fields_service import CustomFieldsService
+            custom_fields = CustomFieldsService.get_custom_fields_for_target('tools')
+        except:
+            custom_fields = []
+        
+        # Header definieren
+        headers = [
+            'barcode', 'name', 'category', 'location', 'description', 'status',
+            'serial_number', 'invoice_number', 'mac_address', 'mac_address_wlan',
+            'user_groups', 'additional_software', 'created_at', 'updated_at'
+        ]
+        
+        # Custom Fields Header hinzufügen - speichere Mapping
+        custom_field_mapping = {}
+        for custom_field in custom_fields:
+            header_name = custom_field['name']
+            headers.append(header_name)
+            custom_field_mapping[header_name] = custom_field['field_key']
+        
+        # Header schreiben
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        # Daten schreiben
+        for row, tool in enumerate(tools_data, 2):
+            for col, key in enumerate(headers, 1):
+                if key in custom_field_mapping:
+                    # Custom Field Wert
+                    field_key = custom_field_mapping[key]
+                    tool_custom_fields = tool.get('custom_fields', {})
+                    value = tool_custom_fields.get(field_key, '')
+                    
+                    # Formatierung für Custom Fields
+                    if isinstance(value, bool):
+                        value = 'Ja' if value else 'Nein'
+                    elif value is None:
+                        value = ''
+                elif key == 'user_groups':
+                    # Nutzergruppen formatieren - Namen statt IDs
+                    groups = tool.get('user_groups', [])
+                    value = _resolve_user_group_names(groups)
+                elif key == 'additional_software':
+                    # Software formatieren
+                    software = tool.get('additional_software', [])
+                    value = ', '.join(software) if software else ''
+                else:
+                    # Standard-Wert
+                    value = tool.get(key, '')
+                
+                ws.cell(row=row, column=col, value=value)
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen der erweiterten Tools-Tabelle: {str(e)}")
+
+def _create_enhanced_consumables_sheet(ws, consumables_data):
+    """Erstellt eine erweiterte Consumables-Tabelle mit allen Feldern"""
+    try:
+        # Lade Custom Fields für dynamische Header
+        try:
+            from app.services.custom_fields_service import CustomFieldsService
+            custom_fields = CustomFieldsService.get_custom_fields_for_target('consumables')
+        except:
+            custom_fields = []
+        
+        # Header definieren
+        headers = [
+            'barcode', 'name', 'category', 'location', 'description', 'quantity',
+            'min_quantity', 'created_at', 'updated_at'
+        ]
+        
+        # Custom Fields Header hinzufügen - speichere Mapping
+        custom_field_mapping = {}
+        for custom_field in custom_fields:
+            header_name = custom_field['name']
+            headers.append(header_name)
+            custom_field_mapping[header_name] = custom_field['field_key']
+        
+        # Header schreiben
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+        
+        # Daten schreiben
+        for row, consumable in enumerate(consumables_data, 2):
+            for col, key in enumerate(headers, 1):
+                if key in custom_field_mapping:
+                    # Custom Field Wert
+                    field_key = custom_field_mapping[key]
+                    consumable_custom_fields = consumable.get('custom_fields', {})
+                    value = consumable_custom_fields.get(field_key, '')
+                    
+                    # Formatierung für Custom Fields
+                    if isinstance(value, bool):
+                        value = 'Ja' if value else 'Nein'
+                    elif value is None:
+                        value = ''
+                else:
+                    # Standard-Wert
+                    value = consumable.get(key, '')
+                
+                ws.cell(row=row, column=col, value=value)
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen der erweiterten Consumables-Tabelle: {str(e)}")
 
 @bp.route('/')
 @mitarbeiter_required
@@ -2392,11 +2534,22 @@ def feature_settings():
         flash('Fehler beim Laden der Feature-Einstellungen', 'error')
         return redirect(url_for('admin.dashboard'))
 
-# Benutzerdefinierte Felder Verwaltung
+# =============================================================================
+# FELDVERWALTUNG - Standard- und benutzerdefinierte Felder
+# =============================================================================
 @bp.route('/custom_fields', methods=['GET', 'POST'])
 @admin_required
 def custom_fields():
-    """Feld-Verwaltung für Standard- und benutzerdefinierte Felder"""
+    """
+    Zentrale Feld-Verwaltung für Standard- und benutzerdefinierte Felder
+    
+    GET: Zeigt die Feldverwaltung-Seite mit Standard-Feldern und benutzerdefinierten Feldern
+    POST: Verarbeitet Updates für Standard-Felder (action=update_default_fields)
+    
+    Integriert:
+    - Standard-Werkzeugfelder (Seriennummer, MAC-Adressen, etc.)
+    - Benutzerdefinierte Felder für Werkzeuge und Verbrauchsgüter
+    """
     try:
         if request.method == 'POST':
             action = request.form.get('action')

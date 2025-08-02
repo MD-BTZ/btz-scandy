@@ -146,7 +146,7 @@
                                 <label class="label cursor-pointer justify-start gap-3">
                                     <input type="checkbox" name="custom_{{ custom_field.field_key }}" 
                                            class="checkbox checkbox-primary"
-                                           {% if custom_field.default_value %}checked{% endif %}>
+                                           {% if custom_field.default_value == 'true' or custom_field.default_value == True %}checked{% endif %}>
                                     <span class="label-text">{{ custom_field.description or 'Aktiviert' }}</span>
                                 </label>
                             {% endif %}

@@ -356,9 +356,14 @@
                         
                         {% elif custom_field.field_type == 'checkbox' %}
                             <label class="label cursor-pointer justify-start gap-3">
+                                {% if consumable.custom_fields and custom_field.field_key in consumable.custom_fields %}
+                                    {% set checkbox_value = consumable.custom_fields[custom_field.field_key] %}
+                                {% else %}
+                                    {% set checkbox_value = custom_field.default_value == 'true' or custom_field.default_value == True %}
+                                {% endif %}
                                 <input type="checkbox" name="custom_{{ custom_field.field_key }}" 
                                        class="checkbox checkbox-primary"
-                                       {% if consumable.custom_fields.get(custom_field.field_key, custom_field.default_value) if consumable.custom_fields else custom_field.default_value %}checked{% endif %}>
+                                       {% if checkbox_value %}checked{% endif %}>
                                 <span class="label-text">{{ custom_field.description or 'Aktiviert' }}</span>
                             </label>
                         {% endif %}

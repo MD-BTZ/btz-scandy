@@ -1,6 +1,24 @@
 """
 Service für benutzerdefinierte Felder (Custom Fields)
-Ermöglicht das Erstellen und Verwalten dynamischer Felder für Werkzeuge und Verbrauchsgüter
+
+Dieser Service ermöglicht das Erstellen und Verwalten dynamischer Felder für Werkzeuge und Verbrauchsgüter.
+Die benutzerdefinierten Felder werden in der MongoDB 'custom_fields' Collection gespeichert und können
+über Context Processors in allen Templates verfügbar gemacht werden.
+
+Unterstützte Feldtypen:
+- text: Einzeiliger Text
+- textarea: Mehrzeiliger Text
+- number: Numerische Werte
+- date: Datumsfelder
+- select: Auswahlliste mit vordefinierten Optionen
+- checkbox: Ja/Nein Checkboxen
+- email: E-Mail-Adressen mit Validierung
+- url: URLs mit Validierung
+
+Zieltypen:
+- tools: Nur für Werkzeuge
+- consumables: Nur für Verbrauchsgüter
+- both: Für beide Typen verfügbar
 """
 from typing import Dict, Any, List, Tuple, Optional, Union
 from datetime import datetime
@@ -273,14 +291,20 @@ class CustomFieldsService:
                 field_key = field['field_key']
                 form_value = form_data.get(f'custom_{field_key}')
                 
-                # Validiere den Wert
+                # Spezielle Behandlung für Checkboxen
+                if field['field_type'] == 'checkbox':
+                    # Checkbox ist aktiviert, wenn sie im Formular vorhanden ist
+                    processed_values[field_key] = form_value is not None
+                    continue
+                
+                # Validiere den Wert für andere Feldtypen
                 is_valid, error_msg, processed_value = CustomFieldsService.validate_custom_field_value(field, form_value)
                 
                 if not is_valid:
                     errors.append(error_msg)
                     continue
                 
-                # Speichere nur nicht-leere Werte
+                # Speichere nur nicht-leere Werte für andere Feldtypen
                 if processed_value is not None and str(processed_value).strip() != '':
                     processed_values[field_key] = processed_value
             

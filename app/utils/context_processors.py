@@ -5,28 +5,19 @@ import traceback
 import logging
 from app.models.mongodb_database import mongodb
 
+# Import mit try-except um Circular Imports zu vermeiden
+try:
+    from app.services.custom_fields_service import CustomFieldsService
+    CUSTOM_FIELDS_AVAILABLE = True
+except ImportError:
+    CUSTOM_FIELDS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 def get_colors():
-    """Holt die Farbeinstellungen aus der MongoDB"""
-    try:
-        colors = {}
-        color_docs = mongodb.find('settings', {'key': {'$regex': '^color_'}})
-        for doc in color_docs:
-            key = doc['key'].replace('color_', '')
-            # Prüfe ob das value Feld existiert
-            if 'value' in doc:
-                colors[key] = doc['value']
-        return colors
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Farben: {str(e)}")
-        return {
-            'primary': '#2c3e50',
-            'secondary': '#4c5789',
-            'accent': '#e74c3c',
-            'background': '#ffffff',
-            'text': '#2c3e50'
-        }
+    """Holt die Farbeinstellungen aus der MongoDB - wird durch inject_colors() ersetzt"""
+    # Diese Funktion ist veraltet und wird durch inject_colors() ersetzt
+    return inject_colors().get('colors', {})
 
 def inject_colors():
     """Injiziert die Farbeinstellungen aus MongoDB in alle Templates"""
@@ -202,19 +193,23 @@ def inject_feature_settings():
         }
 
 def inject_custom_fields():
-    """Injiziert benutzerdefinierte Felder in alle Templates"""
+    """
+    Injiziert benutzerdefinierte Felder in alle Templates
+    
+    Lädt alle aktiven benutzerdefinierten Felder für Werkzeuge und Verbrauchsgüter
+    und stellt sie als 'custom_fields_tools' und 'custom_fields_consumables' 
+    in allen Jinja2-Templates zur Verfügung.
+    
+    Returns:
+        dict: Template-Kontext mit benutzerdefinierten Feldern
+    """
+    if not CUSTOM_FIELDS_AVAILABLE:
+        return {
+            'custom_fields_tools': [],
+            'custom_fields_consumables': []
+        }
+    
     try:
-        # Verwende absoluten Import um Importfehler zu vermeiden
-        import sys
-        import os
-        
-        # Füge das Projektverzeichnis zum Python-Pfad hinzu falls nicht vorhanden
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-            
-        from app.services.custom_fields_service import CustomFieldsService
-        
         # Lade benutzerdefinierte Felder für beide Typen
         tools_fields = CustomFieldsService.get_custom_fields_for_target('tools')
         consumables_fields = CustomFieldsService.get_custom_fields_for_target('consumables')
@@ -223,19 +218,9 @@ def inject_custom_fields():
             'custom_fields_tools': tools_fields,
             'custom_fields_consumables': consumables_fields
         }
-    except ImportError as ie:
-        # Falls Custom Fields Service nicht verfügbar ist, gib leere Listen zurück
-        print(f"CustomFieldsService nicht verfügbar: {ie}")
-        return {
-            'custom_fields_tools': [],
-            'custom_fields_consumables': []
-        }
     except Exception as e:
-        # Logger könnte nicht verfügbar sein, also verwende print als Fallback
-        try:
-            logger.error(f"Fehler beim Laden der benutzerdefinierten Felder für Templates: {str(e)}")
-        except:
-            print(f"Fehler beim Laden der benutzerdefinierten Felder für Templates: {str(e)}")
+        # Bei Fehlern leere Listen zurückgeben, um Template-Rendering nicht zu stören
+        logger.error(f"Fehler beim Laden der benutzerdefinierten Felder: {str(e)}")
         return {
             'custom_fields_tools': [],
             'custom_fields_consumables': []

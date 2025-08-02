@@ -44,7 +44,7 @@ class ConsumableService:
             }
             
             # Benutzerdefinierte Felder hinzufügen, falls vorhanden
-            if 'custom_fields' in data and data['custom_fields']:
+            if 'custom_fields' in data:
                 consumable_data['custom_fields'] = data['custom_fields']
             mongodb.insert_one('consumables', consumable_data)
             return True, 'Verbrauchsmaterial wurde erfolgreich hinzugefügt'
@@ -75,7 +75,7 @@ class ConsumableService:
             }
             
             # Benutzerdefinierte Felder hinzufügen, falls vorhanden
-            if 'custom_fields' in data and data['custom_fields']:
+            if 'custom_fields' in data:
                 update_data['custom_fields'] = data['custom_fields']
             mongodb.update_one('consumables', {'barcode': barcode}, {'$set': update_data})
             # Bestandsänderung protokollieren

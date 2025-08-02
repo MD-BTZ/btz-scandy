@@ -132,9 +132,25 @@ def add():
                 tool_data['user_groups'] = []
                 tool_data['additional_software'] = []
             
-
-            
-
+            # Benutzerdefinierte Felder verarbeiten
+            try:
+                from app.services.custom_fields_service import CustomFieldsService
+                success_custom, error_msg, custom_values = CustomFieldsService.process_custom_fields_from_form('tools', request.form)
+                if success_custom:
+                    tool_data['custom_fields'] = custom_values
+                else:
+                    flash(f'Fehler bei benutzerdefinierten Feldern: {error_msg}', 'error')
+                    return render_template('tools/add.html', 
+                                         form_data=tool_data,
+                                         categories=get_categories_from_settings(),
+                                         locations=get_locations_from_settings(),
+                                         software_presets=get_software_presets(),
+                                         user_groups=get_user_groups(),
+                                         feature_settings=get_feature_settings_safe())
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten benutzerdefinierter Felder: {str(e)}")
+                # Benutzerdefinierte Felder sind optional, daher kein Fehler-Return
+                tool_data['custom_fields'] = {}
             
             # Validierung
             if not tool_data['name'] or not tool_data['barcode']:
@@ -261,6 +277,19 @@ def edit(barcode):
             print(f"DEBUG EDIT: Software-Management deaktiviert")
             tool_data['user_groups'] = []
             tool_data['additional_software'] = []
+        
+        # Benutzerdefinierte Felder verarbeiten
+        try:
+            from app.services.custom_fields_service import CustomFieldsService
+            success_custom, error_msg, custom_values = CustomFieldsService.process_custom_fields_from_form('tools', request.form)
+            if success_custom:
+                tool_data['custom_fields'] = custom_values
+            else:
+                return jsonify({'success': False, 'message': f'Fehler bei benutzerdefinierten Feldern: {error_msg}'})
+        except Exception as e:
+            logger.error(f"Fehler beim Verarbeiten benutzerdefinierter Felder: {str(e)}")
+            # Benutzerdefinierte Felder sind optional, daher kein Fehler-Return
+            tool_data['custom_fields'] = {}
         
         # Status nur hinzufügen, wenn er explizit im Formular angegeben wurde
         form_status = request.form.get('status')

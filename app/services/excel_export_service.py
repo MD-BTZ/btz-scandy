@@ -52,6 +52,38 @@ class ExcelExportService:
             }
         }
     
+    def _resolve_user_group_names(self, group_ids):
+        """Löst Nutzergruppen-IDs zu Namen auf"""
+        try:
+            if not group_ids:
+                return ''
+            
+            group_names = []
+            for group_id in group_ids:
+                try:
+                    from bson import ObjectId
+                    # Versuche ObjectId Konvertierung
+                    query_id = group_id
+                    if isinstance(group_id, str) and len(group_id) == 24:
+                        try:
+                            query_id = ObjectId(group_id)
+                        except:
+                            query_id = group_id
+                    
+                    # Lade Nutzergruppe aus Datenbank
+                    from app.models.mongodb_database import mongodb
+                    group = mongodb.find_one('user_groups', {'_id': query_id})
+                    if group:
+                        group_names.append(group.get('name', str(group_id)))
+                    else:
+                        group_names.append(str(group_id))
+                except Exception:
+                    group_names.append(str(group_id))
+            
+            return ', '.join(group_names)
+        except Exception:
+            return ', '.join([str(gid) for gid in group_ids]) if group_ids else ''
+    
     def generate_complete_export(self) -> BinaryIO:
         """
         Generiert eine komplette Excel-Datei mit allen Scandy-Daten
@@ -90,12 +122,27 @@ class ExcelExportService:
         try:
             ws = self.workbook.create_sheet("Werkzeuge")
             
-            # Header
+            # Lade Custom Fields für dynamische Header
+            try:
+                from app.services.custom_fields_service import CustomFieldsService
+                custom_fields = CustomFieldsService.get_custom_fields_for_target('tools')
+            except Exception as e:
+                custom_fields = []
+            
+            # Basis Header
             headers = [
                 'Barcode', 'Name', 'Kategorie', 'Standort', 'Beschreibung', 
                 'Status', 'Verfügbar', 'Ausgeliehen an', 'Ausgeliehen seit', 
-                'Rückgabe bis', 'Erstellt am', 'Aktualisiert am'
+                'Rückgabe bis', 'Seriennummer', 'Rechnungsnummer', 
+                'MAC-Adresse (LAN)', 'MAC-Adresse (WLAN)', 'Nutzergruppen', 
+                'Zusätzliche Software', 'Erstellt am', 'Aktualisiert am'
             ]
+            
+            # Custom Fields Header hinzufügen
+            for custom_field in custom_fields:
+                headers.append(custom_field['name'])
+            
+            self.tools_custom_fields = custom_fields  # Für später speichern
             
             # Schreibe Header
             for col, header in enumerate(headers, 1):
@@ -142,6 +189,14 @@ class ExcelExportService:
                     if return_date_dt and return_date_dt.date() < datetime.now().date():
                         status = 'überfällig'
                 
+                # Nutzergruppen formatieren
+                user_groups = tool.get('user_groups', [])
+                user_groups_str = self._resolve_user_group_names(user_groups)
+                
+                # Software formatieren
+                additional_software = tool.get('additional_software', [])
+                software_str = ', '.join(additional_software) if additional_software else ''
+                
                 data = [
                     tool.get('barcode', ''),
                     tool.get('name', ''),
@@ -153,9 +208,32 @@ class ExcelExportService:
                     lent_to or '',
                     lent_since.strftime('%d.%m.%Y %H:%M') if lent_since else '',
                     return_date.strftime('%d.%m.%Y') if return_date else '',
+                    tool.get('serial_number', ''),
+                    tool.get('invoice_number', ''),
+                    tool.get('mac_address', ''),
+                    tool.get('mac_address_wlan', ''),
+                    user_groups_str,
+                    software_str,
                     tool.get('created_at', '').strftime('%d.%m.%Y') if tool.get('created_at') else '',
                     tool.get('updated_at', '').strftime('%d.%m.%Y') if tool.get('updated_at') else ''
                 ]
+                
+                # Custom Fields Werte hinzufügen
+                if hasattr(self, 'tools_custom_fields'):
+                    tool_custom_fields = tool.get('custom_fields', {})
+                    for custom_field in self.tools_custom_fields:
+                        field_key = custom_field['field_key']
+                        field_value = tool_custom_fields.get(field_key, '')
+                        
+                        # Formatiere je nach Feldtyp
+                        if custom_field['field_type'] == 'checkbox':
+                            display_value = 'Ja' if field_value else 'Nein'
+                        elif custom_field['field_type'] == 'number':
+                            display_value = str(field_value) if field_value is not None else ''
+                        else:
+                            display_value = str(field_value) if field_value else ''
+                        
+                        data.append(display_value)
                 
                 for col, value in enumerate(data, 1):
                     cell = ws.cell(row=row, column=col, value=value)
@@ -175,11 +253,24 @@ class ExcelExportService:
         try:
             ws = self.workbook.create_sheet("Verbrauchsmaterial")
             
+            # Lade Custom Fields für dynamische Header
+            try:
+                from app.services.custom_fields_service import CustomFieldsService
+                custom_fields = CustomFieldsService.get_custom_fields_for_target('consumables')
+            except:
+                custom_fields = []
+            
             headers = [
                 'Barcode', 'Name', 'Kategorie', 'Standort', 'Beschreibung',
                 'Bestand', 'Mindestbestand', 'Status', 'Einheit',
                 'Erstellt am', 'Aktualisiert am'
             ]
+            
+            # Custom Fields Header hinzufügen
+            for custom_field in custom_fields:
+                headers.append(custom_field['name'])
+            
+            self.consumables_custom_fields = custom_fields  # Für später speichern
             
             # Schreibe Header
             for col, header in enumerate(headers, 1):
@@ -215,6 +306,23 @@ class ExcelExportService:
                     consumable.get('created_at', '').strftime('%d.%m.%Y') if consumable.get('created_at') else '',
                     consumable.get('updated_at', '').strftime('%d.%m.%Y') if consumable.get('updated_at') else ''
                 ]
+                
+                # Custom Fields Werte hinzufügen
+                if hasattr(self, 'consumables_custom_fields'):
+                    consumable_custom_fields = consumable.get('custom_fields', {})
+                    for custom_field in self.consumables_custom_fields:
+                        field_key = custom_field['field_key']
+                        field_value = consumable_custom_fields.get(field_key, '')
+                        
+                        # Formatiere je nach Feldtyp
+                        if custom_field['field_type'] == 'checkbox':
+                            display_value = 'Ja' if field_value else 'Nein'
+                        elif custom_field['field_type'] == 'number':
+                            display_value = str(field_value) if field_value is not None else ''
+                        else:
+                            display_value = str(field_value) if field_value else ''
+                        
+                        data.append(display_value)
                 
                 for col, value in enumerate(data, 1):
                     cell = ws.cell(row=row, column=col, value=value)
