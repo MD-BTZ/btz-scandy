@@ -201,6 +201,46 @@ def inject_feature_settings():
             'feature_settings': fallback_settings
         }
 
+def inject_custom_fields():
+    """Injiziert benutzerdefinierte Felder in alle Templates"""
+    try:
+        # Verwende absoluten Import um Importfehler zu vermeiden
+        import sys
+        import os
+        
+        # Füge das Projektverzeichnis zum Python-Pfad hinzu falls nicht vorhanden
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+            
+        from app.services.custom_fields_service import CustomFieldsService
+        
+        # Lade benutzerdefinierte Felder für beide Typen
+        tools_fields = CustomFieldsService.get_custom_fields_for_target('tools')
+        consumables_fields = CustomFieldsService.get_custom_fields_for_target('consumables')
+        
+        return {
+            'custom_fields_tools': tools_fields,
+            'custom_fields_consumables': consumables_fields
+        }
+    except ImportError as ie:
+        # Falls Custom Fields Service nicht verfügbar ist, gib leere Listen zurück
+        print(f"CustomFieldsService nicht verfügbar: {ie}")
+        return {
+            'custom_fields_tools': [],
+            'custom_fields_consumables': []
+        }
+    except Exception as e:
+        # Logger könnte nicht verfügbar sein, also verwende print als Fallback
+        try:
+            logger.error(f"Fehler beim Laden der benutzerdefinierten Felder für Templates: {str(e)}")
+        except:
+            print(f"Fehler beim Laden der benutzerdefinierten Felder für Templates: {str(e)}")
+        return {
+            'custom_fields_tools': [],
+            'custom_fields_consumables': []
+        }
+
 def register_context_processors(app):
     """Registriert alle Context Processors"""
     app.context_processor(inject_colors)
@@ -209,3 +249,4 @@ def register_context_processors(app):
     app.context_processor(inject_app_labels)
     app.context_processor(inject_unfilled_timesheet_days)
     app.context_processor(inject_feature_settings)
+    app.context_processor(inject_custom_fields)

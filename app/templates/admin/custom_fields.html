@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+
+{% block title %}Feldverwaltung - Scandy{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Seitentitel -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-base-content mb-2">
+            <i class="fas fa-puzzle-piece text-primary mr-3"></i>
+            Feldverwaltung
+        </h1>
+        <p class="text-base-content/70">Verwalten Sie Standard- und benutzerdefinierte Felder für Werkzeuge und Verbrauchsgüter</p>
+    </div>
+
+    <!-- Standard-Felder -->
+    <div class="card bg-base-100 shadow-xl mb-6">
+        <div class="card-body">
+            <h2 class="card-title mb-4">
+                <i class="fas fa-cog text-primary mr-2"></i>Standard-Werkzeugfelder
+            </h2>
+            <p class="text-base-content/70 mb-4">Aktivieren oder deaktivieren Sie die Standard-Felder für Werkzeuge</p>
+            
+            <form method="POST" action="{{ url_for('admin.custom_fields') }}" class="space-y-6">
+                <input type="hidden" name="action" value="update_default_fields">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Seriennummer -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-hashtag mr-2"></i>
+                                Seriennummer
+                            </span>
+                            <input type="checkbox" name="tool_field_serial_number" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_serial_number', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            Seriennummer-Eingabefeld anzeigen
+                        </div>
+                    </div>
+                    
+                    <!-- Rechnungsnummer -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-receipt mr-2"></i>
+                                Rechnungsnummer
+                            </span>
+                            <input type="checkbox" name="tool_field_invoice_number" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_invoice_number', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            Rechnungsnummer-Eingabefeld anzeigen
+                        </div>
+                    </div>
+                    
+                    <!-- MAC-Adresse (LAN) -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-ethernet mr-2"></i>
+                                MAC-Adresse (LAN)
+                            </span>
+                            <input type="checkbox" name="tool_field_mac_address" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_mac_address', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            LAN MAC-Adresse-Eingabefeld anzeigen
+                        </div>
+                    </div>
+                    
+                    <!-- MAC-Adresse (WLAN) -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-wifi mr-2"></i>
+                                MAC-Adresse (WLAN)
+                            </span>
+                            <input type="checkbox" name="tool_field_mac_address_wlan" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_mac_address_wlan', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            WLAN MAC-Adresse-Eingabefeld anzeigen
+                        </div>
+                    </div>
+                    
+                    <!-- Nutzergruppen -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-users mr-2"></i>
+                                Nutzergruppen
+                            </span>
+                            <input type="checkbox" name="tool_field_user_groups" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_user_groups', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            Nutzergruppen-Auswahl anzeigen
+                        </div>
+                    </div>
+                    
+                    <!-- Software -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">
+                                <i class="fas fa-desktop mr-2"></i>
+                                Installierte Software
+                            </span>
+                            <input type="checkbox" name="tool_field_software" class="toggle toggle-primary" 
+                                   {% if feature_settings.get('tool_field_software', True) %}checked{% endif %}>
+                        </label>
+                        <div class="text-sm text-base-content/60 ml-6">
+                            Software-Auswahl anzeigen
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>Standard-Felder speichern
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Benutzerdefinierte Felder -->
+    <div class="card bg-base-100 shadow-xl mb-6">
+        <div class="card-body">
+            <h2 class="card-title mb-4">
+                <i class="fas fa-plus text-primary mr-2"></i>Neues benutzerdefiniertes Feld hinzufügen
+            </h2>
+            <p class="text-base-content/70 mb-4">Erstellen Sie zusätzliche Felder, die über die Standard-Felder hinausgehen</p>
+            
+            <form method="POST" action="{{ url_for('admin.add_custom_field') }}" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Name -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Name <span class="text-error">*</span></span>
+                        </label>
+                        <input type="text" name="name" class="input input-bordered" required 
+                               placeholder="z.B. Seriennummer Drucker">
+                    </div>
+                    
+                    <!-- Feldtyp -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Feldtyp <span class="text-error">*</span></span>
+                        </label>
+                        <select name="field_type" class="select select-bordered" required onchange="toggleSelectOptions(this)">
+                            <option value="">Feldtyp wählen</option>
+                            {% for key, label in field_types.items() %}
+                            <option value="{{ key }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Zieltyp -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Gilt für <span class="text-error">*</span></span>
+                        </label>
+                        <select name="target_type" class="select select-bordered" required>
+                            <option value="">Bereich wählen</option>
+                            {% for key, label in target_types.items() %}
+                            <option value="{{ key }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Beschreibung -->
+                    <div class="form-control md:col-span-2">
+                        <label class="label">
+                            <span class="label-text">Beschreibung</span>
+                        </label>
+                        <input type="text" name="description" class="input input-bordered" 
+                               placeholder="Optionale Beschreibung des Feldes">
+                    </div>
+                    
+                    <!-- Sortierreihenfolge -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Reihenfolge</span>
+                        </label>
+                        <input type="number" name="sort_order" class="input input-bordered" 
+                               value="999" min="1" max="9999">
+                    </div>
+                    
+                    <!-- Erforderlich -->
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Erforderlich</span>
+                            <input type="checkbox" name="required" class="toggle toggle-primary">
+                        </label>
+                    </div>
+                    
+                    <!-- Standardwert -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Standardwert</span>
+                        </label>
+                        <input type="text" name="default_value" class="input input-bordered" 
+                               placeholder="Optionaler Standardwert">
+                    </div>
+                </div>
+                
+                <!-- Auswahloptionen (nur für select) -->
+                <div id="select-options" class="form-control hidden">
+                    <label class="label">
+                        <span class="label-text">Auswahloptionen <span class="text-error">*</span></span>
+                    </label>
+                    <textarea name="select_options" class="textarea textarea-bordered h-24" 
+                              placeholder="Eine Option pro Zeile:&#10;Option 1&#10;Option 2&#10;Option 3"></textarea>
+                    <label class="label">
+                        <span class="label-text-alt">Geben Sie jede Option in einer neuen Zeile ein</span>
+                    </label>
+                </div>
+                
+                <div class="card-actions justify-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>Feld erstellen
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vorhandene Felder -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">
+                <i class="fas fa-list text-primary mr-2"></i>Vorhandene benutzerdefinierte Felder
+            </h2>
+            
+            {% if custom_fields %}
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Typ</th>
+                            <th>Gilt für</th>
+                            <th>Erforderlich</th>
+                            <th>Reihenfolge</th>
+                            <th>Erstellt</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for field in custom_fields %}
+                        <tr>
+                            <td>
+                                <div>
+                                    <div class="font-bold">{{ field.name }}</div>
+                                    {% if field.description %}
+                                    <div class="text-sm text-base-content/60">{{ field.description }}</div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge badge-outline">{{ field_types.get(field.field_type, field.field_type) }}</span>
+                            </td>
+                            <td>
+                                <span class="badge badge-primary">{{ target_types.get(field.target_type, field.target_type) }}</span>
+                            </td>
+                            <td>
+                                {% if field.required %}
+                                <span class="badge badge-error">Erforderlich</span>
+                                {% else %}
+                                <span class="badge badge-success">Optional</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ field.sort_order }}</td>
+                            <td>
+                                <div class="text-sm">{{ field.created_at.strftime('%d.%m.%Y') if field.created_at else 'Unbekannt' }}</div>
+                            </td>
+                            <td>
+                                <div class="flex gap-2">
+                                    <button onclick="editField('{{ field._id }}')" class="btn btn-primary btn-xs">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button onclick="deleteField('{{ field._id }}', '{{ field.name }}')" class="btn btn-error btn-xs">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-puzzle-piece text-6xl text-base-content/20 mb-4"></i>
+                <p class="text-base-content/60">Noch keine benutzerdefinierten Felder erstellt</p>
+                <p class="text-sm text-base-content/40">Erstellen Sie Ihr erstes benutzerdefiniertes Feld mit dem Formular oben</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<dialog id="editModal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-lg mb-4">Feld bearbeiten</h3>
+        <form id="editForm" method="POST" action="" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Name -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Name <span class="text-error">*</span></span>
+                    </label>
+                    <input type="text" name="name" id="edit_name" class="input input-bordered" required>
+                </div>
+                
+                <!-- Feldtyp -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Feldtyp <span class="text-error">*</span></span>
+                    </label>
+                    <select name="field_type" id="edit_field_type" class="select select-bordered" required 
+                            onchange="toggleEditSelectOptions(this)">
+                        {% for key, label in field_types.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Zieltyp -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Gilt für <span class="text-error">*</span></span>
+                    </label>
+                    <select name="target_type" id="edit_target_type" class="select select-bordered" required>
+                        {% for key, label in target_types.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Sortierreihenfolge -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Reihenfolge</span>
+                    </label>
+                    <input type="number" name="sort_order" id="edit_sort_order" class="input input-bordered" 
+                           min="1" max="9999">
+                </div>
+            </div>
+            
+            <!-- Beschreibung -->
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Beschreibung</span>
+                </label>
+                <input type="text" name="description" id="edit_description" class="input input-bordered">
+            </div>
+            
+            <!-- Standardwert -->
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Standardwert</span>
+                </label>
+                <input type="text" name="default_value" id="edit_default_value" class="input input-bordered">
+            </div>
+            
+            <!-- Erforderlich -->
+            <div class="form-control">
+                <label class="label cursor-pointer">
+                    <span class="label-text">Erforderlich</span>
+                    <input type="checkbox" name="required" id="edit_required" class="toggle toggle-primary">
+                </label>
+            </div>
+            
+            <!-- Auswahloptionen (nur für select) -->
+            <div id="edit-select-options" class="form-control hidden">
+                <label class="label">
+                    <span class="label-text">Auswahloptionen <span class="text-error">*</span></span>
+                </label>
+                <textarea name="select_options" id="edit_select_options_text" class="textarea textarea-bordered h-24" 
+                          placeholder="Eine Option pro Zeile"></textarea>
+            </div>
+            
+            <div class="modal-action">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save mr-2"></i>Speichern
+                </button>
+                <button type="button" class="btn" onclick="closeEditModal()">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Delete Confirmation Modal -->
+<dialog id="deleteModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Feld löschen</h3>
+        <p class="mb-4">Möchten Sie das Feld "<span id="deleteFieldName"></span>" wirklich löschen?</p>
+        <p class="text-sm text-warning mb-4">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            Achtung: Alle Daten in diesem Feld gehen verloren!
+        </p>
+        
+        <div class="modal-action">
+            <form id="deleteForm" method="POST" action="">
+                <button type="submit" class="btn btn-error">
+                    <i class="fas fa-trash mr-2"></i>Löschen
+                </button>
+                <button type="button" class="btn" onclick="closeDeleteModal()">Abbrechen</button>
+            </form>
+        </div>
+    </div>
+</dialog>
+
+<script>
+// Custom Fields Management JavaScript
+
+// Field data for editing
+const fieldsData = {{ custom_fields | tojson }};
+
+// Toggle select options visibility
+function toggleSelectOptions(selectElement) {
+    const optionsDiv = document.getElementById('select-options');
+    if (selectElement.value === 'select') {
+        optionsDiv.classList.remove('hidden');
+        optionsDiv.querySelector('textarea').required = true;
+    } else {
+        optionsDiv.classList.add('hidden');
+        optionsDiv.querySelector('textarea').required = false;
+    }
+}
+
+function toggleEditSelectOptions(selectElement) {
+    const optionsDiv = document.getElementById('edit-select-options');
+    if (selectElement.value === 'select') {
+        optionsDiv.classList.remove('hidden');
+        optionsDiv.querySelector('textarea').required = true;
+    } else {
+        optionsDiv.classList.add('hidden');
+        optionsDiv.querySelector('textarea').required = false;
+    }
+}
+
+// Edit field function
+function editField(fieldId) {
+    const field = fieldsData.find(f => f._id === fieldId);
+    if (!field) {
+        alert('Feld nicht gefunden');
+        return;
+    }
+    
+    // Populate edit form
+    document.getElementById('edit_name').value = field.name || '';
+    document.getElementById('edit_field_type').value = field.field_type || '';
+    document.getElementById('edit_target_type').value = field.target_type || '';
+    document.getElementById('edit_description').value = field.description || '';
+    document.getElementById('edit_default_value').value = field.default_value || '';
+    document.getElementById('edit_sort_order').value = field.sort_order || 999;
+    document.getElementById('edit_required').checked = field.required || false;
+    
+    // Handle select options
+    if (field.field_type === 'select' && field.select_options) {
+        document.getElementById('edit_select_options_text').value = field.select_options.join('\n');
+        document.getElementById('edit-select-options').classList.remove('hidden');
+    } else {
+        document.getElementById('edit-select-options').classList.add('hidden');
+    }
+    
+    // Set form action
+    document.getElementById('editForm').action = `/admin/custom_fields/${fieldId}/edit`;
+    
+    // Show modal
+    document.getElementById('editModal').showModal();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').close();
+}
+
+// Delete field function
+function deleteField(fieldId, fieldName) {
+    document.getElementById('deleteFieldName').textContent = fieldName;
+    document.getElementById('deleteForm').action = `/admin/custom_fields/${fieldId}/delete`;
+    document.getElementById('deleteModal').showModal();
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').close();
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Set initial select options visibility
+    const fieldTypeSelect = document.querySelector('select[name="field_type"]');
+    if (fieldTypeSelect) {
+        toggleSelectOptions(fieldTypeSelect);
+    }
+});
+</script>
+{% endblock %}

@@ -72,6 +72,96 @@
                     </div>
                 </div>
                 
+                <!-- Benutzerdefinierte Felder -->
+                {% if custom_fields_consumables %}
+                <div class="space-y-4">
+                    <div class="divider">
+                        <span class="text-sm font-medium text-base-content/70">Benutzerdefinierte Felder</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for custom_field in custom_fields_consumables %}
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">
+                                    {{ custom_field.name }}
+                                    {% if custom_field.required %}<span class="text-error">*</span>{% endif %}
+                                </span>
+                            </label>
+                            
+                            {% if custom_field.field_type == 'text' %}
+                                <input type="text" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'textarea' %}
+                                <textarea name="custom_{{ custom_field.field_key }}" 
+                                          class="textarea textarea-bordered"
+                                          {% if custom_field.required %}required{% endif %}
+                                          placeholder="{{ custom_field.description }}">{{ custom_field.default_value }}</textarea>
+                            
+                            {% elif custom_field.field_type == 'number' %}
+                                <input type="number" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'date' %}
+                                <input type="date" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}>
+                            
+                            {% elif custom_field.field_type == 'email' %}
+                                <input type="email" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'url' %}
+                                <input type="url" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'select' %}
+                                <select name="custom_{{ custom_field.field_key }}" 
+                                        class="select select-bordered"
+                                        {% if custom_field.required %}required{% endif %}>
+                                    <option value="">Bitte wählen...</option>
+                                    {% for option in custom_field.select_options %}
+                                    <option value="{{ option }}" 
+                                            {% if custom_field.default_value == option %}selected{% endif %}>
+                                        {{ option }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            
+                            {% elif custom_field.field_type == 'checkbox' %}
+                                <label class="label cursor-pointer justify-start gap-3">
+                                    <input type="checkbox" name="custom_{{ custom_field.field_key }}" 
+                                           class="checkbox checkbox-primary"
+                                           {% if custom_field.default_value %}checked{% endif %}>
+                                    <span class="label-text">{{ custom_field.description or 'Aktiviert' }}</span>
+                                </label>
+                            {% endif %}
+                            
+                            {% if custom_field.description and custom_field.field_type != 'checkbox' %}
+                            <label class="label">
+                                <span class="label-text-alt">{{ custom_field.description }}</span>
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
                 <div class="flex justify-end gap-2">
                     <a href="{{ url_for('consumables.index') }}" class="btn btn-ghost">Abbrechen</a>
                     <button type="submit" class="btn btn-primary">Speichern</button>

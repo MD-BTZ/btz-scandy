@@ -114,4 +114,4 @@ db.settings.insertOne({
 print('MongoDB für Scandy initialisiert!');
 print('Datenbank: scandy');
 print('MongoDB-Authentifizierungsbenutzer: admin / [aus Umgebungsvariable]');
-print('App-Admin-Benutzer: admin / admin123');
+print('App-Admin-Benutzer: Wird über Setup-Assistent erstellt (keine Standard-Zugangsdaten)');

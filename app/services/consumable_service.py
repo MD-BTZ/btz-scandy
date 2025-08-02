@@ -42,6 +42,10 @@ class ConsumableService:
                 'updated_at': datetime.now(),
                 'deleted': False
             }
+            
+            # Benutzerdefinierte Felder hinzufügen, falls vorhanden
+            if 'custom_fields' in data and data['custom_fields']:
+                consumable_data['custom_fields'] = data['custom_fields']
             mongodb.insert_one('consumables', consumable_data)
             return True, 'Verbrauchsmaterial wurde erfolgreich hinzugefügt'
         except Exception as e:
@@ -69,6 +73,10 @@ class ConsumableService:
                 'barcode': new_barcode,
                 'updated_at': datetime.now()
             }
+            
+            # Benutzerdefinierte Felder hinzufügen, falls vorhanden
+            if 'custom_fields' in data and data['custom_fields']:
+                update_data['custom_fields'] = data['custom_fields']
             mongodb.update_one('consumables', {'barcode': barcode}, {'$set': update_data})
             # Bestandsänderung protokollieren
             if int(data.get('quantity', current['quantity'])) != current['quantity']:

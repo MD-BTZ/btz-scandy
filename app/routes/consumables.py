@@ -53,6 +53,25 @@ def add():
                 'min_quantity': request.form.get('min_quantity', 0),
                 'description': request.form.get('description', '')
             }
+            
+            # Benutzerdefinierte Felder verarbeiten
+            try:
+                from app.services.custom_fields_service import CustomFieldsService
+                success_custom, error_msg, custom_values = CustomFieldsService.process_custom_fields_from_form('consumables', request.form)
+                if success_custom:
+                    data['custom_fields'] = custom_values
+                else:
+                    flash(f'Fehler bei benutzerdefinierten Feldern: {error_msg}', 'error')
+                    categories = get_categories_from_settings()
+                    locations = get_locations_from_settings()
+                    return render_template('consumables/add.html', 
+                                         categories=categories, 
+                                         locations=locations,
+                                         form_data=data)
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten benutzerdefinierter Felder: {str(e)}")
+                # Benutzerdefinierte Felder sind optional, daher kein Fehler-Return
+                data['custom_fields'] = {}
             success, message = ConsumableService.add_consumable(data)
             if success:
                 flash(message, 'success')
@@ -76,7 +95,22 @@ def detail(barcode):
     """Zeigt die Details eines Verbrauchsmaterials und verarbeitet Updates"""
     if request.method == 'POST':
         try:
-            data = request.form
+            # Form-Daten in Dictionary konvertieren für bessere Handhabung
+            data = dict(request.form)
+            
+            # Benutzerdefinierte Felder verarbeiten
+            try:
+                from app.services.custom_fields_service import CustomFieldsService
+                success_custom, error_msg, custom_values = CustomFieldsService.process_custom_fields_from_form('consumables', request.form)
+                if success_custom:
+                    data['custom_fields'] = custom_values
+                else:
+                    return jsonify({'success': False, 'message': f'Fehler bei benutzerdefinierten Feldern: {error_msg}'}), 400
+            except Exception as e:
+                logger.error(f"Fehler beim Verarbeiten benutzerdefinierter Felder: {str(e)}")
+                # Benutzerdefinierte Felder sind optional, daher kein Fehler-Return
+                data['custom_fields'] = {}
+            
             success, message, new_barcode = ConsumableService.update_consumable(barcode, data)
             if success:
                 return jsonify({'success': True, 'redirect': url_for('consumables.detail', barcode=new_barcode)})
