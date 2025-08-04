@@ -143,14 +143,21 @@ if [ -d "venv" ] && [ -f "requirements.txt" ]; then
 fi
 
 # Service starten
-log_info "Starte Scandy..."
-if [ -f "start_scandy.sh" ]; then
-    sudo -u scandy ./start_scandy.sh &
-    log_success "Scandy gestartet!"
-else
-    log_error "start_scandy.sh nicht gefunden!"
-    exit 1
-fi
+log_info "Starte Scandy als Systemd-Service..."
+systemctl restart scandy 2>/dev/null || {
+    log_warning "systemctl restart scandy fehlgeschlagen"
+    log_info "Versuche alternative Start-Methoden..."
+    
+    # Fallback: Docker Compose
+    if [ -f "docker-compose.yml" ]; then
+        log_info "Versuche Docker Compose..."
+        docker compose restart 2>/dev/null || docker compose up -d 2>/dev/null || {
+            log_error "Docker Compose fehlgeschlagen"
+        }
+    else
+        log_error "Keine Start-Methode gefunden!"
+    fi
+}
 
 # Warte auf Service
 log_info "Warte auf Service..."
