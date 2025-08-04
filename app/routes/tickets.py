@@ -655,34 +655,28 @@ def create():
         # Prüfe ob der User ein Admin ist (für "Alle Tickets" Tab)
         show_all_tickets = current_user.role in ['admin', 'mitarbeiter']
         
-        # Lade Ticket-Daten für die verschiedenen Tabs
-        # Offene Tickets (für alle Benutzer)
-        open_tickets_query = {'status': {'$in': ['offen', 'in_bearbeitung', 'wartet_auf_antwort']}}
-        open_tickets = list(mongodb.find('tickets', open_tickets_query, sort=[('created_at', -1)]))
+        # Verwende Ticket-Service für korrekte Handlungsfeld-Filterung
+        ticket_service = get_ticket_service()
         
-        # Zugewiesene Tickets (für aktuellen Benutzer)
-        assigned_tickets_query = {
-            '$or': [
-                {'assigned_to': current_user.username},
-                {'created_by': current_user.username}
-            ]
-        }
-        assigned_tickets = list(mongodb.find('tickets', assigned_tickets_query, sort=[('created_at', -1)]))
+        # Hole Handlungsfelder des Benutzers
+        user_handlungsfelder = []
+        if current_user.role == 'teilnehmer':
+            # Hole Handlungsfelder aus der Benutzer-Konfiguration
+            user_settings = mongodb.find_one('users', {'username': current_user.username})
+            if user_settings and user_settings.get('handlungsfelder'):
+                user_handlungsfelder = user_settings['handlungsfelder']
+                print(f"DEBUG: Benutzer {current_user.username} hat Handlungsfelder: {user_handlungsfelder}")
         
-        # Alle Tickets (nur für Admin/Mitarbeiter)
-        all_tickets = []
-        if show_all_tickets:
-            all_tickets = list(mongodb.find('tickets', {}, sort=[('created_at', -1)]))
+        # Lade Tickets mit korrekter Filterung
+        tickets_data = ticket_service.get_tickets_by_user(
+            username=current_user.username,
+            role=current_user.role,
+            handlungsfelder=user_handlungsfelder
+        )
         
-        # Füge ID-Felder hinzu und konvertiere ObjectId zu String
-        for ticket_list in [open_tickets, assigned_tickets, all_tickets]:
-            for ticket in ticket_list:
-                ticket['id'] = str(ticket['_id'])
-                
-                # Berechne message_count für jedes Ticket
-                ticket_id_for_query = convert_id_for_query(ticket['id'])
-                message_count = mongodb.count_documents('ticket_messages', {'ticket_id': ticket_id_for_query})
-                ticket['message_count'] = message_count
+        open_tickets = tickets_data['open_tickets']
+        assigned_tickets = tickets_data['assigned_tickets']
+        all_tickets = tickets_data['all_tickets']
                 
         # Status und Priorität Colors
         status_colors = {
@@ -730,11 +724,33 @@ def view(ticket_id):
         return redirect(url_for('tickets.create'))
         
     # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
-    if (
-        ticket.get('created_by') != current_user.username
-        and ticket.get('assigned_to') not in [None, '', current_user.username]
-        and current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer']
-    ):
+    has_permission = False
+    
+    # Admins und Mitarbeiter können alle Tickets sehen
+    if current_user.role in ['admin', 'mitarbeiter']:
+        has_permission = True
+    # Erstellt von dem Benutzer
+    elif ticket.get('created_by') == current_user.username:
+        has_permission = True
+    # Zugewiesen an den Benutzer
+    elif ticket.get('assigned_to') in [current_user.username, None, '']:
+        has_permission = True
+    # Teilnehmer: Prüfe Handlungsfeld
+    elif current_user.role == 'teilnehmer':
+        # Hole Handlungsfelder des Benutzers
+        user_settings = mongodb.find_one('users', {'username': current_user.username})
+        if user_settings and user_settings.get('handlungsfelder'):
+            user_handlungsfelder = user_settings['handlungsfelder']
+            ticket_category = ticket.get('category', '')
+            
+            # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
+            if ticket_category in user_handlungsfelder:
+                has_permission = True
+                print(f"DEBUG: Teilnehmer {current_user.username} hat Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+            else:
+                print(f"DEBUG: Teilnehmer {current_user.username} hat KEINEN Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+    
+    if not has_permission:
         logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
         flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
         return redirect(url_for('tickets.create'))
@@ -968,8 +984,34 @@ def detail(id):
             print(f"DEBUG: Ticket nicht gefunden für ID: {id}")
             return render_template('404.html'), 404
         
-        # Prüfe Berechtigungen: Admins/Mitarbeiter/Teilnehmer können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        # Prüfe Berechtigungen
+        has_permission = False
+        
+        # Admins und Mitarbeiter können alle Tickets sehen
+        if current_user.role in ['admin', 'mitarbeiter']:
+            has_permission = True
+        # Erstellt von dem Benutzer
+        elif ticket.get('created_by') == current_user.username:
+            has_permission = True
+        # Zugewiesen an den Benutzer
+        elif ticket.get('assigned_to') == current_user.username:
+            has_permission = True
+        # Teilnehmer: Prüfe Handlungsfeld
+        elif current_user.role == 'teilnehmer':
+            # Hole Handlungsfelder des Benutzers
+            user_settings = mongodb.find_one('users', {'username': current_user.username})
+            if user_settings and user_settings.get('handlungsfelder'):
+                user_handlungsfelder = user_settings['handlungsfelder']
+                ticket_category = ticket.get('category', '')
+                
+                # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
+                if ticket_category in user_handlungsfelder:
+                    has_permission = True
+                    print(f"DEBUG: Teilnehmer {current_user.username} hat Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+                else:
+                    print(f"DEBUG: Teilnehmer {current_user.username} hat KEINEN Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+        
+        if not has_permission:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
             return redirect(url_for('tickets.create'))
         
