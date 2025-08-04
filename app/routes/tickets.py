@@ -625,7 +625,8 @@ def create():
                                      assigned_tickets=[],
                                      all_tickets=[],
                                      status_colors={},
-                                     priority_colors={})
+                                     priority_colors={},
+                                     now=datetime.now())
                 
         except Exception as e:
             logger.error(f"Fehler beim Erstellen des Tickets: {str(e)}")
@@ -643,7 +644,8 @@ def create():
                                  assigned_tickets=[],
                                  all_tickets=[],
                                  status_colors={},
-                                 priority_colors={})
+                                 priority_colors={},
+                                 now=datetime.now())
     
     # GET Request - Formular anzeigen
     try:
@@ -706,7 +708,8 @@ def create():
                              assigned_tickets=assigned_tickets,
                              all_tickets=all_tickets,
                              status_colors=status_colors,
-                             priority_colors=priority_colors)
+                             priority_colors=priority_colors,
+                             now=datetime.now())
     except Exception as e:
         logger.error(f"Fehler beim Laden des Ticket-Formulars: {str(e)}")
         flash('Fehler beim Laden des Formulars', 'error')
@@ -838,6 +841,7 @@ def view(ticket_id):
                              categories=categories,
                              workers=users,
                              assigned_users=assigned_users,
+                             now=datetime.now(),
                              status_colors={
                                  'offen': 'info',
                                  'in_bearbeitung': 'warning',
@@ -1126,7 +1130,8 @@ def auftrag_details_modal(id):
                              messages=messages,
                              auftrag_details=auftrag_details,
                              material_list=material_list,
-                             arbeit_list=arbeit_list)
+                             arbeit_list=arbeit_list,
+                             now=datetime.now())
                              
     except Exception as e:
         logging.error(f"Fehler beim Laden der Auftragsdetails-Modal: {str(e)}")
