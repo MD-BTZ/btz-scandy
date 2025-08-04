@@ -1776,11 +1776,101 @@ update_installation() {
             ;;
         lxc)
             log_info "LXC-Update..."
-            cd /opt/scandy
-            sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
-            # Restart-Logic für LXC
-            pkill -f "gunicorn.*scandy" || true
-            sudo -u scandy ./start_scandy.sh &
+            
+            # Verzeichnisse
+            SOURCE_DIR="/Scandy2"
+            TARGET_DIR="/opt/scandy"
+            
+            # Prüfe verschiedene mögliche Quellverzeichnisse
+            if [ ! -d "$SOURCE_DIR" ]; then
+                # Versuche andere mögliche Namen
+                if [ -d "/scandy2" ]; then
+                    SOURCE_DIR="/scandy2"
+                elif [ -d "/Scandy" ]; then
+                    SOURCE_DIR="/Scandy"
+                elif [ -d "/scandy" ]; then
+                    SOURCE_DIR="/scandy"
+                elif [ -d "/home/scandy/Scandy2" ]; then
+                    SOURCE_DIR="/home/scandy/Scandy2"
+                elif [ -d "/root/Scandy2" ]; then
+                    SOURCE_DIR="/root/Scandy2"
+                else
+                    log_error "Quellverzeichnis nicht gefunden!"
+                    echo "Verfügbare Verzeichnisse:"
+                    find / -name "*scandy*" -type d 2>/dev/null | head -5
+                    exit 1
+                fi
+            fi
+            
+            log_info "Verwende Quellverzeichnis: $SOURCE_DIR"
+            
+            # Git Pull (falls im Quellverzeichnis)
+            cd "$SOURCE_DIR"
+            log_info "Aktualisiere Code von Git..."
+            git pull origin main || git pull origin master || git pull origin IT-VW || {
+                log_warning "Git pull fehlgeschlagen, verwende aktuellen Code"
+            }
+            
+            # Backup erstellen
+            if [ -d "$TARGET_DIR/app" ]; then
+                log_info "Erstelle Backup..."
+                BACKUP_DIR="$TARGET_DIR/app.backup.$(date +%Y%m%d_%H%M%S)"
+                cp -r "$TARGET_DIR/app" "$BACKUP_DIR" 2>/dev/null || {
+                    log_warning "Konnte Backup nicht erstellen"
+                }
+                log_info "Backup: $BACKUP_DIR"
+            fi
+            
+            # Code kopieren
+            log_info "Kopiere Code..."
+            if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
+                log_success "Code kopiert!"
+            else
+                log_error "Fehler beim Kopieren!"
+                exit 1
+            fi
+            
+            # Berechtigungen setzen
+            log_info "Setze Berechtigungen..."
+            chown -R scandy:scandy "$TARGET_DIR/app" 2>/dev/null || {
+                log_warning "Konnte Berechtigungen nicht setzen"
+            }
+            
+            # Dependencies aktualisieren (optional)
+            if [ -d "$TARGET_DIR/venv" ] && [ -f "$TARGET_DIR/requirements.txt" ]; then
+                log_info "Aktualisiere Python-Pakete..."
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" 2>/dev/null || {
+                    log_warning "Konnte Dependencies nicht aktualisieren"
+                }
+            fi
+            
+            # Service neu starten
+            log_info "Starte Scandy-Service neu..."
+            systemctl restart scandy 2>/dev/null || {
+                log_warning "systemctl restart scandy fehlgeschlagen"
+                log_info "Versuche alternative Start-Methoden..."
+                
+                # Fallback: Docker Compose
+                if [ -f "$TARGET_DIR/docker-compose.yml" ]; then
+                    log_info "Versuche Docker Compose..."
+                    cd "$TARGET_DIR"
+                    docker compose restart 2>/dev/null || docker compose up -d 2>/dev/null || {
+                        log_error "Docker Compose fehlgeschlagen"
+                    }
+                else
+                    log_error "Keine Start-Methode gefunden!"
+                fi
+            }
+            
+            # Status prüfen
+            log_info "Prüfe Service-Status..."
+            sleep 3
+            if systemctl is-active --quiet scandy; then
+                log_success "Service läuft!"
+            else
+                log_warning "Service-Status unklar"
+                systemctl status scandy --no-pager -l
+            fi
             ;;
     esac
     
@@ -1842,7 +1932,9 @@ case "\$1" in
                 sudo systemctl start "\$service_name"
                 ;;
             lxc)
-                cd /opt/scandy && sudo -u scandy ./start_scandy.sh &
+                systemctl restart scandy 2>/dev/null || {
+                    cd /opt/scandy && sudo -u scandy ./start_scandy.sh &
+                }
                 ;;
         esac
         echo "Scandy \$INSTANCE_NAME gestartet"
@@ -1896,7 +1988,76 @@ case "\$1" in
         esac
         ;;
     update)
-        ./install_scandy_universal.sh --update
+        case \$INSTALL_MODE in
+            docker)
+                ./install_scandy_universal.sh --update
+                ;;
+            native)
+                ./install_scandy_universal.sh --update
+                ;;
+            lxc)
+                # LXC-spezifisches Update
+                SOURCE_DIR="/Scandy2"
+                TARGET_DIR="/opt/scandy"
+                
+                # Prüfe verschiedene mögliche Quellverzeichnisse
+                if [ ! -d "\$SOURCE_DIR" ]; then
+                    if [ -d "/scandy2" ]; then
+                        SOURCE_DIR="/scandy2"
+                    elif [ -d "/Scandy" ]; then
+                        SOURCE_DIR="/Scandy"
+                    elif [ -d "/scandy" ]; then
+                        SOURCE_DIR="/scandy"
+                    elif [ -d "/home/scandy/Scandy2" ]; then
+                        SOURCE_DIR="/home/scandy/Scandy2"
+                    elif [ -d "/root/Scandy2" ]; then
+                        SOURCE_DIR="/root/Scandy2"
+                    else
+                        echo "Quellverzeichnis nicht gefunden!"
+                        find / -name "*scandy*" -type d 2>/dev/null | head -5
+                        exit 1
+                    fi
+                fi
+                
+                echo "LXC Update gestartet..."
+                echo "Quellverzeichnis: \$SOURCE_DIR"
+                
+                # Git Pull
+                cd "\$SOURCE_DIR"
+                git pull origin main || git pull origin master || git pull origin IT-VW || {
+                    echo "Git pull fehlgeschlagen"
+                }
+                
+                # Backup
+                if [ -d "\$TARGET_DIR/app" ]; then
+                    BACKUP_DIR="\$TARGET_DIR/app.backup.\$(date +%Y%m%d_%H%M%S)"
+                    cp -r "\$TARGET_DIR/app" "\$BACKUP_DIR" 2>/dev/null
+                    echo "Backup: \$BACKUP_DIR"
+                fi
+                
+                # Code kopieren
+                if cp -r "\$SOURCE_DIR/app"/* "\$TARGET_DIR/app/" 2>/dev/null; then
+                    echo "Code kopiert!"
+                else
+                    echo "Fehler beim Kopieren!"
+                    exit 1
+                fi
+                
+                # Berechtigungen
+                chown -R scandy:scandy "\$TARGET_DIR/app" 2>/dev/null
+                
+                # Service neu starten
+                systemctl restart scandy 2>/dev/null || {
+                    echo "systemctl fehlgeschlagen, versuche alternative Methoden..."
+                    if [ -f "\$TARGET_DIR/docker-compose.yml" ]; then
+                        cd "\$TARGET_DIR"
+                        docker compose restart 2>/dev/null || docker compose up -d 2>/dev/null
+                    fi
+                }
+                
+                echo "LXC Update abgeschlossen!"
+                ;;
+        esac
         ;;
     info)
         echo "========================================"
