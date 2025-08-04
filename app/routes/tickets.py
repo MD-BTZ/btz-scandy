@@ -9,6 +9,11 @@ import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Ticket Service Instanz
+def get_ticket_service():
+    """Gibt eine Instanz des TicketService zurück"""
+    return TicketService()
 from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
