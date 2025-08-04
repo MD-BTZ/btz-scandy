@@ -271,6 +271,23 @@ update_lxc() {
     cd /opt/scandy
     git pull || log_warning "Git pull fehlgeschlagen"
     
+    # Stelle sicher, dass alle Dateien korrekt kopiert sind
+    log_info "Stelle sicher, dass Code korrekt kopiert ist..."
+    
+    # Prüfe ob app-Verzeichnis existiert
+    if [ ! -d "app" ]; then
+        log_error "app-Verzeichnis nicht gefunden!"
+        exit 1
+    fi
+    
+    # Kopiere Code in den Container (falls nötig)
+    if [ -d "/opt/scandy/app" ]; then
+        log_info "Kopiere aktualisierten Code..."
+        cp -r app/* /opt/scandy/app/ 2>/dev/null || {
+            log_warning "Konnte Code nicht kopieren, verwende Git-Version"
+        }
+    fi
+    
     # Dependencies aktualisieren
     log_info "Aktualisiere Python-Pakete..."
     sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt

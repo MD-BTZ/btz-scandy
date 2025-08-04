@@ -109,6 +109,18 @@ else
     pkill -f "gunicorn.*scandy" || true
     sleep 2
     
+    # Stelle sicher, dass Code korrekt kopiert ist
+    log_info "Stelle sicher, dass Code korrekt kopiert ist..."
+    
+    # Kopiere Code in das richtige Verzeichnis
+    SCANDY_DIR="/opt/scandy"
+    if [ -d "$SCANDY_DIR" ] && [ -d "app" ]; then
+        log_info "Kopiere Code nach $SCANDY_DIR..."
+        cp -r app/* "$SCANDY_DIR/app/" 2>/dev/null || {
+            log_warning "Konnte Code nicht kopieren, verwende Git-Version"
+        }
+    fi
+    
     # Starte Scandy
     if [ -f "start_scandy.sh" ]; then
         sudo -u scandy ./start_scandy.sh &
