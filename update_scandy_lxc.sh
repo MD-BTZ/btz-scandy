@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #####################################################################
-# Code-Kopierung für LXC Container
-# Kopiert Code nach /opt/scandy/app nach git pull
+# Scandy LXC Update Script
+# Für Setup mit /Scandy2/ als Quellverzeichnis
 #####################################################################
 
 set -e
@@ -38,28 +38,46 @@ log_step() {
 show_banner() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║                    CODE KOPIERUNG                            ║"
-    echo "║                    LXC Container                             ║"
+    echo "║                    SCANDY LXC UPDATE                         ║"
+    echo "║                    /Scandy2/ → /opt/scandy/                  ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
 show_banner
 
-log_step "Code-Kopierung gestartet..."
+# Verzeichnisse
+SOURCE_DIR="/Scandy2"
+TARGET_DIR="/opt/scandy"
 
-# Prüfe ob wir im Scandy-Verzeichnis sind (/Scandy2/)
-if [ ! -d "app" ]; then
-    log_error "app-Verzeichnis nicht gefunden! Bitte im /Scandy2/ Verzeichnis ausführen."
+log_step "Scandy LXC Update gestartet..."
+
+# Prüfe Quellverzeichnis
+if [ ! -d "$SOURCE_DIR" ]; then
+    log_error "Quellverzeichnis $SOURCE_DIR nicht gefunden!"
     exit 1
 fi
 
-# Prüfe ob /opt/scandy existiert
-SCANDY_DIR="/opt/scandy"
-if [ ! -d "$SCANDY_DIR" ]; then
-    log_error "Scandy-Verzeichnis $SCANDY_DIR nicht gefunden!"
+if [ ! -d "$SOURCE_DIR/app" ]; then
+    log_error "app-Verzeichnis in $SOURCE_DIR nicht gefunden!"
     exit 1
 fi
+
+# Prüfe Zielverzeichnis
+if [ ! -d "$TARGET_DIR" ]; then
+    log_error "Zielverzeichnis $TARGET_DIR nicht gefunden!"
+    exit 1
+fi
+
+# Git Pull (falls im Quellverzeichnis)
+cd "$SOURCE_DIR"
+log_info "Wechsle ins Quellverzeichnis: $SOURCE_DIR"
+
+# Git Pull
+log_info "Aktualisiere Code von Git..."
+git pull origin main || git pull origin master || git pull origin IT-VW || {
+    log_warning "Git pull fehlgeschlagen, verwende aktuellen Code"
+}
 
 # Prozess stoppen
 log_info "Stoppe Scandy-Prozess..."
@@ -68,18 +86,18 @@ pkill -f "python.*app" || true
 sleep 2
 
 # Backup erstellen
-if [ -d "$SCANDY_DIR/app" ]; then
+if [ -d "$TARGET_DIR/app" ]; then
     log_info "Erstelle Backup des alten Codes..."
-    BACKUP_DIR="$SCANDY_DIR/app.backup.$(date +%Y%m%d_%H%M%S)"
-    cp -r "$SCANDY_DIR/app" "$BACKUP_DIR" 2>/dev/null || {
+    BACKUP_DIR="$TARGET_DIR/app.backup.$(date +%Y%m%d_%H%M%S)"
+    cp -r "$TARGET_DIR/app" "$BACKUP_DIR" 2>/dev/null || {
         log_warning "Konnte Backup nicht erstellen"
     }
     log_info "Backup erstellt: $BACKUP_DIR"
 fi
 
 # Code kopieren
-log_info "Kopiere Code nach $SCANDY_DIR/app..."
-if cp -r app/* "$SCANDY_DIR/app/" 2>/dev/null; then
+log_info "Kopiere Code von $SOURCE_DIR nach $TARGET_DIR..."
+if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
     log_success "Code erfolgreich kopiert!"
 else
     log_error "Fehler beim Kopieren des Codes!"
@@ -88,12 +106,12 @@ fi
 
 # Berechtigungen setzen
 log_info "Setze Berechtigungen..."
-chown -R scandy:scandy "$SCANDY_DIR/app" 2>/dev/null || {
+chown -R scandy:scandy "$TARGET_DIR/app" 2>/dev/null || {
     log_warning "Konnte Berechtigungen nicht setzen"
 }
 
-# Wechsle ins Scandy-Verzeichnis
-cd "$SCANDY_DIR"
+# Wechsle ins Zielverzeichnis
+cd "$TARGET_DIR"
 
 # Dependencies aktualisieren (optional)
 if [ -d "venv" ] && [ -f "requirements.txt" ]; then
@@ -115,9 +133,9 @@ fi
 
 # Warte auf Service
 log_info "Warte auf Service..."
-for i in {1..10}; do
+for i in {1..15}; do
     if curl -f http://localhost:5000/health &>/dev/null; then
-        log_success "Code-Kopierung abgeschlossen!"
+        log_success "LXC Update abgeschlossen!"
         log_info "Service ist verfügbar unter: http://localhost:5000"
         exit 0
     fi
@@ -125,8 +143,14 @@ for i in {1..10}; do
 done
 
 log_warning "Service braucht länger zum Starten"
-log_info "Prüfe Logs mit: tail -f /opt/scandy/logs/app.log"
+log_info "Prüfe Logs mit: tail -f $TARGET_DIR/logs/app.log"
 
 # Zeige Prozess-Status
 log_info "Aktive Scandy-Prozesse:"
-ps aux | grep -E "(gunicorn|scandy)" | grep -v grep || log_warning "Keine Scandy-Prozesse gefunden" 
+ps aux | grep -E "(gunicorn|scandy)" | grep -v grep || log_warning "Keine Scandy-Prozesse gefunden"
+
+# Zeige Verzeichnisstruktur
+log_info "Verzeichnisstruktur:"
+echo "Quellverzeichnis: $SOURCE_DIR"
+echo "Zielverzeichnis: $TARGET_DIR"
+ls -la "$TARGET_DIR/app/" | head -10 

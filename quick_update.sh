@@ -30,9 +30,9 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Prüfe ob wir im Scandy-Verzeichnis sind
-if [ ! -f "docker-compose.yml" ]; then
-    log_error "Bitte führen Sie dieses Script im Scandy-Verzeichnis aus!"
+# Prüfe ob wir im Scandy-Verzeichnis sind (/Scandy2/)
+if [ ! -d "app" ]; then
+    log_error "Bitte führen Sie dieses Script im /Scandy2/ Verzeichnis aus!"
     exit 1
 fi
 

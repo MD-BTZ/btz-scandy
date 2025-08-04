@@ -24,12 +24,18 @@ Bei LXC-Container-Updates wird der Code nicht korrekt in das `/opt/scandy/app` V
 
 ## Schritt-für-Schritt Anleitung
 
-### 1. Code aktualisieren
+### 1. Code aktualisieren (im /Scandy2/ Verzeichnis)
 ```bash
+cd /Scandy2
 git pull origin IT-VW
 ```
 
 ### 2. Code kopieren
+```bash
+./update_scandy_lxc.sh
+```
+
+### Alternative: Einfache Code-Kopierung
 ```bash
 ./copy_code_to_scandy.sh
 ```
@@ -88,7 +94,12 @@ cp -r app/* /opt/scandy/app/
 ## Verzeichnisstruktur
 
 ```
-/opt/scandy/
+/Scandy2/                   # ← Quellverzeichnis (Git)
+├── app/                    # ← Hier ist der Code von GitHub
+├── copy_code_to_scandy.sh  # ← Code-Kopierung Script
+└── update_scandy_lxc.sh    # ← Vollständiges Update Script
+
+/opt/scandy/                # ← Zielverzeichnis (Installation)
 ├── app/                    # ← Hier muss der Code hin
 ├── venv/                   # Python Virtual Environment
 ├── logs/                   # Log-Dateien

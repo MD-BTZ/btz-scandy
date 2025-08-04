@@ -44,9 +44,9 @@ show_banner() {
     echo -e "${NC}"
 }
 
-# Prüfe ob wir im Scandy-Verzeichnis sind
-if [ ! -f "docker-compose.yml" ] && [ ! -f ".env" ]; then
-    log_error "Bitte führen Sie dieses Script im Scandy-Verzeichnis aus!"
+# Prüfe ob wir im Scandy-Verzeichnis sind (/Scandy2/)
+if [ ! -d "app" ]; then
+    log_error "Bitte führen Sie dieses Script im /Scandy2/ Verzeichnis aus!"
     exit 1
 fi
 
