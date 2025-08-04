@@ -1009,40 +1009,56 @@ class BackupManager:
         except Exception as e:
             return False, f"Fehler bei der Kompatibilitätsanalyse: {str(e)}"
     
-    def _cleanup_old_backups(self, keep=10):
-        """Löscht alte Backups, behält nur die letzten 'keep'"""
+    def _cleanup_old_backups(self, keep_days=7):
+        """Löscht Backups älter als 'keep_days' Tage"""
         try:
+            from datetime import timedelta
+            cutoff_date = datetime.now() - timedelta(days=keep_days)
+            
             # Finde alle Backup-Dateien (JSON und Native)
             json_backups = list(self.backup_dir.glob('scandy_backup_*.json'))
             native_backups = list(self.backup_dir.glob('scandy_native_backup_*'))
             
-            # Priorisiere BSON-Backups, behalte aber JSON-Backups für Kompatibilität
+            # Alle Backups zusammen
             all_backups = native_backups + json_backups
             
-            if len(all_backups) > keep:
-                # Sortiere nach Änderungsdatum
-                all_backups.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                
-                # Lösche alte Backups, aber behalte mindestens 2 JSON-Backups für Kompatibilität
-                json_count = len(json_backups)
-                native_count = len(native_backups)
-                
-                backups_to_delete = all_backups[keep:]
-                
-                for old_backup in backups_to_delete:
-                    if old_backup.is_dir():
-                        # Natives Backup löschen
-                        import shutil
-                        shutil.rmtree(old_backup)
-                        print(f"Altes BSON-Backup gelöscht: {old_backup.name}")
-                    else:
-                        # JSON-Backup löschen, aber mindestens 2 behalten
-                        if json_count > 2:
-                            old_backup.unlink()
-                            json_count -= 1
-                            print(f"Altes JSON-Backup gelöscht: {old_backup.name}")
+            deleted_count = 0
+            total_size_freed = 0
+            
+            for backup in all_backups:
+                try:
+                    # Prüfe Erstellungsdatum
+                    backup_time = datetime.fromtimestamp(backup.stat().st_mtime)
+                    
+                    if backup_time < cutoff_date:
+                        # Backup ist zu alt
+                        if backup.is_dir():
+                            # Natives Backup löschen
+                            import shutil
+                            size = self._get_dir_size(backup)
+                            shutil.rmtree(backup)
+                            deleted_count += 1
+                            total_size_freed += size
+                            print(f"Altes BSON-Backup gelöscht: {backup.name} (vom {backup_time.strftime('%Y-%m-%d %H:%M')})")
                         else:
-                            print(f"JSON-Backup beibehalten für Kompatibilität: {old_backup.name}")
+                            # JSON-Backup löschen
+                            size = backup.stat().st_size
+                            backup.unlink()
+                            deleted_count += 1
+                            total_size_freed += size
+                            print(f"Altes JSON-Backup gelöscht: {backup.name} (vom {backup_time.strftime('%Y-%m-%d %H:%M')})")
+                            
+                except Exception as e:
+                    print(f"Fehler beim Löschen von {backup.name}: {e}")
+            
+            if deleted_count > 0:
+                total_size_mb = total_size_freed / (1024 * 1024)
+                print(f"✅ Backup-Bereinigung abgeschlossen:")
+                print(f"   Gelöschte Backups: {deleted_count}")
+                print(f"   Freigegebener Speicherplatz: {total_size_mb:.1f} MB")
+                print(f"   Behaltene Backups: {len(all_backups) - deleted_count}")
+            else:
+                print(f"✅ Keine alten Backups gefunden (alle Backups sind neuer als {keep_days} Tage)")
                     
         except Exception as e:
             print(f"Fehler beim Aufräumen alter Backups: {e}")

@@ -1769,9 +1769,77 @@ update_installation() {
             ;;
         native)
             log_info "Native Update..."
-            cd /opt/scandy
-            sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+            
+            # Verzeichnisse
+            SOURCE_DIR="/Scandy2"
+            TARGET_DIR="/opt/scandy"
+            
+            # Prüfe verschiedene mögliche Quellverzeichnisse
+            if [ ! -d "$SOURCE_DIR" ]; then
+                # Versuche andere mögliche Namen
+                if [ -d "/scandy2" ]; then
+                    SOURCE_DIR="/scandy2"
+                elif [ -d "/Scandy" ]; then
+                    SOURCE_DIR="/Scandy"
+                elif [ -d "/scandy" ]; then
+                    SOURCE_DIR="/scandy"
+                elif [ -d "/home/scandy/Scandy2" ]; then
+                    SOURCE_DIR="/home/scandy/Scandy2"
+                elif [ -d "/root/Scandy2" ]; then
+                    SOURCE_DIR="/root/Scandy2"
+                else
+                    log_error "Quellverzeichnis nicht gefunden!"
+                    echo "Verfügbare Verzeichnisse:"
+                    find / -name "*scandy*" -type d 2>/dev/null | head -5
+                    exit 1
+                fi
+            fi
+            
+            log_info "Verwende Quellverzeichnis: $SOURCE_DIR"
+            
+            # Git Pull (falls im Quellverzeichnis)
+            cd "$SOURCE_DIR"
+            log_info "Aktualisiere Code von Git..."
+            git pull origin main || git pull origin master || git pull origin IT-VW || {
+                log_warning "Git pull fehlgeschlagen, verwende aktuellen Code"
+            }
+            
+            # Backup erstellen
+            if [ -d "$TARGET_DIR/app" ]; then
+                log_info "Erstelle Backup..."
+                BACKUP_DIR="$TARGET_DIR/app.backup.$(date +%Y%m%d_%H%M%S)"
+                cp -r "$TARGET_DIR/app" "$BACKUP_DIR" 2>/dev/null || {
+                    log_warning "Konnte Backup nicht erstellen"
+                }
+                log_info "Backup: $BACKUP_DIR"
+            fi
+            
+            # Code kopieren
+            log_info "Kopiere Code..."
+            if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
+                log_success "Code kopiert!"
+            else
+                log_error "Fehler beim Kopieren!"
+                exit 1
+            fi
+            
+            # Berechtigungen setzen
+            log_info "Setze Berechtigungen..."
+            chown -R scandy:scandy "$TARGET_DIR/app" 2>/dev/null || {
+                log_warning "Konnte Berechtigungen nicht setzen"
+            }
+            
+            # Dependencies aktualisieren
+            if [ -d "$TARGET_DIR/venv" ] && [ -f "$TARGET_DIR/requirements.txt" ]; then
+                log_info "Aktualisiere Python-Pakete..."
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" 2>/dev/null || {
+                    log_warning "Konnte Dependencies nicht aktualisieren"
+                }
+            fi
+            
+            # Service neu starten
             service_name=$(get_service_name "$INSTANCE_NAME")
+            log_info "Starte Service neu: $service_name"
             systemctl restart "$service_name"
             ;;
         lxc)
