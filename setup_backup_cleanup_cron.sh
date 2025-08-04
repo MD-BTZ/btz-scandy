@@ -39,8 +39,8 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 # Prüfe ob wir im Scandy-Verzeichnis sind
-if [ ! -f "cleanup_old_backups.py" ]; then
-    log_error "cleanup_old_backups.py nicht gefunden!"
+if [ ! -f "cleanup_old_backups_improved.py" ]; then
+    log_error "cleanup_old_backups_improved.py nicht gefunden!"
     log_info "Bitte im Scandy-Verzeichnis ausführen"
     exit 1
 fi
@@ -56,7 +56,7 @@ log_info "Erstelle Cron-Job für automatische Backup-Bereinigung..."
 (crontab -l 2>/dev/null | grep -v "cleanup_old_backups.py") | crontab -
 
 # Füge neuen Cron-Job hinzu (täglich um 2:00 Uhr)
-CRON_JOB="0 2 * * * cd $SCANDY_DIR && python3 cleanup_old_backups.py >> logs/backup_cleanup.log 2>&1"
+CRON_JOB="0 2 * * * cd $SCANDY_DIR && python3 cleanup_old_backups_improved.py >> $SCANDY_DIR/logs/backup_cleanup.log 2>&1"
 
 (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
@@ -70,7 +70,7 @@ crontab -l | grep -E "(cleanup|backup)" || log_warning "Keine Backup-Cron-Jobs g
 
 # Teste das Cleanup-Script
 log_info "Teste Cleanup-Script..."
-python3 cleanup_old_backups.py
+python3 cleanup_old_backups_improved.py
 
 log_success "Setup abgeschlossen!"
 log_info "Backup-Bereinigung ist jetzt automatisch aktiv" 

@@ -1,38 +1,72 @@
 #!/usr/bin/env python3
 """
-Script zur Bereinigung alter Backups
-Löscht Backups älter als 7 Tage
+Verbessertes Script zur Bereinigung alter Backups
+Findet automatisch das Backup-Verzeichnis und löscht Backups älter als 7 Tage
 """
 
 import os
 import shutil
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 
-def cleanup_old_backups(keep_days=7):
-    """Löscht Backups älter als 'keep_days' Tage"""
+def find_backup_directory():
+    """Findet das Backup-Verzeichnis automatisch"""
     
-    # Backup-Verzeichnis - suche in verschiedenen möglichen Pfaden
+    # Mögliche Backup-Verzeichnisse
     possible_backup_dirs = [
         Path("backups"),
         Path("/opt/scandy/backups"),
         Path("/opt/scandy/app/backups"),
         Path("app/backups"),
         Path("../backups"),
-        Path("../../backups")
+        Path("../../backups"),
+        Path("/home/scandy/Scandy2/backups"),
+        Path("/root/Scandy2/backups"),
+        Path("/Scandy2/backups"),
+        Path("/scandy2/backups")
     ]
     
-    backup_dir = None
-    for dir_path in possible_backup_dirs:
-        if dir_path.exists():
-            backup_dir = dir_path
-            break
+    # Prüfe auch relative Pfade vom aktuellen Verzeichnis
+    current_dir = Path.cwd()
+    for i in range(5):  # Gehe bis zu 5 Verzeichnisse nach oben
+        possible_backup_dirs.append(current_dir / "backups")
+        possible_backup_dirs.append(current_dir / "app" / "backups")
+        current_dir = current_dir.parent
     
+    # Suche nach Backup-Verzeichnis
+    for dir_path in possible_backup_dirs:
+        if dir_path.exists() and dir_path.is_dir():
+            print(f"✅ Backup-Verzeichnis gefunden: {dir_path.absolute()}")
+            return dir_path
+    
+    # Suche mit find-Befehl als Fallback
+    try:
+        import subprocess
+        result = subprocess.run(['find', '/', '-name', 'backups', '-type', 'd', '-path', '*scandy*'], 
+                              capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if line and 'scandy' in line.lower():
+                    backup_dir = Path(line)
+                    if backup_dir.exists():
+                        print(f"✅ Backup-Verzeichnis gefunden (via find): {backup_dir.absolute()}")
+                        return backup_dir
+    except Exception as e:
+        print(f"Find-Befehl fehlgeschlagen: {e}")
+    
+    print("❌ Backup-Verzeichnis nicht gefunden!")
+    print("Gesuchte Pfade:")
+    for dir_path in possible_backup_dirs:
+        print(f"  - {dir_path.absolute()}")
+    return None
+
+def cleanup_old_backups(keep_days=7):
+    """Löscht Backups älter als 'keep_days' Tage"""
+    
+    # Finde Backup-Verzeichnis
+    backup_dir = find_backup_directory()
     if not backup_dir:
-        print("Backup-Verzeichnis nicht gefunden!")
-        print("Gesuchte Pfade:")
-        for dir_path in possible_backup_dirs:
-            print(f"  - {dir_path.absolute()}")
         return
     
     cutoff_date = datetime.now() - timedelta(days=keep_days)
@@ -116,11 +150,11 @@ def format_size(size_bytes):
     return f"{size_bytes:.1f} {size_names[i]}"
 
 if __name__ == "__main__":
-    print("🧹 Bereinige alte Backups...")
-    print("=" * 50)
+    print("🧹 Bereinige alte Backups (Verbesserte Version)...")
+    print("=" * 60)
+    print(f"Aktuelles Verzeichnis: {Path.cwd().absolute()}")
     
     # Prüfe ob Argument für Tage angegeben wurde
-    import sys
     keep_days = 7
     if len(sys.argv) > 1:
         try:
