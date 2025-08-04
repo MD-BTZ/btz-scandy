@@ -50,9 +50,30 @@ show_banner
 SOURCE_DIR="/Scandy2"
 TARGET_DIR="/opt/scandy"
 
+# Prüfe verschiedene mögliche Quellverzeichnisse
+if [ ! -d "$SOURCE_DIR" ]; then
+    # Versuche andere mögliche Namen
+    if [ -d "/scandy2" ]; then
+        SOURCE_DIR="/scandy2"
+    elif [ -d "/Scandy" ]; then
+        SOURCE_DIR="/Scandy"
+    elif [ -d "/scandy" ]; then
+        SOURCE_DIR="/scandy"
+    elif [ -d "/home/scandy/Scandy2" ]; then
+        SOURCE_DIR="/home/scandy/Scandy2"
+    elif [ -d "/root/Scandy2" ]; then
+        SOURCE_DIR="/root/Scandy2"
+    else
+        log_error "Quellverzeichnis nicht gefunden! Suche nach Scandy2..."
+        find / -name "Scandy2" -type d 2>/dev/null | head -5
+        exit 1
+    fi
+fi
+
 log_step "Scandy LXC Update gestartet..."
 
 # Prüfe Quellverzeichnis
+log_info "Verwende Quellverzeichnis: $SOURCE_DIR"
 if [ ! -d "$SOURCE_DIR" ]; then
     log_error "Quellverzeichnis $SOURCE_DIR nicht gefunden!"
     exit 1
