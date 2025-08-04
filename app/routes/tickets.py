@@ -658,14 +658,16 @@ def create():
         # Verwende Ticket-Service für korrekte Handlungsfeld-Filterung
         ticket_service = get_ticket_service()
         
-        # Hole Handlungsfelder des Benutzers
+        # Hole Handlungsfelder des Benutzers (für alle Rollen außer Admin)
         user_handlungsfelder = []
-        if current_user.role == 'teilnehmer':
+        if current_user.role != 'admin':
             # Hole Handlungsfelder aus der Benutzer-Konfiguration
             user_settings = mongodb.find_one('users', {'username': current_user.username})
             if user_settings and user_settings.get('handlungsfelder'):
                 user_handlungsfelder = user_settings['handlungsfelder']
-                print(f"DEBUG: Benutzer {current_user.username} hat Handlungsfelder: {user_handlungsfelder}")
+                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat Handlungsfelder: {user_handlungsfelder}")
+            else:
+                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat keine Handlungsfelder zugewiesen")
         
         # Lade Tickets mit korrekter Filterung
         tickets_data = ticket_service.get_tickets_by_user(
@@ -726,8 +728,8 @@ def view(ticket_id):
     # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
     has_permission = False
     
-    # Admins und Mitarbeiter können alle Tickets sehen
-    if current_user.role in ['admin', 'mitarbeiter']:
+    # Admins können alle Tickets sehen
+    if current_user.role == 'admin':
         has_permission = True
     # Erstellt von dem Benutzer
     elif ticket.get('created_by') == current_user.username:
@@ -735,8 +737,8 @@ def view(ticket_id):
     # Zugewiesen an den Benutzer
     elif ticket.get('assigned_to') in [current_user.username, None, '']:
         has_permission = True
-    # Teilnehmer: Prüfe Handlungsfeld
-    elif current_user.role == 'teilnehmer':
+    # Alle anderen Rollen: Prüfe Handlungsfeld
+    else:
         # Hole Handlungsfelder des Benutzers
         user_settings = mongodb.find_one('users', {'username': current_user.username})
         if user_settings and user_settings.get('handlungsfelder'):
@@ -746,9 +748,11 @@ def view(ticket_id):
             # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
             if ticket_category in user_handlungsfelder:
                 has_permission = True
-                print(f"DEBUG: Teilnehmer {current_user.username} hat Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
             else:
-                print(f"DEBUG: Teilnehmer {current_user.username} hat KEINEN Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat KEINEN Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+        else:
+            print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat keine Handlungsfelder zugewiesen")
     
     if not has_permission:
         logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
@@ -987,8 +991,8 @@ def detail(id):
         # Prüfe Berechtigungen
         has_permission = False
         
-        # Admins und Mitarbeiter können alle Tickets sehen
-        if current_user.role in ['admin', 'mitarbeiter']:
+        # Admins können alle Tickets sehen
+        if current_user.role == 'admin':
             has_permission = True
         # Erstellt von dem Benutzer
         elif ticket.get('created_by') == current_user.username:
@@ -996,8 +1000,8 @@ def detail(id):
         # Zugewiesen an den Benutzer
         elif ticket.get('assigned_to') == current_user.username:
             has_permission = True
-        # Teilnehmer: Prüfe Handlungsfeld
-        elif current_user.role == 'teilnehmer':
+        # Alle anderen Rollen: Prüfe Handlungsfeld
+        else:
             # Hole Handlungsfelder des Benutzers
             user_settings = mongodb.find_one('users', {'username': current_user.username})
             if user_settings and user_settings.get('handlungsfelder'):
@@ -1007,9 +1011,11 @@ def detail(id):
                 # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
                 if ticket_category in user_handlungsfelder:
                     has_permission = True
-                    print(f"DEBUG: Teilnehmer {current_user.username} hat Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+                    print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
                 else:
-                    print(f"DEBUG: Teilnehmer {current_user.username} hat KEINEN Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+                    print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat KEINEN Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
+            else:
+                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat keine Handlungsfelder zugewiesen")
         
         if not has_permission:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')

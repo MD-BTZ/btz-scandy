@@ -128,9 +128,9 @@ class TicketService:
                 ]
             }
             
-            # Handlungsfeld-Filter für normale User
-            if role not in ['admin', 'mitarbeiter'] and handlungsfelder:
-                # Für normale User: Nur offene Tickets aus zugewiesenen Handlungsfeldern
+            # Handlungsfeld-Filter für alle Rollen außer Admin
+            if role != 'admin' and handlungsfelder:
+                # Für alle Rollen außer Admin: Nur offene Tickets aus zugewiesenen Handlungsfeldern
                 open_query['$and'].append({'category': {'$in': handlungsfelder}})
                 print(f"DEBUG: Offene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
             
@@ -140,8 +140,8 @@ class TicketService:
             print(f"DEBUG: Offene Tickets gefunden: {len(open_tickets)}")
             
             # Zugewiesene Tickets (nur für zugewiesene Benutzer)
-            if role in ['admin', 'mitarbeiter']:
-                # Für Admins/Mitarbeiter: Alle zugewiesenen Tickets + alle gelösten/geschlossenen
+            if role == 'admin':
+                # Für Admins: Alle zugewiesenen Tickets + alle gelösten/geschlossenen
                 # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
                 user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
                 assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
@@ -160,7 +160,7 @@ class TicketService:
                     ]
                 }
             else:
-                # Für normale User: Nur eigene zugewiesene Tickets
+                # Für alle anderen Rollen: Nur eigene zugewiesene Tickets
                 # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
                 user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
                 assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
@@ -182,9 +182,9 @@ class TicketService:
             assigned_tickets = list(assigned_tickets)
             print(f"DEBUG: Zugewiesene Tickets gefunden: {len(assigned_tickets)}")
             
-            # Alle Tickets (nur für Admins/Mitarbeiter)
+            # Alle Tickets (nur für Admins)
             all_tickets = []
-            if role in ['admin', 'mitarbeiter']:
+            if role == 'admin':
                 all_query = {'deleted': {'$ne': True}}
                 print(f"DEBUG: Alle Tickets Query: {all_query}")
                 all_tickets = mongodb.find('tickets', all_query)
