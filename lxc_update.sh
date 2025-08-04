@@ -64,11 +64,8 @@ fi
 
 log_step "LXC Container Update gestartet..."
 
-# Git Pull
-log_info "Aktualisiere Code von Git..."
-git pull origin main || git pull origin master || git pull origin IT-VW || {
-    log_warning "Git pull fehlgeschlagen, verwende aktuellen Code"
-}
+# Git Pull (bereits im Container ausgeführt)
+log_info "Code wurde bereits von Git geholt"
 
 # Prüfe ob wir in einem LXC-Container sind
 if [ -f "/proc/1/cgroup" ] && grep -q "lxc" /proc/1/cgroup; then
