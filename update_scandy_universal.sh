@@ -209,6 +209,10 @@ update_docker() {
     log_info "Starte Container..."
     docker compose up -d
     
+    # Container neu starten um gemountete Volumes zu aktualisieren
+    log_info "Starte App-Container neu um Code-Updates zu laden..."
+    docker compose restart scandy-app-$(grep "INSTANCE_NAME=" .env | cut -d'=' -f2 2>/dev/null || echo "scandy")
+    
     # Warte auf Services
     log_info "Warte auf Services..."
     for i in {1..30}; do
