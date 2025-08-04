@@ -65,7 +65,7 @@ def admin_required(f):
     return decorated_function
 
 def mitarbeiter_required(f):
-    """Decorator für Routen, die Admins oder Mitarbeitern zugänglich sind."""
+    """Decorator für Routen, die allen authentifizierten Benutzern außer Teilnehmern zugänglich sind."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         logger.debug(f"[DECORATOR] mitarbeiter_required: Checking user {getattr(current_user, 'id', 'Guest')}")
@@ -80,11 +80,14 @@ def mitarbeiter_required(f):
             flash("Bitte melden Sie sich an.", "info")
             return redirect(url_for('auth.login', next=request.url))
         
-        is_mitarbeiter = getattr(current_user, 'is_mitarbeiter', False)
-        logger.debug(f"[DECORATOR] mitarbeiter_required: User role is '{getattr(current_user, 'role', 'N/A')}', is_mitarbeiter evaluated to {is_mitarbeiter}")
+        # Erlaube alle Rollen außer 'teilnehmer'
+        user_role = getattr(current_user, 'role', 'anwender')
+        is_allowed = user_role != 'teilnehmer'
         
-        if not is_mitarbeiter: 
-            logger.warning(f"[DECORATOR] mitarbeiter_required: User {current_user.id} lacks permission. Aborting with 403.")
+        logger.debug(f"[DECORATOR] mitarbeiter_required: User role is '{user_role}', is_allowed evaluated to {is_allowed}")
+        
+        if not is_allowed: 
+            logger.warning(f"[DECORATOR] mitarbeiter_required: User {current_user.id} (role: {user_role}) lacks permission. Aborting with 403.")
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({
                     'success': False,
@@ -92,7 +95,7 @@ def mitarbeiter_required(f):
                 }), 403
             abort(403)
         
-        logger.debug(f"[DECORATOR] mitarbeiter_required: Access granted for user {current_user.id}. Proceeding to route function.")
+        logger.debug(f"[DECORATOR] mitarbeiter_required: Access granted for user {current_user.id} (role: {user_role}). Proceeding to route function.")
         return f(*args, **kwargs)
     return decorated_function
 
