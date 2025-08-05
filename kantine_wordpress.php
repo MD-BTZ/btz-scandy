@@ -6,8 +6,8 @@
  */
 
 // Konfiguration
-$scandy_api_url = 'https://your-scandy-server.com/api/canteen/current_week';  // Zeigt nur aktuelle Woche
-$api_key = 'your-api-key-here'; // Optional für Sicherheit
+$scandy_api_url = 'http://192.168.178.56:5000/api/canteen/current_week';
+$api_key = null; // Kein API-Key für lokale Tests
 $cache_duration = 300; // 5 Minuten Cache
 
 // Cache-Datei
@@ -88,7 +88,7 @@ function convert_api_to_csv_format($api_data) {
     $csvArray = [];
     
     // Header-Zeile (wie in alter CSV)
-    $csvArray[] = ['Tag', 'Datum', 'Menü 1', 'Menü 2 (Vegan)', 'Dessert'];
+    $csvArray[] = ['Tag', 'Datum', 'Menü 1', 'Menü 2 (Vegan)'];
     
     // Daten-Zeilen
     if (isset($api_data['week']) && is_array($api_data['week'])) {
@@ -96,8 +96,7 @@ function convert_api_to_csv_format($api_data) {
             $csvArray[] = [
                 $meal['date'],           // Tag, Datum
                 $meal['meat_dish'],      // Menü 1
-                $meal['vegan_dish'],     // Menü 2 (Vegan)
-                $meal['dessert']         // Dessert
+                $meal['vegan_dish']      // Menü 2 (Vegan)
             ];
         }
     }
@@ -124,7 +123,6 @@ function display_canteen_table($api_url, $api_key, $cache_file, $cache_duration)
     $datum = array();
     $menu1 = array();
     $menu2 = array();
-    $dessert = array();
 
     // Starte bei 1 (A2, B2, etc) um die Header-Zeile zu ignorieren
     for($i = 1; $i < count($csvArray); ++$i) {
@@ -136,9 +134,6 @@ function display_canteen_table($api_url, $api_key, $cache_file, $cache_duration)
         }
         if(!(empty($csvArray[$i][2]))) {
             array_push($menu2, $csvArray[$i][2]);
-        }
-        if(!(empty($csvArray[$i][3]))) {
-            array_push($dessert, $csvArray[$i][3]);
         }
     }
 
@@ -173,14 +168,14 @@ function display_canteen_table($api_url, $api_key, $cache_file, $cache_duration)
     $endofweek = $index + 5;
     $today = $index + $remainder;
 
-    // Drucke die Tabelle
-    echo("<table> <tr> <th>Tag, Datum</th> <th>Menü 1</th> <th>Menü 2 (Vegan)</th> <th>Dessert</th></tr>");
+    // Drucke die Tabelle - EXAKT wie in der alten Datei
+    echo("<table> <tr> <th>Tag, Datum</th> <th>Menü   1</th> <th>Menü   2 (Vegan)</th></tr>");
     for($index; $index < $endofweek; ++$index) {
         if ($index == $today) {
-            echo("<tr> <td>$datum[$index]</td> <td>$menu1[$index]</td> <td>$menu2[$index]</td> <td>$dessert[$index]</td></tr> ");
+            echo("<tr> <td>$datum[$index]</td> <td>$menu1[$index]</td> <td>$menu2[$index]</td></tr> ");
         }
         else {
-            echo("<tr class='optionallyhidden'> <td>$datum[$index]</td> <td>$menu1[$index]</td> <td>$menu2[$index]</td> <td>$dessert[$index]</td></tr> ");
+            echo("<tr class='optionallyhidden'> <td>$datum[$index]</td> <td>$menu1[$index]</td> <td>$menu2[$index]</td></tr> ");
         }
     }
     echo( "</table>");

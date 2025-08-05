@@ -1771,26 +1771,32 @@ update_installation() {
             log_info "Native Update..."
             
             # Verzeichnisse
-            SOURCE_DIR="/Scandy2"
             TARGET_DIR="/opt/scandy"
             
-            # Prüfe verschiedene mögliche Quellverzeichnisse
-            if [ ! -d "$SOURCE_DIR" ]; then
-                # Versuche andere mögliche Namen
-                if [ -d "/scandy2" ]; then
+            # Prüfe das aktuelle Verzeichnis zuerst
+            CURRENT_DIR="$(pwd)"
+            if [ -d "$CURRENT_DIR/app" ] && (echo "$CURRENT_DIR" | grep -qi "scandy"); then
+                SOURCE_DIR="$CURRENT_DIR"
+                log_info "Verwende aktuelles Verzeichnis als Quelle: $SOURCE_DIR"
+            else
+                # Fallback auf Standard-Verzeichnisse
+                if [ -d "/scandy2" ] && [ -d "/scandy2/app" ]; then
                     SOURCE_DIR="/scandy2"
-                elif [ -d "/Scandy" ]; then
+                elif [ -d "/Scandy" ] && [ -d "/Scandy/app" ]; then
                     SOURCE_DIR="/Scandy"
-                elif [ -d "/scandy" ]; then
+                elif [ -d "/scandy" ] && [ -d "/scandy/app" ]; then
                     SOURCE_DIR="/scandy"
-                elif [ -d "/home/scandy/Scandy2" ]; then
+                elif [ -d "/home/scandy/Scandy2" ] && [ -d "/home/scandy/Scandy2/app" ]; then
                     SOURCE_DIR="/home/scandy/Scandy2"
-                elif [ -d "/root/Scandy2" ]; then
+                elif [ -d "/root/Scandy2" ] && [ -d "/root/Scandy2/app" ]; then
                     SOURCE_DIR="/root/Scandy2"
                 else
                     log_error "Quellverzeichnis nicht gefunden!"
                     echo "Verfügbare Verzeichnisse:"
                     find / -name "*scandy*" -type d 2>/dev/null | head -5
+                    echo "Aktuelles Verzeichnis: $CURRENT_DIR"
+                    echo "Prüfe, ob app-Verzeichnis existiert:"
+                    ls -la "$CURRENT_DIR/app" 2>/dev/null || echo "app-Verzeichnis nicht gefunden"
                     exit 1
                 fi
             fi
@@ -1816,10 +1822,51 @@ update_installation() {
             
             # Code kopieren
             log_info "Kopiere Code..."
-            if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
-                log_success "Code kopiert!"
-            else
-                log_error "Fehler beim Kopieren!"
+            
+            # Zuerst das Zielverzeichnis leeren (außer Backup-Verzeichnis)
+            if [ -d "$TARGET_DIR/app" ]; then
+                log_info "Leere Zielverzeichnis..."
+                find "$TARGET_DIR/app" -mindepth 1 -not -path "$TARGET_DIR/app/backups*" -delete 2>/dev/null || {
+                    log_warning "Konnte Zielverzeichnis nicht vollständig leeren"
+                }
+            fi
+            
+            # Code kopieren mit mehreren Fallback-Methoden
+            log_info "Kopiere Dateien..."
+            SUCCESS=false
+            
+            # Methode 1: rsync (falls verfügbar)
+            if command -v rsync >/dev/null 2>&1; then
+                if rsync -av --exclude='backups' "$SOURCE_DIR/app/" "$TARGET_DIR/app/" 2>/dev/null; then
+                    log_success "Code mit rsync kopiert!"
+                    SUCCESS=true
+                fi
+            fi
+            
+            # Methode 2: Standard cp (falls rsync fehlschlägt oder nicht verfügbar)
+            if [ "$SUCCESS" = false ]; then
+                if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
+                    log_success "Code mit cp kopiert!"
+                    SUCCESS=true
+                fi
+            fi
+            
+            # Methode 3: Datei für Datei kopieren (als letzter Ausweg)
+            if [ "$SUCCESS" = false ]; then
+                log_info "Versuche alternative Kopiermethode..."
+                for file in "$SOURCE_DIR/app"/*; do
+                    if [ -f "$file" ]; then
+                        cp "$file" "$TARGET_DIR/app/" 2>/dev/null || log_warning "Konnte $file nicht kopieren"
+                    elif [ -d "$file" ] && [ "$(basename "$file")" != "backups" ]; then
+                        cp -r "$file" "$TARGET_DIR/app/" 2>/dev/null || log_warning "Konnte Verzeichnis $(basename "$file") nicht kopieren"
+                    fi
+                done
+                log_success "Code kopiert (mit Warnungen)"
+                SUCCESS=true
+            fi
+            
+            if [ "$SUCCESS" = false ]; then
+                log_error "Alle Kopiermethoden fehlgeschlagen!"
                 exit 1
             fi
             
@@ -1846,26 +1893,32 @@ update_installation() {
             log_info "LXC-Update..."
             
             # Verzeichnisse
-            SOURCE_DIR="/Scandy2"
             TARGET_DIR="/opt/scandy"
             
-            # Prüfe verschiedene mögliche Quellverzeichnisse
-            if [ ! -d "$SOURCE_DIR" ]; then
-                # Versuche andere mögliche Namen
-                if [ -d "/scandy2" ]; then
+            # Prüfe das aktuelle Verzeichnis zuerst
+            CURRENT_DIR="$(pwd)"
+            if [ -d "$CURRENT_DIR/app" ] && (echo "$CURRENT_DIR" | grep -qi "scandy"); then
+                SOURCE_DIR="$CURRENT_DIR"
+                log_info "Verwende aktuelles Verzeichnis als Quelle: $SOURCE_DIR"
+            else
+                # Fallback auf Standard-Verzeichnisse
+                if [ -d "/scandy2" ] && [ -d "/scandy2/app" ]; then
                     SOURCE_DIR="/scandy2"
-                elif [ -d "/Scandy" ]; then
+                elif [ -d "/Scandy" ] && [ -d "/Scandy/app" ]; then
                     SOURCE_DIR="/Scandy"
-                elif [ -d "/scandy" ]; then
+                elif [ -d "/scandy" ] && [ -d "/scandy/app" ]; then
                     SOURCE_DIR="/scandy"
-                elif [ -d "/home/scandy/Scandy2" ]; then
+                elif [ -d "/home/scandy/Scandy2" ] && [ -d "/home/scandy/Scandy2/app" ]; then
                     SOURCE_DIR="/home/scandy/Scandy2"
-                elif [ -d "/root/Scandy2" ]; then
+                elif [ -d "/root/Scandy2" ] && [ -d "/root/Scandy2/app" ]; then
                     SOURCE_DIR="/root/Scandy2"
                 else
                     log_error "Quellverzeichnis nicht gefunden!"
                     echo "Verfügbare Verzeichnisse:"
                     find / -name "*scandy*" -type d 2>/dev/null | head -5
+                    echo "Aktuelles Verzeichnis: $CURRENT_DIR"
+                    echo "Prüfe, ob app-Verzeichnis existiert:"
+                    ls -la "$CURRENT_DIR/app" 2>/dev/null || echo "app-Verzeichnis nicht gefunden"
                     exit 1
                 fi
             fi
@@ -1891,10 +1944,51 @@ update_installation() {
             
             # Code kopieren
             log_info "Kopiere Code..."
-            if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
-                log_success "Code kopiert!"
-            else
-                log_error "Fehler beim Kopieren!"
+            
+            # Zuerst das Zielverzeichnis leeren (außer Backup-Verzeichnis)
+            if [ -d "$TARGET_DIR/app" ]; then
+                log_info "Leere Zielverzeichnis..."
+                find "$TARGET_DIR/app" -mindepth 1 -not -path "$TARGET_DIR/app/backups*" -delete 2>/dev/null || {
+                    log_warning "Konnte Zielverzeichnis nicht vollständig leeren"
+                }
+            fi
+            
+            # Code kopieren mit mehreren Fallback-Methoden
+            log_info "Kopiere Dateien..."
+            SUCCESS=false
+            
+            # Methode 1: rsync (falls verfügbar)
+            if command -v rsync >/dev/null 2>&1; then
+                if rsync -av --exclude='backups' "$SOURCE_DIR/app/" "$TARGET_DIR/app/" 2>/dev/null; then
+                    log_success "Code mit rsync kopiert!"
+                    SUCCESS=true
+                fi
+            fi
+            
+            # Methode 2: Standard cp (falls rsync fehlschlägt oder nicht verfügbar)
+            if [ "$SUCCESS" = false ]; then
+                if cp -r "$SOURCE_DIR/app"/* "$TARGET_DIR/app/" 2>/dev/null; then
+                    log_success "Code mit cp kopiert!"
+                    SUCCESS=true
+                fi
+            fi
+            
+            # Methode 3: Datei für Datei kopieren (als letzter Ausweg)
+            if [ "$SUCCESS" = false ]; then
+                log_info "Versuche alternative Kopiermethode..."
+                for file in "$SOURCE_DIR/app"/*; do
+                    if [ -f "$file" ]; then
+                        cp "$file" "$TARGET_DIR/app/" 2>/dev/null || log_warning "Konnte $file nicht kopieren"
+                    elif [ -d "$file" ] && [ "$(basename "$file")" != "backups" ]; then
+                        cp -r "$file" "$TARGET_DIR/app/" 2>/dev/null || log_warning "Konnte Verzeichnis $(basename "$file") nicht kopieren"
+                    fi
+                done
+                log_success "Code kopiert (mit Warnungen)"
+                SUCCESS=true
+            fi
+            
+            if [ "$SUCCESS" = false ]; then
+                log_error "Alle Kopiermethoden fehlgeschlagen!"
                 exit 1
             fi
             
@@ -2065,24 +2159,31 @@ case "\$1" in
                 ;;
             lxc)
                 # LXC-spezifisches Update
-                SOURCE_DIR="/Scandy2"
                 TARGET_DIR="/opt/scandy"
                 
-                # Prüfe verschiedene mögliche Quellverzeichnisse
-                if [ ! -d "\$SOURCE_DIR" ]; then
-                    if [ -d "/scandy2" ]; then
+                # Prüfe das aktuelle Verzeichnis zuerst
+                CURRENT_DIR="\$(pwd)"
+                if [ -d "\$CURRENT_DIR/app" ] && (echo "\$CURRENT_DIR" | grep -qi "scandy"); then
+                    SOURCE_DIR="\$CURRENT_DIR"
+                    echo "Verwende aktuelles Verzeichnis als Quelle: \$SOURCE_DIR"
+                else
+                    # Fallback auf Standard-Verzeichnisse
+                    if [ -d "/scandy2" ] && [ -d "/scandy2/app" ]; then
                         SOURCE_DIR="/scandy2"
-                    elif [ -d "/Scandy" ]; then
+                    elif [ -d "/Scandy" ] && [ -d "/Scandy/app" ]; then
                         SOURCE_DIR="/Scandy"
-                    elif [ -d "/scandy" ]; then
+                    elif [ -d "/scandy" ] && [ -d "/scandy/app" ]; then
                         SOURCE_DIR="/scandy"
-                    elif [ -d "/home/scandy/Scandy2" ]; then
+                    elif [ -d "/home/scandy/Scandy2" ] && [ -d "/home/scandy/Scandy2/app" ]; then
                         SOURCE_DIR="/home/scandy/Scandy2"
-                    elif [ -d "/root/Scandy2" ]; then
+                    elif [ -d "/root/Scandy2" ] && [ -d "/root/Scandy2/app" ]; then
                         SOURCE_DIR="/root/Scandy2"
                     else
                         echo "Quellverzeichnis nicht gefunden!"
                         find / -name "*scandy*" -type d 2>/dev/null | head -5
+                        echo "Aktuelles Verzeichnis: \$CURRENT_DIR"
+                        echo "Prüfe, ob app-Verzeichnis existiert:"
+                        ls -la "\$CURRENT_DIR/app" 2>/dev/null || echo "app-Verzeichnis nicht gefunden"
                         exit 1
                     fi
                 fi
