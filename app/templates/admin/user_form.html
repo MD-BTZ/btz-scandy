@@ -109,6 +109,17 @@
                     
                     <div class="form-control mt-4">
                         <label class="label cursor-pointer">
+                            <span class="label-text">Kantinenplan aktivieren</span>
+                            <input type="checkbox" name="canteen_plan_enabled" class="checkbox checkbox-primary" 
+                                   {% if (request.form and request.form.canteen_plan_enabled == 'on') or (not request.form and user and user.canteen_plan_enabled) %}checked{% endif %} />
+                        </label>
+                        <label class="label">
+                            <span class="label-text-alt text-info">Berechtigung zum Eingeben von Mahlzeiten im Kantinenplan.</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-control mt-4">
+                        <label class="label cursor-pointer">
                             <span class="label-text">Benutzerkonto aktiv</span>
                             <input type="checkbox" name="is_active" class="checkbox checkbox-primary" 
                                    {% if (request.form and request.form.is_active == 'on') or (not request.form and user and user.is_active) or (not request.form and not user) %}checked{% endif %} />

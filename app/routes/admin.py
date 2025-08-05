@@ -1766,6 +1766,7 @@ def add_user():
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
+            'canteen_plan_enabled': request.form.get('canteen_plan_enabled') == 'on',
             'is_active': request.form.get('is_active') == 'on',
             'handlungsfelder': handlungsfelder,
             'expiry_date': expiry_date
@@ -1945,6 +1946,7 @@ def edit_user(user_id):
             'firstname': processed_data['firstname'],
             'lastname': processed_data['lastname'],
             'timesheet_enabled': processed_data['timesheet_enabled'],
+            'canteen_plan_enabled': request.form.get('canteen_plan_enabled') == 'on',
             'is_active': request.form.get('is_active') == 'on',
             'handlungsfelder': handlungsfelder,
             'expiry_date': expiry_date
@@ -2507,6 +2509,7 @@ def feature_settings():
                 'software_management': request.form.get('feature_software_management') == 'on',
                 'job_board': request.form.get('feature_job_board') == 'on',
                 'weekly_reports': request.form.get('feature_weekly_reports') == 'on',
+                'canteen_plan': request.form.get('feature_canteen_plan') == 'on',
                 # Werkzeug-Felder
                 'tool_field_serial_number': request.form.get('tool_field_serial_number') == 'on',
                 'tool_field_invoice_number': request.form.get('tool_field_invoice_number') == 'on',

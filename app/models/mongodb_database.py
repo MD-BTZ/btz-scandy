@@ -388,6 +388,7 @@ def get_feature_settings():
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
+            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
             # Werkzeug-Felder (standardmäßig aktiviert)
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,
@@ -434,6 +435,7 @@ def get_feature_settings():
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
+            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
             # Werkzeug-Felder (standardmäßig aktiviert)
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,
@@ -470,6 +472,7 @@ def is_feature_enabled(feature_name):
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
+            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
             # Werkzeug-Felder (standardmäßig aktiviert)
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,

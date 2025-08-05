@@ -55,3 +55,6 @@ Flask-Mail
 
 # Setuptools (für Sicherheitsupdates)
 setuptools>=78.1.1 
+
+# Kantinenplan-System Dependencies
+ 

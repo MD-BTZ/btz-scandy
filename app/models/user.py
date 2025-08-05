@@ -44,6 +44,20 @@ class User(UserMixin):
                 # Speichere das Feld automatisch in der Datenbank
                 self._save_timesheet_enabled(user_data['_id'], self.timesheet_enabled)
             
+            # Kantinenplan-Feature: Prüfe ob Feld existiert, sonst setze Standard
+            if 'canteen_plan_enabled' in user_data:
+                # Feld existiert - verwende den gespeicherten Wert
+                self.canteen_plan_enabled = user_data.get('canteen_plan_enabled', False)
+            else:
+                # Feld existiert nicht - setze Standard basierend auf Rolle
+                if user_data.get('role') in ['admin', 'mitarbeiter']:
+                    self.canteen_plan_enabled = True  # Admins und Mitarbeiter standardmäßig aktiviert
+                else:
+                    self.canteen_plan_enabled = False  # Andere Rollen standardmäßig deaktiviert
+                
+                # Speichere das Feld automatisch in der Datenbank
+                self._save_canteen_plan_enabled(user_data['_id'], self.canteen_plan_enabled)
+            
             # Handlungsfeld-Zuweisungen
             self.handlungsfelder = user_data.get('handlungsfelder', [])
         else:
@@ -55,6 +69,7 @@ class User(UserMixin):
             self.is_teilnehmer = False
             self._active = True
             self.timesheet_enabled = False
+            self.canteen_plan_enabled = False
             self.handlungsfelder = []
     
     def get_id(self):
@@ -94,6 +109,18 @@ class User(UserMixin):
             mongodb.db.users.update_one(
                 {'_id': user_id},
                 {'$set': {'timesheet_enabled': enabled}}
+            )
+        except Exception as e:
+            # Logge den Fehler, aber falle nicht aus
+            import logging
+    
+    def _save_canteen_plan_enabled(self, user_id, enabled):
+        """Speichert das canteen_plan_enabled Feld in der Datenbank"""
+        try:
+            from app.models.mongodb_database import mongodb
+            mongodb.db.users.update_one(
+                {'_id': user_id},
+                {'$set': {'canteen_plan_enabled': enabled}}
             )
         except Exception as e:
             # Logge den Fehler, aber falle nicht aus

@@ -82,6 +82,21 @@
                                 Support-Tickets und Anfragen
                             </div>
                         </div>
+                        
+                        <!-- Kantinenplan -->
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">
+                                    <i class="fas fa-utensils mr-2"></i>
+                                    Kantinenplan
+                                </span>
+                                <input type="checkbox" name="feature_canteen_plan" class="toggle toggle-primary" 
+                                       {% if feature_settings.get('canteen_plan', False) %}checked{% endif %}>
+                            </label>
+                            <div class="text-sm text-base-content/60 ml-6">
+                                Verwaltung von Mahlzeiten und CSV-Export
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

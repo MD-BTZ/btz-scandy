@@ -252,6 +252,17 @@
             </a>
             {% endif %}
 
+            {# Kantinenplan - nur für berechtigte Benutzer wenn Feature aktiviert #}
+            {% if current_user.is_authenticated and features_enabled.get('canteen_plan', False) and current_user.canteen_plan_enabled %}
+            <a href="{{ url_for('canteen.index') }}" 
+               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'canteen' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
+                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                     <i class="fas fa-utensils text-xl"></i>
+                 </div>
+                 <span class="nav-text ml-2 opacity-100 transition-opacity duration-300 whitespace-nowrap sidebar-text">Kantinenplan</span>
+            </a>
+            {% endif %}
+
             <!-- Über Scandy (öffentlich) -->
             <a href="{{ url_for('main.about') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and request.endpoint == 'main.about' %}active{% else %}text-gray-700{% endif %}">
@@ -376,6 +387,13 @@
                                 <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
                             </a>
                         </li>
+                        {% if feature_settings.get('canteen_plan', False) and current_user.role == 'admin' %}
+                        <li>
+                            <a href="{{ url_for('canteen.index') }}" class="{% if request.endpoint and 'canteen.index' in request.endpoint %}active{% endif %}">
+                                <i class="fas fa-utensils mr-2"></i>Kantinenplan verwalten
+                            </a>
+                        </li>
+                        {% endif %}
                     </ul>
                 </div>
                 <a href="{{ url_for('admin.trash') }}" 

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Kantinenplan - Scandy{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Seitentitel -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-base-content mb-2">
+            <i class="fas fa-utensils text-primary mr-3"></i>
+            Kantinenplan
+        </h1>
+        <p class="text-base-content/70">Verwalten Sie die Mahlzeiten für die aktuelle Woche (Montag-Freitag)</p>
+    </div>
+
+    <!-- API-Status-Anzeige -->
+    <div class="alert alert-success mb-6">
+        <i class="fas fa-plug mr-2"></i>
+        <div>
+            <p class="font-semibold">API-Verbindung aktiv</p>
+            <p class="text-sm">Kantinenplan-Daten werden über sichere API bereitgestellt</p>
+        </div>
+    </div>
+
+    <!-- Kantinenplan-Formular -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">
+                <i class="fas fa-calendar-week mr-2"></i>
+                Mahlzeiten für 2 Wochen (aktuelle + nächste Woche)
+            </h2>
+            
+            <form id="canteenForm" method="POST" action="{{ url_for('canteen.temp_save') }}">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Woche</th>
+                                <th>Tag</th>
+                                <th>Datum</th>
+                                <th>Menü 1 (Fleisch)</th>
+                                <th>Menü 2 (Vegan)</th>
+                                <th>Dessert</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for meal in meals %}
+                            {% set day_names = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'] %}
+                            {% set day_index = loop.index0 %}
+                            {% set day_in_week = day_index % 5 %}
+                            <tr class="{% if loop.index > 5 %}week-2{% endif %}">
+                                <td>
+                                    <span class="badge {% if loop.index <= 5 %}badge-primary{% else %}badge-secondary{% endif %}">
+                                        KW{{ meal.calendar_week }}
+                                    </span>
+                                </td>
+                                <td>{{ day_names[day_in_week] }}</td>
+                                <td>{{ meal.date }}</td>
+                                <td>
+                                    <input type="text" 
+                                           name="meat_dish_{{ loop.index0 }}" 
+                                           value="{{ meal.meat_dish }}" 
+                                           class="form-control"
+                                           placeholder="z.B. Schnitzel mit Pommes">
+                                </td>
+                                <td>
+                                    <input type="text" 
+                                           name="vegan_dish_{{ loop.index0 }}" 
+                                           value="{{ meal.vegan_dish }}" 
+                                           class="form-control"
+                                           placeholder="z.B. Veganes Curry mit Reis">
+                                </td>
+                                <td>
+                                    <input type="text" 
+                                           name="dessert_{{ loop.index0 }}" 
+                                           value="{{ meal.dessert }}" 
+                                           class="form-control"
+                                           placeholder="z.B. Apfelkuchen">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Aktions-Buttons -->
+                <div class="flex justify-between items-center mt-6">
+                                    <div class="text-sm text-base-content/60">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Sie können 2 Wochen eingeben, aber nur die aktuelle Woche wird angezeigt
+                </div>
+                    <div class="flex gap-2">
+                        <button type="button" id="clearForm" class="btn btn-outline">
+                            <i class="fas fa-eraser mr-2"></i>Formular leeren
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>Speichern & Übertragen
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hilfe-Sektion -->
+    <div class="card bg-base-100 shadow-xl mt-6">
+        <div class="card-body">
+            <h3 class="card-title text-lg">
+                <i class="fas fa-question-circle text-primary mr-2"></i>
+                Hilfe
+            </h3>
+            <div class="space-y-2 text-sm">
+                <p><strong>Fleisch-Gericht:</strong> Hauptgericht mit Fleisch oder Fisch</p>
+                <p><strong>Vegan-Gericht:</strong> Vegetarisches oder veganes Hauptgericht</p>
+                <p><strong>2-Wochen-Eingabe:</strong> Sie können 2 Wochen (aktuelle + nächste) eingeben</p>
+                <p><strong>1-Wochen-Anzeige:</strong> Nur die aktuelle Woche wird im WordPress angezeigt</p>
+                <p><strong>API-basiert:</strong> Daten werden über sichere API bereitgestellt</p>
+                <p><strong>Sofortige Anzeige:</strong> Die Daten sind sofort im WordPress-Kantinenplan sichtbar</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('canteenForm');
+    const clearButton = document.getElementById('clearForm');
+    
+    // Formular leeren
+    clearButton.addEventListener('click', function() {
+        if (confirm('Möchten Sie wirklich alle Eingaben löschen?')) {
+            const inputs = form.querySelectorAll('input[type="text"]');
+            inputs.forEach(input => {
+                input.value = '';
+            });
+        }
+    });
+    
+    // Formular-Submit mit AJAX
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalText = submitButton.innerHTML;
+        
+        // Button deaktivieren
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichere...';
+        
+        // Formular-Daten sammeln
+        const formData = new FormData(form);
+        
+        // AJAX-Request
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Erfolg anzeigen
+                showToast('success', data.message || 'Kantinenplan erfolgreich aktualisiert');
+                
+                // Optional: Seite neu laden nach kurzer Verzögerung
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                // Fehler anzeigen
+                showToast('error', data.error || 'Fehler beim Speichern');
+            }
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            showToast('error', 'Netzwerkfehler beim Speichern');
+        })
+        .finally(() => {
+            // Button wieder aktivieren
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalText;
+        });
+    });
+});
+
+// Toast-Funktion (falls nicht bereits vorhanden)
+function showToast(type, message) {
+    // Verwende bestehende Toast-Implementierung oder erstelle eine einfache
+    if (typeof showNotification === 'function') {
+        showNotification(message, type);
+    } else {
+        // Einfache Alert-Fallback
+        alert(message);
+    }
+}
+</script>
+{% endblock %} 
