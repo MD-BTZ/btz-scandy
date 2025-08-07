@@ -176,6 +176,12 @@ class TicketService:
                     '_id': {'$in': all_assigned_ids},
                     'deleted': {'$ne': True}
                 }
+                
+                # Handlungsfeld-Filter für zugewiesene Tickets (nur für nicht-Admin Rollen)
+                if handlungsfelder:
+                    # Für zugewiesene Tickets: Nur Tickets aus zugewiesenen Handlungsfeldern
+                    assigned_query['category'] = {'$in': handlungsfelder}
+                    print(f"DEBUG: Zugewiesene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
             
             print(f"DEBUG: Zugewiesene Tickets Query: {assigned_query}")
             assigned_tickets = mongodb.find('tickets', assigned_query)

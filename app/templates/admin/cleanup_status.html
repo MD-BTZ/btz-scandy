@@ -11,6 +11,7 @@
                 <i class="fas fa-arrow-left mr-2"></i>Zurück zur Benutzerverwaltung
             </a>
             <form action="{{ url_for('admin.run_cleanup') }}" method="post" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-warning" 
                         onclick="return confirm('Möchten Sie die automatische Bereinigung jetzt ausführen?')">
                     <i class="fas fa-broom mr-2"></i>Bereinigung ausführen
@@ -133,6 +134,7 @@
                                 </td>
                                 <td>
                                     <form action="{{ url_for('admin.cancel_user_deletion', user_id=user._id) }}" method="post" class="inline-block">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-outline btn-success" title="Löschung stornieren">
                                             <i class="fas fa-undo mr-1"></i>Stornieren
                                         </button>

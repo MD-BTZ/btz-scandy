@@ -14,6 +14,51 @@ logger = logging.getLogger(__name__)
 def get_ticket_service():
     """Gibt eine Instanz des TicketService zurück"""
     return TicketService()
+
+def check_ticket_permission(ticket, username, role):
+    """
+    Prüft ob ein Benutzer Berechtigung für ein Ticket hat
+    
+    Args:
+        ticket: Ticket-Daten
+        username: Benutzername
+        role: Benutzerrolle
+        
+    Returns:
+        bool: True wenn Berechtigung vorhanden, False sonst
+    """
+    # Admins können alle Tickets sehen
+    if role == 'admin':
+        return True
+    
+    # Erstellt von dem Benutzer
+    if ticket.get('created_by') == username:
+        return True
+    
+    # Zugewiesen an den Benutzer (Legacy + Mehrfachzuweisung)
+    # Prüfe Legacy-Zuweisung
+    if ticket.get('assigned_to') == username:
+        return True
+    
+    # Prüfe Mehrfachzuweisung
+    ticket_id_for_query = convert_id_for_query(str(ticket['_id']))
+    user_assignments = mongodb.find('ticket_assignments', {'ticket_id': ticket_id_for_query, 'assigned_to': username})
+    if list(user_assignments):  # Wenn Einträge gefunden wurden
+        return True
+    
+    # Falls nicht zugewiesen, prüfe Handlungsfeld
+    # Hole Handlungsfelder des Benutzers
+    user_settings = mongodb.find_one('users', {'username': username})
+    if user_settings and user_settings.get('handlungsfelder'):
+        user_handlungsfelder = user_settings['handlungsfelder']
+        ticket_category = ticket.get('category', '')
+        
+        # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
+        if ticket_category in user_handlungsfelder:
+            return True
+    
+    return False
+
 from flask_login import current_user
 from docxtpl import DocxTemplate
 import os
@@ -731,33 +776,7 @@ def view(ticket_id):
         return redirect(url_for('tickets.create'))
         
     # Prüfe ob der Benutzer berechtigt ist, das Ticket zu sehen
-    has_permission = False
-    
-    # Admins können alle Tickets sehen
-    if current_user.role == 'admin':
-        has_permission = True
-    # Erstellt von dem Benutzer
-    elif ticket.get('created_by') == current_user.username:
-        has_permission = True
-    # Zugewiesen an den Benutzer
-    elif ticket.get('assigned_to') in [current_user.username, None, '']:
-        has_permission = True
-    # Alle anderen Rollen: Prüfe Handlungsfeld
-    else:
-        # Hole Handlungsfelder des Benutzers
-        user_settings = mongodb.find_one('users', {'username': current_user.username})
-        if user_settings and user_settings.get('handlungsfelder'):
-            user_handlungsfelder = user_settings['handlungsfelder']
-            ticket_category = ticket.get('category', '')
-            
-            # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
-            if ticket_category in user_handlungsfelder:
-                has_permission = True
-                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
-            else:
-                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat KEINEN Zugriff auf Ticket {ticket_id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
-        else:
-            print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat keine Handlungsfelder zugewiesen")
+    has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
     
     if not has_permission:
         logging.error(f"Benutzer {current_user.username} hat keine Berechtigung für Ticket {ticket_id}")
@@ -891,6 +910,12 @@ def get_ticket_messages(ticket_id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
         
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+        
         # Verwende die Ticket-ID für alle Abfragen
         ticket_id_for_query = convert_id_for_query(ticket_id)
         
@@ -927,6 +952,12 @@ def add_message(ticket_id):
         if not ticket:
             logging.error(f"Ticket {ticket_id} nicht gefunden")
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
+        
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
         
         # Verwende die Ticket-ID für alle Abfragen
         ticket_id_for_query = convert_id_for_query(ticket_id)
@@ -994,33 +1025,7 @@ def detail(id):
             return render_template('404.html'), 404
         
         # Prüfe Berechtigungen
-        has_permission = False
-        
-        # Admins können alle Tickets sehen
-        if current_user.role == 'admin':
-            has_permission = True
-        # Erstellt von dem Benutzer
-        elif ticket.get('created_by') == current_user.username:
-            has_permission = True
-        # Zugewiesen an den Benutzer
-        elif ticket.get('assigned_to') == current_user.username:
-            has_permission = True
-        # Alle anderen Rollen: Prüfe Handlungsfeld
-        else:
-            # Hole Handlungsfelder des Benutzers
-            user_settings = mongodb.find_one('users', {'username': current_user.username})
-            if user_settings and user_settings.get('handlungsfelder'):
-                user_handlungsfelder = user_settings['handlungsfelder']
-                ticket_category = ticket.get('category', '')
-                
-                # Prüfe ob Ticket-Kategorie in den zugewiesenen Handlungsfeldern ist
-                if ticket_category in user_handlungsfelder:
-                    has_permission = True
-                    print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
-                else:
-                    print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat KEINEN Zugriff auf Ticket {id} (Kategorie: {ticket_category}, Handlungsfelder: {user_handlungsfelder})")
-            else:
-                print(f"DEBUG: Benutzer {current_user.username} (Rolle: {current_user.role}) hat keine Handlungsfelder zugewiesen")
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
         
         if not has_permission:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
@@ -1218,6 +1223,12 @@ def update_status(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+
         # Speichere alten Status für History
         old_status = ticket.get('status', 'unbekannt')
         
@@ -1300,6 +1311,12 @@ def update_assignment(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+
         # Speichere alte Zuweisungen für History
         old_assigned_users = []
         
@@ -1366,6 +1383,12 @@ def update_due_date(id):
         if not ticket:
             return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
 
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+
         # Verarbeite due_date
         update_data = {'updated_at': datetime.now()}
         if due_date:
@@ -1405,6 +1428,16 @@ def update_details(id):
                 return jsonify({'success': False, 'message': 'Ticket nicht gefunden'}), 404
             else:
                 flash('Ticket nicht gefunden', 'error')
+                return redirect(url_for('tickets.create'))
+        
+        # Prüfe Berechtigungen
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
+            if request.is_json:
+                return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
+            else:
+                flash('Sie haben keine Berechtigung, dieses Ticket zu bearbeiten', 'error')
                 return redirect(url_for('tickets.create'))
         
         # Verwende die Ticket-ID für alle Abfragen
@@ -1982,7 +2015,9 @@ def auftrag_details_page(id):
             return render_template('404.html'), 404
         
         # Prüfe Berechtigungen: Admins/Mitarbeiter/Teilnehmer können alle Tickets sehen, normale User nur ihre eigenen oder zugewiesenen
-        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
             return redirect(url_for('tickets.index'))
         
@@ -2091,7 +2126,9 @@ def update_ticket(id):
         logging.info(f"DEBUG: Ticket gefunden: {ticket.get('title', 'No Title')}")
         
         # Prüfe Berechtigungen: Normale User können nur ihre eigenen oder zugewiesenen Tickets bearbeiten
-        if current_user.role not in ['admin', 'mitarbeiter', 'teilnehmer'] and ticket.get('created_by') != current_user.username and ticket.get('assigned_to') != current_user.username:
+        has_permission = check_ticket_permission(ticket, current_user.username, current_user.role)
+        
+        if not has_permission:
             logging.error(f"DEBUG: Keine Berechtigung für User {current_user.username}")
             return jsonify({'success': False, 'message': 'Sie haben keine Berechtigung, dieses Ticket zu bearbeiten'}), 403
         

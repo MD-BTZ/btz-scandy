@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Scandy{% endblock %}</title>
     
     <!-- Favicon -->
@@ -33,6 +34,41 @@
     {% block head %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- CSRF-Token für AJAX-Requests -->
+    <script>
+        // CSRF-Token für alle AJAX-Requests
+        function getCSRFToken() {
+            return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        }
+        
+        // Automatisch CSRF-Token zu allen AJAX-Requests hinzufügen
+        document.addEventListener('DOMContentLoaded', function() {
+            // Intercepte alle fetch-Requests
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+                if (options && options.method && options.method.toUpperCase() !== 'GET') {
+                    options.headers = options.headers || {};
+                    options.headers['X-CSRFToken'] = getCSRFToken();
+                }
+                return originalFetch(url, options);
+            };
+            
+            // Intercepte alle XMLHttpRequest
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+                const xhr = this;
+                originalXHROpen.call(xhr, method, url, async, user, password);
+                if (method.toUpperCase() !== 'GET') {
+                    xhr.addEventListener('readystatechange', function() {
+                        if (xhr.readyState === 1) { // OPENED
+                            xhr.setRequestHeader('X-CSRFToken', getCSRFToken());
+                        }
+                    });
+                }
+            };
+        });
+    </script>
 
     <style>
         body {

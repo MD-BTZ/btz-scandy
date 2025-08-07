@@ -72,7 +72,9 @@ show_help() {
     echo "  -m, --mongodb-port     MongoDB Port (Standard: 27017)"
     echo "  -e, --express-port     Mongo Express Port (Standard: 8081)"
     echo "  --domain DOMAIN        Domain für Nginx-Konfiguration"
-    echo "  --ssl                  SSL/HTTPS aktivieren"
+    echo "  --ssl                  SSL/HTTPS aktivieren (mit Domain)"
+    echo "  --local-ssl            Lokales SSL ohne Domain (selbst-signiert)"
+    echo "  --https                HTTPS für lokale Entwicklung aktivieren"
     echo
     echo -e "${WHITE}SPEZIELLE OPTIONEN:${NC}"
     echo "  -u, --update          Nur Update durchführen"
@@ -104,6 +106,165 @@ show_help() {
     echo
 }
 
+# SSL-Setup Funktionen
+setup_local_ssl() {
+    log_step "Konfiguriere lokales SSL-Setup..."
+    
+    # Server-IP ermitteln
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    log_info "Server-IP: $SERVER_IP"
+    
+    # SSL-Verzeichnisse erstellen
+    sudo mkdir -p /etc/ssl/scandy
+    sudo mkdir -p /etc/nginx/sites-available
+    sudo mkdir -p /etc/nginx/sites-enabled
+    
+    # Selbst-signiertes Zertifikat erstellen
+    log_info "Erstelle selbst-signiertes SSL-Zertifikat..."
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/ssl/scandy/scandy.key \
+        -out /etc/ssl/scandy/scandy.crt \
+        -subj "/C=DE/ST=Germany/L=Local/O=Scandy/OU=IT/CN=$SERVER_IP" \
+        -addext "subjectAltName=DNS:localhost,DNS:$SERVER_IP,IP:$SERVER_IP,IP:127.0.0.1"
+    
+    log_success "SSL-Zertifikat erstellt"
+    
+    # Nginx installieren (falls nicht vorhanden)
+    if ! command -v nginx &> /dev/null; then
+        log_info "Installiere Nginx..."
+        if command -v apt &> /dev/null; then
+            sudo apt update
+            sudo apt install nginx -y
+        elif command -v yum &> /dev/null; then
+            sudo yum install nginx -y
+        fi
+        sudo systemctl enable nginx
+        sudo systemctl start nginx
+        log_success "Nginx installiert und gestartet"
+    else
+        log_success "Nginx bereits installiert"
+    fi
+    
+    # Nginx-Konfiguration für lokales HTTPS
+    log_info "Erstelle Nginx-Konfiguration für lokales HTTPS..."
+    
+    sudo tee /etc/nginx/sites-available/scandy-local > /dev/null <<EOF
+# HTTP zu HTTPS Umleitung
+server {
+    listen 80;
+    server_name $SERVER_IP localhost;
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS Server mit selbst-signiertem Zertifikat
+server {
+    listen 443 ssl http2;
+    server_name $SERVER_IP localhost;
+    
+    # SSL-Konfiguration
+    ssl_certificate /etc/ssl/scandy/scandy.crt;
+    ssl_certificate_key /etc/ssl/scandy/scandy.key;
+    
+    # SSL-Sicherheitseinstellungen
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # Security Headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    
+    # Proxy-Einstellungen für Scandy
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        
+        # Timeout-Einstellungen
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer-Einstellungen
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+    }
+    
+    # Static Files (mit Cache)
+    location /static/ {
+        proxy_pass http://localhost:5000;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Uploads (mit Sicherheitseinschränkungen)
+    location /uploads/ {
+        proxy_pass http://localhost:5000;
+        # Verhindere Ausführung von Dateien
+        location ~* \.(php|pl|py|jsp|asp|sh|cgi)$ {
+            deny all;
+        }
+    }
+    
+    # Health Check (ohne Security Headers)
+    location /health {
+        proxy_pass http://localhost:5000;
+        access_log off;
+    }
+    
+    # Verstecke Server-Informationen
+    server_tokens off;
+    
+    # Rate Limiting
+    limit_req_zone \$binary_remote_addr zone=scandy:10m rate=10r/s;
+    limit_req zone=scandy burst=20 nodelay;
+    
+    # Logging
+    access_log /var/log/nginx/scandy_access.log;
+    error_log /var/log/nginx/scandy_error.log;
+}
+EOF
+    
+    # Nginx-Konfiguration aktivieren
+    sudo ln -sf /etc/nginx/sites-available/scandy-local /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl reload nginx
+    log_success "Nginx-Konfiguration aktiviert"
+    
+    # Firewall konfigurieren
+    log_info "Konfiguriere Firewall..."
+    if command -v ufw &> /dev/null; then
+        sudo ufw allow 22/tcp    # SSH
+        sudo ufw allow 80/tcp    # HTTP
+        sudo ufw allow 443/tcp   # HTTPS
+        sudo ufw --force enable
+        log_success "UFW Firewall konfiguriert"
+    elif command -v firewall-cmd &> /dev/null; then
+        sudo firewall-cmd --permanent --add-service=ssh
+        sudo firewall-cmd --permanent --add-service=http
+        sudo firewall-cmd --permanent --add-service=https
+        sudo firewall-cmd --reload
+        log_success "firewalld konfiguriert"
+    else
+        log_warning "Keine Firewall erkannt - manuelle Konfiguration empfohlen"
+    fi
+    
+    log_success "Lokales SSL-Setup abgeschlossen!"
+    log_info "Zugang: https://$SERVER_IP"
+    log_warning "Browser-Warnung ist normal - Zertifikat importieren für bessere UX"
+}
+
 # Variablen initialisieren
 INSTALL_MODE=""
 INSTANCE_NAME="scandy"
@@ -112,6 +273,8 @@ MONGODB_PORT=27017
 MONGO_EXPRESS_PORT=8081
 DOMAIN=""
 ENABLE_SSL=false
+LOCAL_SSL=false
+ENABLE_HTTPS=false
 UPDATE_ONLY=false
 FORCE_INSTALL=false
 CREATE_BACKUP=false
@@ -168,6 +331,15 @@ parse_arguments() {
                 ;;
             --ssl)
                 ENABLE_SSL=true
+                shift
+                ;;
+            --local-ssl)
+                LOCAL_SSL=true
+                ENABLE_SSL=true
+                shift
+                ;;
+            --https)
+                ENABLE_HTTPS=true
                 shift
                 ;;
             -u|--update)
@@ -1303,6 +1475,23 @@ EOF
     log_success ".env-Datei erstellt"
 }
 
+# SSL-Zertifikate einrichten
+setup_ssl_certificates() {
+    log_step "Richte SSL-Zertifikate ein..."
+    
+    # SSL-Verzeichnis erstellen
+    mkdir -p ssl
+    
+    # Selbst-signiertes Zertifikat erstellen
+    if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/key.pem" ]; then
+        log_info "Erstelle selbst-signiertes SSL-Zertifikat..."
+        openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes -subj "/C=DE/ST=NRW/L=Dortmund/O=Scandy/CN=localhost"
+        log_success "SSL-Zertifikat erstellt"
+    else
+        log_info "SSL-Zertifikate bereits vorhanden"
+    fi
+}
+
 # Docker-Installation
 install_docker() {
     log_step "Starte Docker-Installation..."
@@ -1341,6 +1530,20 @@ install_docker() {
 create_docker_compose() {
     log_step "Erstelle docker-compose.yml..."
     
+    if [ "$ENABLE_HTTPS" = true ]; then
+        log_info "HTTPS-Modus aktiviert - erstelle SSL-Zertifikate..."
+        setup_ssl_certificates
+    fi
+    
+    if [ "$ENABLE_HTTPS" = true ]; then
+        create_https_docker_compose
+    else
+        create_http_docker_compose
+    fi
+}
+
+# HTTP docker-compose.yml erstellen
+create_http_docker_compose() {
     cat > docker-compose.yml << EOF
 services:
   scandy-mongodb-${INSTANCE_NAME}:
@@ -1448,7 +1651,123 @@ networks:
     driver: bridge
 EOF
     
-    log_success "docker-compose.yml erstellt"
+    log_success "HTTP docker-compose.yml erstellt"
+}
+
+# HTTPS docker-compose.yml erstellen
+create_https_docker_compose() {
+    cat > docker-compose.yml << EOF
+services:
+  scandy-mongodb-${INSTANCE_NAME}:
+    image: mongo:7
+    container_name: scandy-mongodb-${INSTANCE_NAME}
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: \${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: \${MONGO_INITDB_DATABASE}
+    ports:
+      - "${MONGODB_PORT}:27017"
+    volumes:
+      - mongodb_data_${INSTANCE_NAME}:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - scandy-network-${INSTANCE_NAME}
+    command: mongod --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    env_file:
+      - .env
+
+  scandy-mongo-express-${INSTANCE_NAME}:
+    image: mongo-express:1.0.0
+    container_name: scandy-mongo-express-${INSTANCE_NAME}
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: \${MONGO_INITDB_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://admin:\${MONGO_INITDB_ROOT_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: \${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "${MONGO_EXPRESS_PORT}:8081"
+    depends_on:
+      scandy-mongodb-${INSTANCE_NAME}:
+        condition: service_healthy
+    networks:
+      - scandy-network-${INSTANCE_NAME}
+    env_file:
+      - .env
+
+  scandy-app-${INSTANCE_NAME}:
+    build:
+      context: .
+      dockerfile: Dockerfile.https
+    image: scandy-local:dev-${INSTANCE_NAME}
+    container_name: scandy-app-${INSTANCE_NAME}
+    restart: unless-stopped
+    environment:
+      - DATABASE_MODE=mongodb
+      - MONGODB_URI=\${MONGODB_URI}
+      - MONGODB_DB=\${MONGODB_DB}
+      - FLASK_ENV=\${FLASK_ENV}
+      - SECRET_KEY=\${SECRET_KEY}
+      - SYSTEM_NAME=\${SYSTEM_NAME}
+      - TICKET_SYSTEM_NAME=\${TICKET_SYSTEM_NAME}
+      - TOOL_SYSTEM_NAME=\${TOOL_SYSTEM_NAME}
+      - CONSUMABLE_SYSTEM_NAME=\${CONSUMABLE_SYSTEM_NAME}
+      - CONTAINER_NAME=\${CONTAINER_NAME}
+      - TZ=Europe/Berlin
+      - SESSION_COOKIE_SECURE=True
+      - REMEMBER_COOKIE_SECURE=True
+      - FORCE_HTTPS=True
+      - SSL_CERT_PATH=/app/ssl/cert.pem
+      - SSL_KEY_PATH=/app/ssl/key.pem
+    ports:
+      - "${WEB_PORT}:5000"
+    volumes:
+      - ./app:/app/app
+      - app_uploads_${INSTANCE_NAME}:/app/app/uploads
+      - app_backups_${INSTANCE_NAME}:/app/app/backups
+      - app_logs_${INSTANCE_NAME}:/app/app/logs
+      - app_sessions_${INSTANCE_NAME}:/app/app/flask_session
+      - ./ssl:/app/ssl
+    depends_on:
+      scandy-mongodb-${INSTANCE_NAME}:
+        condition: service_healthy
+    networks:
+      - scandy-network-${INSTANCE_NAME}
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    env_file:
+      - .env
+
+volumes:
+  mongodb_data_${INSTANCE_NAME}:
+    driver: local
+  app_uploads_${INSTANCE_NAME}:
+    driver: local
+  app_backups_${INSTANCE_NAME}:
+    driver: local
+  app_logs_${INSTANCE_NAME}:
+    driver: local
+  app_sessions_${INSTANCE_NAME}:
+    driver: local
+
+networks:
+  scandy-network-${INSTANCE_NAME}:
+    driver: bridge
+EOF
+    
+    log_success "HTTPS docker-compose.yml erstellt"
 }
 
 # Warte auf Docker-Services
@@ -1495,6 +1814,11 @@ install_native() {
     
     # Python-Umgebung einrichten
     setup_python_environment
+    
+    # SSL-Setup für lokale Installation
+    if [ "$LOCAL_SSL" = true ]; then
+        setup_local_ssl
+    fi
     
     # Nginx konfigurieren
     configure_nginx
@@ -1763,7 +2087,16 @@ update_installation() {
         docker)
             log_info "Docker-Update..."
             $DOCKER_CMD compose down
-            $DOCKER_CMD compose build --no-cache
+            
+            # Images entfernen aber Volumes behalten
+            log_info "Entferne alte Images..."
+            $DOCKER_CMD image rm scandy-local:dev-scandy 2>/dev/null || true
+            
+            # Requirements explizit neu installieren
+            log_info "Baue Images komplett neu..."
+            $DOCKER_CMD compose build --no-cache --build-arg REBUILD_REQUIREMENTS=true
+            
+            # Container starten
             $DOCKER_CMD compose up -d
             wait_for_docker_services
             ;;

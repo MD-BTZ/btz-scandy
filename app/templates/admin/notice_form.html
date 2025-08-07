@@ -12,6 +12,7 @@
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <form method="POST" action="{{ url_for('admin.edit_notice', id=notice.id) if notice else url_for('admin.create_notice') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-control">
                         <label class="label" for="title">
                             <span class="label-text">Titel</span>

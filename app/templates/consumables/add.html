@@ -17,6 +17,7 @@
                 {{ app_labels.consumables.name }} hinzufügen
             </h2>
             <form method="POST" class="space-y-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Name (max. 50 Zeichen)</span>

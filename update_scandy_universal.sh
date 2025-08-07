@@ -52,6 +52,8 @@ show_help() {
     echo "  --backup         Backup vor Update erstellen"
     echo "  --force          Update ohne Bestätigung"
     echo "  --rollback       Auf vorherige Version zurücksetzen"
+    echo "  --ssl            SSL-Zertifikat erstellen"
+    echo "  --local-ssl      Lokales SSL-Setup (für Entwicklung)"
     echo "  -h, --help       Diese Hilfe anzeigen"
     echo
     echo -e "${WHITE}BEISPIELE:${NC}"
@@ -65,6 +67,9 @@ UPDATE_MODE=""
 CREATE_BACKUP=false
 FORCE_UPDATE=false
 ROLLBACK=false
+ENABLE_SSL=false
+LOCAL_SSL=false
+ENABLE_HTTPS=false
 
 # Argumente parsen
 parse_arguments() {
@@ -78,6 +83,9 @@ parse_arguments() {
             --backup) CREATE_BACKUP=true; shift ;;
             --force) FORCE_UPDATE=true; shift ;;
             --rollback) ROLLBACK=true; shift ;;
+            --ssl) ENABLE_SSL=true; shift ;;
+            --local-ssl) LOCAL_SSL=true; ENABLE_SSL=true; shift ;;
+            --https) ENABLE_HTTPS=true; shift ;;
             *) log_error "Unbekannte Option: $1"; show_help; exit 1 ;;
         esac
     done
@@ -164,6 +172,165 @@ fix_mongodb_uri() {
     fi
 }
 
+# SSL-Setup Funktionen
+setup_local_ssl() {
+    log_step "Konfiguriere lokales SSL-Setup..."
+    
+    # Server-IP ermitteln
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    log_info "Server-IP: $SERVER_IP"
+    
+    # SSL-Verzeichnisse erstellen
+    sudo mkdir -p /etc/ssl/scandy
+    sudo mkdir -p /etc/nginx/sites-available
+    sudo mkdir -p /etc/nginx/sites-enabled
+    
+    # Selbst-signiertes Zertifikat erstellen
+    log_info "Erstelle selbst-signiertes SSL-Zertifikat..."
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/ssl/scandy/scandy.key \
+        -out /etc/ssl/scandy/scandy.crt \
+        -subj "/C=DE/ST=Germany/L=Local/O=Scandy/OU=IT/CN=$SERVER_IP" \
+        -addext "subjectAltName=DNS:localhost,DNS:$SERVER_IP,IP:$SERVER_IP,IP:127.0.0.1"
+    
+    log_success "SSL-Zertifikat erstellt"
+    
+    # Nginx installieren (falls nicht vorhanden)
+    if ! command -v nginx &> /dev/null; then
+        log_info "Installiere Nginx..."
+        if command -v apt &> /dev/null; then
+            sudo apt update
+            sudo apt install nginx -y
+        elif command -v yum &> /dev/null; then
+            sudo yum install nginx -y
+        fi
+        sudo systemctl enable nginx
+        sudo systemctl start nginx
+        log_success "Nginx installiert und gestartet"
+    else
+        log_success "Nginx bereits installiert"
+    fi
+    
+    # Nginx-Konfiguration für lokales HTTPS
+    log_info "Erstelle Nginx-Konfiguration für lokales HTTPS..."
+    
+    sudo tee /etc/nginx/sites-available/scandy-local > /dev/null <<EOF
+# HTTP zu HTTPS Umleitung
+server {
+    listen 80;
+    server_name $SERVER_IP localhost;
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS Server mit selbst-signiertem Zertifikat
+server {
+    listen 443 ssl http2;
+    server_name $SERVER_IP localhost;
+    
+    # SSL-Konfiguration
+    ssl_certificate /etc/ssl/scandy/scandy.crt;
+    ssl_certificate_key /etc/ssl/scandy/scandy.key;
+    
+    # SSL-Sicherheitseinstellungen
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # Security Headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    
+    # Proxy-Einstellungen für Scandy
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        
+        # Timeout-Einstellungen
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer-Einstellungen
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+    }
+    
+    # Static Files (mit Cache)
+    location /static/ {
+        proxy_pass http://localhost:5000;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Uploads (mit Sicherheitseinschränkungen)
+    location /uploads/ {
+        proxy_pass http://localhost:5000;
+        # Verhindere Ausführung von Dateien
+        location ~* \.(php|pl|py|jsp|asp|sh|cgi)$ {
+            deny all;
+        }
+    }
+    
+    # Health Check (ohne Security Headers)
+    location /health {
+        proxy_pass http://localhost:5000;
+        access_log off;
+    }
+    
+    # Verstecke Server-Informationen
+    server_tokens off;
+    
+    # Rate Limiting
+    limit_req_zone \$binary_remote_addr zone=scandy:10m rate=10r/s;
+    limit_req zone=scandy burst=20 nodelay;
+    
+    # Logging
+    access_log /var/log/nginx/scandy_access.log;
+    error_log /var/log/nginx/scandy_error.log;
+}
+EOF
+    
+    # Nginx-Konfiguration aktivieren
+    sudo ln -sf /etc/nginx/sites-available/scandy-local /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl reload nginx
+    log_success "Nginx-Konfiguration aktiviert"
+    
+    # Firewall konfigurieren
+    log_info "Konfiguriere Firewall..."
+    if command -v ufw &> /dev/null; then
+        sudo ufw allow 22/tcp    # SSH
+        sudo ufw allow 80/tcp    # HTTP
+        sudo ufw allow 443/tcp   # HTTPS
+        sudo ufw --force enable
+        log_success "UFW Firewall konfiguriert"
+    elif command -v firewall-cmd &> /dev/null; then
+        sudo firewall-cmd --permanent --add-service=ssh
+        sudo firewall-cmd --permanent --add-service=http
+        sudo firewall-cmd --permanent --add-service=https
+        sudo firewall-cmd --reload
+        log_success "firewalld konfiguriert"
+    else
+        log_warning "Keine Firewall erkannt - manuelle Konfiguration empfohlen"
+    fi
+    
+    log_success "Lokales SSL-Setup abgeschlossen!"
+    log_info "Zugang: https://$SERVER_IP"
+    log_warning "Browser-Warnung ist normal - Zertifikat importieren für bessere UX"
+}
+
 # Backup erstellen
 create_backup() {
     if [ "$CREATE_BACKUP" = true ]; then
@@ -201,9 +368,14 @@ update_docker() {
     log_info "Stoppe Container..."
     docker compose down
     
-    # Images neu bauen
+    # Images und Volumes komplett entfernen
+    log_info "Entferne alte Images und Volumes..."
+    docker compose down -v
+    docker image rm scandy-local:dev-scandy 2>/dev/null || true
+    
+    # Images neu bauen mit Requirements-Rebuild
     log_info "Baue neue Images..."
-    docker compose build --no-cache
+    docker compose build --no-cache --build-arg REBUILD_REQUIREMENTS=true
     
     # Services starten
     log_info "Starte Container..."
@@ -360,6 +532,11 @@ main() {
     # Argumente parsen
     parse_arguments "$@"
     
+    # SSL-Setup durchführen
+    if [ "$ENABLE_SSL" = true ]; then
+        setup_local_ssl
+    fi
+
     # Rollback-Modus
     if [ "$ROLLBACK" = true ]; then
         detect_install_mode

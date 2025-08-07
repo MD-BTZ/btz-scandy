@@ -59,6 +59,7 @@
                 {% endif %}
 
                 <form method="POST" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <!-- Titel und Kategorie -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <div class="form-control">

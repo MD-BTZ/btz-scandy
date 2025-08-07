@@ -22,6 +22,7 @@
             <p class="text-base-content/70 mb-4">Aktivieren oder deaktivieren Sie die Standard-Felder für Werkzeuge</p>
             
             <form method="POST" action="{{ url_for('admin.custom_fields') }}" class="space-y-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="update_default_fields">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -134,6 +135,7 @@
             <p class="text-base-content/70 mb-4">Erstellen Sie zusätzliche Felder, die über die Standard-Felder hinausgehen</p>
             
             <form method="POST" action="{{ url_for('admin.add_custom_field') }}" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <!-- Name -->
                     <div class="form-control">
@@ -307,6 +309,7 @@
     <div class="modal-box max-w-2xl">
         <h3 class="font-bold text-lg mb-4">Feld bearbeiten</h3>
         <form id="editForm" method="POST" action="" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Name -->
                 <div class="form-control">
@@ -406,6 +409,7 @@
         
         <div class="modal-action">
             <form id="deleteForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-error">
                     <i class="fas fa-trash mr-2"></i>Löschen
                 </button>

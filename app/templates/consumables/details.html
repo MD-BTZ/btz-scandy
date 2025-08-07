@@ -185,6 +185,7 @@
     <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Bestand anpassen</h3>
         <form id="stockForm" method="POST" action="{{ url_for('consumables.adjust_stock', barcode=consumable.barcode) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Aktueller Bestand: {{ consumable.quantity }}</span>
@@ -228,6 +229,7 @@
     <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">{{ app_labels.consumables.name }} bearbeiten</h3>
         <form id="editForm" method="POST" action="{{ url_for('consumables.detail', barcode=consumable.barcode) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Name</span>

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import secrets
 from datetime import datetime
+from flask import request, redirect
 
 class Config:
     """Basis-Konfigurationsklasse"""
@@ -164,11 +165,48 @@ class ProductionConfig(Config):
     DEBUG = False
     TESTING = False
     
+    # Erweiterte Sicherheitseinstellungen
+    SESSION_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Strict'
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Strict'
+    
+    # Security Headers
+    SECURITY_HEADERS = {
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'",
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'geolocation=(), microphone=(), camera=()'
+    }
+    
+    # Rate Limiting
+    RATELIMIT_ENABLED = True
+    RATELIMIT_STORAGE_URL = 'memory://'
+    
     @classmethod
     def init_app(cls, app):
         # Produktionsspezifische Initialisierung
         if not app.config['SECRET_KEY']:
             app.config['SECRET_KEY'] = secrets.token_hex(32)
+        
+        # Security Headers hinzufügen
+        @app.after_request
+        def add_security_headers(response):
+            for header, value in cls.SECURITY_HEADERS.items():
+                response.headers[header] = value
+            return response
+        
+        # HTTPS-Umleitung für Produktion
+        @app.before_request
+        def force_https():
+            if not request.is_secure and request.headers.get('X-Forwarded-Proto', 'http') == 'http':
+                url = request.url.replace('http://', 'https://', 1)
+                return redirect(url, code=301)
 
 # Konfigurationen
 config = {

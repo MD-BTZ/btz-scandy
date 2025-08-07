@@ -12,23 +12,26 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Build-Argument für Requirements-Rebuild
+ARG REBUILD_REQUIREMENTS=false
+
 # Kopiere nur die notwendigen Dateien
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
+# Requirements installieren (immer neu installieren bei Updates)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Node.js-Abhängigkeiten installieren
 COPY package*.json ./
 COPY tailwind.config.js ./
 COPY postcss.config.js ./
+RUN npm install --silent && \
+    npm update --silent && \
+    npm audit fix --silent || true
 
-# Kopiere das app-Verzeichnis
+# App-Code kopieren und CSS bauen
 COPY app ./app
-
-WORKDIR /app
-
-# Aktualisiere npm und installiere Abhängigkeiten
-RUN npm install --silent
-RUN npm update --silent
-RUN npm audit fix --silent || true
 RUN npm run build:css
 
 # Erstelle notwendige Verzeichnisse

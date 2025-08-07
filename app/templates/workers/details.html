@@ -193,6 +193,7 @@
     <div class="modal-box">
         <h3 class="font-bold text-lg">Mitarbeiter bearbeiten</h3>
         <form id="editWorkerForm" method="POST" action="{{ url_for('workers.edit', barcode=worker.barcode) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-control">
                 <label class="label">
                     <span class="label-text">Vorname</span>

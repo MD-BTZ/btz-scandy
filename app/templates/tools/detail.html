@@ -370,6 +370,7 @@
     <div class="modal-box max-w-4xl w-11/12 max-h-[90vh] overflow-y-auto">
         <h3 class="font-bold text-lg mb-4">Werkzeug bearbeiten</h3>
         <form method="POST" id="editForm" action="{{ url_for('tools.edit', barcode=tool.barcode) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- Grundlegende Informationen -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div class="form-control">

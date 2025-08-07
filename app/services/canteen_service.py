@@ -154,6 +154,12 @@ class CanteenService:
         try:
             from app.models.mongodb_database import mongodb
             
+            # Lösche alte Daten (älter als 30 Tage) - nur wenn created_at existiert
+            thirty_days_ago = datetime.now() - timedelta(days=30)
+            mongodb.delete_many('canteen_meals', {
+                'created_at': {'$lt': thirty_days_ago}
+            })
+            
             for meal in meals_data:
                 date = meal.get('date')
                 meat_dish = meal.get('meat_dish', '').strip()

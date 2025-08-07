@@ -33,6 +33,9 @@ from app.utils.context_processors import register_context_processors
 from app.config import Config
 from app.routes import init_app
 from dotenv import load_dotenv
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # .env-Datei laden
 load_dotenv()
@@ -156,6 +159,15 @@ def ensure_directories_exist():
         else:
             logging.info(f"Verzeichnis existiert bereits: {dir_path}")
 
+# CSRF-Schutz initialisieren
+csrf = CSRFProtect()
+
+# Rate Limiter initialisieren
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
 def create_app(test_config=None):
     """
     Erstellt und konfiguriert die Flask-Anwendung.
@@ -175,6 +187,7 @@ def create_app(test_config=None):
     - Blueprints und Context-Processor
     - Error-Handling und Filter
     - E-Mail-System
+    - CSRF-Schutz und Rate Limiting
     """
     app = Flask(__name__)
     
@@ -182,6 +195,12 @@ def create_app(test_config=None):
     from app.config import config
     config_name = 'default' if test_config is None else test_config
     app.config.from_object(config[config_name])
+    
+    # ===== CSRF-SCHUTZ AKTIVIEREN =====
+    csrf.init_app(app)
+    
+    # ===== RATE LIMITING AKTIVIEREN =====
+    limiter.init_app(app)
     
     # ===== SYSTEMNAMEN AUS UMGEBUNGSVARIABLEN =====
     app.config['SYSTEM_NAME'] = os.environ.get('SYSTEM_NAME') or 'Scandy'
@@ -226,6 +245,16 @@ def create_app(test_config=None):
     login_manager.init_app(app)
     
     # ===== FLASK-SESSION INITIALISIEREN =====
+    # Session-Konfiguration für bessere Kompatibilität
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = os.path.join(app.root_path, 'flask_session')
+    app.config['SESSION_FILE_THRESHOLD'] = 500
+    app.config['SESSION_FILE_MODE'] = 384
+    app.config['SESSION_COOKIE_SECURE'] = False  # Für lokale Entwicklung
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+    
     Session(app)
     
     @login_manager.user_loader
@@ -282,10 +311,25 @@ def create_app(test_config=None):
                 print(f"User geladen: {user.username}, ID: {user.id}")
                 return user
             
-            print(f"Kein User gefunden für ID: {user_id}")
+            # Methode 4: Session-Reparatur - versuche Session zu löschen
+            print(f"Kein User gefunden für ID: {user_id} - Session wird zurückgesetzt")
+            try:
+                from flask import session
+                session.clear()
+                print("Session zurückgesetzt")
+            except Exception as e:
+                print(f"Fehler beim Zurücksetzen der Session: {e}")
+            
             return None
         except Exception as e:
             logging.error(f"Fehler beim Laden des Benutzers {user_id}: {e}")
+            # Bei Fehlern Session zurücksetzen
+            try:
+                from flask import session
+                session.clear()
+                print("Session nach Fehler zurückgesetzt")
+            except Exception as session_error:
+                print(f"Fehler beim Zurücksetzen der Session: {session_error}")
             return None
     
     # ===== CONTEXT PROCESSORS REGISTRIEREN =====

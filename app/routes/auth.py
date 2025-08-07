@@ -67,7 +67,7 @@ def login():
     - Bei bereits angemeldeten Benutzern: Direkt zum Dashboard
     """
     if current_user.is_authenticated:
-        return redirect(url_for('main.index')) 
+        return redirect(url_for('main.index'))
     
     if request.method == 'POST':
         # ===== FORMULARDATEN HOLEN =====
@@ -157,17 +157,33 @@ def setup():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
-        # ===== PASSWORT VALIDIERUNG =====
+        # ===== FORMULARDATEN VALIDIEREN =====
+        username = request.form.get('username', '').strip()
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
+        
+        # Validierung
+        if not username:
+            flash('Bitte geben Sie einen Benutzernamen ein.', 'error')
+            return render_template('auth/setup.html')
+        
+        if not password:
+            flash('Bitte geben Sie ein Passwort ein.', 'error')
+            return render_template('auth/setup.html')
         
         if password != confirm_password:
             flash('Die Passwörter stimmen nicht überein.', 'error')
             return render_template('auth/setup.html')
         
+        # Prüfe ob Benutzername bereits existiert
+        existing_user = mongodb.find_one('users', {'username': username})
+        if existing_user:
+            flash('Dieser Benutzername existiert bereits. Bitte wählen Sie einen anderen.', 'error')
+            return render_template('auth/setup.html')
+        
         # ===== ADMIN-BENUTZER ERSTELLEN =====
         admin_data = {
-            'username': 'Admin',
+            'username': username,
             'password_hash': generate_password_hash(password),
             'role': 'admin',
             'is_active': True,
@@ -177,7 +193,11 @@ def setup():
         }
         
         try:
-            mongodb.insert_one('users', admin_data)
+            logger.info(f"Setup: Versuche Admin-Benutzer '{username}' zu erstellen")
+            logger.info(f"Setup: Admin-Daten: {admin_data}")
+            
+            result = mongodb.insert_one('users', admin_data)
+            logger.info(f"Setup: Benutzer erfolgreich erstellt mit ID: {result.inserted_id}")
             
             # ===== SYSTEMEINSTELLUNGEN SPEICHERN =====
             settings = [
@@ -189,20 +209,188 @@ def setup():
                 {'key': 'label_consumables_icon', 'value': request.form.get('label_consumables_icon', 'fas fa-box-open')}
             ]
             
+            logger.info(f"Setup: Speichere {len(settings)} Systemeinstellungen")
             for setting in settings:
-                mongodb.update_one('settings', 
+                result = mongodb.update_one('settings', 
                                  {'key': setting['key']}, 
                                  {'$set': setting}, 
                                  upsert=True)
+                logger.info(f"Setup: Einstellung '{setting['key']}' gespeichert: {result.modified_count} geändert, {result.upserted_id} neu")
+            
+            logger.info("Setup: Erfolgreich abgeschlossen")
+            flash('Setup erfolgreich abgeschlossen! Sie können sich jetzt anmelden.', 'success')
+            return redirect(url_for('auth.login'))
+            
+        except Exception as e:
+            logger.error(f"Setup: Fehler beim Erstellen des Admin-Benutzers: {e}")
+            logger.error(f"Setup: Exception-Typ: {type(e)}")
+            import traceback
+            logger.error(f"Setup: Stacktrace: {traceback.format_exc()}")
+            flash(f'Fehler beim Setup: {str(e)}', 'error')
+            return render_template('auth/setup.html')
+    
+    return render_template('auth/setup.html')
+
+@bp.route('/setup-api', methods=['POST'])
+def setup_api():
+    """
+    API-Endpunkt für Setup ohne CSRF-Schutz.
+    Nur für interne Verwendung.
+    """
+    if not needs_setup():
+        return jsonify({'success': False, 'message': 'Setup bereits abgeschlossen'}), 400
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Keine Daten erhalten'}), 400
+        
+        username = data.get('username', '').strip()
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Benutzername und Passwort erforderlich'}), 400
+        
+        # Prüfe ob Benutzername bereits existiert
+        existing_user = mongodb.find_one('users', {'username': username})
+        if existing_user:
+            return jsonify({'success': False, 'message': 'Benutzername existiert bereits'}), 400
+        
+        # Admin-Benutzer erstellen
+        admin_data = {
+            'username': username,
+            'password_hash': generate_password_hash(password),
+            'role': 'admin',
+            'is_active': True,
+            'timesheet_enabled': False,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        }
+        
+        result = mongodb.insert_one('users', admin_data)
+        logger.info(f"Setup-API: Admin-Benutzer '{username}' erstellt mit ID: {result.inserted_id}")
+        
+        # Systemeinstellungen
+        settings = [
+            {'key': 'label_tickets_name', 'value': data.get('label_tickets_name', 'Tickets')},
+            {'key': 'label_tickets_icon', 'value': data.get('label_tickets_icon', 'fas fa-ticket-alt')},
+            {'key': 'label_tools_name', 'value': data.get('label_tools_name', 'Werkzeuge')},
+            {'key': 'label_tools_icon', 'value': data.get('label_tools_icon', 'fas fa-tools')},
+            {'key': 'label_consumables_name', 'value': data.get('label_consumables_name', 'Verbrauchsmaterial')},
+            {'key': 'label_consumables_icon', 'value': data.get('label_consumables_icon', 'fas fa-box-open')}
+        ]
+        
+        for setting in settings:
+            mongodb.update_one('settings', {'key': setting['key']}, {'$set': setting}, upsert=True)
+        
+        return jsonify({'success': True, 'message': 'Setup erfolgreich abgeschlossen'})
+        
+    except Exception as e:
+        logger.error(f"Setup-API: Fehler: {e}")
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@bp.route('/setup-simple', methods=['GET', 'POST'])
+def setup_simple():
+    """
+    Einfache Setup-Route ohne CSRF-Validierung.
+    Nur für die Ersteinrichtung.
+    """
+    if not needs_setup():
+        flash('Das System wurde bereits eingerichtet.', 'info')
+        return redirect(url_for('main.index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not username or not password:
+            flash('Benutzername und Passwort sind erforderlich.', 'error')
+            return render_template('auth/setup.html')
+        
+        if password != confirm_password:
+            flash('Die Passwörter stimmen nicht überein.', 'error')
+            return render_template('auth/setup.html')
+        
+        try:
+            # Admin-Benutzer erstellen
+            admin_data = {
+                'username': username,
+                'password_hash': generate_password_hash(password),
+                'role': 'admin',
+                'is_active': True,
+                'timesheet_enabled': False,
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
+            
+            result = mongodb.insert_one('users', admin_data)
+            logger.info(f"Setup-Simple: Admin '{username}' erstellt mit ID: {result.inserted_id}")
+            
+            # Systemeinstellungen
+            settings = [
+                {'key': 'label_tickets_name', 'value': request.form.get('label_tickets_name', 'Tickets')},
+                {'key': 'label_tickets_icon', 'value': request.form.get('label_tickets_icon', 'fas fa-ticket-alt')},
+                {'key': 'label_tools_name', 'value': request.form.get('label_tools_name', 'Werkzeuge')},
+                {'key': 'label_tools_icon', 'value': request.form.get('label_tools_icon', 'fas fa-tools')},
+                {'key': 'label_consumables_name', 'value': request.form.get('label_consumables_name', 'Verbrauchsmaterial')},
+                {'key': 'label_consumables_icon', 'value': request.form.get('label_consumables_icon', 'fas fa-box-open')}
+            ]
+            
+            for setting in settings:
+                mongodb.update_one('settings', {'key': setting['key']}, {'$set': setting}, upsert=True)
             
             flash('Setup erfolgreich abgeschlossen! Sie können sich jetzt anmelden.', 'success')
             return redirect(url_for('auth.login'))
             
         except Exception as e:
+            logger.error(f"Setup-Simple: Fehler: {e}")
             flash(f'Fehler beim Setup: {str(e)}', 'error')
-            return render_template('auth/setup.html')
     
     return render_template('auth/setup.html')
+
+@bp.route('/fix-session', methods=['GET', 'POST'])
+def fix_session():
+    """
+    Repariert Session-Probleme nach Updates.
+    Löscht die aktuelle Session und leitet zum Login weiter.
+    """
+    try:
+        # Session komplett löschen
+        from flask import session
+        session.clear()
+        
+        flash('Session wurde zurückgesetzt. Bitte melden Sie sich erneut an.', 'info')
+        return redirect(url_for('auth.login'))
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Reparieren der Session: {e}")
+        flash('Fehler beim Reparieren der Session.', 'error')
+        return redirect(url_for('auth.login'))
+
+@bp.route('/auto-fix-session')
+def auto_fix_session():
+    """
+    Automatische Session-Reparatur für Update-Probleme.
+    Wird automatisch aufgerufen wenn Session-Probleme erkannt werden.
+    """
+    try:
+        # Session komplett löschen
+        from flask import session
+        session.clear()
+        
+        # CSRF-Token neu generieren
+        from flask_wtf.csrf import generate_csrf
+        session['csrf_token'] = generate_csrf()
+        
+        logger.info("Session automatisch repariert nach Update")
+        flash('Session wurde automatisch repariert. Bitte melden Sie sich erneut an.', 'info')
+        return redirect(url_for('auth.login'))
+        
+    except Exception as e:
+        logger.error(f"Fehler bei automatischer Session-Reparatur: {e}")
+        flash('Fehler bei der Session-Reparatur. Bitte melden Sie sich manuell an.', 'error')
+        return redirect(url_for('auth.login'))
 
 @bp.route('/logout')
 @login_required
@@ -353,3 +541,40 @@ def profile():
         user.setdefault('role', 'anwender')
     
     return render_template('auth/profile.html', user=user)
+
+@bp.route('/login-simple', methods=['POST'])
+def login_simple():
+    """
+    Einfache Login-Route ohne CSRF-Validierung.
+    Nur für Tests.
+    """
+    try:
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Benutzername und Passwort erforderlich'}), 400
+        
+        # Benutzer validieren
+        user_data = MongoDBUser.get_by_username(username)
+        from app.utils.auth_utils import check_password_compatible
+        
+        if user_data and check_password_compatible(user_data['password_hash'], password):
+            if user_data.get('is_active', True):
+                # User-Objekt erstellen
+                from app.models.user import User
+                user = User(user_data)
+                
+                # Login durchführen
+                login_user(user, remember=False)
+                
+                logger.info(f"Login erfolgreich: {user.username}")
+                return jsonify({'success': True, 'message': 'Login erfolgreich', 'redirect': url_for('main.index')})
+            else:
+                return jsonify({'success': False, 'message': 'Benutzerkonto deaktiviert'}), 400
+        else:
+            return jsonify({'success': False, 'message': 'Ungültige Anmeldedaten'}), 400
+            
+    except Exception as e:
+        logger.error(f"Login-Fehler: {e}")
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500

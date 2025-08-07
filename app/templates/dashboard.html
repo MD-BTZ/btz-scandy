@@ -41,6 +41,7 @@
             {% else %}
                 <h6>Client-Modus aktiv</h6>
                 <form method="post" action="{{ url_for('settings.update_settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="client_name" class="form-label">Client-Name</label>
                         <input type="text" class="form-control" id="client_name" name="client_name" 

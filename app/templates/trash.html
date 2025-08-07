@@ -47,12 +47,14 @@
                             <td>
                                 <div class="flex gap-2">
                                     <form method="POST" action="{{ url_for('trash.restore', item_type=active_tab, item_id=item.id) }}" class="inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-success">
                                             <i class="fas fa-undo mr-1"></i>
                                             Wiederherstellen
                                         </button>
                                     </form>
                                     <form method="POST" action="{{ url_for('trash.delete_permanent', item_type=active_tab, item_id=item.id) }}" class="inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-error" onclick="return confirm('Möchten Sie dieses Element wirklich endgültig löschen?')">
                                             <i class="fas fa-trash-alt mr-1"></i>
                                             Endgültig löschen

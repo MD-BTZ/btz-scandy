@@ -13,6 +13,17 @@
     <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
         <form class="space-y-6" action="{{ url_for('auth.setup') }}" method="POST">
             <div>
+                <label for="username" class="block text-sm font-medium leading-6">
+                    Admin-Benutzername
+                </label>
+                <div class="mt-2">
+                    <input id="username" name="username" type="text" required
+                           value="Admin" placeholder="z.B. Admin"
+                           class="input input-bordered w-full">
+                </div>
+            </div>
+
+            <div>
                 <label for="password" class="block text-sm font-medium leading-6">
                     Admin-Passwort
                 </label>

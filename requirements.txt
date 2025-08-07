@@ -8,6 +8,8 @@ python-dotenv==1.0.1
 
 # Security
 bcrypt==4.1.2
+Flask-Limiter==3.5.0
+Flask-Talisman==1.1.0
 
 # Image processing (nur wenn wirklich benötigt)
 Pillow>=10.2.0

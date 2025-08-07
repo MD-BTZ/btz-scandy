@@ -15,6 +15,7 @@
     </div>
     {% endif %}
     <form method="POST" action="{{ url_for('setup.setup_admin') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title mb-4">Admin-Account erstellen</h2>

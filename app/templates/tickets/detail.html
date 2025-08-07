@@ -154,6 +154,7 @@
                             <p class="text-sm opacity-70">Status</p>
                             {% if current_user.is_admin %}
                                 <form method="POST" action="{{ url_for('tickets.update_status', id=ticket.id) }}" id="statusForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <select name="status" class="select select-bordered w-full mb-2">
                                         <option value="offen" {% if ticket.status == 'offen' %}selected{% endif %}>Offen</option>
                                         <option value="in_bearbeitung" {% if ticket.status == 'in_bearbeitung' %}selected{% endif %}>In Bearbeitung</option>

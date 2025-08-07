@@ -10,6 +10,7 @@
     <div class="upload-area border-2 border-dashed border-base-300 rounded-lg p-6 text-center">
         <form action="{{ url_for('media.upload_media', entity_type=entity_type, entity_id=entity_id) }}" 
               method="post" enctype="multipart/form-data" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="flex items-center justify-center">
                 <i class="fas fa-cloud-upload-alt text-4xl text-base-content/50 mb-4"></i>
@@ -104,6 +105,7 @@ function displayMediaList(mediaList, entityType, entityId) {
             
             <form action="/media/${entityType}/${entityId}/delete/${media.filename}" 
                   method="post" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-error btn-xs" 
                         onclick="return confirm('Medium wirklich löschen?')">
                     <i class="fas fa-trash"></i>

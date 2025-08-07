@@ -5,7 +5,7 @@
  */
 
 // Test-Konfiguration (NICHT für Produktion!)
-$scandy_api_url = 'http://localhost:5000/api/canteen/current_week';
+$scandy_api_url = 'https://localhost:5000/api/canteen/current_week';  // HTTPS VERWENDEN!
 $api_key = ''; // Leer für Tests
 $cache_duration = 60; // 1 Minute für Tests
 
@@ -48,7 +48,8 @@ function test_api_connection($api_url, $api_key = null) {
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);  // SSL-VERIFIKATION AKTIVIEREN!
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);     // HOST-VERIFIKATION AKTIVIEREN!
     curl_setopt($ch, CURLOPT_USERAGENT, 'WordPress-Canteen-Test/1.0');
     
     $response = curl_exec($ch);
@@ -123,7 +124,8 @@ function show_test_canteen_table($api_url, $api_key, $cache_file, $cache_duratio
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);  // SSL-VERIFIKATION AKTIVIEREN!
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);     // HOST-VERIFIKATION AKTIVIEREN!
     curl_setopt($ch, CURLOPT_USERAGENT, 'WordPress-Canteen-Test/1.0');
     
     $response = curl_exec($ch);

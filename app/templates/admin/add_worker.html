@@ -8,6 +8,7 @@
         <h2 class="card-title mb-4">Neuen Mitarbeiter hinzufügen</h2>
         
         <form method="POST" action="{{ url_for('workers.add') }}" class="max-w-lg">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-control mb-4">
                 <label class="label">
                     <span class="label-text">Barcode</span>

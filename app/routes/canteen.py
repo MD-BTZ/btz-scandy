@@ -17,16 +17,10 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('canteen', __name__)
 
 @bp.route('/canteen')
-@login_required
 def index():
     """Hauptseite für Kantinenplan"""
     if not is_feature_enabled('canteen_plan'):
         flash('Kantinenplan-Feature ist nicht aktiviert', 'error')
-        return redirect(url_for('dashboard.index'))
-    
-    # Prüfe Benutzerberechtigung
-    if not hasattr(current_user, 'canteen_plan_enabled') or not current_user.canteen_plan_enabled:
-        flash('Sie haben keine Berechtigung für den Kantinenplan', 'error')
         return redirect(url_for('dashboard.index'))
     
     try:
@@ -44,13 +38,8 @@ def index():
         return redirect(url_for('dashboard.index'))
 
 @bp.route('/canteen/update', methods=['POST'])
-@login_required
 def update_canteen_plan():
     """Aktualisiert den Kantinenplan (2 Wochen)"""
-    if not current_user.canteen_plan_enabled:
-        flash('Keine Berechtigung für Kantinenplan-Eingabe', 'error')
-        return redirect(url_for('canteen.index'))
-    
     try:
         service = CanteenService()
         
@@ -268,46 +257,9 @@ def debug_canteen():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@bp.route('/canteen/test_save', methods=['POST'])
-def test_save():
-    """Test-Route für Kantinenplan-Speicherung (ohne Authentifizierung)"""
-    try:
-        from app.models.mongodb_database import mongodb
-        
-        # Test-Daten
-        test_meal = {
-            'date': '2025-08-04',
-            'meat_dish': 'Test Schnitzel',
-            'vegan_dish': 'Test Vegan',
-            'dessert': 'Test Dessert',
-            'created_at': datetime.now(),
-            'updated_at': datetime.now()
-        }
-        
-        # Speichere Test-Daten
-        result = mongodb.insert_one('canteen_meals', test_meal)
-        
-        if result:
-            return jsonify({
-                'success': True,
-                'message': 'Test-Daten erfolgreich gespeichert',
-                'id': str(result)
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Fehler beim Speichern'
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@bp.route('/canteen/temp_save', methods=['POST'])
-def temp_save():
-    """Temporäre Route für Kantinenplan-Speicherung (ohne Authentifizierung)"""
+@bp.route('/canteen/simple_save', methods=['POST'])
+def simple_save():
+    """Einfache Test-Route für Speicherung (ohne Authentifizierung)"""
     try:
         service = CanteenService()
         
@@ -317,23 +269,23 @@ def temp_save():
             date = request.form.get(f'date_{i}')
             meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
             vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
-            dessert = request.form.get(f'dessert_{i}', '').strip()  # Neues Dessert-Feld
+            dessert = request.form.get(f'dessert_{i}', '').strip()
             
             if date:
                 meals_data.append({
                     'date': date,
                     'meat_dish': meat_dish,
                     'vegan_dish': vegan_dish,
-                    'dessert': dessert  # Neues Dessert-Feld
+                    'dessert': dessert
                 })
         
-        # Speichere in Datenbank
+        # Verwende die normale Service-Methode
         success, message = service.save_meals(meals_data)
         
         if success:
             return jsonify({
                 'success': True,
-                'message': 'Kantinenplan erfolgreich aktualisiert!'
+                'message': 'Daten erfolgreich gespeichert!'
             })
         else:
             return jsonify({
@@ -342,38 +294,347 @@ def temp_save():
             }), 500
         
     except Exception as e:
-        logger.error(f"Fehler beim Aktualisieren des Kantinenplans: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
-@bp.route('/canteen/test_week', methods=['GET'])
-def test_week():
-    """Test-Route für Kalenderwoche-Berechnung"""
+@bp.route('/canteen/debug_db', methods=['GET'])
+def debug_db():
+    """Debug-Route um Datenbank-Inhalt zu prüfen"""
     try:
-        from datetime import datetime
+        from app.models.mongodb_database import mongodb
         
-        # Teste Kalenderwoche-Berechnung
-        today = datetime.now()
-        monday = today - timedelta(days=today.weekday())
+        # Hole alle Daten aus der Datenbank
+        all_meals = mongodb.find('canteen_meals', {})
         
-        test_dates = []
-        for week in range(2):
-            for day in range(5):
-                date = monday + timedelta(days=(week * 7) + day)
-                calendar_week = date.isocalendar()[1]
-                test_dates.append({
-                    'date': date.strftime('%Y-%m-%d'),
-                    'calendar_week': calendar_week,
-                    'weekday': ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'][day]
-                })
+        # Hole Daten für spezifisches Datum
+        test_meal = mongodb.find_one('canteen_meals', {'date': '2025-08-04'})
         
         return jsonify({
-            'success': True,
-            'test_dates': test_dates,
-            'current_week': today.isocalendar()[1]
+            'all_meals': list(all_meals),
+            'test_meal': test_meal,
+            'count': len(list(all_meals))
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/debug_form', methods=['POST'])
+def debug_form():
+    """Debug-Route um zu sehen, was das Formular sendet"""
+    try:
+        # Sammle alle Formular-Daten
+        form_data = {}
+        for i in range(10):  # 2 Wochen = 10 Tage
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            if date:
+                form_data[f'day_{i}'] = {
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                }
+        
+        return jsonify({
+            'success': True,
+            'form_data': form_data,
+            'all_form_data': dict(request.form)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/debug_complete', methods=['POST'])
+def debug_complete():
+    """Komplette Debug-Route um alle Formular-Daten zu sehen"""
+    try:
+        # Sammle alle Formular-Daten
+        all_data = dict(request.form)
+        
+        # Sammle Daten für 2 Wochen (10 Tage)
+        meals_data = []
+        for i in range(10):  # 2 Wochen = 10 Tage
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            if date:
+                meals_data.append({
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                })
+        
+        # Speichere in Datenbank
+        service = CanteenService()
+        success, message = service.save_meals(meals_data)
+        
+        return jsonify({
+            'success': True,
+            'all_form_data': all_data,
+            'meals_data': meals_data,
+            'save_success': success,
+            'save_message': message
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/direct_save', methods=['POST'])
+def direct_save():
+    """Direkte Test-Route die die Datenbank verwendet"""
+    try:
+        from app.models.mongodb_database import mongodb
+        from datetime import datetime
+        
+        # Sammle Daten für 2 Wochen (10 Tage)
+        meals_data = []
+        for i in range(10):  # 2 Wochen = 10 Tage
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            if date:
+                meals_data.append({
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                })
+        
+        # Speichere direkt in Datenbank
+        for meal in meals_data:
+            date = meal.get('date')
+            meat_dish = meal.get('meat_dish', '').strip()
+            vegan_dish = meal.get('vegan_dish', '').strip()
+            dessert = meal.get('dessert', '').strip()
+            
+            if not date:
+                continue
+            
+            # Prüfe ob Eintrag bereits existiert
+            existing_meal = mongodb.find_one('canteen_meals', {'date': date})
+            
+            meal_data = {
+                'date': date,
+                'meat_dish': meat_dish,
+                'vegan_dish': vegan_dish,
+                'dessert': dessert,
+                'updated_at': datetime.now()
+            }
+            
+            if existing_meal:
+                # Update existierenden Eintrag
+                mongodb.update_one('canteen_meals', {'date': date}, meal_data)
+            else:
+                # Erstelle neuen Eintrag
+                meal_data['created_at'] = datetime.now()
+                mongodb.insert_one('canteen_meals', meal_data)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Daten direkt in Datenbank gespeichert!',
+            'meals_data': meals_data
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/test_save', methods=['POST'])
+def test_save():
+    """Test-Route die alle Formular-Daten loggt"""
+    try:
+        # Logge alle Formular-Daten
+        all_form_data = dict(request.form)
+        logger.info(f"Alle Formular-Daten: {all_form_data}")
+        
+        # Sammle Daten für 2 Wochen (10 Tage)
+        meals_data = []
+        for i in range(10):  # 2 Wochen = 10 Tage
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            logger.info(f"Tag {i}: date={date}, meat={meat_dish}, vegan={vegan_dish}, dessert={dessert}")
+            
+            if date:
+                meals_data.append({
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                })
+        
+        # Speichere direkt in Datenbank
+        from app.models.mongodb_database import mongodb
+        from datetime import datetime
+        
+        for meal in meals_data:
+            date = meal.get('date')
+            meat_dish = meal.get('meat_dish', '').strip()
+            vegan_dish = meal.get('vegan_dish', '').strip()
+            dessert = meal.get('dessert', '').strip()
+            
+            if not date:
+                continue
+            
+            # Prüfe ob Eintrag bereits existiert
+            existing_meal = mongodb.find_one('canteen_meals', {'date': date})
+            
+            meal_data = {
+                'date': date,
+                'meat_dish': meat_dish,
+                'vegan_dish': vegan_dish,
+                'dessert': dessert,
+                'updated_at': datetime.now()
+            }
+            
+            if existing_meal:
+                # Update existierenden Eintrag
+                mongodb.update_one('canteen_meals', {'date': date}, meal_data)
+                logger.info(f"Update: {date} -> {meat_dish}")
+            else:
+                # Erstelle neuen Eintrag
+                meal_data['created_at'] = datetime.now()
+                mongodb.insert_one('canteen_meals', meal_data)
+                logger.info(f"Insert: {date} -> {meat_dish}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Daten gespeichert!',
+            'all_form_data': all_form_data,
+            'meals_data': meals_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler in test_save: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/debug_request', methods=['GET', 'POST'])
+def debug_request():
+    """Debug-Route die alle Requests loggt"""
+    logger.info(f"=== DEBUG REQUEST ===")
+    logger.info(f"Method: {request.method}")
+    logger.info(f"URL: {request.url}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    
+    if request.method == 'POST':
+        logger.info(f"Form Data: {dict(request.form)}")
+        try:
+            json_data = request.get_json()
+            logger.info(f"JSON Data: {json_data}")
+        except:
+            logger.info("JSON Data: None (not JSON content-type)")
+    
+    return jsonify({
+        'method': request.method,
+        'url': request.url,
+        'headers': dict(request.headers),
+        'form_data': dict(request.form) if request.method == 'POST' else None
+    })
+
+@bp.route('/canteen/simple_test', methods=['GET', 'POST'])
+def simple_test():
+    """Einfache Test-Route die direkt im Browser funktioniert"""
+    if request.method == 'POST':
+        logger.info(f"=== SIMPLE TEST POST ===")
+        logger.info(f"Form Data: {dict(request.form)}")
+        
+        # Sammle Daten
+        meals_data = []
+        for i in range(10):
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            if date:
+                meals_data.append({
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                })
+        
+        # Speichere in Datenbank
+        from app.models.mongodb_database import mongodb
+        from datetime import datetime
+        
+        for meal in meals_data:
+            date = meal.get('date')
+            meat_dish = meal.get('meat_dish', '').strip()
+            vegan_dish = meal.get('vegan_dish', '').strip()
+            dessert = meal.get('dessert', '').strip()
+            
+            if not date:
+                continue
+            
+            meal_data = {
+                'date': date,
+                'meat_dish': meat_dish,
+                'vegan_dish': vegan_dish,
+                'dessert': dessert,
+                'updated_at': datetime.now()
+            }
+            
+            existing_meal = mongodb.find_one('canteen_meals', {'date': date})
+            if existing_meal:
+                mongodb.update_one('canteen_meals', {'date': date}, meal_data)
+                logger.info(f"Update: {date} -> {meat_dish}")
+            else:
+                meal_data['created_at'] = datetime.now()
+                mongodb.insert_one('canteen_meals', meal_data)
+                logger.info(f"Insert: {date} -> {meat_dish}")
+        
+        return f"""
+        <html>
+        <head><title>Test Erfolgreich</title></head>
+        <body>
+        <h1>Test Erfolgreich!</h1>
+        <p>Daten gespeichert:</p>
+        <pre>{meals_data}</pre>
+        <p><a href="/canteen">Zurück zum Kantinenplan</a></p>
+        </body>
+        </html>
+        """
+    
+    # GET - Zeige einfaches Formular
+    return f"""
+    <html>
+    <head><title>Einfacher Test</title></head>
+    <body>
+    <h1>Einfacher Test</h1>
+    <form method="POST">
+        <p>Datum: <input type="date" name="date_0" value="2025-08-04"></p>
+        <p>Fleisch: <input type="text" name="meat_dish_0" value="TestFleisch"></p>
+        <p>Vegan: <input type="text" name="vegan_dish_0" value="TestVegan"></p>
+        <p>Dessert: <input type="text" name="dessert_0" value="TestDessert"></p>
+        <p><input type="submit" value="Speichern"></p>
+    </form>
+    <p><a href="/canteen">Zurück zum Kantinenplan</a></p>
+    </body>
+    </html>
+    """

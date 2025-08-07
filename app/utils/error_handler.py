@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import render_template, flash, jsonify, request, current_app
+from flask import render_template, flash, jsonify, request, current_app, session
 from pymongo.errors import PyMongoError
 import logging
 import traceback
@@ -55,45 +55,55 @@ def setup_logging():
         app_logger.propagate = False
 
 def handle_errors(app):
-    """Registriert globale Fehlerbehandlung für die Anwendung"""
+    """Registriert Error-Handler für die Flask-App"""
     
     @app.errorhandler(404)
     def not_found_error(error):
-        if request.path.startswith('/static/'):
-            logger.warning(f"Statische Datei nicht gefunden: {request.path}")
-            return error
-        logger.warning(f"404 Fehler: {request.url} - IP: {request.remote_addr}")
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Not found'}), 404
         return render_template('errors/404.html'), 404
-
-    @app.errorhandler(403)
-    def forbidden_error(error):
-        logger.warning(f"403 Fehler: {request.url} - IP: {request.remote_addr}")
-        if request.path.startswith('/api/'):
-            return jsonify({'error': 'Forbidden'}), 403
-        return render_template('errors/403.html'), 403
-
-    @app.errorhandler(401)
-    def unauthorized_error(error):
-        logger.warning(f"401 Fehler: {request.url} - IP: {request.remote_addr}")
-        if request.path.startswith('/api/'):
-            return jsonify({'error': 'Unauthorized'}), 401
-        return render_template('errors/401.html'), 401
-
+    
     @app.errorhandler(500)
     def internal_error(error):
-        logger.error(f"500 Fehler: {request.url} - IP: {request.remote_addr}")
-        logger.error(f"Fehlerdetails: {str(error)}")
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Internal server error'}), 500
         return render_template('errors/500.html'), 500
-
+    
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Forbidden'}), 403
+        return render_template('errors/403.html'), 403
+    
+    @app.errorhandler(401)
+    def unauthorized_error(error):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return render_template('errors/401.html'), 401
+    
+    # Session-Fehler Handler
+    @app.errorhandler(400)
+    def bad_request_error(error):
+        # Prüfe ob es ein CSRF-Token-Fehler ist
+        if hasattr(error, 'description') and 'CSRF token' in str(error.description):
+            logger.warning("CSRF-Token-Fehler erkannt - ignoriere für Setup/Login")
+            return jsonify({'error': 'Bad request'}), 400
+        
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Bad request'}), 400
+        return render_template('errors/400.html'), 400
+    
+    # Allgemeiner Exception-Handler
     @app.errorhandler(Exception)
-    def unhandled_exception(error):
-        logger.error(f"Unbehandelte Exception: {request.url} - IP: {request.remote_addr}")
-        logger.error(f"Fehlerdetails: {str(error)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
+    def handle_exception(e):
+        # Prüfe ob es ein Session-Problem ist
+        if isinstance(e, Exception) and ('load_user' in str(e) or 'CSRF token' in str(e)):
+            logger.warning("Session-Problem erkannt - ignoriere für Setup/Login")
+            return jsonify({'error': 'Internal server error'}), 500
+        
+        # Logge den Fehler
+        logger.error(f"Unbehandelter Fehler: {str(e)}")
+        
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Internal server error'}), 500
         return render_template('errors/500.html'), 500
