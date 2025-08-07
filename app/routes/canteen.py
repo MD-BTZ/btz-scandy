@@ -41,6 +41,15 @@ def index():
 def update_canteen_plan():
     """Aktualisiert den Kantinenplan (2 Wochen)"""
     try:
+        # Prüfe Berechtigung
+        if not current_user.canteen_plan_enabled:
+            is_ajax = (request.headers.get('Content-Type', '').startswith('application/json') or 
+                       request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+            if is_ajax:
+                return jsonify({'success': False, 'error': 'Keine Berechtigung für Kantinenplan-Eingabe'}), 403
+            flash('Keine Berechtigung für Kantinenplan-Eingabe', 'error')
+            return redirect(url_for('canteen.index'))
+        
         service = CanteenService()
         
         # Sammle Daten für 2 Wochen (10 Tage)
@@ -49,30 +58,48 @@ def update_canteen_plan():
             date = request.form.get(f'date_{i}')
             meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
             vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
-            dessert = request.form.get(f'dessert_{i}', '').strip()  # Neues Dessert-Feld
+            dessert = request.form.get(f'dessert_{i}', '').strip()
             
             if date:
                 meals_data.append({
                     'date': date,
                     'meat_dish': meat_dish,
                     'vegan_dish': vegan_dish,
-                    'dessert': dessert  # Neues Dessert-Feld
+                    'dessert': dessert
                 })
         
         # Speichere in Datenbank
         success, message = service.save_meals(meals_data)
         
-        if success:
-            flash('Kantinenplan erfolgreich aktualisiert!', 'success')
-        else:
-            flash(f'Fehler beim Speichern: {message}', 'error')
+        # Prüfe ob es ein AJAX-Request ist
+        is_ajax = (request.headers.get('Content-Type', '').startswith('application/json') or 
+                   request.headers.get('X-Requested-With') == 'XMLHttpRequest')
         
-        return redirect(url_for('canteen.index'))
+        if is_ajax:
+            if success:
+                return jsonify({'success': True, 'message': 'Kantinenplan erfolgreich aktualisiert!'})
+            else:
+                return jsonify({'success': False, 'error': message}), 500
+        else:
+            # Normaler Form-Submit
+            if success:
+                flash('Kantinenplan erfolgreich aktualisiert!', 'success')
+            else:
+                flash(f'Fehler beim Speichern: {message}', 'error')
+            
+            return redirect(url_for('canteen.index'))
         
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Kantinenplans: {e}")
-        flash(f'Fehler beim Speichern: {str(e)}', 'error')
-        return redirect(url_for('canteen.index'))
+        error_message = f'Fehler beim Speichern: {str(e)}'
+        
+        is_ajax = (request.headers.get('Content-Type', '').startswith('application/json') or 
+                   request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+        if is_ajax:
+            return jsonify({'success': False, 'error': error_message}), 500
+        else:
+            flash(error_message, 'error')
+            return redirect(url_for('canteen.index'))
 
 @bp.route('/admin/canteen_status')
 @admin_required
@@ -299,9 +326,80 @@ def simple_save():
             'error': str(e)
         }), 500
 
+<<<<<<< HEAD
 @bp.route('/canteen/debug_db', methods=['GET'])
 def debug_db():
     """Debug-Route um Datenbank-Inhalt zu prüfen"""
+=======
+@bp.route('/canteen/update_alt', methods=['POST'])
+@login_required
+def update_canteen_plan_alt():
+    """Alternative Route für Kantinenplan-Update (verwendet temp_save Logik)"""
+    if not current_user.canteen_plan_enabled:
+        return jsonify({'success': False, 'error': 'Keine Berechtigung für Kantinenplan-Eingabe'}), 403
+    
+    try:
+        service = CanteenService()
+        
+        # Sammle Daten für 2 Wochen (10 Tage) - wie in temp_save
+        meals_data = []
+        for i in range(10):  # 2 Wochen = 10 Tage
+            date = request.form.get(f'date_{i}')
+            meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
+            vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
+            dessert = request.form.get(f'dessert_{i}', '').strip()
+            
+            if date:
+                meals_data.append({
+                    'date': date,
+                    'meat_dish': meat_dish,
+                    'vegan_dish': vegan_dish,
+                    'dessert': dessert
+                })
+        
+        # Speichere in Datenbank
+        success, message = service.save_meals(meals_data)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Kantinenplan erfolgreich aktualisiert!'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': message
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Aktualisieren des Kantinenplans (alt): {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/canteen/user_status', methods=['GET'])
+@login_required
+def user_status():
+    """Debug-Route für Benutzerstatus"""
+    try:
+        return jsonify({
+            'success': True,
+            'user': {
+                'username': current_user.username,
+                'role': current_user.role,
+                'canteen_plan_enabled': getattr(current_user, 'canteen_plan_enabled', False),
+                'is_authenticated': current_user.is_authenticated
+            },
+            'feature_enabled': is_feature_enabled('canteen_plan')
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/canteen/test_week', methods=['GET'])
+def test_week():
+    """Test-Route für Kalenderwoche-Berechnung"""
+>>>>>>> 21969fe048413df0f46eb632bc037f27c1e775c5
     try:
         from app.models.mongodb_database import mongodb
         

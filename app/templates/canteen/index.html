@@ -30,7 +30,7 @@
                 Mahlzeiten für 2 Wochen (aktuelle + nächste Woche)
             </h2>
             
-            <form id="canteenForm" method="POST" action="{{ url_for('canteen.simple_test') }}">
+            <form id="canteenForm" method="POST" action="{{ url_for('canteen.update_canteen_plan') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="overflow-x-auto">
                     <table class="table table-zebra w-full">
@@ -78,6 +78,8 @@
                                            class="form-control"
                                            placeholder="z.B. Apfelkuchen">
                                 </td>
+                                <!-- Verstecktes Datums-Feld -->
+                                <input type="hidden" name="date_{{ loop.index0 }}" value="{{ meal.date }}">
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -86,10 +88,10 @@
                 
                 <!-- Aktions-Buttons -->
                 <div class="flex justify-between items-center mt-6">
-                                    <div class="text-sm text-base-content/60">
-                    <i class="fas fa-info-circle mr-1"></i>
-                    Sie können 2 Wochen eingeben, aber nur die aktuelle Woche wird angezeigt
-                </div>
+                    <div class="text-sm text-base-content/60">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Sie können 2 Wochen eingeben, aber nur die aktuelle Woche wird angezeigt
+                    </div>
                     <div class="flex gap-2">
                         <button type="button" id="clearForm" class="btn btn-outline">
                             <i class="fas fa-eraser mr-2"></i>Formular leeren
@@ -127,6 +129,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('canteenForm');
     const clearButton = document.getElementById('clearForm');
     
+    // Prüfe Benutzerstatus beim Laden
+    fetch('/canteen/user_status', {
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Benutzerstatus:', data.user);
+            if (!data.user.canteen_plan_enabled) {
+                showToast('error', 'Sie haben keine Berechtigung für den Kantinenplan');
+            }
+        } else {
+            console.error('Fehler beim Laden des Benutzerstatus:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Netzwerkfehler beim Laden des Benutzerstatus:', error);
+    });
+    
     // Formular leeren
     clearButton.addEventListener('click', function() {
         if (confirm('Möchten Sie wirklich alle Eingaben löschen?')) {
@@ -151,14 +172,30 @@ document.addEventListener('DOMContentLoaded', function() {
         // Formular-Daten sammeln
         const formData = new FormData(form);
         
-        // AJAX-Request
+        // AJAX-Request mit Credentials
         fetch(form.action, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin',  // Wichtig: Session-Cookies mitsenden
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'  // AJAX-Header für Flask
+            }
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response Status:', response.status);
+            console.log('Response Headers:', response.headers);
+            
+            if (response.redirected) {
+                // Bei Redirect (Flash-Message) zur neuen Seite weiterleiten
+                window.location.href = response.url;
+                return;
+            }
+            return response.json();
+        })
         .then(data => {
-            if (data.success) {
+            console.log('Response Data:', data);
+            
+            if (data && data.success) {
                 // Erfolg anzeigen
                 showToast('success', data.message || 'Kantinenplan erfolgreich aktualisiert');
                 
@@ -166,14 +203,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else {
+            } else if (data && !data.success) {
                 // Fehler anzeigen
                 showToast('error', data.error || 'Fehler beim Speichern');
             }
         })
         .catch(error => {
             console.error('Fehler:', error);
-            showToast('error', 'Netzwerkfehler beim Speichern');
+            showToast('error', 'Netzwerkfehler beim Speichern - verwende Fallback');
+            
+            // Fallback: Normales Formular-Submit
+            console.log('Verwende Fallback: Normales Formular-Submit');
+            form.removeEventListener('submit', arguments.callee);
+            form.submit();
         })
         .finally(() => {
             // Button wieder aktivieren
