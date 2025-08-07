@@ -1,131 +1,90 @@
 {% extends "base.html" %}
 
-{% block title %}Scandy Einrichtung - Optionale Einstellungen{% endblock %}
+{% block title %}Optionale Einstellungen - {{ config.SYSTEM_NAME }}{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-bold mb-6">
-        <i class="fas fa-cogs text-primary mr-2"></i>
-        Scandy Einrichtung
-    </h1>
-    {% if error %}
-    <div class="alert alert-error mb-4">
-        <i class="fas fa-exclamation-circle mr-2"></i>
-        {{ error }}
-    </div>
-    {% endif %}
-    <form method="POST" action="{{ url_for('setup.setup_optional') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title mb-4">Optionale Einstellungen</h2>
-                <div class="prose max-w-none mb-6">
-                    <p class="text-base-content/70">
-                        Hier können Sie Kategorien, Standorte und Abteilungen für Ihr System definieren. Diese Einstellungen sind wichtig für:
-                    </p>
-                    <ul class="list-disc list-inside text-base-content/70">
-                        <li>Kategorien: Zur Einordnung von {{ app_labels.tools }}</li>
-                        <li>Standorte: Zur Angabe des Lagerorts von {{ app_labels.tools }} und {{ app_labels.consumables }}</li>
-                        <li>Abteilungen: Zur Zuordnung von Mitarbeitern</li>
-                    </ul>
-                    <p class="text-base-content/70 mt-4">
-                        Sie können diese Einstellungen jetzt vornehmen oder später im Dashboard unter "System" → "Einstellungen" anpassen.
-                    </p>
-                </div>
+<div class="min-h-screen flex items-center justify-center bg-base-200">
+    <div class="card w-96 bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold">
+                    <i class="fas fa-cogs text-primary mr-2"></i>
+                    Optionale Einstellungen
+                </h1>
+                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-error mb-4">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="POST" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- Kategorien -->
-                    <div class="card bg-base-200">
-                        <div class="card-body">
-                            <h3 class="text-lg font-semibold mb-4">Kategorien</h3>
-                            <div class="space-y-4">
-                                {% for category in categories %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="categories[]" class="input input-bordered flex-1" value="{{ category }}" placeholder="z.B. Elektrowerkzeuge">
-                                </div>
-                                {% endfor %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="categories[]" class="input input-bordered flex-1" placeholder="z.B. Elektrowerkzeuge">
-                                </div>
-                                <button type="button" class="btn btn-ghost btn-sm w-full" onclick="addInputField(this, 'categories[]')">
-                                    <i class="fas fa-plus mr-2"></i>
-                                    Kategorie hinzufügen
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Standorte -->
-                    <div class="card bg-base-200">
-                        <div class="card-body">
-                            <h3 class="text-lg font-semibold mb-4">Standorte</h3>
-                            <div class="space-y-4">
-                                {% for location in locations %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="locations[]" class="input input-bordered flex-1" value="{{ location }}" placeholder="z.B. Lager 1">
-                                </div>
-                                {% endfor %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="locations[]" class="input input-bordered flex-1" placeholder="z.B. Lager 1">
-                                </div>
-                                <button type="button" class="btn btn-ghost btn-sm w-full" onclick="addInputField(this, 'locations[]')">
-                                    <i class="fas fa-plus mr-2"></i>
-                                    Standort hinzufügen
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Abteilungen -->
-                    <div class="card bg-base-200">
-                        <div class="card-body">
-                            <h3 class="text-lg font-semibold mb-4">Abteilungen</h3>
-                            <div class="space-y-4">
-                                {% for department in departments %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="departments[]" class="input input-bordered flex-1" value="{{ department }}" placeholder="z.B. Werkstatt">
-                                </div>
-                                {% endfor %}
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="departments[]" class="input input-bordered flex-1" placeholder="z.B. Werkstatt">
-                                </div>
-                                <button type="button" class="btn btn-ghost btn-sm w-full" onclick="addInputField(this, 'departments[]')">
-                                    <i class="fas fa-plus mr-2"></i>
-                                    Abteilung hinzufügen
-                                </button>
-                            </div>
-                        </div>
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">System-Name</span>
+                    </label>
+                    <input type="text" name="system_name" class="input input-bordered" 
+                           value="{{ form_data.system_name if form_data else 'Scandy' }}" autofocus>
+                    <div class="text-sm text-gray-600 mt-1">
+                        Wird in der Titelleiste und auf Seiten angezeigt
                     </div>
                 </div>
 
-                <div class="card-actions justify-end mt-6">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-check mr-2"></i>
-                        Einrichtung abschließen
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">E-Mail-Server</span>
+                    </label>
+                    <input type="text" name="smtp_server" class="input input-bordered" 
+                           value="{{ form_data.smtp_server if form_data else '' }}" 
+                           placeholder="smtp.gmail.com">
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">E-Mail-Port</span>
+                    </label>
+                    <input type="number" name="smtp_port" class="input input-bordered" 
+                           value="{{ form_data.smtp_port if form_data else '587' }}">
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">E-Mail-Benutzername</span>
+                    </label>
+                    <input type="email" name="smtp_username" class="input input-bordered" 
+                           value="{{ form_data.smtp_username if form_data else '' }}">
+                </div>
+
+                <div class="form-control mb-6">
+                    <label class="label">
+                        <span class="label-text">E-Mail-Passwort</span>
+                    </label>
+                    <input type="password" name="smtp_password" class="input input-bordered" 
+                           value="{{ form_data.smtp_password if form_data else '' }}">
+                </div>
+
+                <div class="form-control">
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i class="fas fa-save mr-2"></i>
+                        Einstellungen speichern
                     </button>
                 </div>
+            </form>
+
+            <div class="divider">oder</div>
+
+            <div class="text-center">
+                <a href="{{ url_for('main.index') }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Zum Dashboard
+                </a>
             </div>
         </div>
-    </form>
+    </div>
 </div>
-
-<script>
-function addInputField(button, name) {
-    const container = button.parentElement;
-    const newInput = document.createElement('div');
-    newInput.className = 'flex items-center gap-2';
-    newInput.innerHTML = `
-        <input type="text" name="${name}" class="input input-bordered flex-1" placeholder="Neuer Eintrag">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="removeInputField(this)">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-    container.insertBefore(newInput, button);
-}
-
-function removeInputField(button) {
-    const container = button.parentElement;
-    container.remove();
-}
-</script>
 {% endblock %} 

@@ -3,95 +3,91 @@
 {% block title %}Profil - {{ config.SYSTEM_NAME }}{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <div class="max-w-2xl mx-auto">
-        <h1 class="text-2xl font-bold mb-6">
-            <i class="fas fa-user text-primary mr-2"></i>
-            Profil bearbeiten
-        </h1>
+<div class="min-h-screen flex items-center justify-center bg-base-200">
+    <div class="card w-96 bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold">
+                    <i class="fas fa-user text-primary mr-2"></i>
+                    Profil bearbeiten
+                </h1>
+                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
+            </div>
 
-        {% if error %}
-        <div class="alert alert-error mb-4">
-            <i class="fas fa-exclamation-circle mr-2"></i>
-            {{ error }}
-        </div>
-        {% endif %}
+            {% if error %}
+            <div class="alert alert-error mb-4">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                {{ error }}
+            </div>
+            {% endif %}
 
-        {% if success %}
-        <div class="alert alert-success mb-4">
-            <i class="fas fa-check-circle mr-2"></i>
-            {{ success }}
-        </div>
-        {% endif %}
+            {% if success %}
+            <div class="alert alert-success mb-4">
+                <i class="fas fa-check-circle mr-2"></i>
+                {{ success }}
+            </div>
+            {% endif %}
 
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('auth.profile') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    
-                    <div class="form-control mb-4">
-                        <label class="label">
-                            <span class="label-text">Benutzername</span>
-                        </label>
-                        <input type="text" value="{{ current_user.username }}" class="input input-bordered" disabled>
-                        <label class="label">
-                            <span class="label-text-alt">Benutzername kann nicht geändert werden</span>
-                        </label>
+            <form method="POST" action="{{ url_for('auth.profile') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Benutzername</span>
+                    </label>
+                    <input type="text" name="username" class="input input-bordered" 
+                           value="{{ current_user.username }}" required>
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Aktuelles Passwort</span>
+                    </label>
+                    <input type="password" name="current_password" class="input input-bordered" required>
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Neues Passwort</span>
+                    </label>
+                    <input type="password" name="new_password" class="input input-bordered" minlength="8">
+                </div>
+
+                <div class="form-control mb-6">
+                    <label class="label">
+                        <span class="label-text">Neues Passwort bestätigen</span>
+                    </label>
+                    <input type="password" name="new_password_confirm" class="input input-bordered" minlength="8">
+                </div>
+
+                <div class="divider">Wochenplan-Einstellungen</div>
+
+                <div class="form-control mb-6">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Wochenplan-Feature aktivieren</span>
+                        <input type="checkbox" name="timesheet_enabled" class="toggle toggle-primary" 
+                               {% if current_user.timesheet_enabled %}checked{% endif %}>
+                    </label>
+                    <div class="text-sm text-gray-600 ml-6 mt-2">
+                        Erlaubt die Erstellung von Wochenberichten
                     </div>
+                </div>
 
-                    <div class="form-control mb-4">
-                        <label class="label">
-                            <span class="label-text">E-Mail-Adresse</span>
-                        </label>
-                        <input type="email" name="email" value="{{ current_user.email or '' }}" class="input input-bordered">
-                    </div>
+                <div class="form-control">
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i class="fas fa-save mr-2"></i>
+                        Profil speichern
+                    </button>
+                </div>
+            </form>
 
-                    <div class="divider">Passwort ändern (optional)</div>
+            <div class="divider">oder</div>
 
-                    <div class="form-control mb-4">
-                        <label class="label">
-                            <span class="label-text">Aktuelles Passwort</span>
-                        </label>
-                        <input type="password" name="current_password" class="input input-bordered">
-                    </div>
-
-                    <div class="form-control mb-4">
-                        <label class="label">
-                            <span class="label-text">Neues Passwort</span>
-                        </label>
-                        <input type="password" name="new_password" class="input input-bordered" minlength="8">
-                        <label class="label">
-                            <span class="label-text-alt">Mindestens 8 Zeichen</span>
-                        </label>
-                    </div>
-
-                    <div class="form-control mb-6">
-                        <label class="label">
-                            <span class="label-text">Neues Passwort bestätigen</span>
-                        </label>
-                        <input type="password" name="new_password_confirm" class="input input-bordered" minlength="8">
-                    </div>
-
-                    <div class="divider">Wochenplan-Einstellungen</div>
-
-                    <div class="form-control mb-6">
-                        <label class="label cursor-pointer">
-                            <span class="label-text">Wochenplan-Feature aktivieren</span>
-                            <input type="checkbox" name="timesheet_enabled" class="checkbox checkbox-primary" 
-                                   {% if user.timesheet_enabled %}checked{% endif %}>
-                        </label>
-                        <label class="label">
-                            <span class="label-text-alt">Aktiviert das Wochenplan-Feature für Ihren Account</span>
-                        </label>
-                    </div>
-
-                    <div class="card-actions justify-end">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save mr-2"></i>
-                            Änderungen speichern
-                        </button>
-                    </div>
-                </form>
+            <div class="text-center">
+                <a href="{{ url_for('main.index') }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-home mr-2"></i>
+                    Zurück zum Dashboard
+                </a>
             </div>
         </div>
     </div>

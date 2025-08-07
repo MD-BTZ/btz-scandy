@@ -1,122 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Setup{% endblock %}
+{% block title %}Erste Einrichtung - {{ config.SYSTEM_NAME }}{% endblock %}
 
 {% block content %}
-<div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
-    <div class="sm:mx-auto sm:w-full sm:max-w-sm">
-        <h2 class="mt-10 text-center text-2xl font-bold leading-9 tracking-tight">
-            Ersteinrichtung
-        </h2>
-    </div>
+<div class="min-h-screen flex items-center justify-center bg-base-200">
+    <div class="card w-96 bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold">
+                    <i class="fas fa-cogs text-primary mr-2"></i>
+                    Erste Einrichtung
+                </h1>
+                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
+            </div>
 
-    <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-        <form class="space-y-6" action="{{ url_for('auth.setup') }}" method="POST">
-            <div>
-                <label for="username" class="block text-sm font-medium leading-6">
-                    Admin-Benutzername
-                </label>
-                <div class="mt-2">
-                    <input id="username" name="username" type="text" required
-                           value="Admin" placeholder="z.B. Admin"
-                           class="input input-bordered w-full">
+            {% if error %}
+            <div class="alert alert-error mb-4">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('auth.setup') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="{{ step }}">
+                
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Admin-Benutzername</span>
+                    </label>
+                    <input type="text" name="username" class="input input-bordered" required 
+                           value="Admin" placeholder="z.B. Admin" autofocus>
                 </div>
-            </div>
 
-            <div>
-                <label for="password" class="block text-sm font-medium leading-6">
-                    Admin-Passwort
-                </label>
-                <div class="mt-2">
-                    <input id="password" name="password" type="password" required
-                           class="input input-bordered w-full">
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Admin-Passwort</span>
+                    </label>
+                    <input type="password" name="password" class="input input-bordered" required>
                 </div>
-            </div>
 
-            <div>
-                <label for="confirm_password" class="block text-sm font-medium leading-6">
-                    Passwort bestätigen
-                </label>
-                <div class="mt-2">
-                    <input id="confirm_password" name="confirm_password" type="password" required
-                           class="input input-bordered w-full">
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Passwort bestätigen</span>
+                    </label>
+                    <input type="password" name="password_confirm" class="input input-bordered" required>
                 </div>
-            </div>
 
-            <div class="divider">Systembezeichnungen</div>
-
-            <div>
-                <label for="label_tickets_name" class="block text-sm font-medium leading-6">
-                    Bezeichnung für Tickets
-                </label>
-                <div class="mt-2">
-                    <input id="label_tickets_name" name="label_tickets_name" type="text" 
-                           value="Tickets" required
-                           class="input input-bordered w-full">
+                <div class="form-control mb-6">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Angemeldet bleiben</span>
+                        <input type="checkbox" name="remember" class="checkbox checkbox-primary" checked>
+                    </label>
                 </div>
-            </div>
 
-            <div>
-                <label for="label_tickets_icon" class="block text-sm font-medium leading-6">
-                    Icon für Tickets (FontAwesome-Klasse)
-                </label>
-                <div class="mt-2">
-                    <input id="label_tickets_icon" name="label_tickets_icon" type="text" 
-                           value="fas fa-ticket-alt" required
-                           class="input input-bordered w-full">
+                <div class="form-control">
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i class="fas fa-save mr-2"></i>
+                        Einrichtung abschließen
+                    </button>
                 </div>
-            </div>
+            </form>
 
-            <div>
-                <label for="label_tools_name" class="block text-sm font-medium leading-6">
-                    Bezeichnung für Werkzeuge
-                </label>
-                <div class="mt-2">
-                    <input id="label_tools_name" name="label_tools_name" type="text" 
-                           value="Werkzeuge" required
-                           class="input input-bordered w-full">
-                </div>
-            </div>
+            <div class="divider">oder</div>
 
-            <div>
-                <label for="label_tools_icon" class="block text-sm font-medium leading-6">
-                    Icon für Werkzeuge (FontAwesome-Klasse)
-                </label>
-                <div class="mt-2">
-                    <input id="label_tools_icon" name="label_tools_icon" type="text" 
-                           value="fas fa-tools" required
-                           class="input input-bordered w-full">
-                </div>
+            <div class="text-center">
+                <a href="{{ url_for('auth.login') }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    Zurück zum Login
+                </a>
             </div>
-
-            <div>
-                <label for="label_consumables_name" class="block text-sm font-medium leading-6">
-                    Bezeichnung für Verbrauchsmaterial
-                </label>
-                <div class="mt-2">
-                    <input id="label_consumables_name" name="label_consumables_name" type="text" 
-                           value="Verbrauchsmaterial" required
-                           class="input input-bordered w-full">
-                </div>
-            </div>
-
-            <div>
-                <label for="label_consumables_icon" class="block text-sm font-medium leading-6">
-                    Icon für Verbrauchsmaterial (FontAwesome-Klasse)
-                </label>
-                <div class="mt-2">
-                    <input id="label_consumables_icon" name="label_consumables_icon" type="text" 
-                           value="fas fa-box-open" required
-                           class="input input-bordered w-full">
-                </div>
-            </div>
-
-            <div>
-                <button type="submit" class="btn btn-primary w-full">
-                    Setup abschließen
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %} 
