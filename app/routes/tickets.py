@@ -2019,7 +2019,7 @@ def auftrag_details_page(id):
         
         if not has_permission:
             flash('Sie haben keine Berechtigung, dieses Ticket zu sehen.', 'error')
-            return redirect(url_for('tickets.index'))
+            return redirect(url_for('tickets.create'))
         
         # Füge id-Feld hinzu (für Template-Kompatibilität)
         ticket['id'] = str(ticket['_id'])

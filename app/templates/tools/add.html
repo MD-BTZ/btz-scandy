@@ -1,70 +1,65 @@
 {% extends "base.html" %}
 
-{% block title %}{{ app_labels.tools.name }} hinzufügen - {{ config.SYSTEM_NAME }}{% endblock %}
+{% block title %}{{ app_labels.tools.name }} hinzufügen{% endblock %}
 
 {% block content %}
-<div class="min-h-screen flex items-center justify-center bg-base-200">
-    <div class="card w-96 bg-base-100 shadow-xl">
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-4">
+        <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Zurück zur Übersicht
+        </a>
+    </div>
+    <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-            <div class="text-center mb-6">
-                <h1 class="text-2xl font-bold">
-                    <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
-                    {{ app_labels.tools.name }} hinzufügen
-                </h1>
-                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
-            </div>
-
-            {% if error %}
-            <div class="alert alert-error mb-4">
-                <i class="fas fa-exclamation-circle mr-2"></i>
-                {{ error }}
-            </div>
-            {% endif %}
-
+            <h2 class="card-title">
+                <i class="{{ app_labels.tools.icon }} text-primary mr-2"></i>
+                {{ app_labels.tools.name }} hinzufügen
+            </h2>
             <form method="POST" class="space-y-4">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <!-- Grundlegende Informationen -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Name (max. 50 Zeichen)</span>
+                        </label>
+                        <input type="text" name="name" class="input input-bordered" required maxlength="50" value="{{ form_data.name if form_data else '' }}">
+                    </div>
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Barcode (max. 50 Zeichen)</span>
+                        </label>
+                        <input type="text" name="barcode" class="input input-bordered" required maxlength="50" value="{{ form_data.barcode if form_data else '' }}">
+                    </div>
+                </div>
                 
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Name (max. 50 Zeichen)</span>
-                    </label>
-                    <input type="text" name="name" class="input input-bordered" required maxlength="50" 
-                           value="{{ form_data.name if form_data else '' }}" autofocus>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Kategorie</span>
+                        </label>
+                        <select name="category" class="select select-bordered" required>
+                            <option value="">Bitte wählen...</option>
+                            {% for category in categories %}
+                            <option value="{{ category }}" {% if form_data and form_data.category == category %}selected{% endif %}>{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Standort</span>
+                        </label>
+                        <select name="location" class="select select-bordered" required>
+                            <option value="">Bitte wählen...</option>
+                            {% for location in locations %}
+                            <option value="{{ location }}" {% if form_data and form_data.location == location %}selected{% endif %}>{{ location }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Barcode (max. 50 Zeichen)</span>
-                    </label>
-                    <input type="text" name="barcode" class="input input-bordered" required maxlength="50" 
-                           value="{{ form_data.barcode if form_data else '' }}">
-                </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Kategorie</span>
-                    </label>
-                    <select name="category" class="select select-bordered" required>
-                        <option value="">Bitte wählen...</option>
-                        {% for category in categories %}
-                        <option value="{{ category }}" {% if form_data and form_data.category == category %}selected{% endif %}>{{ category }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Standort</span>
-                    </label>
-                    <select name="location" class="select select-bordered" required>
-                        <option value="">Bitte wählen...</option>
-                        {% for location in locations %}
-                        <option value="{{ location }}" {% if form_data and form_data.location == location %}selected{% endif %}>{{ location }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-control mb-6">
+                
+                <div class="form-control">
                     <label class="label">
                         <span class="label-text">Status</span>
                     </label>
@@ -73,23 +68,200 @@
                         <option value="defekt">Defekt</option>
                     </select>
                 </div>
-
+                
+                <!-- Neue optionale Felder -->
+                {% if feature_settings.get('tool_field_serial_number', True) or feature_settings.get('tool_field_invoice_number', True) or feature_settings.get('tool_field_mac_address', True) or feature_settings.get('tool_field_mac_address_wlan', True) or feature_settings.get('tool_field_user_groups', True) or feature_settings.get('tool_field_software', True) %}
+                <div class="divider">
+                    <span class="text-sm font-medium text-base-content/70">Optionale Informationen</span>
+                </div>
+                {% endif %}
+                
+                {% if feature_settings.get('tool_field_serial_number', True) or feature_settings.get('tool_field_invoice_number', True) %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% if feature_settings.get('tool_field_serial_number', True) %}
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Seriennummer</span>
+                        </label>
+                        <input type="text" name="serial_number" class="input input-bordered" maxlength="100" value="{{ form_data.serial_number if form_data else '' }}">
+                    </div>
+                    {% endif %}
+                    {% if feature_settings.get('tool_field_invoice_number', True) %}
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Rechnungsnummer</span>
+                        </label>
+                        <input type="text" name="invoice_number" class="input input-bordered" maxlength="100" value="{{ form_data.invoice_number if form_data else '' }}">
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                {% if feature_settings.get('tool_field_mac_address', True) or feature_settings.get('tool_field_mac_address_wlan', True) %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% if feature_settings.get('tool_field_mac_address', True) %}
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">MAC-Adresse (LAN)</span>
+                        </label>
+                        <input type="text" name="mac_address" class="input input-bordered" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX" value="{{ form_data.mac_address if form_data else '' }}">
+                    </div>
+                    {% endif %}
+                    {% if feature_settings.get('tool_field_mac_address_wlan', True) %}
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">MAC-Adresse (WLAN)</span>
+                        </label>
+                        <input type="text" name="mac_address_wlan" class="input input-bordered" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX" value="{{ form_data.mac_address_wlan if form_data else '' }}">
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                {% if feature_settings.get('software_management', False) %}
+                {% if feature_settings.get('tool_field_user_groups', True) %}
                 <div class="form-control">
-                    <button type="submit" class="btn btn-primary w-full">
-                        <i class="fas fa-save mr-2"></i>
-                        {{ app_labels.tools.name }} speichern
-                    </button>
+                    <label class="label">
+                        <span class="label-text">Nutzergruppen</span>
+                    </label>
+                    <div class="space-y-2">
+                        {% for group in user_groups %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="user_groups" value="{{ group._id }}" class="checkbox checkbox-sm" 
+                                   {% if form_data and group._id|string in form_data.user_groups %}checked{% endif %}>
+                            <span class="text-sm">{{ group.name }}</span>
+                            {% if group.description %}
+                            <span class="text-xs text-base-content/60">({{ group.description }})</span>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if feature_settings.get('tool_field_software', True) %}
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Zusätzliche Software</span>
+                    </label>
+                    <div class="space-y-2">
+                        {% for software in software_presets %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="additional_software" value="{{ software._id }}" class="checkbox checkbox-sm" 
+                                   {% if form_data and software._id|string in form_data.additional_software %}checked{% endif %}>
+                            <span class="text-sm">{{ software.name }}</span>
+                            {% if software.category %}
+                            <span class="text-xs text-base-content/60">({{ software.category }})</span>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+                
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Beschreibung</span>
+                    </label>
+                    <textarea name="description" class="textarea textarea-bordered h-24">{{ form_data.description if form_data else '' }}</textarea>
+                </div>
+                
+                <!-- Benutzerdefinierte Felder -->
+                {% if custom_fields_tools %}
+                <div class="space-y-4">
+                    <div class="divider">
+                        <span class="text-sm font-medium text-base-content/70">Benutzerdefinierte Felder</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for custom_field in custom_fields_tools %}
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">
+                                    {{ custom_field.name }}
+                                    {% if custom_field.required %}<span class="text-error">*</span>{% endif %}
+                                </span>
+                            </label>
+                            
+                            {% if custom_field.field_type == 'text' %}
+                                <input type="text" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'textarea' %}
+                                <textarea name="custom_{{ custom_field.field_key }}" 
+                                          class="textarea textarea-bordered"
+                                          {% if custom_field.required %}required{% endif %}
+                                          placeholder="{{ custom_field.description }}">{{ custom_field.default_value }}</textarea>
+                            
+                            {% elif custom_field.field_type == 'number' %}
+                                <input type="number" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'date' %}
+                                <input type="date" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}>
+                            
+                            {% elif custom_field.field_type == 'email' %}
+                                <input type="email" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'url' %}
+                                <input type="url" name="custom_{{ custom_field.field_key }}" 
+                                       class="input input-bordered" 
+                                       value="{{ custom_field.default_value }}"
+                                       {% if custom_field.required %}required{% endif %}
+                                       placeholder="{{ custom_field.description }}">
+                            
+                            {% elif custom_field.field_type == 'select' %}
+                                <select name="custom_{{ custom_field.field_key }}" 
+                                        class="select select-bordered"
+                                        {% if custom_field.required %}required{% endif %}>
+                                    <option value="">Bitte wählen...</option>
+                                    {% for option in custom_field.select_options %}
+                                    <option value="{{ option }}" 
+                                            {% if custom_field.default_value == option %}selected{% endif %}>
+                                        {{ option }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            
+                            {% elif custom_field.field_type == 'checkbox' %}
+                                <label class="label cursor-pointer justify-start gap-3">
+                                    <input type="checkbox" name="custom_{{ custom_field.field_key }}" 
+                                           class="checkbox checkbox-primary"
+                                           {% if custom_field.default_value == 'true' or custom_field.default_value == True %}checked{% endif %}>
+                                    <span class="label-text">{{ custom_field.description or 'Aktiviert' }}</span>
+                                </label>
+                            {% endif %}
+                            
+                            {% if custom_field.description and custom_field.field_type != 'checkbox' %}
+                            <label class="label">
+                                <span class="label-text-alt">{{ custom_field.description }}</span>
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="flex justify-end gap-2">
+                    <a href="{{ url_for('tools.index') }}" class="btn btn-ghost">Abbrechen</a>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>
             </form>
-
-            <div class="divider">oder</div>
-
-            <div class="text-center">
-                <a href="{{ url_for('tools.index') }}" class="btn btn-outline btn-sm">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Zurück zur Übersicht
-                </a>
-            </div>
         </div>
     </div>
 </div>

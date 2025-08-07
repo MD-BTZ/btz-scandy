@@ -1,103 +1,132 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - {{ config.SYSTEM_NAME }}{% endblock %}
+{% block head %}
+    <!-- Lending Service -->
+    <script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+{% endblock %}
 
 {% block content %}
-<div class="min-h-screen flex items-center justify-center bg-base-200">
-    <div class="card w-96 bg-base-100 shadow-xl">
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title">Synchronisation</h5>
+        </div>
         <div class="card-body">
-            <div class="text-center mb-6">
-                <h1 class="text-2xl font-bold">
-                    <i class="fas fa-tachometer-alt text-primary mr-2"></i>
-                    Dashboard
-                </h1>
-                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
-            </div>
-
-            {% if error %}
-            <div class="alert alert-error mb-4">
-                <i class="fas fa-exclamation-circle mr-2"></i>
-                {{ error }}
-            </div>
-            {% endif %}
-
-            <!-- Schnellzugriff -->
-            <div class="space-y-4 mb-6">
-                <h2 class="text-lg font-semibold">Schnellzugriff</h2>
+            {% if config.SERVER_MODE %}
+                <h6>Server-Modus aktiv</h6>
+                <p>Server-URL: http://{{ config.LOCAL_IP }}:5000</p>
                 
-                <div class="grid grid-cols-2 gap-3">
-                    <a href="{{ url_for('tools.index') }}" class="btn btn-outline btn-sm">
-                        <i class="fas fa-tools mr-2"></i>
-                        Werkzeuge
-                    </a>
-                    <a href="{{ url_for('consumables.index') }}" class="btn btn-outline btn-sm">
-                        <i class="fas fa-boxes mr-2"></i>
-                        Verbrauchsgüter
-                    </a>
-                    <a href="{{ url_for('workers.index') }}" class="btn btn-outline btn-sm">
-                        <i class="fas fa-users mr-2"></i>
-                        Mitarbeiter
-                    </a>
-                    <a href="{{ url_for('tickets.index') }}" class="btn btn-outline btn-sm">
-                        <i class="fas fa-ticket-alt mr-2"></i>
-                        Tickets
-                    </a>
+                <h6>Letzte Synchronisationen</h6>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Zeitpunkt</th>
+                                <th>Änderungen</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in sync_logs %}
+                            <tr>
+                                <td>{{ log.client_name }}</td>
+                                <td>{{ log.timestamp }}</td>
+                                <td>{{ log.changes_count }}</td>
+                                <td>{{ log.details }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-
-            <!-- Statistiken -->
-            {% if stats %}
-            <div class="space-y-4 mb-6">
-                <h2 class="text-lg font-semibold">Übersicht</h2>
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="stat bg-base-200 rounded-lg p-3">
-                        <div class="stat-title text-xs">Werkzeuge</div>
-                        <div class="stat-value text-lg">{{ stats.tools_count }}</div>
-                        <div class="stat-desc text-xs">{{ stats.tools_available }} verfügbar</div>
+            {% else %}
+                <h6>Client-Modus aktiv</h6>
+                <form method="post" action="{{ url_for('settings.update_settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="client_name" class="form-label">Client-Name</label>
+                        <input type="text" class="form-control" id="client_name" name="client_name" 
+                               value="{{ settings.get('client_name', '') }}" required>
                     </div>
-                    
-                    <div class="stat bg-base-200 rounded-lg p-3">
-                        <div class="stat-title text-xs">Verbrauchsgüter</div>
-                        <div class="stat-value text-lg">{{ stats.consumables_count }}</div>
-                        <div class="stat-desc text-xs">{{ stats.consumables_low }} niedrig</div>
+                    <div class="mb-3">
+                        <label for="server_url" class="form-label">Server-URL</label>
+                        <input type="url" class="form-control" id="server_url" name="server_url" 
+                               value="{{ settings.get('server_url', '') }}" required>
                     </div>
-                    
-                    <div class="stat bg-base-200 rounded-lg p-3">
-                        <div class="stat-title text-xs">Mitarbeiter</div>
-                        <div class="stat-value text-lg">{{ stats.workers_count }}</div>
-                        <div class="stat-desc text-xs">aktiv</div>
+                    <div class="mb-3">
+                        <label for="sync_status" class="form-label">Sync-Status</label>
+                        <div id="sync_status">
+                            Letzte Synchronisation: {{ last_sync }}
+                        </div>
                     </div>
-                    
-                    <div class="stat bg-base-200 rounded-lg p-3">
-                        <div class="stat-title text-xs">Tickets</div>
-                        <div class="stat-value text-lg">{{ stats.tickets_count }}</div>
-                        <div class="stat-desc text-xs">{{ stats.tickets_open }} offen</div>
-                    </div>
-                </div>
-            </div>
+                    <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
+                    <button type="button" class="btn btn-secondary" onclick="syncNow()">Jetzt synchronisieren</button>
+                </form>
             {% endif %}
+        </div>
+    </div>
 
-            <!-- Benutzer-Aktionen -->
-            <div class="space-y-3">
-                <a href="{{ url_for('auth.profile') }}" class="btn btn-primary w-full">
-                    <i class="fas fa-user mr-2"></i>
-                    Mein Profil
-                </a>
-                
-                {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary w-full">
-                    <i class="fas fa-cog mr-2"></i>
-                    Administration
-                </a>
-                {% endif %}
-                
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline w-full">
-                    <i class="fas fa-sign-out-alt mr-2"></i>
-                    Abmelden
-                </a>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title">Aktuelle Ausleihen</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Artikel</th>
+                            <th>Barcode</th>
+                            <th>Ausgeliehen an</th>
+                            <th>Datum</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lending in current_lendings %}
+                        <tr>
+                            <td>{{ lending.item_name }}</td>
+                            <td>{{ lending.item_barcode }}</td>
+                            <td>{{ lending.worker_name }}</td>
+                            <td>{{ lending.action_date }}</td>
+                            <td>
+                                {% if lending.category == 'Werkzeug' %}
+                                    <button class="btn btn-sm btn-error" 
+                                            data-barcode="{{ lending.item_barcode }}"
+                                            title="Werkzeug zurückgeben">
+                                        <i class="fas fa-undo-alt"></i> Zurückgeben
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-</div>
+
+    {% if not config.SERVER_MODE %}
+    <script>
+        function syncNow() {
+            fetch('/api/sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Synchronisation erfolgreich');
+                    location.reload();
+                } else {
+                    alert('Fehler bei der Synchronisation: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Fehler bei der Synchronisation: ' + error);
+            });
+        }
+    </script>
+    {% endif %} 
 {% endblock %} 

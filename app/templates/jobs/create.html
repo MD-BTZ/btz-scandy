@@ -1,92 +1,178 @@
 {% extends "base.html" %}
 
-{% block title %}Job erstellen - {{ config.SYSTEM_NAME }}{% endblock %}
-
 {% block content %}
-<div class="min-h-screen flex items-center justify-center bg-base-200">
-    <div class="card w-96 bg-base-100 shadow-xl">
-        <div class="card-body">
-            <div class="text-center mb-6">
-                <h1 class="text-2xl font-bold">
-                    <i class="fas fa-briefcase text-primary mr-2"></i>
-                    Job erstellen
-                </h1>
-                <p class="text-sm text-gray-600">{{ config.SYSTEM_NAME }}</p>
-            </div>
-
-            {% if error %}
-            <div class="alert alert-error mb-4">
-                <i class="fas fa-exclamation-circle mr-2"></i>
-                {{ error }}
-            </div>
-            {% endif %}
-
-            <form method="POST" class="space-y-4">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Titel</span>
-                    </label>
-                    <input type="text" name="title" class="input input-bordered" required 
-                           value="{{ form_data.title if form_data else '' }}" autofocus>
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-base-content mb-2">Neuen Job erstellen</h1>
+                    <p class="text-base-content/70">Erstellen Sie eine neue Jobanzeige für Ihre Jobbörse</p>
                 </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Unternehmen</span>
-                    </label>
-                    <input type="text" name="company" class="input input-bordered" required 
-                           value="{{ form_data.company if form_data else '' }}">
-                </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Standort</span>
-                    </label>
-                    <input type="text" name="location" class="input input-bordered" 
-                           value="{{ form_data.location if form_data else '' }}">
-                </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Beschreibung</span>
-                    </label>
-                    <textarea name="description" class="textarea textarea-bordered h-24" 
-                              placeholder="Job-Beschreibung...">{{ form_data.description if form_data else '' }}</textarea>
-                </div>
-
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text">Anforderungen</span>
-                    </label>
-                    <textarea name="requirements" class="textarea textarea-bordered h-24" 
-                              placeholder="Anforderungen...">{{ form_data.requirements if form_data else '' }}</textarea>
-                </div>
-
-                <div class="form-control mb-6">
-                    <label class="label">
-                        <span class="label-text">Kontakt-E-Mail</span>
-                    </label>
-                    <input type="email" name="contact_email" class="input input-bordered" 
-                           value="{{ form_data.contact_email if form_data else '' }}">
-                </div>
-
-                <div class="form-control">
-                    <button type="submit" class="btn btn-primary w-full">
-                        <i class="fas fa-save mr-2"></i>
-                        Job veröffentlichen
-                    </button>
-                </div>
-            </form>
-
-            <div class="divider">oder</div>
-
-            <div class="text-center">
-                <a href="{{ url_for('jobs.index') }}" class="btn btn-outline btn-sm">
+                <a href="{{ url_for('jobs.job_list') }}" class="btn btn-outline">
                     <i class="fas fa-arrow-left mr-2"></i>
-                    Zurück zur Übersicht
+                    Zurück zur Jobbörse
                 </a>
+            </div>
+        </div>
+
+        <!-- Job-Formular -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <form method="POST" class="space-y-6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <!-- Pflichtfelder -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Job-Titel *</span>
+                            </label>
+                            <input type="text" name="title" value="{{ data.title }}" required
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="z.B. Softwareentwickler (m/w/d)">
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Firma *</span>
+                            </label>
+                            <input type="text" name="company" value="{{ data.company }}" required
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="z.B. TechCorp GmbH">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Standort</span>
+                            </label>
+                            <input type="text" name="location" value="{{ data.location }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="z.B. Berlin">
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Branche</span>
+                            </label>
+                            <input type="text" name="industry" value="{{ data.industry }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="z.B. Medien, Design, IT, Buchhaltung, Beratung, Technik...">
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Job-Typ</span>
+                            </label>
+                            <select name="job_type" class="select select-bordered w-full bg-base-100 text-base-content">
+                                <option value="Vollzeit" {% if data.job_type == 'Vollzeit' %}selected{% endif %}>Vollzeit</option>
+                                <option value="Teilzeit" {% if data.job_type == 'Teilzeit' %}selected{% endif %}>Teilzeit</option>
+                                <option value="Praktikum" {% if data.job_type == 'Praktikum' %}selected{% endif %}>Praktikum</option>
+                                <option value="Ausbildung" {% if data.job_type == 'Ausbildung' %}selected{% endif %}>Ausbildung</option>
+                                <option value="Freelance" {% if data.job_type == 'Freelance' %}selected{% endif %}>Freelance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Beschreibung -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">Job-Beschreibung *</span>
+                        </label>
+                        <textarea name="description" rows="4" required
+                                  class="textarea textarea-bordered w-full bg-base-100 text-base-content"
+                                  placeholder="Beschreiben Sie die Position, Aufgaben und Anforderungen...">{{ data.description }}</textarea>
+                    </div>
+
+                    <!-- Anforderungen und Benefits -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Anforderungen</span>
+                            </label>
+                            <textarea name="requirements" rows="3"
+                                      class="textarea textarea-bordered w-full bg-base-100 text-base-content"
+                                      placeholder="Qualifikationen, Erfahrung, Skills...">{{ data.requirements }}</textarea>
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Benefits</span>
+                            </label>
+                            <textarea name="benefits" rows="3"
+                                      class="textarea textarea-bordered w-full bg-base-100 text-base-content"
+                                      placeholder="Vergünstigungen, Vorteile...">{{ data.benefits }}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Gehalt und Kontakt -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Gehalt</span>
+                            </label>
+                            <input type="text" name="salary_range" value="{{ data.salary_range }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="z.B. 50.000 - 70.000 €">
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Bewerbungs-URL</span>
+                            </label>
+                            <input type="text" name="application_url" value="{{ data.application_url }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="https://firma.de/karriere">
+                        </div>
+                    </div>
+
+                    <!-- Kontaktdaten -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Kontakt-E-Mail</span>
+                            </label>
+                            <input type="email" name="contact_email" value="{{ data.contact_email }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="jobs@firma.de">
+                        </div>
+                        
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text font-medium">Kontakt-Telefon</span>
+                            </label>
+                            <input type="tel" name="contact_phone" value="{{ data.contact_phone }}"
+                                   class="input input-bordered w-full bg-base-100 text-base-content"
+                                   placeholder="+49 30 12345678">
+                        </div>
+                    </div>
+
+                    <!-- Bilder-Galerie -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-medium">Bilder (Flyer, etc.)</span>
+                        </label>
+                        <div class="alert alert-info mb-4">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <h4 class="font-bold">Bilder-Upload</h4>
+                                <p>Sie können nach dem Erstellen des Jobs Bilder hinzufügen. Maximal 5 Bilder erlaubt (jpg, png, gif, webp).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="flex gap-4 pt-6 border-t border-base-300">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save mr-2"></i>Job erstellen
+                        </button>
+                        <a href="{{ url_for('jobs.job_list') }}" class="btn btn-outline">
+                            Abbrechen
+                        </a>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

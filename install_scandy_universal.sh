@@ -2212,9 +2212,25 @@ update_installation() {
             # Dependencies aktualisieren
             if [ -d "$TARGET_DIR/venv" ] && [ -f "$TARGET_DIR/requirements.txt" ]; then
                 log_info "Aktualisiere Python-Pakete..."
-                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" 2>/dev/null || {
-                    log_warning "Konnte Dependencies nicht aktualisieren"
+                
+                # pip upgrade
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade pip --no-warn-script-location 2>/dev/null || {
+                    log_warning "pip-Upgrade fehlgeschlagen"
                 }
+                
+                # Requirements installieren
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" --no-warn-script-location 2>/dev/null || {
+                    log_error "Konnte Dependencies nicht aktualisieren - versuche Neuinstallation"
+                    # Fallback: venv neu erstellen
+                    rm -rf "$TARGET_DIR/venv"
+                    sudo -u scandy python3 -m venv "$TARGET_DIR/venv"
+                    sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade pip --no-warn-script-location
+                    sudo -u scandy "$TARGET_DIR/venv/bin/pip" install -r "$TARGET_DIR/requirements.txt" --no-warn-script-location
+                }
+                
+                log_success "Python-Pakete aktualisiert"
+            else
+                log_warning "Virtual Environment oder requirements.txt nicht gefunden"
             fi
             
             # Service neu starten
@@ -2334,9 +2350,25 @@ update_installation() {
             # Dependencies aktualisieren (optional)
             if [ -d "$TARGET_DIR/venv" ] && [ -f "$TARGET_DIR/requirements.txt" ]; then
                 log_info "Aktualisiere Python-Pakete..."
-                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" 2>/dev/null || {
-                    log_warning "Konnte Dependencies nicht aktualisieren"
+                
+                # pip upgrade
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade pip --no-warn-script-location 2>/dev/null || {
+                    log_warning "pip-Upgrade fehlgeschlagen"
                 }
+                
+                # Requirements installieren
+                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" --no-warn-script-location 2>/dev/null || {
+                    log_error "Konnte Dependencies nicht aktualisieren - versuche Neuinstallation"
+                    # Fallback: venv neu erstellen
+                    rm -rf "$TARGET_DIR/venv"
+                    sudo -u scandy python3 -m venv "$TARGET_DIR/venv"
+                    sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade pip --no-warn-script-location
+                    sudo -u scandy "$TARGET_DIR/venv/bin/pip" install -r "$TARGET_DIR/requirements.txt" --no-warn-script-location
+                }
+                
+                log_success "Python-Pakete aktualisiert"
+            else
+                log_warning "Virtual Environment oder requirements.txt nicht gefunden"
             fi
             
             # Service neu starten
