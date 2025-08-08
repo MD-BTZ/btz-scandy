@@ -66,7 +66,7 @@ def index():
         return redirect(url_for('main.index'))
     
     try:
-        # Hole alle Werkzeuge über den ToolService (filtert automatisch gelöschte)
+        # Hole alle Werkzeuge über den ToolService (filtert automatisch gelöschte und per Abteilung)
         tool_service = get_tool_service()
         tools = tool_service.get_all_tools()
         

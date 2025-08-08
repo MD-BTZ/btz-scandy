@@ -4,7 +4,7 @@ Alle Ticket-Funktionalitäten an einem Ort
 """
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
-from flask import current_app
+from flask import current_app, g
 from app.models.mongodb_database import mongodb
 from app.services.notification_service import NotificationService
 from app.services.utility_service import UtilityService
@@ -67,6 +67,7 @@ class TicketService:
                 'due_date': due_date,
                 'estimated_time': ticket_data.get('estimated_time'),
                 'status': 'offen',
+                'department': getattr(g, 'current_department', None),
                 'created_at': datetime.now(),
                 'updated_at': datetime.now(),
                 'ticket_number': get_next_ticket_number()
@@ -127,6 +128,8 @@ class TicketService:
                     {'deleted': {'$ne': True}}
                 ]
             }
+            if getattr(g, 'current_department', None):
+                open_query['$and'].append({'department': g.current_department})
             
             # Handlungsfeld-Filter für alle Rollen außer Admin
             if role != 'admin' and handlungsfelder:
@@ -147,6 +150,8 @@ class TicketService:
                     {'deleted': {'$ne': True}}
                 ]
             }
+            if getattr(g, 'current_department', None):
+                assigned_query['$and'].append({'department': g.current_department})
             
             # Handlungsfeld-Filter für alle Rollen außer Admin
             if role != 'admin' and handlungsfelder:
@@ -163,6 +168,8 @@ class TicketService:
             all_tickets = []
             if role == 'admin':
                 all_query = {'deleted': {'$ne': True}}
+                if getattr(g, 'current_department', None):
+                    all_query['department'] = g.current_department
                 logger.debug(f"Alle Tickets Query: {all_query}")
                 all_tickets = mongodb.find('tickets', all_query)
                 all_tickets = list(all_tickets)

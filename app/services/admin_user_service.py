@@ -73,6 +73,17 @@ class AdminUserService:
             if existing_user:
                 return False, "Benutzername existiert bereits", None
             
+            # Multi‑Department Pflicht: Mindestens eine erlaubte Abteilung
+            allowed_departments = user_data.get('allowed_departments') or []
+            default_department = user_data.get('default_department')
+            if not allowed_departments and default_department:
+                # Falls nur Standard gesetzt ist, als erlaubte Abteilung übernehmen
+                allowed_departments = [default_department]
+            if not allowed_departments:
+                return False, "Mindestens eine Abteilung muss zugewiesen werden", None
+            if default_department and default_department not in allowed_departments:
+                allowed_departments.append(default_department)
+
             # Passwort generieren falls nicht angegeben
             password = user_data.get('password', '')
             if not password:
@@ -95,8 +106,8 @@ class AdminUserService:
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
                 # Multi-Department Felder
-                'allowed_departments': user_data.get('allowed_departments', []),
-                'default_department': user_data.get('default_department', None),
+                'allowed_departments': allowed_departments,
+                'default_department': default_department or allowed_departments[0],
                 'handlungsfelder': user_data.get('handlungsfelder', []),
                 # Neues, einfaches Löschdatum
                 'delete_at': user_data.get('delete_at', None),
@@ -183,6 +194,21 @@ class AdminUserService:
                 if existing_user:
                     return False, "Benutzername existiert bereits"
             
+            # Multi‑Department Pflicht validieren
+            new_allowed = update_data.get('allowed_departments', user.get('allowed_departments', []))
+            new_default = update_data.get('default_department', user.get('default_department'))
+            if not new_allowed and new_default:
+                new_allowed = [new_default]
+                update_data['allowed_departments'] = new_allowed
+            if not new_allowed:
+                return False, "Mindestens eine Abteilung muss zugewiesen werden"
+            if not new_default:
+                new_default = new_allowed[0]
+                update_data['default_department'] = new_default
+            if new_default not in new_allowed:
+                new_allowed.append(new_default)
+                update_data['allowed_departments'] = new_allowed
+
             # Benutzer aktualisieren
             mongodb.update_one('users', {'_id': user_id}, {'$set': update_data})
             
@@ -356,7 +382,7 @@ class AdminUserService:
                 'user_id': user_id,  # Verknüpfung zur Benutzer-ID
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
-                'department': user_data.get('default_department', ''),
+                'department': user_data.get('default_department') or (user_data.get('allowed_departments', [])[:1] or [''])[0],
                 'email': user_data.get('email', ''),
                 'role': user_data.get('role', 'anwender'),
                 'created_at': datetime.now(),

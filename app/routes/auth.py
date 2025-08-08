@@ -93,9 +93,9 @@ def login():
             if len(username) > 50:
                 errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
             else:
-                # Erlaube Buchstaben, Zahlen, Unterstrich, Bindestrich und Punkt
-                if not re.match(r'^[A-Za-z0-9._-]+$', username):
-                    errors.append('Benutzername darf nur Buchstaben, Zahlen, Unterstriche, Bindestriche und Punkte enthalten.')
+                # Erlaube Unicode-Buchstaben (inkl. Umlaute), Zahlen, Unterstrich, Bindestrich und Punkt
+                if not re.match(r'^[\w._-]+$', username):
+                    errors.append('Benutzername darf nur Buchstaben (inkl. Umlaute), Zahlen, Unterstriche, Bindestriche und Punkte enthalten.')
         
         # Passwort-Validierung
         if not password:
@@ -113,9 +113,7 @@ def login():
             return render_template('auth/login.html')
         
         # ===== RATE LIMITING FÜR LOGIN-VERSUCHE =====
-        # Rate Limiting wird über Flask-Limiter in der App-Konfiguration gehandhabt
-        # Keine zusätzliche Rate-Limiting-Logik hier erforderlich
-        pass
+        # Wird zentral initialisiert; kein Inline-pass nötig
         
         # ===== BENUTZER VALIDIEREN =====
         if is_email_login:

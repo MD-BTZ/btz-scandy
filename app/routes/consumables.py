@@ -22,8 +22,12 @@ def index():
         return redirect(url_for('main.index'))
     
     try:
-        # Hole alle Verbrauchsmaterialien
-        consumables = list(mongodb.find('consumables', {}, sort=[('name', 1)]))
+        # Hole alle Verbrauchsmaterialien der aktuellen Abteilung
+        from flask import g
+        filter_query = {}
+        if getattr(g, 'current_department', None):
+            filter_query['department'] = g.current_department
+        consumables = list(mongodb.find('consumables', filter_query, sort=[('name', 1)]))
         
         # Hole Kategorien und Standorte für Filter
         categories = get_categories_from_settings()

@@ -63,8 +63,12 @@ def find_document_by_id(collection: str, id_value: str):
 def index():
     """Zeigt die Mitarbeiter-Übersicht an"""
     try:
-        # Hole alle nicht gelöschten Mitarbeiter
-        workers = mongodb.find('workers', {'deleted': {'$ne': True}})
+        # Hole alle nicht gelöschten Mitarbeiter der aktuellen Abteilung
+        from flask import g
+        worker_filter = {'deleted': {'$ne': True}}
+        if getattr(g, 'current_department', None):
+            worker_filter['department'] = g.current_department
+        workers = mongodb.find('workers', worker_filter)
         workers = list(workers)
         
         # Für jeden Mitarbeiter die aktiven Ausleihen zählen und Benutzer-Informationen hinzufügen

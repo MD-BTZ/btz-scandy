@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string, current_app
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb, is_feature_enabled
+from flask import g
 from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
 from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number, get_departments_from_settings
 from app.models.user import User
@@ -31,6 +32,16 @@ def check_ticket_permission(ticket, username, role):
     if role == 'admin':
         return True
     
+    # Department-Gleichheit prüfen: Ticket muss in gleicher Abteilung liegen (falls gesetzt)
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if current_dept:
+            ticket_dept = ticket.get('department')
+            if ticket_dept and ticket_dept != current_dept:
+                return False
+    except Exception:
+        pass
+
     # Erstellt von dem Benutzer
     if ticket.get('created_by') == username:
         return True
