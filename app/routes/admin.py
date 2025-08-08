@@ -5,6 +5,7 @@ from app.models.mongodb_models import MongoDBUser
 from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
+import json
 import colorsys
 import logging
 from datetime import datetime, timedelta
@@ -1818,10 +1819,16 @@ def add_user():
     # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
     handlungsfelder = get_ticket_categories_from_settings()
     
+    # Abteilungen aus Settings
+    from app.services.admin_system_settings_service import AdminSystemSettingsService
+    departments = AdminSystemSettingsService.get_departments_from_settings()
     return render_template('admin/user_form.html', 
                          roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                          handlungsfelder=handlungsfelder,
-                         user_handlungsfelder=[])
+                         user_handlungsfelder=[],
+                         departments=departments,
+                         user_allowed_departments=[],
+                         user_default_department='')
 
 @bp.route('/migrate_users_to_workers', methods=['POST'])
 @admin_required
@@ -1895,11 +1902,16 @@ def edit_user(user_id):
         handlungsfelder = get_ticket_categories_from_settings()
         user_handlungsfelder = user.get('handlungsfelder', [])
         
+        from app.services.admin_system_settings_service import AdminSystemSettingsService
+        departments = AdminSystemSettingsService.get_departments_from_settings()
         return render_template('admin/user_form.html', 
                              user=user,
                              roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                              handlungsfelder=handlungsfelder,
-                             user_handlungsfelder=user_handlungsfelder)
+                             user_handlungsfelder=user_handlungsfelder,
+                             departments=departments,
+                             user_allowed_departments=user.get('allowed_departments', []),
+                             user_default_department=user.get('default_department',''))
     
     # POST-Request: Verarbeite die Formulardaten
     try:
@@ -1956,6 +1968,12 @@ def edit_user(user_id):
         if processed_data['password']:
             user_data['password'] = processed_data['password']
         
+        # Abteilungsrechte
+        allowed_departments = request.form.getlist('allowed_departments')
+        default_department = request.form.get('default_department') or None
+        user_data['allowed_departments'] = allowed_departments
+        user_data['default_department'] = default_department if default_department else None
+
         success, message = AdminUserService.update_user(user_id, user_data)
         
         if success:

@@ -84,11 +84,25 @@ def handle_errors(app):
     # Session-Fehler Handler
     @app.errorhandler(400)
     def bad_request_error(error):
-        # Prüfe ob es ein CSRF-Token-Fehler ist
+        # CSRF-Handling differenziert nach Route
         if hasattr(error, 'description') and 'CSRF token' in str(error.description):
-            logger.warning("CSRF-Token-Fehler erkannt - ignoriere für Setup/Login")
-            return jsonify({'error': 'Bad request'}), 400
-        
+            logger.warning("CSRF-Token-Fehler erkannt")
+            # Für Auth/Setup: zurück zur Login-/Setup-Seite mit Hinweis
+            try:
+                from flask import redirect, url_for, flash
+                if request.path.startswith('/auth') or request.path.startswith('/setup'):
+                    flash('Sicherheits-Token abgelaufen. Bitte erneut versuchen.', 'error')
+                    # Leite je nach Route passend um
+                    if request.path.startswith('/auth'):
+                        return redirect(url_for('auth.login'))
+                    return redirect(url_for('auth.setup'))
+            except Exception:
+                pass
+            # Für API: JSON, sonst 400-Seite
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Bad request'}), 400
+            return render_template('errors/400.html'), 400
+
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Bad request'}), 400
         return render_template('errors/400.html'), 400

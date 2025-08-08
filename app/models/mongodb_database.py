@@ -92,6 +92,14 @@ class MongoDBDatabase:
         """
         if collection_name not in cls._SCOPED_COLLECTIONS:
             return base_filter or {}
+        # Sonderfall: globale Settings (departments) sind NICHT gescoped
+        try:
+            if collection_name == 'settings' and isinstance(base_filter, dict):
+                key_val = base_filter.get('key')
+                if key_val == 'departments' or (isinstance(key_val, dict) and key_val.get('$regex') == '^departments$'):
+                    return base_filter or {}
+        except Exception:
+            pass
         current_department = cls._get_current_department()
         if not current_department:
             # Ohne gesetztes Department: alle Dokumente zulassen (Legacy-Modus)
@@ -215,6 +223,16 @@ class MongoDBDatabase:
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
         try:
+            # Bei Upsert in gescopten Collections sicherstellen, dass 'department' gesetzt wird
+            if upsert and collection_name in self._SCOPED_COLLECTIONS:
+                current_department = self._get_current_department()
+                # Nicht für globale Settings 'departments'
+                is_global_departments = (collection_name == 'settings' and isinstance(filter_dict, dict) and filter_dict.get('key') == 'departments')
+                if current_department and not is_global_departments:
+                    if '$set' in update_dict:
+                        update_dict['$set']['department'] = current_department
+                    else:
+                        update_dict = {'$set': {**update_dict, 'department': current_department}}
             result = collection.update_one(processed_filter, update_dict, upsert=upsert)
             
             # Debug-Logs für bessere Fehlerdiagnose
@@ -359,6 +377,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         return list(collection.distinct(field, processed_filter))
     

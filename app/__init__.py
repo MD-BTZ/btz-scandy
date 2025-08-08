@@ -268,8 +268,23 @@ def create_app(test_config=None):
     # ===== Department aus Session in Request-Context laden =====
     @app.before_request
     def load_current_department():
+        """Lädt das aktuelle Department in den Request-Context.
+        Fallback: Wenn nichts in der Session steht, verwende die Default‑Abteilung
+        des eingeloggten Benutzers (oder die erste erlaubte).
+        """
         try:
             dept = session.get('department')
+            # Falls kein Department in der Session: aus Benutzerprofil ableiten
+            if not dept and current_user.is_authenticated:
+                try:
+                    from app.models.mongodb_database import mongodb
+                    user = mongodb.find_one('users', {'username': current_user.username})
+                    if user:
+                        dept = user.get('default_department') or (user.get('allowed_departments') or [None])[0]
+                        if dept:
+                            session['department'] = dept
+                except Exception:
+                    pass
             g.current_department = dept
         except Exception:
             g.current_department = None

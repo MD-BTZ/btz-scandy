@@ -44,6 +44,7 @@ class AdminSystemSettingsService:
             Liste der Kategorien
         """
         try:
+            # Kategorien sind abteilungs-spezifisch
             settings = mongodb.find_one('settings', {'key': 'categories'})
             if settings and 'value' in settings:
                 return settings['value']
@@ -61,6 +62,7 @@ class AdminSystemSettingsService:
             Liste der Standorte
         """
         try:
+            # Standorte sind abteilungs-spezifisch
             settings = mongodb.find_one('settings', {'key': 'locations'})
             if settings and 'value' in settings:
                 return settings['value']
@@ -78,6 +80,7 @@ class AdminSystemSettingsService:
             Liste der Ticket-Kategorien
         """
         try:
+            # Ticket-Kategorien sind abteilungs-spezifisch
             settings = mongodb.find_one('settings', {'key': 'ticket_categories'})
             if settings and 'value' in settings:
                 return settings['value']

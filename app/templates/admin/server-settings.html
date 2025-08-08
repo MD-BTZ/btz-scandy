@@ -177,6 +177,38 @@
         <!-- Rechte Spalte: System-Konfiguration -->
         <div class="space-y-6">
             
+            <!-- Abteilungen (Bereiche) verwalten -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-xl mb-4">
+                        <i class="fas fa-building text-primary mr-2"></i>
+                        Abteilungen (Bereiche)
+                    </h2>
+                    <p class="text-sm text-base-content/70 mb-4">Definiere Bereiche. Daten werden pro Abteilung logisch getrennt. Benutzerrechte vergibst du in der Benutzerverwaltung.</p>
+
+                    <div class="space-y-4">
+                        <!-- Abteilung hinzufügen -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <form id="addDepartmentForm" class="flex gap-2 items-end">
+                                <div class="form-control flex-1">
+                                    <label class="label"><span class="label-text">Neue Abteilung</span></label>
+                                    <input type="text" name="name" class="input input-bordered input-sm w-full" placeholder="z. B. Werkstatt, Verwaltung" required>
+                                </div>
+                                <button class="btn btn-primary btn-sm"><i class="fas fa-plus mr-2"></i>Hinzufügen</button>
+                            </form>
+                        </div>
+
+                        <!-- Abteilungs-Liste -->
+                        <div class="bg-base-200 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Vorhandene Abteilungen</h3>
+                            <div id="departmentsList" class="space-y-2 max-h-60 overflow-y-auto">
+                                <div class="text-sm text-base-content/60">Lade Abteilungen…</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- System-Labels -->
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
@@ -498,6 +530,7 @@ function closeIconSelector() {
 // Software-Verwaltung
 let softwareList = [];
 let userGroupsList = [];
+let departmentsList = [];
 
 // Software laden
 async function loadSoftware() {
@@ -731,6 +764,77 @@ function editUserGroup(id) {
 document.addEventListener('DOMContentLoaded', function() {
     loadSoftware();
     loadUserGroups();
+    loadDepartments();
 });
+
+// Abteilungen laden
+async function loadDepartments() {
+    try {
+        const res = await fetch('/admin/departments');
+        const data = await res.json();
+        if (data.success) {
+            departmentsList = (data.departments || []).map(d => d.name || d);
+            renderDepartments();
+        } else {
+            showToast('error', data.message || 'Fehler beim Laden der Abteilungen');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('error', 'Fehler beim Laden der Abteilungen');
+    }
+}
+
+function renderDepartments() {
+    const container = document.getElementById('departmentsList');
+    if (!container) return;
+    if (!departmentsList.length) {
+        container.innerHTML = '<p class="text-sm text-base-content/60">Keine Abteilungen definiert</p>';
+        return;
+    }
+    container.innerHTML = departmentsList.map(name => `
+        <div class="flex items-center justify-between p-2 bg-base-100 rounded border">
+            <div class="font-medium">${name}</div>
+            <button class="btn btn-error btn-xs" onclick="deleteDepartment('${name}')"><i class="fas fa-trash"></i></button>
+        </div>
+    `).join('');
+}
+
+// Abteilung hinzufügen
+document.getElementById('addDepartmentForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const res = await fetch('/admin/departments/add', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+            showToast('success', data.message || 'Abteilung hinzugefügt');
+            this.reset();
+            await loadDepartments();
+        } else {
+            showToast('error', data.message || 'Fehler beim Hinzufügen');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('error', 'Fehler beim Hinzufügen');
+    }
+});
+
+// Abteilung löschen
+async function deleteDepartment(name) {
+    if (!confirm(`Abteilung "${name}" löschen?`)) return;
+    try {
+        const res = await fetch(`/admin/departments/delete/${encodeURIComponent(name)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('success', data.message || 'Abteilung gelöscht');
+            await loadDepartments();
+        } else {
+            showToast('error', data.message || 'Fehler beim Löschen');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('error', 'Fehler beim Löschen');
+    }
+}
 </script>
 {% endblock %} 

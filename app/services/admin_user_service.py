@@ -94,7 +94,9 @@ class AdminUserService:
                 'email': user_data.get('email', ''),
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
-                'department': user_data.get('department', ''),
+                # Multi-Department Felder
+                'allowed_departments': user_data.get('allowed_departments', []),
+                'default_department': user_data.get('default_department', None),
                 'handlungsfelder': user_data.get('handlungsfelder', []),
                 'expiry_date': user_data.get('expiry_date', None),
                 'created_at': datetime.now(),
@@ -144,9 +146,10 @@ class AdminUserService:
                 'updated_at': datetime.now()
             }
             
-            # Aktualisierbare Felder (ohne Abteilung)
+            # Aktualisierbare Felder inkl. Multi-Department
             updatable_fields = ['username', 'role', 'is_active', 'timesheet_enabled', 
-                              'email', 'firstname', 'lastname', 'handlungsfelder', 'expiry_date']
+                              'email', 'firstname', 'lastname', 'handlungsfelder', 'expiry_date',
+                              'allowed_departments', 'default_department']
             
             for field in updatable_fields:
                 if field in user_data:
@@ -348,7 +351,7 @@ class AdminUserService:
                 'user_id': user_id,  # Verknüpfung zur Benutzer-ID
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
-                'department': user_data.get('department', ''),
+                'department': user_data.get('default_department', ''),
                 'email': user_data.get('email', ''),
                 'role': user_data.get('role', 'anwender'),
                 'created_at': datetime.now(),
@@ -400,8 +403,8 @@ class AdminUserService:
                 worker_update_data['lastname'] = user_update_data['lastname']
             if 'email' in user_update_data:
                 worker_update_data['email'] = user_update_data['email']
-            if 'department' in user_update_data:
-                worker_update_data['department'] = user_update_data['department']
+            if 'default_department' in user_update_data:
+                worker_update_data['department'] = user_update_data['default_department']
             
             # Aktualisiere Mitarbeiter-Eintrag
             mongodb.update_one('workers', 

@@ -266,35 +266,8 @@
 
 
 
-    <!-- Abteilungsverwaltung: eigene Zeile -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <!-- Abteilungen -->
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">
-                    <i class="fas fa-building text-primary"></i>
-                    Abteilungen
-                </h2>
-                <div class="overflow-y-auto max-h-64">
-                    <table class="table table-zebra w-full">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th class="text-right">Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody id="departmentsList">
-                            <!-- Dynamisch per JS -->
-                        </tbody>
-                    </table>
-                </div>
-                <form id="addDepartmentForm" class="mt-4 flex gap-2">
-                    <input type="text" name="name" class="input input-bordered flex-1" placeholder="Abteilung eingeben" required>
-                    <button type="submit" class="btn btn-primary btn-sm">Hinzufügen</button>
-                </form>
-            </div>
-        </div>
-
+    <!-- Verwaltung (Standorte, Kategorien, Handlungsfelder) – jetzt in System-Einstellungen verschoben -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <!-- Standorte -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
@@ -322,7 +295,7 @@
             </div>
         </div>
 
-                        <!-- Kategorien -->
+        <!-- Kategorien -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
@@ -349,7 +322,7 @@
             </div>
         </div>
 
-                        <!-- Handlungsfelder -->
+        <!-- Handlungsfelder -->
         <div class="card bg-base-100 shadow-xl">
             <div class="card-body">
                 <h2 class="card-title">
@@ -382,20 +355,18 @@
 
 {% block scripts %}
 {{ super() }}
+<!-- Trenddaten als JSON, damit kein Jinja in JS-Code stört -->
+<script id="consumable-trend-data" type="application/json">{{ (stats.consumable_trend if stats is defined and stats.consumable_trend is defined else {}) | tojson | safe }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Chart initialisieren wenn das Element existiert und Daten vorhanden sind
 function initChart() {
     const chartCanvas = document.getElementById('consumableTrendChart');
-    const trendData = '{{ stats.consumable_trend|tojson if stats is defined and stats.consumable_trend is defined else '' }}';
+    const trendEl = document.getElementById('consumable-trend-data');
     let trend = null;
     try {
-        if (trendData) {
-            trend = JSON.parse(trendData);
-        }
-    } catch (e) {
-        trend = null;
-    }
+        trend = trendEl ? JSON.parse(trendEl.textContent || '{}') : null;
+    } catch (e) { trend = null; }
     if (chartCanvas && trend && trend.labels && trend.datasets) {
         const ctx = chartCanvas.getContext('2d');
         new Chart(ctx, {
@@ -760,7 +731,7 @@ function returnTool(barcode) {
 
 // Initialisierung der Manager beim Laden der Seite
 document.addEventListener('DOMContentLoaded', function() {
-    DepartmentManager.init();
+    // Abteilungsblock entfernt – Verwaltung findet unter System‑Einstellungen statt
     LocationManager.init();
     CategoryManager.init();
     initChart();

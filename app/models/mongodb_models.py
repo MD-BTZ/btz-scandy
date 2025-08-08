@@ -846,8 +846,9 @@ class MongoDBTicket:
 def create_mongodb_indexes():
     """Erstellt alle notwendigen MongoDB-Indizes und initialisiert die Datenbank"""
     try:
-        # Werkzeuge-Indizes
-        mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'barcode', unique=True)
+        # Werkzeuge-Indizes (Unique pro Abteilung statt global)
+        # Entferne evtl. existierende globale Unique-Index-Konflikte NICHT aggressiv; create_index ist idempotent
+        mongodb.create_index(MongoDBTool.COLLECTION_NAME, [('department', 1), ('barcode', 1)], unique=True, sparse=True)
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'name')
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'category')
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'location')
@@ -857,15 +858,15 @@ def create_mongodb_indexes():
         # Compound-Index für Standort + Status
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, [('location', 1), ('status', 1)])
         
-        # Mitarbeiter-Indizes
-        mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'barcode', unique=True)
+        # Mitarbeiter-Indizes (Unique pro Abteilung)
+        mongodb.create_index(MongoDBWorker.COLLECTION_NAME, [('department', 1), ('barcode', 1)], unique=True, sparse=True)
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'lastname')
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'department')
         # Compound-Index für Abteilung + Name
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, [('department', 1), ('lastname', 1)])
         
-        # Verbrauchsmaterial-Indizes
-        mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'barcode', unique=True)
+        # Verbrauchsmaterial-Indizes (Unique pro Abteilung)
+        mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, [('department', 1), ('barcode', 1)], unique=True, sparse=True)
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'name')
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'category')
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'location')
@@ -911,8 +912,8 @@ def create_mongodb_indexes():
         # Compound-Index für Priorität + Status
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, [('priority', 1), ('status', 1)])
         
-        # Settings-Indizes
-        mongodb.create_index('settings', 'key', unique=True)
+        # Settings-Indizes (Key pro Abteilung), aber der Schlüssel 'departments' bleibt global
+        mongodb.create_index('settings', [('department', 1), ('key', 1)], unique=True, sparse=True)
         
         # Timesheets-Indizes
         mongodb.create_index('timesheets', 'user_id')
