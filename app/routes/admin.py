@@ -1707,11 +1707,14 @@ def manage_users():
             else:
                 flash(f'Warnung: {expired_count} Benutzerkonten sind abgelaufen und sollten überprüft werden!', 'warning')
         
-        return render_template('admin/users.html', users=users, expired_users=expired_users)
+        # Rollenrechte für Anzeige in der Rollenübersicht
+        from app.utils.permissions import get_role_permissions
+        role_permissions = get_role_permissions()
+        return render_template('admin/users.html', users=users, expired_users=expired_users, role_permissions=role_permissions)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Benutzer: {e}")
         flash('Fehler beim Laden der Benutzer', 'error')
-        return render_template('admin/users.html', users=[], expired_users=[])
+        return render_template('admin/users.html', users=[], expired_users=[], role_permissions={})
 
 @bp.route('/add_user', methods=['GET', 'POST'])
 @mitarbeiter_required

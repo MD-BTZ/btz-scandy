@@ -7,6 +7,11 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold">Benutzerverwaltung</h1>
         <div class="flex gap-2">
+            {% if has_permission(current_user.role, 'settings', 'manage') %}
+            <a href="{{ url_for('admin.role_permissions') }}" class="btn btn-outline">
+                <i class="fas fa-user-shield mr-2"></i>Rollen & Rechte
+            </a>
+            {% endif %}
 
             <form action="{{ url_for('admin.migrate_users_to_workers') }}" method="post" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -50,12 +55,11 @@
                         <span class="badge badge-error mr-2">Admin</span>
                         <span>Administrator</span>
                     </h3>
+                    {% set admin_perms = role_permissions.get('admin', {}) %}
                     <ul class="text-sm space-y-1">
-                        <li><i class="fas fa-check text-success mr-1"></i>Vollzugriff auf alle Funktionen</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Systemverwaltung</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Benutzerverwaltung</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Ticketverwaltung</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Manuelle Ausleihe</li>
+                        {% for area, actions in admin_perms.items() %}
+                        <li><i class="fas fa-check text-success mr-1"></i>{{ area }}: {{ actions|join(', ') }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
                 <!-- Mitarbeiter -->
@@ -64,12 +68,11 @@
                         <span class="badge badge-warning mr-2">Mitarbeiter</span>
                         <span>Mitarbeiter</span>
                     </h3>
+                    {% set mit_perms = role_permissions.get('mitarbeiter', {}) %}
                     <ul class="text-sm space-y-1">
-                        <li><i class="fas fa-check text-success mr-1"></i>{{ app_labels.tools.name }}-Übersicht</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>{{ app_labels.consumables.name }}-Übersicht</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Manuelle Ausleihe</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine Benutzerverwaltung</li>
+                        {% for area, actions in mit_perms.items() %}
+                        <li><i class="fas fa-check text-success mr-1"></i>{{ area }}: {{ actions|join(', ') }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
                 <!-- Anwender -->
@@ -78,13 +81,11 @@
                         <span class="badge badge-info mr-2">Anwender</span>
                         <span>Benutzer</span>
                     </h3>
+                    {% set ben_perms = role_permissions.get('benutzer', {}) %}
                     <ul class="text-sm space-y-1">
-                        <li><i class="fas fa-check text-success mr-1"></i>{{ app_labels.tools.name }}-Übersicht</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>{{ app_labels.consumables.name }}-Übersicht</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Wochenberichte erstellen</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine Mitarbeiter-Funktionen</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine manuelle Ausleihe</li>
+                        {% for area, actions in ben_perms.items() %}
+                        <li><i class="fas fa-check text-success mr-1"></i>{{ area }}: {{ actions|join(', ') }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
                 <!-- Teilnehmer -->
@@ -93,14 +94,11 @@
                         <span class="badge badge-secondary mr-2">Teilnehmer</span>
                         <span>Teilnehmer</span>
                     </h3>
+                    {% set teil_perms = role_permissions.get('teilnehmer', {}) %}
                     <ul class="text-sm space-y-1">
-                        <li><i class="fas fa-check text-success mr-1"></i>Wochenberichte erstellen</li>
-                        <li><i class="fas fa-check text-success mr-1"></i>Auftragserstellung</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Kein Admin-Zugriff</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine Mitarbeiter-Funktionen</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine {{ app_labels.tools.name }}-Übersicht</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Keine {{ app_labels.consumables.name }}-Übersicht</li>
-                        <li><i class="fas fa-times text-error mr-1"></i>Kein Quickscan</li>
+                        {% for area, actions in teil_perms.items() %}
+                        <li><i class="fas fa-check text-success mr-1"></i>{{ area }}: {{ actions|join(', ') }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
             </div>
