@@ -4,42 +4,53 @@
 <div class="p-4">
   <h1 class="text-2xl font-bold mb-4">Rollen & Berechtigungen</h1>
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
     <div class="overflow-x-auto bg-base-100 rounded-lg shadow p-4">
-      <table class="table">
+      {# Tabelle mit Rollen als Spalten-Gruppen und Aktionen als Unterspalten #}
+      <table class="table table-zebra w-full">
         <thead>
           <tr>
-            <th>Rolle</th>
-            <th>Bereich</th>
-            {% for action in actions %}
-            <th class="text-center">{{ action }}</th>
+            <th class="align-bottom" rowspan="2">Bereich</th>
+            {% for role in roles %}
+              <th class="text-center align-bottom border-l-2" colspan="{{ actions|length }}">
+                {{ role|capitalize }}
+              </th>
+            {% endfor %}
+          </tr>
+          <tr>
+            {% for role in roles %}
+              {% for action in actions %}
+                <th class="text-center border-l{% if loop.index0 == 0 %}-2{% endif %}">{{ action }}</th>
+              {% endfor %}
             {% endfor %}
           </tr>
         </thead>
         <tbody>
-        {% for role in roles %}
           {% for area in areas %}
           <tr>
-            {% if loop.index0 == 0 %}
-              <td rowspan="{{ areas|length }}" class="align-top font-semibold">{{ role }}</td>
-            {% endif %}
-            <td class="font-medium">{{ area }}</td>
-            {% for action in actions %}
-              {% set checked = action in (permissions.get(role, {}).get(area, [])) %}
-              <td class="text-center">
-                <input type="checkbox" name="perm[{{ role }}][{{ area }}][{{ action }}]"
-                       class="checkbox checkbox-sm" {% if checked %}checked{% endif %}
-                       {% if role == 'admin' %}disabled{% endif %}>
-              </td>
+            <td class="font-medium sticky left-0 bg-base-100">{{ area }}</td>
+            {% for role in roles %}
+              {% for action in actions %}
+                {% set checked = action in (permissions.get(role, {}).get(area, [])) %}
+                <td class="text-center border-l{% if loop.index0 == 0 %}-2{% endif %}">
+                  <input type="checkbox"
+                         name="perm[{{ role }}][{{ area }}][{{ action }}]"
+                         class="checkbox checkbox-sm"
+                         {% if checked %}checked{% endif %}
+                         {% if role == 'admin' %}disabled{% endif %}>
+                </td>
+              {% endfor %}
             {% endfor %}
           </tr>
           {% endfor %}
-        {% endfor %}
         </tbody>
       </table>
     </div>
+
     <div class="mt-4 flex gap-2">
       <button class="btn btn-primary" type="submit"><i class="fas fa-save mr-2"></i>Speichern</button>
-      <a class="btn" href="{{ url_for('admin.dashboard') }}">Abbrechen</a>
+      <a class="btn" href="{{ url_for('admin.manage_users') }}">Abbrechen</a>
     </div>
   </form>
 </div>
