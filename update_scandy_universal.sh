@@ -110,6 +110,39 @@ detect_install_mode() {
     fi
 }
 
+# Service-Namen für systemd bestimmen (einheitlich)
+get_service_name() {
+    local instance_name="$1"
+    if [ -z "$instance_name" ] || [ "$instance_name" = "scandy" ]; then
+        echo "scandy"
+    else
+        echo "scandy-$instance_name"
+    fi
+}
+
+# Git Safe Directory setzen (für Root und scandy)
+ensure_git_safe_dir() {
+    local dir="$1"
+    git config --global --add safe.directory "$dir" 2>/dev/null || true
+    if id scandy &>/dev/null; then
+        sudo -u scandy git config --global --add safe.directory "$dir" 2>/dev/null || true
+    fi
+}
+
+# Sitzungspfad und Berechtigungen sicherstellen
+ensure_runtime_dirs() {
+    local base="/opt/scandy/app"
+    sudo -u scandy mkdir -p "$base/flask_session" 2>/dev/null || sudo mkdir -p "$base/flask_session"
+    sudo chown -R scandy:scandy "$base/flask_session" 2>/dev/null || true
+    sudo find "$base/flask_session" -type d -exec chmod 700 {} + 2>/dev/null || true
+    sudo find "$base/flask_session" -type f -exec chmod 600 {} + 2>/dev/null || true
+    # häufig benötigte Verzeichnisse
+    for d in uploads backups logs; do
+        sudo -u scandy mkdir -p "$base/$d" 2>/dev/null || sudo mkdir -p "$base/$d"
+        sudo chown -R scandy:scandy "$base/$d" 2>/dev/null || true
+    done
+}
+
 # MongoDB-URI korrigieren falls nötig
 fix_mongodb_uri() {
     log_step "Prüfe MongoDB-URI Konfiguration..."
@@ -404,29 +437,34 @@ update_native() {
     
     # Service stoppen
     INSTANCE_NAME=$(grep "INSTANCE_NAME=" .env | cut -d'=' -f2 2>/dev/null || echo "scandy")
-    log_info "Stoppe Service scandy-$INSTANCE_NAME..."
-    sudo systemctl stop scandy-$INSTANCE_NAME
+    SERVICE_NAME=$(get_service_name "$INSTANCE_NAME")
+    log_info "Stoppe Service $SERVICE_NAME..."
+    sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
     
     # Code aktualisieren
     log_info "Aktualisiere Code..."
     cd /opt/scandy
+    ensure_git_safe_dir "/opt/scandy"
     git pull || log_warning "Git pull fehlgeschlagen"
     
     # Dependencies aktualisieren
     log_info "Aktualisiere Python-Pakete..."
     sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+
+    # Laufzeitverzeichnisse & Berechtigungen
+    ensure_runtime_dirs
     
     # Service starten
     log_info "Starte Service..."
-    sudo systemctl start scandy-$INSTANCE_NAME
+    sudo systemctl start "$SERVICE_NAME"
     
     # Status prüfen
     sleep 5
-    if systemctl is-active --quiet scandy-$INSTANCE_NAME; then
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
         log_success "Native Update abgeschlossen"
     else
         log_error "Service konnte nicht gestartet werden"
-        sudo systemctl status scandy-$INSTANCE_NAME
+        sudo systemctl status "$SERVICE_NAME"
     fi
 }
 
@@ -441,6 +479,7 @@ update_lxc() {
     # Code aktualisieren
     log_info "Aktualisiere Code..."
     cd /opt/scandy
+    ensure_git_safe_dir "/opt/scandy"
     git pull || log_warning "Git pull fehlgeschlagen"
     
     # Stelle sicher, dass alle Dateien korrekt kopiert sind
@@ -463,6 +502,9 @@ update_lxc() {
     # Dependencies aktualisieren
     log_info "Aktualisiere Python-Pakete..."
     sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+
+    # Laufzeitverzeichnisse & Berechtigungen
+    ensure_runtime_dirs
     
     # Service starten
     log_info "Starte Scandy..."
