@@ -463,6 +463,7 @@ def create_app(test_config=None):
     @app.context_processor
     def utility_processor():
         """Injiziert Farben für Status und Prioritäten in alle Templates"""
+        from flask_wtf.csrf import generate_csrf
         return {
             'status_colors': {
                 'offen': 'danger',
@@ -476,7 +477,8 @@ def create_app(test_config=None):
                 'normal': 'primary',
                 'hoch': 'error',
                 'dringend': 'error'
-            }
+            },
+            'csrf_token': generate_csrf
         }
     
     # ===== CONTEXT PROCESSOR FÜR FEATURE-EINSTELLUNGEN =====

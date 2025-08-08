@@ -382,24 +382,41 @@ class MongoDBDatabase:
         
         return list(collection.distinct(field, processed_filter))
     
-    def create_index(self, collection_name: str, field: str, unique: bool = False, sparse: bool = False):
-        """Erstellt einen Index für eine Collection"""
+    def create_index(self, collection_name: str, field: Union[str, List[tuple]], unique: bool = False, sparse: bool = False, expire_after_seconds: Optional[int] = None):
+        """Erstellt einen Index für eine Collection.
+        Unterstützt auch TTL-Indizes via expire_after_seconds.
+        """
         collection = self.get_collection(collection_name)
         try:
-            # Prüfe ob Index bereits existiert
-            existing_indexes = collection.list_indexes()
-            index_name = f"{field}_1"
-            
-            for index in existing_indexes:
-                if index['name'] == index_name:
-                    # Index existiert bereits, überspringe
-                    return
-            
-            # Erstelle Index nur wenn er nicht existiert
-            collection.create_index(field, unique=unique, sparse=sparse)
+            # Versuche vorhandene Indizes zu finden (Best effort; bei Compound stimmt der einfache Name evtl. nicht)
+            try:
+                existing_indexes = list(collection.list_indexes())
+            except Exception:
+                existing_indexes = []
+
+            # Bestimme einen erwarteten Namen nur für Single-Field-Strings
+            expected_name = None
+            if isinstance(field, str):
+                expected_name = f"{field}_1"
+
+            if expected_name:
+                for index in existing_indexes:
+                    if index.get('name') == expected_name:
+                        return
+
+            # Index erstellen (TTL falls expire_after_seconds gesetzt ist)
+            collection.create_index(
+                field,
+                unique=unique,
+                sparse=sparse,
+                expireAfterSeconds=expire_after_seconds if expire_after_seconds is not None else None
+            )
         except Exception as e:
-            # Ignoriere Fehler wenn Index bereits existiert
-            if "already exists" not in str(e) and "IndexKeySpecsConflict" not in str(e):
+            # Ignoriere bekannte Konflikte
+            message = str(e)
+            if ("already exists" not in message and 
+                "IndexKeySpecsConflict" not in message and 
+                "InvalidIndexSpecificationOption" not in message):
                 raise e
     
     def drop_collection(self, collection_name: str):

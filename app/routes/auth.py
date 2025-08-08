@@ -23,6 +23,7 @@ from datetime import datetime
 from bson import ObjectId
 from typing import Union
 import logging
+import re
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 mongodb = MongoDB()
@@ -80,13 +81,21 @@ def login():
         # ===== INPUT-VALIDIERUNG =====
         errors = []
         
-        # Benutzername-Validierung
+        # Benutzername/E-Mail-Validierung
+        is_email_login = '@' in username
         if not username:
-            errors.append('Benutzername ist erforderlich.')
-        elif len(username) > 50:
-            errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
-        elif not username.replace('_', '').replace('-', '').isalnum():
-            errors.append('Benutzername darf nur Buchstaben, Zahlen, Unterstriche und Bindestriche enthalten.')
+            errors.append('Benutzername oder E-Mail ist erforderlich.')
+        elif is_email_login:
+            # Sehr einfache E-Mail-Prüfung (keine harte RFC-Validierung)
+            if len(username) > 254 or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', username):
+                errors.append('E-Mail-Format ist ungültig.')
+        else:
+            if len(username) > 50:
+                errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
+            else:
+                # Erlaube Buchstaben, Zahlen, Unterstrich, Bindestrich und Punkt
+                if not re.match(r'^[A-Za-z0-9._-]+$', username):
+                    errors.append('Benutzername darf nur Buchstaben, Zahlen, Unterstriche, Bindestriche und Punkte enthalten.')
         
         # Passwort-Validierung
         if not password:
@@ -109,7 +118,15 @@ def login():
         pass
         
         # ===== BENUTZER VALIDIEREN =====
-        user_data = MongoDBUser.get_by_username(username)
+        if is_email_login:
+            # Case-insensitive Suche nach E-Mail
+            try:
+                pattern = {'$regex': f'^{re.escape(username)}$', '$options': 'i'}
+                user_data = mongodb.find_one('users', {'email': pattern})
+            except Exception:
+                user_data = None
+        else:
+            user_data = MongoDBUser.get_by_username(username)
             
         from app.utils.auth_utils import check_password_compatible
         if user_data and check_password_compatible(user_data['password_hash'], password):

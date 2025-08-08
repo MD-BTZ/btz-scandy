@@ -98,10 +98,15 @@ class AdminUserService:
                 'allowed_departments': user_data.get('allowed_departments', []),
                 'default_department': user_data.get('default_department', None),
                 'handlungsfelder': user_data.get('handlungsfelder', []),
-                'expiry_date': user_data.get('expiry_date', None),
+                # Neues, einfaches Löschdatum
+                'delete_at': user_data.get('delete_at', None),
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
+
+            # Standard: Für Teilnehmer ohne explizites Datum -> 1 Jahr
+            if new_user.get('role') == 'teilnehmer' and not new_user.get('delete_at'):
+                new_user['delete_at'] = datetime.now() + timedelta(days=365)
             
             # Benutzer in Datenbank speichern
             user_id = mongodb.insert_one('users', new_user)
@@ -148,7 +153,7 @@ class AdminUserService:
             
             # Aktualisierbare Felder inkl. Multi-Department
             updatable_fields = ['username', 'role', 'is_active', 'timesheet_enabled', 
-                              'email', 'firstname', 'lastname', 'handlungsfelder', 'expiry_date',
+                              'email', 'firstname', 'lastname', 'handlungsfelder', 'delete_at',
                               'allowed_departments', 'default_department']
             
             for field in updatable_fields:
@@ -181,7 +186,7 @@ class AdminUserService:
             # Benutzer aktualisieren
             mongodb.update_one('users', {'_id': user_id}, {'$set': update_data})
             
-            # Synchronisiere Mitarbeiter-Eintrag falls vorhanden
+            # Synchronisiere Mitarbeiter-Eintrag falls vorhanden (inkl. delete_at)
             AdminUserService._sync_worker_from_user(user_id, update_data)
             
             logger.info(f"Benutzer aktualisiert: {user.get('username', 'Unknown')} (ID: {user_id})")
@@ -405,6 +410,8 @@ class AdminUserService:
                 worker_update_data['email'] = user_update_data['email']
             if 'default_department' in user_update_data:
                 worker_update_data['department'] = user_update_data['default_department']
+            if 'delete_at' in user_update_data:
+                worker_update_data['delete_at'] = user_update_data['delete_at']
             
             # Aktualisiere Mitarbeiter-Eintrag
             mongodb.update_one('workers', 

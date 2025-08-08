@@ -864,6 +864,11 @@ def create_mongodb_indexes():
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'department')
         # Compound-Index für Abteilung + Name
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, [('department', 1), ('lastname', 1)])
+        # TTL für geplante Löschung von Workern (falls mit User gekoppelt)
+        try:
+            mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'delete_at', expire_after_seconds=0)
+        except Exception:
+            pass
         
         # Verbrauchsmaterial-Indizes (Unique pro Abteilung)
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, [('department', 1), ('barcode', 1)], unique=True, sparse=True)
@@ -898,6 +903,12 @@ def create_mongodb_indexes():
         mongodb.create_index(MongoDBUser.COLLECTION_NAME, 'email')
         # Compound-Index für Rolle + Aktivität
         mongodb.create_index(MongoDBUser.COLLECTION_NAME, [('role', 1), ('is_active', 1)])
+        # TTL für geplante Löschung (löscht Dokumente automatisch nach Erreichen von delete_at)
+        # Hinweis: delete_at muss als echtes Date-Feld gespeichert werden
+        try:
+            mongodb.create_index(MongoDBUser.COLLECTION_NAME, 'delete_at', expire_after_seconds=0)
+        except Exception:
+            pass
         
         # Ticket-Indizes
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'status')
