@@ -378,6 +378,14 @@ def create_app(test_config=None):
             'consumable_system_name': app.config['CONSUMABLE_SYSTEM_NAME']
         }
     
+    # ===== STANDARD-ROLLENRECHTE SICHERSTELLEN =====
+    try:
+        from app.utils.permissions import ensure_default_role_permissions
+        with app.app_context():
+            ensure_default_role_permissions()
+    except Exception as e:
+        logging.warning(f"Konnte Default-Rollenrechte nicht sicherstellen: {e}")
+
     # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
     
@@ -492,5 +500,16 @@ def create_app(test_config=None):
         except Exception as e:
             app.logger.warning(f"Fehler beim Laden der Feature-Einstellungen: {e}")
             return {'feature_settings': {}}
+
+    # ===== CONTEXT PROCESSOR FÜR BERECHTIGUNGEN =====
+    @app.context_processor
+    def permissions_processor():
+        """Stellt has_permission für Templates bereit."""
+        try:
+            from app.utils.permissions import has_permission
+            return {'has_permission': has_permission}
+        except Exception:
+            # Fallback: alles false (UI blendet dann Buttons aus)
+            return {'has_permission': lambda *args, **kwargs: False}
 
     return app

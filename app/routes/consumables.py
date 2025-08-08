@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
+from app.utils.permissions import permission_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @bp.route('/')
 @login_required
+@permission_required('consumables', 'view')
 @not_teilnehmer_required
 def index():
     """Zeigt alle Verbrauchsmaterialien an"""
@@ -44,6 +46,7 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('consumables', 'create')
 def add():
     """Fügt ein neues Verbrauchsmaterial hinzu"""
     if request.method == 'POST':
@@ -95,6 +98,7 @@ def add():
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @login_required
+@permission_required('consumables', 'edit')
 def detail(barcode):
     """Zeigt die Details eines Verbrauchsmaterials und verarbeitet Updates"""
     if request.method == 'POST':
@@ -165,6 +169,7 @@ def detail(barcode):
 
 @bp.route('/<barcode>/adjust-stock', methods=['POST'])
 @login_required
+@permission_required('consumables', 'edit')
 def adjust_stock(barcode):
     """Passt den Bestand eines Verbrauchsmaterials an"""
     try:
@@ -183,6 +188,7 @@ def adjust_stock(barcode):
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
 @login_required
+@permission_required('consumables', 'delete')
 def delete(barcode):
     """Löscht ein Verbrauchsmaterial"""
     try:
@@ -197,6 +203,7 @@ def delete(barcode):
 
 @bp.route('/<barcode>/forecast')
 @login_required
+@permission_required('consumables', 'view')
 def forecast(barcode):
     """Zeigt eine Vorhersage für ein Verbrauchsmaterial an"""
     try:
@@ -211,6 +218,7 @@ def forecast(barcode):
 
 @bp.route('/export')
 @login_required
+@permission_required('consumables', 'export')
 def export():
     """Exportiert alle Verbrauchsmaterialien als CSV"""
     try:

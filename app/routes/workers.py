@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.models.mongodb_models import MongoDBWorker
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required, teilnehmer_required
+from app.utils.permissions import permission_required
 from app.utils.database_helpers import get_departments_from_settings
 from datetime import datetime, timedelta
 from flask_login import current_user
@@ -60,6 +61,7 @@ def find_document_by_id(collection: str, id_value: str):
 
 @bp.route('/')
 @mitarbeiter_required
+@permission_required('workers', 'view')
 def index():
     """Zeigt die Mitarbeiter-Übersicht an"""
     try:
@@ -118,6 +120,7 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
+@permission_required('workers', 'create')
 def add():
     # Lade Abteilungen
     departments = get_departments_from_settings()
@@ -180,6 +183,7 @@ def add():
 
 @bp.route('/<string:original_barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
+@permission_required('workers', 'view')
 def details(original_barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
@@ -392,6 +396,7 @@ def details(original_barcode):
 
 @bp.route('/<barcode>/edit', methods=['POST'])
 @mitarbeiter_required
+@permission_required('workers', 'edit')
 def edit(barcode):
     """Bearbeitet einen Mitarbeiter über Modal"""
     try:
@@ -454,6 +459,7 @@ def edit(barcode):
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
+@permission_required('workers', 'delete')
 def delete_by_barcode(barcode):
     """Löscht einen Mitarbeiter (Soft Delete)"""
     try:

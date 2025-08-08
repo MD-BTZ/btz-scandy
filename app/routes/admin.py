@@ -39,6 +39,7 @@ from app.services.admin_debug_service import AdminDebugService
 from app.services.admin_system_settings_service import AdminSystemSettingsService
 from app.services.excel_export_service import ExcelExportService
 from app.services.custom_fields_service import CustomFieldsService
+from app.utils.permissions import get_role_permissions, set_role_permissions
 
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
@@ -2553,6 +2554,61 @@ def feature_settings():
     except Exception as e:
         logger.error(f"Fehler beim Laden der Feature-Einstellungen: {str(e)}")
         flash('Fehler beim Laden der Feature-Einstellungen', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+
+@bp.route('/role_permissions', methods=['GET', 'POST'])
+@admin_required
+def role_permissions():
+    """Rollen- und Berechtigungs-Matrix verwalten."""
+    try:
+        if request.method == 'POST':
+            # Erwartet JSON im Formularfeld 'permissions' oder einzelne Checkboxen
+            if request.is_json:
+                payload = request.get_json()
+                permissions = payload.get('permissions', {})
+            else:
+                # Aus HTML-Form-Checkboxen zusammensetzen: name="perm[role][area][action]"
+                permissions = get_role_permissions()
+                # Flaches Formular in Matrix zurückschreiben
+                for key, value in request.form.items():
+                    if not key.startswith('perm[') or value != 'on':
+                        continue
+                    try:
+                        # perm[role][area][action]
+                        parts = key.split('[')
+                        role = parts[1][:-1]
+                        area = parts[2][:-1]
+                        action = parts[3][:-1]
+                        permissions.setdefault(role, {}).setdefault(area, [])
+                        if action not in permissions[role][area]:
+                            permissions[role][area].append(action)
+                    except Exception:
+                        continue
+
+            # Guardrail: Admin immer alles
+            from app.utils.permissions import DEFAULT_ROLE_PERMISSIONS
+            permissions['admin'] = DEFAULT_ROLE_PERMISSIONS['admin']
+
+            if set_role_permissions(permissions):
+                flash('Berechtigungen erfolgreich gespeichert', 'success')
+            else:
+                flash('Fehler beim Speichern der Berechtigungen', 'error')
+            return redirect(url_for('admin.role_permissions'))
+
+        # GET: aktuelle Matrix anzeigen
+        permissions = get_role_permissions()
+        areas = sorted({a for r in permissions.values() for a in r.keys()})
+        actions = sorted({act for r in permissions.values() for acts in r.values() for act in acts})
+        roles = sorted(permissions.keys())
+        return render_template('admin/role_permissions.html',
+                               permissions=permissions,
+                               roles=roles,
+                               areas=areas,
+                               actions=actions)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Rollenrechte: {str(e)}")
+        flash('Fehler beim Laden der Rollenrechte', 'error')
         return redirect(url_for('admin.dashboard'))
 
 # =============================================================================

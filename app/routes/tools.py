@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.services.tool_service import ToolService
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
+from app.utils.permissions import permission_required
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 from datetime import datetime
 import logging
@@ -58,6 +59,7 @@ def get_user_groups():
 
 @bp.route('/')
 @login_required
+@permission_required('tools', 'view')
 def index():
     """Werkzeuge-Übersicht"""
     # Prüfe ob Werkzeuge-Feature aktiviert ist
@@ -93,6 +95,7 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('tools', 'create')
 @not_teilnehmer_required
 def add():
     """Neues Werkzeug hinzufügen"""
@@ -211,6 +214,7 @@ def add():
 
 @bp.route('/<barcode>')
 @login_required
+@permission_required('tools', 'view')
 def detail(barcode):
     """Zeigt die Details eines Werkzeugs"""
     try:
@@ -248,6 +252,7 @@ def detail(barcode):
 
 @bp.route('/<barcode>/edit', methods=['POST'])
 @login_required
+@permission_required('tools', 'edit')
 def edit(barcode):
     """Bearbeitet ein Werkzeug über Modal"""
     try:
@@ -323,6 +328,7 @@ def edit(barcode):
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required
+@permission_required('tools', 'edit')
 def change_status(barcode):
     """Ändert den Status eines Werkzeugs"""
     try:
@@ -343,6 +349,7 @@ def change_status(barcode):
 
 @bp.route('/<string:barcode>/delete', methods=['POST'])
 @login_required
+@permission_required('tools', 'delete')
 @admin_required
 def delete(barcode):
     """Löscht ein Werkzeug"""
@@ -472,6 +479,7 @@ def by_status(status):
 
 @bp.route('/statistics')
 @login_required
+@permission_required('tools', 'export')
 @admin_required
 def statistics():
     """Zeigt Werkzeug-Statistiken"""
@@ -491,6 +499,7 @@ def statistics():
 
 @bp.route('/export')
 @login_required
+@permission_required('tools', 'export')
 @admin_required
 def export():
     """Exportiert Werkzeuge als CSV"""
