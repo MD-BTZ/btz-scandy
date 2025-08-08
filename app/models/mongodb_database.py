@@ -11,9 +11,9 @@ import json
 from typing import Dict, List, Any, Optional, Union
 import os
 import time
+from flask import g
 
-# Logger deaktiviert für Gunicorn-Kompatibilität
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 class MongoDBDatabase:
     """MongoDB-Datenbankklasse für Scandy"""
@@ -69,6 +69,50 @@ class MongoDBDatabase:
         if self._db is None:
             self._connect()
         return self._db[collection_name]
+
+    # --- Multi-Department Scoping (abwärtskompatibel) ---
+    _SCOPED_COLLECTIONS = {
+        'tools', 'consumables', 'workers', 'lendings', 'consumable_usage',
+        'tickets', 'messages', 'ticket_history', 'timesheets', 'homepage_notices',
+        'settings'
+    }
+
+    @staticmethod
+    def _get_current_department() -> Optional[str]:
+        try:
+            return getattr(g, 'current_department', None)
+        except Exception:
+            return None
+
+    @classmethod
+    def _augment_filter_with_department(cls, collection_name: str, base_filter: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Erzwingt Department-Scoping für lesende/ändernde Operationen.
+        Abwärtskompatibel: Matcht auch Dokumente ohne 'department'-Feld.
+        """
+        if collection_name not in cls._SCOPED_COLLECTIONS:
+            return base_filter or {}
+        current_department = cls._get_current_department()
+        if not current_department:
+            # Ohne gesetztes Department: alle Dokumente zulassen (Legacy-Modus)
+            return base_filter or {}
+        scoped_clause = {'$or': [
+            {'department': current_department},
+            {'department': {'$exists': False}}
+        ]}
+        if not base_filter:
+            return scoped_clause
+        # Kombiniere mit AND
+        return {'$and': [base_filter, scoped_clause]}
+
+    @classmethod
+    def _ensure_department_on_insert(cls, collection_name: str, document: Dict[str, Any]) -> Dict[str, Any]:
+        if collection_name not in cls._SCOPED_COLLECTIONS:
+            return document
+        current_department = cls._get_current_department()
+        if current_department and 'department' not in document:
+            document['department'] = current_department
+        return document
     
     def insert_one(self, collection_name: str, document: Dict[str, Any]) -> str:
         """Fügt ein Dokument in eine Collection ein"""
@@ -77,6 +121,9 @@ class MongoDBDatabase:
         # Timestamps hinzufügen
         document['created_at'] = datetime.now()
         document['updated_at'] = datetime.now()
+
+        # Department setzen (falls relevant)
+        document = self._ensure_department_on_insert(collection_name, document)
         
         result = collection.insert_one(document)
         return str(result.inserted_id)
@@ -89,6 +136,7 @@ class MongoDBDatabase:
         for doc in documents:
             doc['created_at'] = datetime.now()
             doc['updated_at'] = datetime.now()
+            doc = self._ensure_department_on_insert(collection_name, doc)
         
         result = collection.insert_many(documents)
         return [str(id) for id in result.inserted_ids]
@@ -99,6 +147,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.find_one(processed_filter)
         
@@ -118,6 +168,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         cursor = collection.find(processed_filter)
         
@@ -145,6 +197,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         # Prüfe ob update_dict bereits MongoDB-Operatoren enthält
         has_operators = any(key.startswith('$') for key in update_dict.keys())
@@ -234,7 +288,10 @@ class MongoDBDatabase:
             # Erstelle $set Modifier falls nicht vorhanden
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
-        result = collection.update_many(filter_dict, update_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
+        result = collection.update_many(processed_filter, update_dict)
         return result.modified_count
     
     def delete_one(self, collection_name: str, filter_dict: Dict[str, Any]) -> bool:
@@ -243,6 +300,7 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.delete_one(processed_filter)
         return result.deleted_count > 0
@@ -253,6 +311,7 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.delete_many(processed_filter)
         return result.deleted_count
@@ -266,12 +325,21 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         return collection.count_documents(processed_filter)
     
     def aggregate(self, collection_name: str, pipeline: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Führt eine Aggregation-Pipeline aus"""
         collection = self.get_collection(collection_name)
+        # Department-Scoping vorschalten (abwärtskompatibel)
+        current_department = self._get_current_department()
+        if collection_name in self._SCOPED_COLLECTIONS and current_department:
+            scoped_match = {'$match': {'$or': [
+                {'department': current_department},
+                {'department': {'$exists': False}}
+            ]}}
+            pipeline = [scoped_match] + (pipeline or [])
         cursor = collection.aggregate(pipeline)
         
         results = []

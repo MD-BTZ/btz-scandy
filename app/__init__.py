@@ -36,6 +36,7 @@ from dotenv import load_dotenv
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask import g, session
 
 # .env-Datei laden
 load_dotenv()
@@ -263,6 +264,15 @@ def create_app(test_config=None):
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
     
     Session(app)
+
+    # ===== Department aus Session in Request-Context laden =====
+    @app.before_request
+    def load_current_department():
+        try:
+            dept = session.get('department')
+            g.current_department = dept
+        except Exception:
+            g.current_department = None
     
     @login_manager.user_loader
     def load_user(user_id):

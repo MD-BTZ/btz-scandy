@@ -4,6 +4,8 @@ from app.config.version import VERSION
 import traceback
 import logging
 from app.models.mongodb_database import mongodb
+from flask_login import current_user
+from flask import g
 
 # Import mit try-except um Circular Imports zu vermeiden
 try:
@@ -235,3 +237,25 @@ def register_context_processors(app):
     app.context_processor(inject_unfilled_timesheet_days)
     app.context_processor(inject_feature_settings)
     app.context_processor(inject_custom_fields)
+    app.context_processor(inject_departments)
+
+def inject_departments():
+    """Injiziert Departments (Auswahl + aktuelles Department) in Templates.
+    Abwärtskompatibel: Wenn Benutzer kein Feld allowed_departments hat, wird nichts angezeigt.
+    """
+    try:
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return {'departments': {'allowed': [], 'current': None}}
+
+        # Benutzer lesen
+        user = mongodb.find_one('users', {'username': current_user.username})
+        allowed = user.get('allowed_departments', []) if user else []
+        current = getattr(g, 'current_department', None)
+        default = user.get('default_department') if user else None
+        if not current:
+            current = default
+        return {'departments': {'allowed': allowed, 'current': current}}
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Departments Context Fehler: {e}")
+        return {'departments': {'allowed': [], 'current': None}}

@@ -4965,6 +4965,24 @@ def email_settings():
         flash('Fehler beim Laden der E-Mail-Einstellungen.', 'error')
         return redirect(url_for('admin.dashboard'))
 
+@bp.route('/switch-department/<department>')
+@mitarbeiter_required
+def switch_department(department):
+    """Setzt das aktive Department in der Session, falls der Benutzer berechtigt ist."""
+    try:
+        user = mongodb.find_one('users', {'username': current_user.username})
+        allowed = user.get('allowed_departments', []) if user else []
+        if department in allowed:
+            session['department'] = department
+            flash(f'Aktives Department: {department}', 'success')
+        else:
+            flash('Keine Berechtigung für diese Abteilung', 'error')
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Fehler beim Wechseln des Departments: {e}")
+        flash('Fehler beim Wechseln des Departments', 'error')
+    return redirect(request.referrer or url_for('main.index'))
+
 @bp.route('/admin/email/diagnose', methods=['POST'])
 @login_required
 @admin_required
