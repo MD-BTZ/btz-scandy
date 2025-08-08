@@ -143,6 +143,32 @@ ensure_runtime_dirs() {
     done
 }
 
+# Quellcode-Verzeichnis ermitteln (für Kopieren aus Arbeitskopie)
+find_source_dir() {
+    # 1) Aktuelles Arbeitsverzeichnis (wenn es wie eine Scandy-Arbeitskopie aussieht)
+    local cwd="$(pwd)"
+    if [ -d "$cwd/app" ] && [ -f "$cwd/requirements.txt" ]; then
+        echo "$cwd"
+        return 0
+    fi
+    # 2) Übliche Pfade
+    for d in \
+        "/home/scandy/Scandy2" \
+        "/home/woschj/Scandy2" \
+        "/root/Scandy2" \
+        "/Scandy" \
+        "/scandy2" \
+        "/scandy"; do
+        if [ -d "$d/app" ] && [ -f "$d/requirements.txt" ]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    # 3) Kein Source gefunden
+    echo ""
+    return 1
+}
+
 # MongoDB-URI korrigieren falls nötig
 fix_mongodb_uri() {
     log_step "Prüfe MongoDB-URI Konfiguration..."
@@ -446,6 +472,23 @@ update_native() {
     cd /opt/scandy
     ensure_git_safe_dir "/opt/scandy"
     git pull || log_warning "Git pull fehlgeschlagen"
+
+    # Optional: Code aus Arbeitskopie nach /opt/scandy übernehmen (falls vorhanden)
+    SRC_DIR="$(find_source_dir)"
+    if [ -n "$SRC_DIR" ] && [ "$SRC_DIR" != "/opt/scandy" ]; then
+        log_info "Synchronisiere Code aus Arbeitskopie: $SRC_DIR -> /opt/scandy/app/"
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -av --delete \
+                --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+                "$SRC_DIR/app/" "/opt/scandy/app/"
+        else
+            # Fallback ohne rsync (kein --delete)
+            cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
+        fi
+        sudo chown -R scandy:scandy /opt/scandy/app || true
+    else
+        log_info "Keine separate Arbeitskopie gefunden – verwende Git-Stand in /opt/scandy"
+    fi
     
     # Dependencies aktualisieren
     log_info "Aktualisiere Python-Pakete..."
