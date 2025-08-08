@@ -380,32 +380,15 @@ check_system_compatibility() {
     log_step "Prüfe System-Kompatibilität..."
     
     # Betriebssystem erkennen
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        log_success "Linux-System erkannt"
-        
-        # Distribution ermitteln
-        if [ -f /etc/os-release ]; then
-            . /etc/os-release
-            log_info "Distribution: $NAME $VERSION"
-        fi
-        
-        # Architektur prüfen
-        ARCH=$(uname -m)
-        log_info "Architektur: $ARCH"
-        
-        if [[ "$ARCH" != "x86_64" && "$ARCH" != "aarch64" ]]; then
-            log_warning "Ungetestete Architektur: $ARCH"
-        fi
-        
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
         log_success "macOS erkannt"
-        
-    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
-        log_error "Windows wird nicht unterstützt!"
-        log_info "Bitte verwenden Sie WSL2 oder eine Linux-VM"
-        exit 1
+        OS_TYPE="macos"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        log_success "Linux erkannt"
+        OS_TYPE="linux"
     else
         log_warning "Unbekanntes Betriebssystem: $OSTYPE"
+        OS_TYPE="unknown"
     fi
     
     # Docker prüfen
@@ -429,6 +412,19 @@ check_system_compatibility() {
         DOCKER_CMD="docker"
     fi
     
+    # Docker Compose V2 prüfen
+    if command -v docker &> /dev/null; then
+        if docker compose version &> /dev/null 2>&1; then
+            log_success "Docker Compose V2 ist verfügbar"
+            DOCKER_COMPOSE_V2=true
+        else
+            log_warning "Docker Compose V2 ist nicht verfügbar"
+            DOCKER_COMPOSE_V2=false
+        fi
+    else
+        DOCKER_COMPOSE_V2=false
+    fi
+    
     # LXC-Umgebung prüfen
     if [ -f /.dockerenv ]; then
         log_info "Läuft in Docker-Container"
@@ -444,12 +440,17 @@ check_system_compatibility() {
         IN_LXC=false
     fi
     
-    # Systemd prüfen
-    if systemctl --version &> /dev/null; then
-        log_success "Systemd ist verfügbar"
-        SYSTEMD_AVAILABLE=true
+    # Systemd prüfen (nur auf Linux)
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        if systemctl --version &> /dev/null; then
+            log_success "Systemd ist verfügbar"
+            SYSTEMD_AVAILABLE=true
+        else
+            log_warning "Systemd ist nicht verfügbar"
+            SYSTEMD_AVAILABLE=false
+        fi
     else
-        log_warning "Systemd ist nicht verfügbar"
+        log_info "Systemd ist auf $OS_TYPE nicht verfügbar"
         SYSTEMD_AVAILABLE=false
     fi
     
@@ -462,12 +463,24 @@ check_system_compatibility() {
         HAS_ROOT=false
     fi
     
-    # Speicherplatz prüfen
-    AVAILABLE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
-    if [ "$AVAILABLE_SPACE" -lt 5 ]; then
-        log_warning "Wenig Speicherplatz verfügbar: ${AVAILABLE_SPACE}GB (empfohlen: 5GB+)"
+    # Speicherplatz prüfen (OS-spezifisch)
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        # macOS: df -g für GB
+        AVAILABLE_SPACE=$(df -g . | tail -1 | awk '{print $4}' | sed 's/Gi//')
     else
-        log_success "Ausreichend Speicherplatz verfügbar: ${AVAILABLE_SPACE}GB"
+        # Linux: df -BG für GB
+        AVAILABLE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+    fi
+    
+    # Prüfe ob AVAILABLE_SPACE eine Zahl ist
+    if [[ "$AVAILABLE_SPACE" =~ ^[0-9]+$ ]]; then
+        if [ "$AVAILABLE_SPACE" -lt 5 ]; then
+            log_warning "Wenig Speicherplatz verfügbar: ${AVAILABLE_SPACE}GB (empfohlen: 5GB+)"
+        else
+            log_success "Ausreichend Speicherplatz verfügbar: ${AVAILABLE_SPACE}GB"
+        fi
+    else
+        log_warning "Konnte verfügbaren Speicherplatz nicht ermitteln"
     fi
 }
 
@@ -1105,7 +1118,7 @@ uninstall_docker() {
     # Container stoppen und entfernen
     if command -v docker &> /dev/null; then
         log_info "Stoppe und entferne Container..."
-        $DOCKER_CMD compose down -v 2>/dev/null || true
+        $DOCKER_COMPOSE_CMD down -v 2>/dev/null || true
         
         # Images entfernen
         log_info "Entferne Docker Images..."
@@ -1473,6 +1486,9 @@ $([ -n "$DOMAIN" ] && echo "DOMAIN=$DOMAIN" || echo "# DOMAIN=")
 EOF
 
     log_success ".env-Datei erstellt"
+
+    # Zugangsdaten für Dokumentationszwecke protokollieren (sicher, nur lokal)
+    write_credentials_log
 }
 
 # SSL-Zertifikate einrichten
@@ -1492,11 +1508,19 @@ setup_ssl_certificates() {
     fi
 }
 
+# Docker Compose Befehl ermitteln
+get_docker_compose_cmd() {
+    if [ "$DOCKER_COMPOSE_V2" = true ]; then
+        echo "$DOCKER_CMD compose"
+    else
+        echo "$DOCKER_CMD-compose"
+    fi
+}
+
 # Docker-Installation
 install_docker() {
     log_step "Starte Docker-Installation..."
     
-    # Prüfe Docker
     if ! command -v docker &> /dev/null; then
         log_error "Docker ist nicht installiert!"
         log_info "Installiere Docker mit: curl -fsSL https://get.docker.com | sh"
@@ -1511,14 +1535,18 @@ install_docker() {
     
     log_success "Docker ist verfügbar"
     
+    # Docker Compose CMD ermitteln
+    DOCKER_COMPOSE_CMD=$(get_docker_compose_cmd)
+    log_info "Verwende Docker Compose: $DOCKER_COMPOSE_CMD"
+    
     # docker-compose.yml erstellen
     create_docker_compose
     
     # Container bauen und starten
     log_step "Baue und starte Container..."
-    $DOCKER_CMD compose down || true
-    $DOCKER_CMD compose build --no-cache
-    $DOCKER_CMD compose up -d
+    $DOCKER_COMPOSE_CMD down || true
+    $DOCKER_COMPOSE_CMD build --no-cache
+    $DOCKER_COMPOSE_CMD up -d
     
     # Warte auf Services
     wait_for_docker_services
@@ -1652,6 +1680,38 @@ networks:
 EOF
     
     log_success "HTTP docker-compose.yml erstellt"
+}
+
+# Initiale Zugangsdaten sicher in einer Textdatei hinterlegen
+# Die Datei landet in backups/credentials_<instance>_<timestamp>.txt mit chmod 600
+write_credentials_log() {
+    log_step "Protokolliere initiale Zugangsdaten..."
+
+    CRED_DIR="backups"
+    mkdir -p "$CRED_DIR"
+    CRED_FILE="$CRED_DIR/credentials_${INSTANCE_NAME}_$(date +%Y%m%d_%H%M%S).txt"
+
+    # Setze restriktive Rechte (Owner-only)
+    umask 077
+
+    {
+        echo "Scandy – Initiale Zugangsdaten"
+        echo "Erstellt: $(date)"
+        echo "Instanz: ${INSTANCE_NAME}"
+        echo
+        echo "[MongoDB]"
+        echo "MONGO_INITDB_ROOT_USERNAME=admin"
+        echo "MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}"
+        echo "MONGODB_DB=${MONGODB_DB:-scandy}"
+        echo "MONGODB_URI=${MONGODB_URI}"
+        echo
+        echo "[App]"
+        echo "SECRET_KEY=${SECRET_KEY}"
+        echo "FLASK_ENV=${FLASK_ENV}"
+    } > "$CRED_FILE"
+
+    chmod 600 "$CRED_FILE" || true
+    log_success "Zugangsdaten gespeichert in: $CRED_FILE"
 }
 
 # HTTPS docker-compose.yml erstellen
@@ -1949,13 +2009,13 @@ setup_python_environment() {
     
     # pip upgrade (mit besserem Error-Handling)
     log_info "Aktualisiere pip..."
-    if ! sudo -u scandy venv/bin/pip install --upgrade pip --no-warn-script-location; then
+    if ! sudo -u scandy /opt/scandy/venv/bin/pip install --upgrade pip --no-warn-script-location; then
         log_warning "pip-Upgrade fehlgeschlagen, verwende bestehende Version"
     fi
     
     # Requirements installieren
     log_info "Installiere Python-Abhängigkeiten..."
-    sudo -u scandy venv/bin/pip install -r requirements.txt --no-warn-script-location
+    sudo -u scandy /opt/scandy/venv/bin/pip install -r /opt/scandy/requirements.txt --no-warn-script-location
     
     log_success "Python-Umgebung eingerichtet"
 }
@@ -2086,7 +2146,7 @@ update_installation() {
     case $INSTALL_MODE in
         docker)
             log_info "Docker-Update..."
-            $DOCKER_CMD compose down
+            $DOCKER_COMPOSE_CMD down
             
             # Images entfernen aber Volumes behalten
             log_info "Entferne alte Images..."
@@ -2094,10 +2154,10 @@ update_installation() {
             
             # Requirements explizit neu installieren
             log_info "Baue Images komplett neu..."
-            $DOCKER_CMD compose build --no-cache --build-arg REBUILD_REQUIREMENTS=true
+            $DOCKER_COMPOSE_CMD build --no-cache --build-arg REBUILD_REQUIREMENTS=true
             
             # Container starten
-            $DOCKER_CMD compose up -d
+            $DOCKER_COMPOSE_CMD up -d
             wait_for_docker_services
             ;;
         native)
@@ -2356,15 +2416,33 @@ update_installation() {
                     log_warning "pip-Upgrade fehlgeschlagen"
                 }
                 
-                # Requirements installieren
-                sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" --no-warn-script-location 2>/dev/null || {
+                # Requirements installieren (mit expliziter Überprüfung)
+                log_info "Installiere Requirements in $TARGET_DIR/venv..."
+                if sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade -r "$TARGET_DIR/requirements.txt" --no-warn-script-location 2>/dev/null; then
+                    log_success "Requirements erfolgreich installiert"
+                    
+                    # Überprüfe ob Flask-Limiter installiert ist
+                    if sudo -u scandy "$TARGET_DIR/venv/bin/pip" show Flask-Limiter >/dev/null 2>&1; then
+                        log_success "Flask-Limiter ist installiert"
+                    else
+                        log_warning "Flask-Limiter nicht gefunden - versuche manuelle Installation"
+                        sudo -u scandy "$TARGET_DIR/venv/bin/pip" install Flask-Limiter==3.5.0 --no-warn-script-location
+                    fi
+                else
                     log_error "Konnte Dependencies nicht aktualisieren - versuche Neuinstallation"
                     # Fallback: venv neu erstellen
                     rm -rf "$TARGET_DIR/venv"
                     sudo -u scandy python3 -m venv "$TARGET_DIR/venv"
                     sudo -u scandy "$TARGET_DIR/venv/bin/pip" install --upgrade pip --no-warn-script-location
                     sudo -u scandy "$TARGET_DIR/venv/bin/pip" install -r "$TARGET_DIR/requirements.txt" --no-warn-script-location
-                }
+                    
+                    # Überprüfe nochmal Flask-Limiter
+                    if sudo -u scandy "$TARGET_DIR/venv/bin/pip" show Flask-Limiter >/dev/null 2>&1; then
+                        log_success "Flask-Limiter ist nach Neuinstallation verfügbar"
+                    else
+                        log_error "Flask-Limiter konnte nicht installiert werden"
+                    fi
+                fi
                 
                 log_success "Python-Pakete aktualisiert"
             else
@@ -2381,7 +2459,7 @@ update_installation() {
                 if [ -f "$TARGET_DIR/docker-compose.yml" ]; then
                     log_info "Versuche Docker Compose..."
                     cd "$TARGET_DIR"
-                    docker compose restart 2>/dev/null || docker compose up -d 2>/dev/null || {
+                    $DOCKER_COMPOSE_CMD restart 2>/dev/null || $DOCKER_COMPOSE_CMD up -d 2>/dev/null || {
                         log_error "Docker Compose fehlgeschlagen"
                     }
                 else
@@ -2585,7 +2663,7 @@ case "\$1" in
                     echo "systemctl fehlgeschlagen, versuche alternative Methoden..."
                     if [ -f "\$TARGET_DIR/docker-compose.yml" ]; then
                         cd "\$TARGET_DIR"
-                        docker compose restart 2>/dev/null || docker compose up -d 2>/dev/null
+                        $DOCKER_COMPOSE_CMD restart 2>/dev/null || $DOCKER_COMPOSE_CMD up -d 2>/dev/null
                     fi
                 }
                 
@@ -2659,8 +2737,19 @@ main() {
     # Argumente parsen
     parse_arguments "$@"
     
-    # System-Kompatibilität prüfen (für interaktive Auswahl benötigt)
+    # System-Kompatibilität prüfen
     check_system_compatibility
+    
+    # Docker Compose CMD global verfügbar machen
+    DOCKER_COMPOSE_CMD=$(get_docker_compose_cmd)
+    log_info "Verwende Docker Compose: $DOCKER_COMPOSE_CMD"
+    
+    # Installation starten
+    if [ "$UPDATE_ONLY" = true ]; then
+        update_installation
+        show_final_info
+        exit 0
+    fi
     
     # Installationsmodus bestimmen
     if [ -z "$INSTALL_MODE" ] || [ "$INSTALL_MODE" = "auto" ]; then
@@ -2671,13 +2760,6 @@ main() {
     log_info "Installationsmodus: $INSTALL_MODE"
     log_info "Instance: $INSTANCE_NAME"
     log_info "Ports: Web=$WEB_PORT, MongoDB=$MONGODB_PORT, MongoExpress=$MONGO_EXPRESS_PORT"
-    
-    # Update-Modus
-    if [ "$UPDATE_ONLY" = true ]; then
-        update_installation
-        show_final_info
-        exit 0
-    fi
     
     # Port-Konflikte lösen
     resolve_port_conflicts

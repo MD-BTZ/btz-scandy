@@ -1,0 +1,44 @@
+{
+  "name": "Scandy Quickscan",
+  "short_name": "Quickscan",
+  "description": "Mobile Barcode-Scanner für Scandy",
+  "start_url": "/mobile/quickscan",
+  "display": "standalone",
+  "background_color": "#667eea",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "scope": "/mobile/",
+  "icons": [
+    {
+      "src": "/static/images/scandy-favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/scandy-favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "lang": "de",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "shortcuts": [
+    {
+      "name": "Neuer Scan",
+      "short_name": "Scan",
+      "description": "Neuen Barcode scannen",
+      "url": "/mobile/quickscan",
+      "icons": [
+        {
+          "src": "/static/images/scandy-favicon.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+} 

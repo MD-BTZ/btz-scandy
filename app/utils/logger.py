@@ -1,16 +1,14 @@
 import logging
-import warnings
+import os
 import sys
 from logging.handlers import RotatingFileHandler
-import os
 from pathlib import Path
-from datetime import datetime
+import warnings
 
-# Unterdrücke pkg_resources Warnungen
+# Unterdrücke lästige Bibliotheks-Warnungen
 def suppress_pkg_resources_warnings():
-    """Unterdrückt pkg_resources Deprecation Warnings"""
+    """Unterdrückt pkg_resources-Warnungen"""
     warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
-    warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
 
 # Rufe die Funktion beim Import auf
 suppress_pkg_resources_warnings()
@@ -81,9 +79,74 @@ def init_app_logger(app):
     # Propagate auf False setzen, um doppelte Meldungen zu vermeiden
     app.logger.propagate = False
 
-# Spezifische Logger initialisieren
-loggers = {
-    'user_actions': setup_logger('user_actions', 'logs/user_actions.log'),
-    'errors': setup_logger('errors', 'logs/errors.log'),
-    'database': setup_logger('database', 'logs/database.log')
-} 
+# Erstelle spezialisierte Logger für verschiedene Bereiche
+def create_specialized_loggers():
+    """Erstellt spezialisierte Logger für verschiedene Bereiche"""
+    loggers = {}
+    
+    # Sicherheits-Logger
+    loggers['security'] = setup_logger('scandy.security', 'logs/security.log')
+    
+    # Benutzer-Aktionen Logger
+    loggers['user_actions'] = setup_logger('scandy.user_actions', 'logs/user_actions.log')
+    
+    # Datenbank-Logger
+    loggers['database'] = setup_logger('scandy.database', 'logs/database.log')
+    
+    # API-Logger
+    loggers['api'] = setup_logger('scandy.api', 'logs/api.log')
+    
+    # Fehler-Logger
+    loggers['errors'] = setup_logger('scandy.errors', 'logs/errors.log')
+    
+    # Performance-Logger
+    loggers['performance'] = setup_logger('scandy.performance', 'logs/performance.log')
+    
+    return loggers
+
+# Globale Logger-Instanz
+loggers = create_specialized_loggers()
+
+def log_security_event(event_type, user_id=None, ip_address=None, details=None):
+    """Loggt Sicherheitsereignisse"""
+    security_logger = loggers['security']
+    
+    log_data = {
+        'event_type': event_type,
+        'user_id': user_id,
+        'ip_address': ip_address,
+        'details': details,
+        'timestamp': logging.Formatter().formatTime(logging.LogRecord('', 0, '', 0, '', (), None))
+    }
+    
+    security_logger.warning(f"SECURITY_EVENT: {log_data}")
+    
+    # Bei kritischen Ereignissen auch in Hauptlog
+    if event_type in ['login_failed', 'unauthorized_access', 'suspicious_activity']:
+        loggers['errors'].error(f"KRITISCHES SICHERHEITSEREIGNIS: {event_type} - User: {user_id}, IP: {ip_address}")
+
+def log_user_action(action, user_id, details=None):
+    """Loggt Benutzeraktionen"""
+    user_logger = loggers['user_actions']
+    user_logger.info(f"USER_ACTION: {action} - User: {user_id} - Details: {details}")
+
+def log_database_operation(operation, collection, duration=None, success=True):
+    """Loggt Datenbankoperationen"""
+    db_logger = loggers['database']
+    status = "SUCCESS" if success else "FAILED"
+    duration_str = f" ({duration:.3f}s)" if duration else ""
+    db_logger.info(f"DB_OPERATION: {operation} - Collection: {collection} - Status: {status}{duration_str}")
+
+def log_api_request(method, endpoint, user_id=None, status_code=None, duration=None):
+    """Loggt API-Anfragen"""
+    api_logger = loggers['api']
+    user_str = f" - User: {user_id}" if user_id else ""
+    status_str = f" - Status: {status_code}" if status_code else ""
+    duration_str = f" ({duration:.3f}s)" if duration else ""
+    api_logger.info(f"API_REQUEST: {method} {endpoint}{user_str}{status_str}{duration_str}")
+
+def log_performance_metric(metric_name, value, unit=None):
+    """Loggt Performance-Metriken"""
+    perf_logger = loggers['performance']
+    unit_str = f" {unit}" if unit else ""
+    perf_logger.info(f"PERFORMANCE: {metric_name}: {value}{unit_str}") 

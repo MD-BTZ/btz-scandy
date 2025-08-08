@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Scandy Quickscan">
+    
+    <title>Scandy Quickscan</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest-quickscan.json') }}">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/scandy-favicon.png') }}">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.10.2/dist/full.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quickscan.css') }}">
+    
+    <style>
+        /* Mobile-spezifische Styles */
+        body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        
+        .mobile-container {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .quickscan-card {
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .scan-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #3b82f6, #1d4ed8);
+            border: none;
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .scan-button:active {
+            transform: scale(0.95);
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-online { background-color: #10b981; }
+        .status-offline { background-color: #ef4444; }
+        
+        /* Vollbild-Modus für PWA */
+        @media (display-mode: standalone) {
+            .mobile-container {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-container flex items-stretch p-0">
+        <div class="quickscan-card w-full max-w-md mx-auto">
+            <div class="p-4">
+                <!-- Kompakter Header -->
+                <div class="flex items-center justify-between mb-2">
+                    <div class="text-sm font-semibold text-gray-700">QuickScan</div>
+                    <img src="{{ url_for('static', filename='images/scandy-favicon.png') }}" alt="Logo" class="h-4 w-4 opacity-60">
+                </div>
+
+                <!-- Login Form (falls nicht eingeloggt) -->
+                {% if not current_user.is_authenticated %}
+                <form method="POST" action="{{ url_for('mobile.login') }}" class="space-y-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="form-control">
+                        <input type="text" name="username" placeholder="Benutzername" 
+                               class="input input-bordered w-full" required autofocus>
+                    </div>
+                    
+                    <div class="form-control">
+                        <input type="password" name="password" placeholder="Passwort" 
+                               class="input input-bordered w-full" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i class="fas fa-sign-in-alt mr-2"></i>
+                        Anmelden
+                    </button>
+                </form>
+                
+                {% else %}
+                <!-- Quickscan Interface (mobil, mit Fokus auf die zwei großen Buttons) -->
+                <div class="space-y-3">
+                    <!-- Große Buttons oben -->
+                    <div class="flex gap-3">
+                        <button id="scanItemBtn" class="flex-1 card bg-base-200 p-4 text-center active:scale-95 transition border-2 border-transparent h-24" data-step="1">
+                            <div class="flex flex-col items-center justify-center h-full">
+                                <i class="fas fa-tools text-xl mb-1"></i>
+                                <div class="font-semibold text-sm">Artikel scannen</div>
+                                <div id="itemSummary" class="text-[11px] opacity-60 mt-1 truncate w-full px-2">Tippen zum Scannen</div>
+                            </div>
+                        </button>
+                        <button id="scanWorkerBtn" class="flex-1 card bg-base-200 p-4 text-center active:scale-95 transition border-2 border-transparent h-24" data-step="2">
+                            <div class="flex flex-col items-center justify-center h-full">
+                                <i class="fas fa-id-badge text-xl mb-1"></i>
+                                <div class="font-semibold text-sm">Mitarbeiter scannen</div>
+                                <div id="workerSummary" class="text-[11px] opacity-60 mt-1 truncate w-full px-2">Tippen zum Scannen</div>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Kamera-Vorschau darunter -->
+                    <div class="relative w-full overflow-hidden rounded-2xl shadow-xl bg-black">
+                        <video id="cameraPreview" class="w-full object-cover" style="height:45dvh;" autoplay playsinline muted></video>
+                        <!-- Overlay-Rahmen -->
+                        <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <div class="border-2 border-white/80 rounded-lg w-[78%] h-[62%] shadow-[0_0_0_100vmax_rgba(0,0,0,0.35)]"></div>
+                        </div>
+                        <!-- Kamera Controls -->
+                        <div class="absolute bottom-2 left-0 right-0 flex items-center justify-between px-3">
+                            <button id="toggleTorchBtn" class="btn btn-xs btn-ghost text-white">
+                                <i class="fas fa-bolt mr-1"></i> Licht
+                            </button>
+                            <div class="text-white text-xs opacity-80" id="scanHint">Tippe „Artikel/Mitarbeiter scannen“</div>
+                            <button id="switchCameraBtn" class="btn btn-xs btn-ghost text-white">
+                                <i class="fas fa-camera-rotate mr-1"></i> Kamera
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="h-20"></div>
+
+                    <div class="divider text-xs">Angemeldet als {{ current_user.username }}</div>
+                     <a href="{{ url_for('mobile.logout') }}" class="btn btn-error btn-sm w-full">
+                         <i class="fas fa-sign-out-alt mr-2"></i> Abmelden
+                     </a>
+                 </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Worker für PWA -->
+    <script>
+        // Service Worker registrieren
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/js/quickscan-sw.js')
+                .then(function(registration) {
+                    console.log('Service Worker registriert:', registration);
+                })
+                .catch(function(error) {
+                    console.log('Service Worker Registrierung fehlgeschlagen:', error);
+                });
+        }
+    </script>
+
+    <!-- Quickscan JavaScript -->
+    <script src="{{ url_for('static', filename='js/quickscan.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/scanner.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mobile-quickscan.js') }}"></script>
+    
+    <!-- Bottom Action Bar -->
+    <div id="actionBar" class="fixed inset-x-0 bottom-0 z-50 bg-base-100 border-t shadow-2xl p-4 hidden backdrop-blur supports-[backdrop-filter]:bg-base-100/90">
+        <!-- Menge (nur für Verbrauchsmaterial) -->
+        <div id="quantityRow" class="hidden mb-3">
+            <label class="label py-1">
+                <span class="label-text">Menge</span>
+            </label>
+            <div class="join w-full">
+                <button id="qtyDec" class="btn join-item">-</button>
+                <input id="qtyInput" type="number" class="input input-bordered join-item w-full text-center" min="1" value="1">
+                <button id="qtyInc" class="btn join-item">+</button>
+            </div>
+        </div>
+        
+        <!-- Rückgabedatum (nur für neue Werkzeug-Ausleihe) -->
+        <div id="returnDateRow" class="hidden mb-3">
+            <label class="label py-1">
+                <span class="label-text">Rückgabedatum</span>
+            </label>
+            <input id="returnDateInput" type="date" class="input input-bordered w-full">
+            <div class="text-[11px] opacity-60 mt-1">Standard: in 14 Tagen</div>
+        </div>
+        
+        <!-- Großer Bestätigen-Button -->
+        <button id="confirmMobileQuickscan" class="btn btn-primary btn-lg w-full" disabled>
+            <i class="fas fa-check mr-2"></i> Bestätigen
+        </button>
+    </div>
+    
+    <!-- Mobile-spezifische Funktionen werden in mobile-quickscan.js initialisiert -->
+</body>
+</html> 

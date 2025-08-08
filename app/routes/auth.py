@@ -12,6 +12,8 @@ und MongoDB für die Benutzerdaten.
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from urllib.parse import urlparse
 from app.models.mongodb_models import MongoDBUser
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -70,10 +72,41 @@ def login():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
-        # ===== FORMULARDATEN HOLEN =====
-        username = request.form.get('username')
-        password = request.form.get('password')
+        # ===== FORMULARDATEN HOLEN UND VALIDIEREN =====
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
         remember = request.form.get('remember') == 'on'
+        
+        # ===== INPUT-VALIDIERUNG =====
+        errors = []
+        
+        # Benutzername-Validierung
+        if not username:
+            errors.append('Benutzername ist erforderlich.')
+        elif len(username) > 50:
+            errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
+        elif not username.replace('_', '').replace('-', '').isalnum():
+            errors.append('Benutzername darf nur Buchstaben, Zahlen, Unterstriche und Bindestriche enthalten.')
+        
+        # Passwort-Validierung
+        if not password:
+            errors.append('Passwort ist erforderlich.')
+        elif len(password) > 128:
+            errors.append('Passwort ist zu lang (maximal 128 Zeichen).')
+        
+        # Bei Validierungsfehlern
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            # Logge fehlgeschlagene Validierung
+            from app.utils.logger import log_security_event
+            log_security_event('login_validation_failed', username, request.remote_addr, {'errors': errors})
+            return render_template('auth/login.html')
+        
+        # ===== RATE LIMITING FÜR LOGIN-VERSUCHE =====
+        # Rate Limiting wird über Flask-Limiter in der App-Konfiguration gehandhabt
+        # Keine zusätzliche Rate-Limiting-Logik hier erforderlich
+        pass
         
         # ===== BENUTZER VALIDIEREN =====
         user_data = MongoDBUser.get_by_username(username)
@@ -81,6 +114,11 @@ def login():
         from app.utils.auth_utils import check_password_compatible
         if user_data and check_password_compatible(user_data['password_hash'], password):
             if user_data.get('is_active', True):
+                # Logge erfolgreichen Login
+                from app.utils.logger import log_security_event, log_user_action
+                log_security_event('login_success', username, request.remote_addr)
+                log_user_action('login', username, {'remember': remember})
+                
                 # Konvertiere alte Hash-Formate zu werkzeug-Hash bei erfolgreicher Anmeldung
                 if (user_data['password_hash'].startswith('scrypt:') or 
                     user_data['password_hash'].startswith('$2b$')):
@@ -93,18 +131,18 @@ def login():
                                          {'$set': {'password_hash': new_hash, 'updated_at': datetime.now()}})
                         # Aktualisiere user_data für die Session
                         user_data['password_hash'] = new_hash
-                        print(f"Passwort-Hash für Benutzer {user_data['username']} erfolgreich konvertiert")
+                        logger.info(f"Passwort-Hash für Benutzer {user_data['username']} erfolgreich konvertiert")
                     except Exception as e:
-                        print(f"Fehler bei der Passwort-Konvertierung: {e}")
+                        logger.error(f"Fehler bei der Passwort-Konvertierung: {e}")
                         # Fahre trotz Fehler fort - der Login war erfolgreich
                 
                 # Erstelle ein User-Objekt für Flask-Login
                 from app.models.user import User
                 user = User(user_data)
-                print(f"User-Objekt erstellt: {user.username}, ID: {user.id}, Role: {user.role}")
+                logger.info(f"User-Objekt erstellt: {user.username}, ID: {user.id}, Role: {user.role}")
                 
                 login_user(user, remember=remember) 
-                print(f"login_user aufgerufen für: {user.username}")
+                logger.info(f"login_user aufgerufen für: {user.username}")
                 
                 flash('Anmeldung erfolgreich!', 'success')
                 
@@ -114,8 +152,14 @@ def login():
                     next_page = url_for('main.index') 
                 return redirect(next_page)
             else:
-                 flash('Ihr Benutzerkonto ist deaktiviert.', 'error')
+                # Logge Login-Versuch mit deaktiviertem Konto
+                from app.utils.logger import log_security_event
+                log_security_event('login_disabled_account', username, request.remote_addr)
+                flash('Ihr Benutzerkonto ist deaktiviert.', 'error')
         else:
+            # Logge fehlgeschlagenen Login
+            from app.utils.logger import log_security_event
+            log_security_event('login_failed', username, request.remote_addr, {'reason': 'invalid_credentials'})
             flash('Ungültiger Benutzername oder Passwort.', 'error')
     
     return render_template('auth/login.html')
@@ -542,39 +586,6 @@ def profile():
     
     return render_template('auth/profile.html', user=user)
 
-@bp.route('/login-simple', methods=['POST'])
-def login_simple():
-    """
-    Einfache Login-Route ohne CSRF-Validierung.
-    Nur für Tests.
-    """
-    try:
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if not username or not password:
-            return jsonify({'success': False, 'message': 'Benutzername und Passwort erforderlich'}), 400
-        
-        # Benutzer validieren
-        user_data = MongoDBUser.get_by_username(username)
-        from app.utils.auth_utils import check_password_compatible
-        
-        if user_data and check_password_compatible(user_data['password_hash'], password):
-            if user_data.get('is_active', True):
-                # User-Objekt erstellen
-                from app.models.user import User
-                user = User(user_data)
-                
-                # Login durchführen
-                login_user(user, remember=False)
-                
-                logger.info(f"Login erfolgreich: {user.username}")
-                return jsonify({'success': True, 'message': 'Login erfolgreich', 'redirect': url_for('main.index')})
-            else:
-                return jsonify({'success': False, 'message': 'Benutzerkonto deaktiviert'}), 400
-        else:
-            return jsonify({'success': False, 'message': 'Ungültige Anmeldedaten'}), 400
-            
-    except Exception as e:
-        logger.error(f"Login-Fehler: {e}")
-        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+# ENTFERNT: Unsichere Login-Route ohne CSRF-Schutz
+# Diese Route wurde aus Sicherheitsgründen entfernt.
+# Verwenden Sie stattdessen die normale /login Route mit CSRF-Schutz.

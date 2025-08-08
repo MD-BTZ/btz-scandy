@@ -1,9 +1,10 @@
 from functools import wraps
 from flask import session, redirect, url_for, request, flash, abort, jsonify
 from datetime import datetime
-from app.utils.logger import loggers
+from app.utils.logger import loggers, log_security_event, log_user_action, log_performance_metric
 from flask_login import current_user
 import logging # Import logging
+import time
 # needs_setup wird nur in login_required verwendet
 # from app.utils.auth_utils import needs_setup
 
@@ -30,6 +31,11 @@ def login_required(f):
 
         # Wenn nicht eingeloggt, zum Login weiterleiten
         if not current_user.is_authenticated:
+            # Logge unautorisierte Zugriffe
+            log_security_event('unauthorized_access', 'anonymous', request.remote_addr, {
+                'endpoint': request.endpoint,
+                'url': request.url
+            })
             flash('Bitte melden Sie sich an, um auf diese Seite zuzugreifen.', 'info')
             return redirect(url_for('auth.login', next=request.url))
 
@@ -56,11 +62,33 @@ def admin_required(f):
     """Decorator für Routen, die nur Admins zugänglich sind."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        logger.debug(f"[DECORATOR] admin_required: Checking user {getattr(current_user, 'id', 'Guest')}")
         if not current_user.is_authenticated:
-             flash("Bitte melden Sie sich an.", "info")
-             return redirect(url_for('auth.login', next=request.url))
-        if not getattr(current_user, 'is_admin', False): # Sicherer Zugriff auf is_admin
+            logger.warning(f"[DECORATOR] admin_required: User not authenticated. Redirecting to login.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Bitte melden Sie sich an.',
+                    'redirect': url_for('auth.login', next=request.url)
+                }), 401
+            flash("Bitte melden Sie sich an.", "info")
+            return redirect(url_for('auth.login', next=request.url))
+        
+        if current_user.role != 'admin':
+            # Logge unautorisierte Admin-Zugriffe
+            log_security_event('unauthorized_admin_access', current_user.username, request.remote_addr, {
+                'endpoint': request.endpoint,
+                'user_role': current_user.role
+            })
+            logger.warning(f"[DECORATOR] admin_required: User {current_user.id} lacks admin permission. Aborting with 403.")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False,
+                    'message': 'Keine Berechtigung für diese Aktion.'
+                }), 403
             abort(403)
+        
+        logger.debug(f"[DECORATOR] admin_required: Access granted for user {current_user.id}. Proceeding to route function.")
         return f(*args, **kwargs)
     return decorated_function
 
@@ -87,6 +115,11 @@ def mitarbeiter_required(f):
         logger.debug(f"[DECORATOR] mitarbeiter_required: User role is '{user_role}', is_allowed evaluated to {is_allowed}")
         
         if not is_allowed: 
+            # Logge unautorisierte Zugriffe
+            log_security_event('unauthorized_mitarbeiter_access', current_user.username, request.remote_addr, {
+                'endpoint': request.endpoint,
+                'user_role': user_role
+            })
             logger.warning(f"[DECORATOR] mitarbeiter_required: User {current_user.id} (role: {user_role}) lacks permission. Aborting with 403.")
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({
@@ -116,6 +149,11 @@ def teilnehmer_required(f):
             return redirect(url_for('auth.login', next=request.url))
         
         if current_user.role != 'teilnehmer':
+            # Logge unautorisierte Zugriffe
+            log_security_event('unauthorized_teilnehmer_access', current_user.username, request.remote_addr, {
+                'endpoint': request.endpoint,
+                'user_role': current_user.role
+            })
             logger.warning(f"[DECORATOR] teilnehmer_required: User {current_user.id} lacks permission. Aborting with 403.")
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({
@@ -160,6 +198,8 @@ def not_teilnehmer_required(f):
 def log_route(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        start_time = time.time()
+        
         loggers['user_actions'].info(
             f"Route aufgerufen: {request.endpoint} - "
             f"Methode: {request.method} - "
@@ -177,12 +217,39 @@ def log_route(f):
             
         try:
             result = f(*args, **kwargs)
+            
+            # Performance-Metriken loggen
+            duration = time.time() - start_time
+            log_performance_metric('route_duration', duration, 'seconds')
+            
+            # Logge erfolgreiche Aktionen
+            if current_user.is_authenticated:
+                log_user_action('route_access', current_user.username, {
+                    'endpoint': request.endpoint,
+                    'method': request.method,
+                    'duration': duration
+                })
+            
             return result
         except Exception as e:
+            duration = time.time() - start_time
             loggers['errors'].error(
                 f"Fehler in {request.endpoint}: {str(e)}",
                 exc_info=True
             )
+            
+            # Logge Fehler mit Performance-Metriken
+            log_performance_metric('route_error_duration', duration, 'seconds')
+            
+            # Logge Sicherheitsereignisse bei bestimmten Fehlern
+            if '403' in str(e) or '401' in str(e):
+                log_security_event('route_access_denied', 
+                                 getattr(current_user, 'username', 'anonymous'), 
+                                 request.remote_addr, {
+                                     'endpoint': request.endpoint,
+                                     'error': str(e)
+                                 })
+            
             raise
     return decorated_function
 
@@ -190,23 +257,58 @@ def log_db_operation(operation):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            start_time = datetime.now()
+            start_time = time.time()
             try:
                 result = f(*args, **kwargs)
-                duration = (datetime.now() - start_time).total_seconds()
-                loggers['database'].info(
-                    f"DB Operation: {operation} - "
-                    f"Dauer: {duration:.2f}s - "
-                    f"Erfolgreich: Ja"
-                )
+                duration = time.time() - start_time
+                
+                # Logge erfolgreiche DB-Operation
+                log_database_operation(operation, 'unknown', duration, True)
+                
+                # Performance-Metriken
+                log_performance_metric('db_operation_duration', duration, 'seconds')
+                
                 return result
             except Exception as e:
-                duration = (datetime.now() - start_time).total_seconds()
+                duration = time.time() - start_time
+                
+                # Logge fehlgeschlagene DB-Operation
+                log_database_operation(operation, 'unknown', duration, False)
+                
+                # Logge Fehler
                 loggers['database'].error(
                     f"DB Operation: {operation} - "
                     f"Dauer: {duration:.2f}s - "
                     f"Fehler: {str(e)}"
                 )
+                
+                # Performance-Metriken für Fehler
+                log_performance_metric('db_operation_error_duration', duration, 'seconds')
+                
+                raise
+        return wrapper
+    return decorator
+
+def performance_monitor(operation_name):
+    """Decorator für Performance-Monitoring"""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = f(*args, **kwargs)
+                duration = time.time() - start_time
+                
+                # Logge Performance-Metriken
+                log_performance_metric(f'{operation_name}_duration', duration, 'seconds')
+                
+                return result
+            except Exception as e:
+                duration = time.time() - start_time
+                
+                # Logge Fehler-Performance
+                log_performance_metric(f'{operation_name}_error_duration', duration, 'seconds')
+                
                 raise
         return wrapper
     return decorator 

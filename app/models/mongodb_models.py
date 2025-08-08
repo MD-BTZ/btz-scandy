@@ -852,36 +852,64 @@ def create_mongodb_indexes():
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'category')
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'location')
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, 'status')
+        # Compound-Index für Status + Kategorie (häufige Abfrage)
+        mongodb.create_index(MongoDBTool.COLLECTION_NAME, [('status', 1), ('category', 1)])
+        # Compound-Index für Standort + Status
+        mongodb.create_index(MongoDBTool.COLLECTION_NAME, [('location', 1), ('status', 1)])
         
         # Mitarbeiter-Indizes
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'barcode', unique=True)
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'lastname')
         mongodb.create_index(MongoDBWorker.COLLECTION_NAME, 'department')
+        # Compound-Index für Abteilung + Name
+        mongodb.create_index(MongoDBWorker.COLLECTION_NAME, [('department', 1), ('lastname', 1)])
         
         # Verbrauchsmaterial-Indizes
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'barcode', unique=True)
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'name')
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'category')
         mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, 'location')
+        # Compound-Index für Kategorie + Status
+        mongodb.create_index(MongoDBConsumable.COLLECTION_NAME, [('category', 1), ('quantity', 1)])
         
         # Ausleihen-Indizes
         mongodb.create_index(MongoDBLending.COLLECTION_NAME, 'tool_barcode')
         mongodb.create_index(MongoDBLending.COLLECTION_NAME, 'worker_barcode')
         mongodb.create_index(MongoDBLending.COLLECTION_NAME, 'lent_at')
+        # Compound-Index für aktive Ausleihen
+        mongodb.create_index(MongoDBLending.COLLECTION_NAME, [('status', 1), ('due_date', 1)])
+        # Compound-Index für Worker + Status
+        mongodb.create_index(MongoDBLending.COLLECTION_NAME, [('worker_barcode', 1), ('status', 1)])
+        # Compound-Index für Tool + Status
+        mongodb.create_index(MongoDBLending.COLLECTION_NAME, [('tool_barcode', 1), ('status', 1)])
         
         # Verbrauchsmaterial-Verwendung-Indizes
         mongodb.create_index(MongoDBConsumableUsage.COLLECTION_NAME, 'consumable_barcode')
         mongodb.create_index(MongoDBConsumableUsage.COLLECTION_NAME, 'worker_barcode')
         mongodb.create_index(MongoDBConsumableUsage.COLLECTION_NAME, 'used_at')
+        # Compound-Index für Verbrauchsmaterial + Datum
+        mongodb.create_index(MongoDBConsumableUsage.COLLECTION_NAME, [('consumable_barcode', 1), ('used_at', -1)])
+        # Compound-Index für Worker + Datum
+        mongodb.create_index(MongoDBConsumableUsage.COLLECTION_NAME, [('worker_barcode', 1), ('used_at', -1)])
         
         # Benutzer-Indizes
         mongodb.create_index(MongoDBUser.COLLECTION_NAME, 'username', unique=True)
         mongodb.create_index(MongoDBUser.COLLECTION_NAME, 'email')
+        # Compound-Index für Rolle + Aktivität
+        mongodb.create_index(MongoDBUser.COLLECTION_NAME, [('role', 1), ('is_active', 1)])
         
         # Ticket-Indizes
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'status')
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'assigned_to')
         mongodb.create_index(MongoDBTicket.COLLECTION_NAME, 'created_at')
+        # Compound-Index für Status + Kategorie (häufige Abfrage)
+        mongodb.create_index(MongoDBTicket.COLLECTION_NAME, [('status', 1), ('category', 1)])
+        # Compound-Index für Zuweisung + Status
+        mongodb.create_index(MongoDBTicket.COLLECTION_NAME, [('assigned_to', 1), ('status', 1)])
+        # Compound-Index für Ersteller + Datum
+        mongodb.create_index(MongoDBTicket.COLLECTION_NAME, [('created_by', 1), ('created_at', -1)])
+        # Compound-Index für Priorität + Status
+        mongodb.create_index(MongoDBTicket.COLLECTION_NAME, [('priority', 1), ('status', 1)])
         
         # Settings-Indizes
         mongodb.create_index('settings', 'key', unique=True)
@@ -890,11 +918,27 @@ def create_mongodb_indexes():
         mongodb.create_index('timesheets', 'user_id')
         mongodb.create_index('timesheets', 'year')
         mongodb.create_index('timesheets', 'kw')
+        # Compound-Index für User + Jahr + KW
+        mongodb.create_index('timesheets', [('user_id', 1), ('year', 1), ('kw', 1)], unique=True)
         
         # Homepage-Notices-Indizes
         mongodb.create_index('homepage_notices', 'is_active')
         mongodb.create_index('homepage_notices', 'priority')
         mongodb.create_index('homepage_notices', 'created_at')
+        # Compound-Index für aktive Notices nach Priorität
+        mongodb.create_index('homepage_notices', [('is_active', 1), ('priority', -1), ('created_at', -1)])
+        
+        # Messages-Indizes
+        mongodb.create_index('messages', 'ticket_id')
+        mongodb.create_index('messages', 'created_at')
+        # Compound-Index für Ticket + Datum
+        mongodb.create_index('messages', [('ticket_id', 1), ('created_at', -1)])
+        
+        # Ticket-History-Indizes
+        mongodb.create_index('ticket_history', 'ticket_id')
+        mongodb.create_index('ticket_history', 'created_at')
+        # Compound-Index für Ticket + Datum
+        mongodb.create_index('ticket_history', [('ticket_id', 1), ('created_at', -1)])
         
         logger.info("MongoDB-Indizes erfolgreich erstellt")
         

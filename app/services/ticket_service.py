@@ -107,11 +107,11 @@ class TicketService:
             Dict: Verschiedene Ticket-Listen
         """
         try:
-            print(f"DEBUG: Lade Tickets für Benutzer: {username}, Rolle: {role}, Handlungsfelder: {handlungsfelder}")
+            logger.debug(f"Lade Tickets für Benutzer: {username}, Rolle: {role}, Handlungsfelder: {handlungsfelder}")
             
             # Debug: Prüfe alle Tickets in der Datenbank
             all_tickets_debug = list(mongodb.find('tickets', {}))
-            print(f"DEBUG: Gesamtanzahl Tickets in DB: {len(all_tickets_debug)}")
+            logger.debug(f"Gesamtanzahl Tickets in DB: {len(all_tickets_debug)}")
             
             # Offene Tickets (nicht zugewiesene, offene Tickets)
             open_query = {
@@ -132,77 +132,48 @@ class TicketService:
             if role != 'admin' and handlungsfelder:
                 # Für alle Rollen außer Admin: Nur offene Tickets aus zugewiesenen Handlungsfeldern
                 open_query['$and'].append({'category': {'$in': handlungsfelder}})
-                print(f"DEBUG: Offene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
+                logger.debug(f"Offene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
             
-            print(f"DEBUG: Offene Tickets Query: {open_query}")
+            logger.debug(f"Offene Tickets Query: {open_query}")
             open_tickets = mongodb.find('tickets', open_query)
             open_tickets = list(open_tickets)
-            print(f"DEBUG: Offene Tickets gefunden: {len(open_tickets)}")
+            logger.debug(f"Offene Tickets gefunden: {len(open_tickets)}")
             
-            # Zugewiesene Tickets (nur für zugewiesene Benutzer)
-            if role == 'admin':
-                # Für Admins: Alle zugewiesenen Tickets + alle gelösten/geschlossenen
-                # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
-                user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
-                assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
-                
-                # Füge Legacy-Zuweisungen hinzu (falls keine Mehrfachzuweisungen vorhanden)
-                legacy_tickets = mongodb.find('tickets', {'assigned_to': username, 'deleted': {'$ne': True}})
-                legacy_ticket_ids = [str(ticket['_id']) for ticket in legacy_tickets]
-                
-                # Kombiniere beide Listen ohne Duplikate
-                all_assigned_ids = list(set(assigned_ticket_ids + legacy_ticket_ids))
-                
-                assigned_query = {
-                    '$or': [
-                        {'_id': {'$in': all_assigned_ids}, 'deleted': {'$ne': True}},
-                        {'status': {'$in': ['gelöst', 'geschlossen']}, 'deleted': {'$ne': True}}
-                    ]
-                }
-            else:
-                # Für alle anderen Rollen: Nur eigene zugewiesene Tickets
-                # Hole alle Ticket-IDs, bei denen der Benutzer zugewiesen ist
-                user_assignments = mongodb.find('ticket_assignments', {'assigned_to': username})
-                assigned_ticket_ids = [assignment['ticket_id'] for assignment in user_assignments]
-                
-                # Füge Legacy-Zuweisungen hinzu (falls keine Mehrfachzuweisungen vorhanden)
-                legacy_tickets = mongodb.find('tickets', {'assigned_to': username, 'deleted': {'$ne': True}})
-                legacy_ticket_ids = [str(ticket['_id']) for ticket in legacy_tickets]
-                
-                # Kombiniere beide Listen ohne Duplikate
-                all_assigned_ids = list(set(assigned_ticket_ids + legacy_ticket_ids))
-                
-                assigned_query = {
-                    '_id': {'$in': all_assigned_ids},
-                    'deleted': {'$ne': True}
-                }
-                
-                # Handlungsfeld-Filter für zugewiesene Tickets (nur für nicht-Admin Rollen)
-                if handlungsfelder:
-                    # Für zugewiesene Tickets: Nur Tickets aus zugewiesenen Handlungsfeldern
-                    assigned_query['category'] = {'$in': handlungsfelder}
-                    print(f"DEBUG: Zugewiesene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
+            # Zugewiesene Tickets (dem Benutzer zugewiesene, offene Tickets)
+            assigned_query = {
+                '$and': [
+                    {'assigned_to': username},
+                    {'status': 'offen'},
+                    {'deleted': {'$ne': True}}
+                ]
+            }
             
-            print(f"DEBUG: Zugewiesene Tickets Query: {assigned_query}")
+            # Handlungsfeld-Filter für alle Rollen außer Admin
+            if role != 'admin' and handlungsfelder:
+                # Für alle Rollen außer Admin: Nur zugewiesene Tickets aus zugewiesenen Handlungsfeldern
+                assigned_query['$and'].append({'category': {'$in': handlungsfelder}})
+                logger.debug(f"Zugewiesene Tickets mit Handlungsfeld-Filter: {handlungsfelder}")
+            
+            logger.debug(f"Zugewiesene Tickets Query: {assigned_query}")
             assigned_tickets = mongodb.find('tickets', assigned_query)
             assigned_tickets = list(assigned_tickets)
-            print(f"DEBUG: Zugewiesene Tickets gefunden: {len(assigned_tickets)}")
+            logger.debug(f"Zugewiesene Tickets gefunden: {len(assigned_tickets)}")
             
-            # Alle Tickets (nur für Admins)
+            # Alle Tickets (nur für Admin)
             all_tickets = []
             if role == 'admin':
                 all_query = {'deleted': {'$ne': True}}
-                print(f"DEBUG: Alle Tickets Query: {all_query}")
+                logger.debug(f"Alle Tickets Query: {all_query}")
                 all_tickets = mongodb.find('tickets', all_query)
                 all_tickets = list(all_tickets)
-                print(f"DEBUG: Alle Tickets gefunden: {len(all_tickets)}")
+                logger.debug(f"Alle Tickets gefunden: {len(all_tickets)}")
             
             # Nachrichtenanzahl und Auftragsdetails hinzufügen
-            print(f"DEBUG: Verarbeite {len(open_tickets)} offene, {len(assigned_tickets)} zugewiesene, {len(all_tickets)} alle Tickets")
+            logger.debug(f"Verarbeite {len(open_tickets)} offene, {len(assigned_tickets)} zugewiesene, {len(all_tickets)} alle Tickets")
             
             for ticket_list in [open_tickets, assigned_tickets, all_tickets]:
                 for ticket in ticket_list:
-                    print(f"DEBUG: Verarbeite Ticket: {ticket.get('title', 'Kein Titel')} (ID: {ticket.get('_id')})")
+                    logger.debug(f"Verarbeite Ticket: {ticket.get('title', 'Kein Titel')} (ID: {ticket.get('_id')})")
                     
                     # ID-Feld für Template-Kompatibilität
                     ticket['id'] = str(ticket['_id'])

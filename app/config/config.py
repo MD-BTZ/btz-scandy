@@ -27,7 +27,7 @@ class Config:
     SESSION_TYPE = os.environ.get('SESSION_TYPE', 'filesystem')
     SESSION_FILE_DIR = os.environ.get('SESSION_FILE_DIR', os.path.join(BASE_DIR, 'app', 'flask_session'))
     SESSION_PERMANENT = os.environ.get('SESSION_PERMANENT', 'True').lower() == 'true'
-    PERMANENT_SESSION_LIFETIME = int(os.environ.get('PERMANENT_SESSION_LIFETIME', '86400'))  # 24 Stunden
+    PERMANENT_SESSION_LIFETIME = int(os.environ.get('PERMANENT_SESSION_LIFETIME', '3600'))  # 1 Stunde (sicherer)
     
     # Sicherheit
     SECRET_KEY = os.environ.get('SECRET_KEY')

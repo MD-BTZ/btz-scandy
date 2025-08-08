@@ -162,11 +162,18 @@ def ensure_directories_exist():
 # CSRF-Schutz initialisieren
 csrf = CSRFProtect()
 
-# Rate Limiter initialisieren
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
+# Rate Limiter initialisieren (lazy initialization)
+limiter = None
+
+def get_limiter():
+    global limiter
+    if limiter is None:
+        limiter = Limiter(
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"],
+            storage_uri="memory://"
+        )
+    return limiter
 
 def create_app(test_config=None):
     """
@@ -200,7 +207,7 @@ def create_app(test_config=None):
     csrf.init_app(app)
     
     # ===== RATE LIMITING AKTIVIEREN =====
-    limiter.init_app(app)
+    get_limiter().init_app(app)
     
     # ===== SYSTEMNAMEN AUS UMGEBUNGSVARIABLEN =====
     app.config['SYSTEM_NAME'] = os.environ.get('SYSTEM_NAME') or 'Scandy'
@@ -348,6 +355,8 @@ def create_app(test_config=None):
     
     # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
+    
+
     
     # ===== AUTOMATISCHES BACKUP-SYSTEM STARTEN =====
     try:
