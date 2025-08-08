@@ -39,7 +39,14 @@ from app.services.admin_debug_service import AdminDebugService
 from app.services.admin_system_settings_service import AdminSystemSettingsService
 from app.services.excel_export_service import ExcelExportService
 from app.services.custom_fields_service import CustomFieldsService
-from app.utils.permissions import get_role_permissions, set_role_permissions
+from app.utils.permissions import (
+    get_role_permissions,
+    set_role_permissions,
+    DEFAULT_ROLE_PERMISSIONS,
+    ALLOWED_ACTIONS,
+    get_all_actions,
+    normalize_permissions,
+)
 
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
@@ -2589,9 +2596,9 @@ def role_permissions():
                     except Exception:
                         continue
 
-            # Guardrail: Admin immer alles
-            from app.utils.permissions import DEFAULT_ROLE_PERMISSIONS
+            # Guardrail: Admin immer alles und unzulässige Aktionen filtern
             permissions['admin'] = DEFAULT_ROLE_PERMISSIONS['admin']
+            permissions = normalize_permissions(permissions)
 
             if set_role_permissions(permissions):
                 flash('Berechtigungen erfolgreich gespeichert', 'success')
@@ -2601,14 +2608,17 @@ def role_permissions():
 
         # GET: aktuelle Matrix anzeigen
         permissions = get_role_permissions()
-        areas = sorted({a for r in permissions.values() for a in r.keys()})
-        actions = sorted({act for r in permissions.values() for acts in r.values() for act in acts})
+        # Bereiche: aus erlaubten Bereichen, ergänzt um evtl. vorhandene Einträge
+        areas = sorted(set(ALLOWED_ACTIONS.keys()) | {a for r in permissions.values() for a in r.keys()})
+        # Aktionen: Superset aller erlaubten Aktionen
+        actions = get_all_actions()
         roles = sorted(permissions.keys())
         return render_template('admin/role_permissions.html',
                                permissions=permissions,
                                roles=roles,
                                areas=areas,
-                               actions=actions)
+                               actions=actions,
+                               allowed_actions=ALLOWED_ACTIONS)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Rollenrechte: {str(e)}")
         flash('Fehler beim Laden der Rollenrechte', 'error')

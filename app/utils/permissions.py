@@ -10,6 +10,35 @@ from app.models.mongodb_database import mongodb
 
 
 # Standard-Rechte-Matrix (kann per Admin-UI überschrieben werden)
+ALLOWED_ACTIONS: Dict[str, List[str]] = {
+    "tools": ["view", "create", "edit", "delete", "export"],
+    "consumables": ["view", "create", "edit", "delete", "export"],
+    "workers": ["view", "create", "edit", "delete"],
+    "tickets": ["view", "create", "edit", "assign", "delete", "export"],
+    "jobs": ["view", "create", "edit", "delete"],
+    "settings": ["manage"],
+}
+
+def get_all_actions() -> List[str]:
+    actions: List[str] = []
+    for acts in ALLOWED_ACTIONS.values():
+        for a in acts:
+            if a not in actions:
+                actions.append(a)
+    return sorted(actions)
+
+def normalize_permissions(permissions: Dict[str, Dict[str, List[str]]]) -> Dict[str, Dict[str, List[str]]]:
+    """Filtert nicht erlaubte Aktionen je Bereich heraus."""
+    normalized: Dict[str, Dict[str, List[str]]] = {}
+    for role, areas in permissions.items():
+        for area, actions in areas.items():
+            allowed = set(ALLOWED_ACTIONS.get(area, []))
+            valid_actions = [a for a in actions if a in allowed]
+            if not valid_actions:
+                continue
+            normalized.setdefault(role, {})[area] = sorted(list(set(valid_actions)))
+    return normalized
+
 DEFAULT_ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
     "admin": {
         "tools": ["view", "create", "edit", "delete", "export"],
@@ -50,11 +79,13 @@ def get_role_permissions() -> Dict[str, Dict[str, List[str]]]:
 
 def set_role_permissions(permissions: Dict[str, Dict[str, List[str]]]) -> bool:
     """Schreibt die Rollenrechte in die Settings-Collection (Upsert)."""
+    # Nicht erlaubte Kombinationen herausfiltern
+    filtered = normalize_permissions(permissions)
     return bool(
         mongodb.update_one(
             "settings",
             {"key": "role_permissions"},
-            {"$set": {"value": permissions}},
+            {"$set": {"value": filtered}},
             upsert=True,
         )
     )

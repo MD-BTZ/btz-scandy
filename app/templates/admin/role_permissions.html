@@ -32,14 +32,22 @@
             <td class="font-medium sticky left-0 bg-base-100">{{ area }}</td>
             {% for role in roles %}
               {% for action in actions %}
+                {% set area_allowed = allowed_actions.get(area, []) %}
+                {% set is_allowed = action in area_allowed %}
                 {% set checked = action in (permissions.get(role, {}).get(area, [])) %}
-                <td class="text-center border-l{% if loop.index0 == 0 %}-2{% endif %}">
-                  <input type="checkbox"
-                         name="perm[{{ role }}][{{ area }}][{{ action }}]"
-                         class="checkbox checkbox-sm"
-                         {% if checked %}checked{% endif %}
-                         {% if role == 'admin' %}disabled{% endif %}>
-                </td>
+                {% if is_allowed %}
+                  <td class="text-center border-l{% if loop.index0 == 0 %}-2{% endif %}">
+                    <input type="checkbox"
+                           name="perm[{{ role }}][{{ area }}][{{ action }}]"
+                           class="checkbox checkbox-sm"
+                           {% if checked %}checked{% endif %}
+                           {% if role == 'admin' %}disabled{% endif %}>
+                  </td>
+                {% else %}
+                  <td class="text-center text-base-content/40 border-l{% if loop.index0 == 0 %}-2{% endif %}" title="Nicht verfügbar">
+                    &mdash;
+                  </td>
+                {% endif %}
               {% endfor %}
             {% endfor %}
           </tr>
