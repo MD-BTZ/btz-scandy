@@ -25,6 +25,11 @@
                 <a href="{{ url_for('admin.export_excel_detailed') }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-file-excel mr-2"></i>Detaillierter Excel Export
                 </a>
+                {% if has_permission(current_user.role, 'settings', 'manage') %}
+                <a href="{{ url_for('admin.import_json_backup_scoped') }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-upload mr-2"></i>JSON-Backup importieren
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>

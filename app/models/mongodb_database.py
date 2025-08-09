@@ -74,7 +74,9 @@ class MongoDBDatabase:
     _SCOPED_COLLECTIONS = {
         'tools', 'consumables', 'workers', 'lendings', 'consumable_usage',
         'tickets', 'messages', 'ticket_history', 'timesheets', 'homepage_notices',
-        'settings'
+        'settings',
+        # Neue referenzielle Collections pro Abteilung
+        'locations', 'categories', 'ticket_categories'
     }
 
     @staticmethod

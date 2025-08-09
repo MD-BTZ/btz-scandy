@@ -50,6 +50,12 @@ show_banner
 SOURCE_DIR="/Scandy2"
 TARGET_DIR="/opt/scandy"
 
+# Falls Script im Projekt liegt, dieses als Quelle verwenden
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -d "$SCRIPT_DIR/app" ]; then
+    SOURCE_DIR="$SCRIPT_DIR"
+fi
+
 # Prüfe verschiedene mögliche Quellverzeichnisse
 if [ ! -d "$SOURCE_DIR" ]; then
     # Versuche andere mögliche Namen
@@ -59,6 +65,8 @@ if [ ! -d "$SOURCE_DIR" ]; then
         SOURCE_DIR="/Scandy"
     elif [ -d "/scandy" ]; then
         SOURCE_DIR="/scandy"
+    elif [ -d "/home/woschj/Scandy2" ]; then
+        SOURCE_DIR="/home/woschj/Scandy2"
     elif [ -d "/home/scandy/Scandy2" ]; then
         SOURCE_DIR="/home/scandy/Scandy2"
     elif [ -d "/root/Scandy2" ]; then
@@ -95,10 +103,11 @@ cd "$SOURCE_DIR"
 log_info "Wechsle ins Quellverzeichnis: $SOURCE_DIR"
 
 # Git Pull
-log_info "Aktualisiere Code von Git..."
-git pull origin main || git pull origin master || git pull origin IT-VW || {
-    log_warning "Git pull fehlgeschlagen, verwende aktuellen Code"
-}
+# Optional: Git Pull, nur wenn .git existiert
+if [ -d .git ]; then
+    log_info "Aktualisiere Code von Git..."
+    git pull || log_warning "Git pull fehlgeschlagen, verwende lokalen Code"
+fi
 
 # Prozess stoppen
 log_info "Stoppe Scandy-Prozess..."
@@ -144,7 +153,7 @@ fi
 
 # Service starten
 log_info "Starte Scandy als Systemd-Service..."
-systemctl restart scandy 2>/dev/null || {
+systemctl restart scandy.service 2>/dev/null || {
     log_warning "systemctl restart scandy fehlgeschlagen"
     log_info "Versuche alternative Start-Methoden..."
     
@@ -159,19 +168,22 @@ systemctl restart scandy 2>/dev/null || {
     fi
 }
 
-# Warte auf Service
+# Warte auf Service (systemd aktiv + HTTP 200/302 auf Port 5001)
 log_info "Warte auf Service..."
-for i in {1..15}; do
-    if curl -f http://localhost:5000/health &>/dev/null; then
-        log_success "LXC Update abgeschlossen!"
-        log_info "Service ist verfügbar unter: http://localhost:5000"
-        exit 0
+for i in {1..20}; do
+    if systemctl is-active --quiet scandy.service; then
+        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5001/ || true)
+        if [ "$CODE" = "200" ] || [ "$CODE" = "302" ]; then
+            log_success "LXC Update abgeschlossen!"
+            log_info "Service ist erreichbar unter: http://127.0.0.1:5001"
+            exit 0
+        fi
     fi
     sleep 2
 done
 
 log_warning "Service braucht länger zum Starten"
-log_info "Prüfe Logs mit: tail -f $TARGET_DIR/logs/app.log"
+log_info "Prüfe Logs mit: journalctl -u scandy.service -n 200 --no-pager"
 
 # Zeige Prozess-Status
 log_info "Aktive Scandy-Prozesse:"

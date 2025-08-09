@@ -846,6 +846,23 @@ class MongoDBTicket:
 def create_mongodb_indexes():
     """Erstellt alle notwendigen MongoDB-Indizes und initialisiert die Datenbank"""
     try:
+        # Legacy-Index-Bereinigung: entferne eindeutige Barcode-Indexe ohne Department
+        def _drop_legacy_barcode_unique(collection_name: str):
+            try:
+                coll = mongodb.get_collection(collection_name)
+                for idx in coll.list_indexes():
+                    # Erkenne Single-Field-Index auf barcode
+                    if idx.get('name') == 'barcode_1' and idx.get('unique'):
+                        try:
+                            coll.drop_index('barcode_1')
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        for coll_name in [MongoDBTool.COLLECTION_NAME, MongoDBWorker.COLLECTION_NAME, MongoDBConsumable.COLLECTION_NAME]:
+            _drop_legacy_barcode_unique(coll_name)
+
         # Werkzeuge-Indizes (Unique pro Abteilung statt global)
         # Entferne evtl. existierende globale Unique-Index-Konflikte NICHT aggressiv; create_index ist idempotent
         mongodb.create_index(MongoDBTool.COLLECTION_NAME, [('department', 1), ('barcode', 1)], unique=True, sparse=True)

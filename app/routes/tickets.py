@@ -1950,6 +1950,11 @@ def _handle_auftrag_creation(external=False):
             kontakt = request.form.get('kontakt', '')  # Kontaktdaten
             bereich = request.form.get('bereich', '')  # Bereich
             auftraggeber_typ = request.form.get('auftraggeber_typ', 'extern')  # Intern/Extern
+            # Ziel-Abteilung (optional, nur intern relevant)
+            target_department = request.form.get('target_department')
+            current_dept = getattr(g, 'current_department', None)
+            if target_department == '':
+                target_department = None
             
             # Validiere die Pflichtfelder
             if not title:
@@ -1992,7 +1997,8 @@ def _handle_auftrag_creation(external=False):
                 'created_at': datetime.now(),
                 'updated_at': datetime.now(),
                 'ticket_number': get_next_ticket_number(),  # Neue Auftragsnummer
-                'is_external': not current_user.is_authenticated  # Markiere externe Aufträge
+                'is_external': not current_user.is_authenticated,  # Markiere externe Aufträge
+                'department': (target_department or current_dept)
             }
             
             result = mongodb.insert_one('tickets', ticket_data)

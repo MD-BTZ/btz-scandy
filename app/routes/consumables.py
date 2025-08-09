@@ -51,6 +51,15 @@ def add():
     """Fügt ein neues Verbrauchsmaterial hinzu"""
     if request.method == 'POST':
         try:
+            from flask import g
+            if not getattr(g, 'current_department', None):
+                flash('Bitte Abteilung wählen, bevor Sie ein Verbrauchsmaterial anlegen', 'error')
+                categories = get_categories_from_settings()
+                locations = get_locations_from_settings()
+                return render_template('consumables/add.html', 
+                                     categories=categories, 
+                                     locations=locations,
+                                     form_data=request.form)
             data = {
                 'name': request.form.get('name'),
                 'barcode': request.form.get('barcode'),

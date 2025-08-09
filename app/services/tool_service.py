@@ -135,6 +135,9 @@ class ToolService:
         """
         try:
             # Validierung
+            dept = getattr(g, 'current_department', None)
+            if not dept:
+                return False, 'Bitte Abteilung wählen, bevor Sie ein Werkzeug anlegen', None
             if not tool_data.get('name'):
                 return False, 'Name ist erforderlich', None
             
@@ -145,8 +148,8 @@ class ToolService:
             
             # Prüfe ob der Barcode bereits existiert (nur innerhalb der aktuellen Abteilung)
             uniqueness_query = {'barcode': barcode, 'deleted': {'$ne': True}}
-            if getattr(g, 'current_department', None):
-                uniqueness_query['department'] = g.current_department
+            if dept:
+                uniqueness_query['department'] = dept
             existing_tool = mongodb.find_one('tools', uniqueness_query)
             if existing_tool:
                 return False, 'Dieser Barcode existiert bereits', None
@@ -165,7 +168,7 @@ class ToolService:
                 'mac_address_wlan': tool_data.get('mac_address_wlan', ''),
                 'user_groups': tool_data.get('user_groups', []),
                 'additional_software': tool_data.get('additional_software', []),
-                'department': getattr(g, 'current_department', None),
+                'department': dept,
                 'created_at': datetime.now(),
                 'modified_at': datetime.now(),
                 'deleted': False

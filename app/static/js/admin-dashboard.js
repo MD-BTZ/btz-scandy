@@ -105,6 +105,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
                 const response = await fetch('/admin/locations/add', {
                     method: 'POST',
                     body: formData
@@ -142,6 +145,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
                 const response = await fetch('/admin/categories/add', {
                     method: 'POST',
                     body: formData
@@ -179,6 +185,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
                 const response = await fetch('/admin/ticket_categories/add', {
                     method: 'POST',
                     body: formData
@@ -205,6 +214,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+async function fetchJson(url, options) {
+    const resp = await fetch(url, Object.assign({headers: {'Accept': 'application/json'}}, options||{}));
+    const ct = resp.headers.get('content-type') || '';
+    if (resp.redirected || resp.url.includes('/auth/login') || (!ct.includes('application/json') && !ct.includes('json'))) {
+        try { window.showToast && window.showToast('error', 'Bitte erneut anmelden'); } catch(e) {}
+        window.location.href = '/auth/login';
+        throw new Error('Not authenticated');
+    }
+    if (!resp.ok) {
+        throw new Error('Request failed');
+    }
+    return resp.json();
+}
+
 // Lade Abteilungen
 async function loadDepartments() {
     const tbody = document.getElementById('departmentsList');
@@ -215,8 +238,7 @@ async function loadDepartments() {
 
     try {
         console.log('Lade Abteilungen von /admin/departments');
-        const response = await fetch('/admin/departments');
-        const data = await response.json();
+        const data = await fetchJson('/admin/departments');
         if (data.success) {
             console.log('Abteilungen geladen:', data.departments);
             tbody.innerHTML = data.departments.map(dept => `
@@ -247,9 +269,11 @@ async function loadLocations() {
     }
 
     try {
-        console.log('Lade Standorte von /admin/locations');
-        const response = await fetch('/admin/locations');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        console.log('Lade Standorte von /admin/locations für Dept:', dept);
+        const url = dept ? `/admin/locations?dept=${encodeURIComponent(dept)}` : '/admin/locations';
+        const data = await fetchJson(url);
         if (data.success) {
             console.log('Standorte geladen:', data.locations);
             tbody.innerHTML = data.locations.map(loc => `
@@ -277,8 +301,10 @@ async function loadCategories() {
     if (!tbody) return;
 
     try {
-        const response = await fetch('/admin/categories');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        const url = dept ? `/admin/categories?dept=${encodeURIComponent(dept)}` : '/admin/categories';
+        const data = await fetchJson(url);
         if (data.success) {
             tbody.innerHTML = data.categories.map(cat => `
                 <tr>
@@ -305,8 +331,10 @@ async function loadTicketCategories() {
     if (!tbody) return;
 
     try {
-        const response = await fetch('/admin/ticket_categories');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        const url = dept ? `/admin/ticket_categories?dept=${encodeURIComponent(dept)}` : '/admin/ticket_categories';
+        const data = await fetchJson(url);
         if (data.success) {
             tbody.innerHTML = data.categories.map(cat => `
                 <tr>

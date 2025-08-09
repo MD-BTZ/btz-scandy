@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Import-Status{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+  <h1 class="text-2xl font-bold mb-6">Import-Status</h1>
+  <div id="statusBox" class="alert">
+    Lädt Status...
+  </div>
+  <div id="details" class="mt-4 hidden">
+    <pre id="jsonOut" class="p-3 bg-base-200 rounded"></pre>
+  </div>
+  <div class="mt-6">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn">Zurück zum Dashboard</a>
+  </div>
+</div>
+<script>
+const jobId = {{ job_id|tojson }};
+const box = document.getElementById('statusBox');
+const details = document.getElementById('details');
+const jsonOut = document.getElementById('jsonOut');
+
+async function poll() {
+  try {
+    const res = await fetch(`/admin/backup/import_json/job/${jobId}.json`, { credentials: 'same-origin' });
+    const data = await res.json();
+    jsonOut.textContent = JSON.stringify(data, null, 2);
+    details.classList.remove('hidden');
+    if (!data.exists) {
+      box.className = 'alert alert-error';
+      box.textContent = 'Job nicht gefunden';
+      return;
+    }
+    const st = data.status || 'unknown';
+    if (st === 'running') {
+      box.className = 'alert alert-info';
+      const p = data.progress || {}; 
+      box.textContent = `Import läuft … Eingefügt: ${p.inserted||0}, Duplikate: ${p.duplicates||0}, Fehler: ${p.failed||0}`;
+      setTimeout(poll, 1500);
+    } else if (st === 'done') {
+      box.className = 'alert alert-success';
+      const p = data.result || {}; 
+      box.textContent = `Fertig: Eingefügt ${p.total_inserted||0}, Duplikate ${p.total_duplicates||0}, Fehler ${p.total_failed||0}`;
+    } else {
+      box.className = 'alert alert-error';
+      const errs = (data.errors||[]).join('; ');
+      box.textContent = `Fehler: ${errs || 'Unbekannter Fehler'}`;
+    }
+  } catch (e) {
+    box.className = 'alert alert-error';
+    box.textContent = 'Fehler beim Statusabruf';
+  }
+}
+poll();
+</script>
+{% endblock %}
+

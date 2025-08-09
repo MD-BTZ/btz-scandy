@@ -129,14 +129,19 @@ def add():
         barcode = request.form['barcode']
         firstname = request.form['firstname']
         lastname = request.form['lastname']
-        department = request.form.get('department', '')
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            flash('Bitte Abteilung wählen, bevor Sie einen Mitarbeiter anlegen', 'error')
+            return render_template('workers/add.html', departments=departments, form_data=request.form)
+        department = current_dept
         email = request.form.get('email', '')
         
         try:
             # Prüfe ob der Barcode bereits existiert
-            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
+            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
+            existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
+            existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
             
             if existing_tool or existing_consumable or existing_worker:
                 flash('Dieser Barcode existiert bereits', 'error')
@@ -179,7 +184,13 @@ def add():
                                    'email': email
                                })
             
-    return render_template('workers/add.html', departments=departments)
+    # GET: aktive Abteilung vorausgewählt anzeigen
+    try:
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+    except Exception:
+        current_dept = None
+    return render_template('workers/add.html', departments=departments, form_data={'department': current_dept} )
 
 @bp.route('/<string:original_barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -754,6 +765,7 @@ def timesheet_list():
         # Migration-Fehler nicht blockieren, nur loggen
         print(f"Migration-Fehler (nicht kritisch): {e}")
     
+    # Wochenberichte sind nutzerspezifisch und nicht abteilungsgebunden
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
     

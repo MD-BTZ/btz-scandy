@@ -22,6 +22,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings, get_departments_from_settings, get_locations_from_settings
 from docxtpl import DocxTemplate
 from urllib.parse import unquote
+from werkzeug.utils import secure_filename
+import tempfile
+import os
 import pandas as pd
 import tempfile
 from typing import Union
@@ -2846,8 +2849,20 @@ def delete_department(name):
 def get_categories_admin():
     """Gibt alle Kategorien zurück"""
     try:
-        # Verwende den AdminSystemSettingsService
-        categories = AdminSystemSettingsService.get_categories_from_settings()
+        # Optionaler Dept-Filter
+        req_dept = request.args.get('dept')
+        settings = mongodb.find_one('settings', {'key': 'categories'})
+        if settings and isinstance(settings.get('value'), dict):
+            value = settings['value']
+            if req_dept:
+                categories = value.get(req_dept) or value.get('GLOBAL') or value.get('*') or []
+            else:
+                from flask import g
+                current_dept = getattr(g, 'current_department', None)
+                categories = value.get(current_dept) or value.get('GLOBAL') or value.get('*') or []
+        else:
+            # Fallback: Service (global Liste)
+            categories = AdminSystemSettingsService.get_categories_from_settings()
         return jsonify({
             'success': True,
             'categories': [{'name': cat} for cat in categories]
@@ -2872,43 +2887,23 @@ def add_category():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Lade aktuelle Kategorien
-        settings = mongodb.db.settings.find_one({'key': 'categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(cat.lower() == name.lower() for cat in current_categories):
-            return jsonify({
-                'success': False,
-                'message': 'Diese Kategorie existiert bereits.'
-            })
-
-        # Kategorie zur Liste hinzufügen
-        current_categories.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'categories'},
-                {'value': current_categories},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern der Kategorie: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'categories'},
-                {'$set': {'value': current_categories}},
-                upsert=True
-            )
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Lese (nur) das Kategorien-Dokument dieser Abteilung als Liste
+        dept_doc = mongodb.find_one('settings', {'key': 'categories', 'department': current_dept})
+        dept_list = []
+        if dept_doc:
+            val = dept_doc.get('value', [])
+            if isinstance(val, list):
+                dept_list = val
+        if any(cat.lower() == name.lower() for cat in dept_list):
+            return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits in dieser Abteilung.'})
+        dept_list = sorted(list(set(dept_list + [name])), key=str.lower)
+        mongodb.update_one('settings', {'key': 'categories', 'department': current_dept}, {'$set': {'value': dept_list}}, upsert=True)
 
         return jsonify({
             'success': True,
@@ -2927,9 +2922,12 @@ def delete_category(name):
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
+        # Aktuelle Abteilung bestimmen
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
         
-        # Überprüfen, ob die Kategorie in Verwendung ist
-        tools_with_category = mongodb.db.tools.find_one({'category': decoded_name})
+        # Überprüfen, ob die Kategorie in Verwendung ist (nur aktuelle Abteilung)
+        tools_with_category = mongodb.db.tools.find_one({'category': decoded_name, 'department': current_dept})
         if tools_with_category:
             return jsonify({
                 'success': False,
@@ -2938,33 +2936,28 @@ def delete_category(name):
 
         # Lade aktuelle Kategorien
         settings = mongodb.db.settings.find_one({'key': 'categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Kategorie aus der Liste entfernen
-        if decoded_name in current_categories:
-            current_categories.remove(decoded_name)
-            try:
-                mongodb.update_one(
-                    'settings',
-                    {'key': 'categories'},
-                    {'value': current_categories},
-                    upsert=True
-                )
-            except Exception as db_error:
-                logger.error(f"Datenbankfehler beim Löschen der Kategorie: {str(db_error)}")
-                # Fallback: Versuche es mit update_one_array
-                mongodb.update_one_array(
-                    'settings',
-                    {'key': 'categories'},
-                    {'$set': {'value': current_categories}},
-                    upsert=True
-                )
+        if settings and isinstance(settings.get('value'), dict):
+            dept_map = settings['value']
+            lst = list(dept_map.get(current_dept) or [])
+            if decoded_name in lst:
+                lst.remove(decoded_name)
+                dept_map[current_dept or 'GLOBAL'] = lst
+                mongodb.update_one('settings', {'key': 'categories'}, {'$set': {'value': dept_map}}, upsert=True)
+        else:
+            current_categories = []
+            if settings and 'value' in settings:
+                value = settings['value']
+                if isinstance(value, str):
+                    current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
+                elif isinstance(value, list):
+                    current_categories = value
+            if decoded_name in current_categories:
+                current_categories.remove(decoded_name)
+                try:
+                    mongodb.update_one('settings', {'key': 'categories'}, {'value': current_categories}, upsert=True)
+                except Exception as db_error:
+                    logger.error(f"Datenbankfehler beim Löschen der Kategorie: {str(db_error)}")
+                    mongodb.update_one_array('settings', {'key': 'categories'}, {'$set': {'value': current_categories}}, upsert=True)
         
         return jsonify({
             'success': True,
@@ -2983,8 +2976,22 @@ def delete_category(name):
 def get_locations():
     """Gibt alle Standorte zurück"""
     try:
-        # Verwende den AdminSystemSettingsService
-        locations = AdminSystemSettingsService.get_locations_from_settings()
+        # Optionaler Dept-Filter
+        req_dept = request.args.get('dept')
+        # Erst: neue Collection 'locations' lesen (pro Abteilung)
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        locations_docs = list(mongodb.find('locations', {'deleted': {'$ne': True}}))
+        # Filter nach Abteilung
+        if current_dept:
+            locations_docs = [d for d in locations_docs if d.get('department') in (None, current_dept)]
+        locations_raw = [d.get('name') for d in locations_docs if d.get('name')]
+        locations = sorted(list({*locations_raw}))
+        # Fallback auf alte Settings-Struktur
+        if not locations:
+            settings = mongodb.find_one('settings', {'key': 'locations'})
+            if settings and isinstance(settings.get('value'), list):
+                locations = settings['value']
         return jsonify({
             'success': True,
             'locations': [{'name': loc} for loc in locations]
@@ -3009,43 +3016,16 @@ def add_location():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Lade aktuelle Standorte
-        settings = mongodb.db.settings.find_one({'key': 'locations'})
-        current_locations = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-            elif isinstance(value, list):
-                current_locations = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(loc.lower() == name.lower() for loc in current_locations):
-            return jsonify({
-                'success': False,
-                'message': 'Dieser Standort existiert bereits.'
-            })
-
-        # Standort zur Liste hinzufügen
-        current_locations.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'locations'},
-                {'value': current_locations},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern des Standorts: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'locations'},
-                {'$set': {'value': current_locations}},
-                upsert=True
-            )
+        # Schreibe in neue Collection 'locations'
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        exists = mongodb.find_one('locations', {'name': {'$regex': f'^{name}$', '$options': 'i'}})
+        if exists and exists.get('department') == current_dept:
+            return jsonify({'success': False, 'message': 'Dieser Standort existiert bereits in dieser Abteilung.'})
+        mongodb.insert_one('locations', {'name': name})
 
         return jsonify({
             'success': True,
@@ -3064,9 +3044,10 @@ def delete_location(name):
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
-        
-        # Überprüfen, ob der Standort in Verwendung ist
-        tools_with_location = mongodb.db.tools.find_one({'location': decoded_name})
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        # Überprüfen, ob der Standort in Verwendung ist (nur aktuelle Abteilung)
+        tools_with_location = mongodb.db.tools.find_one({'location': decoded_name, 'department': current_dept})
         if tools_with_location:
             return jsonify({
                 'success': False,
@@ -3074,34 +3055,29 @@ def delete_location(name):
             })
 
         # Lade aktuelle Standorte
-        settings = mongodb.db.settings.find_one({'key': 'locations'})
-        current_locations = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-            elif isinstance(value, list):
-                current_locations = value
-        
-        # Standort aus der Liste entfernen
-        if decoded_name in current_locations:
-            current_locations.remove(decoded_name)
-            try:
-                mongodb.update_one(
-                    'settings',
-                    {'key': 'locations'},
-                    {'value': current_locations},
-                    upsert=True
-                )
-            except Exception as db_error:
-                logger.error(f"Datenbankfehler beim Löschen des Standorts: {str(db_error)}")
-                # Fallback: Versuche es mit update_one_array
-                mongodb.update_one_array(
-                    'settings',
-                    {'key': 'locations'},
-                    {'$set': {'value': current_locations}},
-                    upsert=True
-                )
+        settings = mongodb.find_one('settings', {'key': 'locations'})
+        if settings and isinstance(settings.get('value'), dict):
+            dept_map = settings['value']
+            lst = list(dept_map.get(current_dept) or [])
+            if decoded_name in lst:
+                lst.remove(decoded_name)
+                dept_map[current_dept or 'GLOBAL'] = lst
+                mongodb.update_one('settings', {'key': 'locations'}, {'$set': {'value': dept_map}}, upsert=True)
+        else:
+            current_locations = []
+            if settings and 'value' in settings:
+                value = settings['value']
+                if isinstance(value, str):
+                    current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
+                elif isinstance(value, list):
+                    current_locations = value
+            if decoded_name in current_locations:
+                current_locations.remove(decoded_name)
+                try:
+                    mongodb.update_one('settings', {'key': 'locations'}, {'value': current_locations}, upsert=True)
+                except Exception as db_error:
+                    logger.error(f"Datenbankfehler beim Löschen des Standorts: {str(db_error)}")
+                    mongodb.update_one_array('settings', {'key': 'locations'}, {'$set': {'value': current_locations}}, upsert=True)
         
         return jsonify({
             'success': True,
@@ -3120,11 +3096,24 @@ def delete_location(name):
 def get_ticket_categories():
     """Gibt alle Ticket-Kategorien zurück"""
     try:
-        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+        # Optionaler Dept-Filter (für dynamisches Nachladen)
+        req_dept = request.args.get('dept')
+        settings = None
+        if req_dept:
+            settings = mongodb.db.settings.find_one({'key': 'ticket_categories', 'department': req_dept})
+        if settings is None:
+            settings = mongodb.find_one('settings', {'key': 'ticket_categories'})
         categories = []
         if settings and 'value' in settings:
             value = settings['value']
-            if isinstance(value, str):
+            if isinstance(value, dict):
+                if req_dept:
+                    categories = value.get(req_dept) or value.get('GLOBAL') or value.get('*') or []
+                else:
+                    from flask import g
+                    current_dept = getattr(g, 'current_department', None)
+                    categories = value.get(current_dept) or value.get('GLOBAL') or value.get('*') or []
+            elif isinstance(value, str):
                 categories = [cat.strip() for cat in value.split(',') if cat.strip()]
             elif isinstance(value, list):
                 categories = value
@@ -3152,43 +3141,22 @@ def add_ticket_category_json():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfen ob Ticket-Kategorie bereits existiert
-        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(cat.lower() == name.lower() for cat in current_categories):
-            return jsonify({
-                'success': False,
-                'message': 'Diese Ticket-Kategorie existiert bereits.'
-            })
-
-        # Ticket-Kategorie zur Liste hinzufügen
-        current_categories.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'value': current_categories},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern der Ticket-Kategorie: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'$set': {'value': current_categories}},
-                upsert=True
-            )
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        dept_doc = mongodb.find_one('settings', {'key': 'ticket_categories', 'department': current_dept})
+        dept_list = []
+        if dept_doc:
+            val = dept_doc.get('value', [])
+            if isinstance(val, list):
+                dept_list = val
+        if any(cat.lower() == name.lower() for cat in dept_list):
+            return jsonify({'success': False, 'message': 'Diese Ticket-Kategorie existiert bereits in dieser Abteilung.'})
+        dept_list = sorted(list(set(dept_list + [name])), key=str.lower)
+        mongodb.update_one('settings', {'key': 'ticket_categories', 'department': current_dept}, {'$set': {'value': dept_list}}, upsert=True)
 
         return jsonify({
             'success': True,
@@ -3227,7 +3195,7 @@ def delete_ticket_category_json(name):
         except Exception as db_error:
             logger.error(f"Datenbankfehler beim Löschen der Ticket-Kategorie: {str(db_error)}")
             # Fallback: Lade alle Kategorien und entferne die gewünschte
-            settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
+            settings = mongodb.find_one('settings', {'key': 'ticket_categories'})
             if settings and 'value' in settings:
                 current_categories = settings['value']
                 if isinstance(current_categories, list) and decoded_name in current_categories:
@@ -5053,7 +5021,7 @@ def email_settings():
         return redirect(url_for('admin.dashboard'))
 
 @bp.route('/switch-department/<department>')
-@mitarbeiter_required
+@login_required
 def switch_department(department):
     """Setzt das aktive Department in der Session, falls der Benutzer berechtigt ist."""
     try:
@@ -5176,6 +5144,86 @@ def test_weekly_backup():
             'success': False,
             'message': f'Fehler beim Versenden: {str(e)}'
         })
+
+@bp.route('/backup/import_json', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def import_json_backup_scoped():
+    """Importiert ein altes JSON-Backup in eine benannte Abteilung."""
+    try:
+        if request.method == 'POST':
+            dept_name = (request.form.get('department_name') or '').strip()
+            file = request.files.get('backup_file')
+            if not dept_name:
+                flash('Bitte Abteilungsnamen angeben', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+            if not file or file.filename == '':
+                flash('Bitte eine JSON-Backup-Datei auswählen', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+            if not file.filename.lower().endswith('.json'):
+                flash('Ungültiges Dateiformat. Bitte eine .json Datei wählen', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+
+            # Datei temporär speichern
+            filename = secure_filename(file.filename)
+            tmp_dir = tempfile.mkdtemp()
+            tmp_path = os.path.join(tmp_dir, filename)
+            file.save(tmp_path)
+
+            # Import als Hintergrund-Job starten, um Timeouts zu vermeiden
+            from app.utils.unified_backup_manager import unified_backup_manager
+            job_id = unified_backup_manager.start_import_job(tmp_path, dept_name)
+
+            # Abteilung in den Systemeinstellungen anlegen und Benutzerberechtigungen erweitern
+            try:
+                # Departments-Liste pflegen
+                existing_depts_doc = mongodb.find_one('settings', {'key': 'departments'})
+                if existing_depts_doc and isinstance(existing_depts_doc.get('value'), list):
+                    if dept_name not in existing_depts_doc['value']:
+                        new_list = existing_depts_doc['value'] + [dept_name]
+                        mongodb.update_one('settings', {'_id': existing_depts_doc['_id']}, {'$set': {'value': new_list}})
+                else:
+                    mongodb.insert_one('settings', {'key': 'departments', 'value': [dept_name]})
+
+                # Aktuellen Benutzer für die neue Abteilung berechtigen
+                if hasattr(current_user, 'username'):
+                    mongodb.update_one('users', {'username': current_user.username}, {'$addToSet': {'allowed_departments': dept_name}})
+            except Exception as dep_e:
+                logger.warning(f"Konnte Abteilung/Berechtigung nicht automatisch anlegen: {dep_e}")
+            if not job_id:
+                flash('Import konnte nicht gestartet werden.', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+
+            # Weiterleitung auf Status-Seite
+            return redirect(url_for('admin.import_json_backup_status', job_id=job_id))
+
+        return render_template('admin/import_json_backup.html')
+    except Exception as e:
+        logger.error(f"Fehler beim JSON-Import: {e}")
+        flash('Fehler beim Import', 'error')
+        return redirect(url_for('admin.import_json_backup_scoped'))
+
+@bp.route('/backup/import_json/job/<job_id>.json', methods=['GET'])
+@login_required
+@admin_required
+def import_json_backup_job_status(job_id: str):
+    try:
+        from app.utils.unified_backup_manager import unified_backup_manager
+        job = unified_backup_manager.get_import_job(job_id)
+        return jsonify(job)
+    except Exception as e:
+        return jsonify({'exists': False, 'error': str(e)}), 500
+
+@bp.route('/backup/import_json/status/<job_id>', methods=['GET'])
+@login_required
+@admin_required
+def import_json_backup_status(job_id: str):
+    try:
+        return render_template('admin/import_json_backup_status.html', job_id=job_id)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Status-Seite: {e}")
+        flash('Fehler beim Laden des Status', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/version/check', methods=['GET'])
 @login_required

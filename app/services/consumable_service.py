@@ -29,8 +29,10 @@ class ConsumableService:
     def add_consumable(data: Dict[str, Any]) -> Tuple[bool, str]:
         try:
             barcode = data.get('barcode')
-            # Prüfe auf Barcode-Duplikate innerhalb der aktuellen Abteilung
             dept = getattr(g, 'current_department', None)
+            if not dept:
+                return False, 'Bitte Abteilung wählen, bevor Sie ein Verbrauchsmaterial anlegen'
+            # Prüfe auf Barcode-Duplikate innerhalb der aktuellen Abteilung
             for collection in ['tools', 'consumables', 'workers']:
                 uniq_query = {'barcode': barcode, 'deleted': {'$ne': True}}
                 if dept:
