@@ -1,0 +1,8 @@
+[allowlist]
+description = "allow baseline and local env files"
+paths = [
+  '^\.secrets\.baseline$',
+  '^\.env(\..*)?$',
+  '^backups/',
+]
+ 
