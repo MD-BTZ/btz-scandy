@@ -1866,20 +1866,46 @@ def add_note(id):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 def get_unassigned_ticket_count():
-    count = mongodb.count_documents('tickets', {
-        '$and': [
-            {
-                '$or': [
-                    {'assigned_to': None},
-                    {'assigned_to': ''},
-                    {'assigned_to': {'$exists': False}}
-                ]
-            },
-            {'status': 'offen'},
-            {'deleted': {'$ne': True}}
-        ]
-    })
-    return count
+    """Zählt offene, nicht zugewiesene Tickets nur im aktuellen Department,
+    die der eingeloggte Nutzer sehen darf."""
+    try:
+        from flask import g
+        from flask_login import current_user
+        # Basis-Filter
+        filter_query = {
+            '$and': [
+                {
+                    '$or': [
+                        {'assigned_to': None},
+                        {'assigned_to': ''},
+                        {'assigned_to': {'$exists': False}}
+                    ]
+                },
+                {'status': 'offen'},
+                {'deleted': {'$ne': True}}
+            ]
+        }
+        # Department-Filter anwenden
+        current_dept = getattr(g, 'current_department', None)
+        if current_dept:
+            filter_query['department'] = current_dept
+
+        # Sichtbarkeit nach Rolle einschränken
+        if getattr(current_user, 'role', None) != 'admin':
+            username = getattr(current_user, 'username', None)
+            role = getattr(current_user, 'role', None)
+            # Sichtbare Tickets für Nicht‑Admins: eigene, zugewiesene oder in erlaubten Bereichen
+            or_visibility = [
+                {'created_by': username},
+                {'assigned_to': username},
+            ]
+            if role:
+                or_visibility.append({'visible_roles': role})
+            filter_query['$and'].append({'$or': or_visibility})
+
+        return mongodb.count_documents('tickets', filter_query)
+    except Exception:
+        return 0
 
 # Kontextprozessor für alle Templates
 @bp.app_context_processor

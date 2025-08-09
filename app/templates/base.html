@@ -290,16 +290,6 @@
 
             {# Kantinenplan - nur für berechtigte Benutzer wenn Feature aktiviert #}
             {% if current_user.is_authenticated and features_enabled.get('canteen_plan', False) and current_user.canteen_plan_enabled %}
-            {# Admin: Rollen & Berechtigungen #}
-            {% if current_user.is_authenticated and has_permission(current_user.role, 'settings', 'manage') %}
-            <a href="{{ url_for('admin.role_permissions') }}"
-               class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'role_permissions' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
-                 <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                     <i class="fas fa-user-shield text-xl"></i>
-                 </div>
-                 <span class="nav-text ml-2 opacity-100 transition-opacity duration-300 whitespace-nowrap sidebar-text">Rollen & Rechte</span>
-            </a>
-            {% endif %}
             <a href="{{ url_for('canteen.index') }}" 
                class="flex items-center h-12 pl-2 mb-1 rounded-r-lg transition-all duration-300 sidebar-nav-item {% if request.endpoint and 'canteen' in request.endpoint %}active{% else %}text-gray-700{% endif %}">
                  <div class="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -390,7 +380,7 @@
 
             <!-- Rechter Bereich -->
             <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
-                {% if current_user.is_authenticated and departments.allowed|length > 1 %}
+                {% if current_user.is_authenticated %}
                 <div class="dropdown dropdown-end">
                     <label tabindex="0" class="btn btn-ghost btn-sm">
                         <i class="fas fa-building mr-2"></i>
