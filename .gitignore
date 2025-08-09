@@ -131,3 +131,7 @@ package-lock.json
 # Build artifacts
 *.css.map
 *.js.map 
+# Backups
+scandy_backup_*.json
+scandy_backup_*.zip
+scandy_weekly_backup_*.zip
