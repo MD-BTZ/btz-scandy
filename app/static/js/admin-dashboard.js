@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/departments/add', {
                     method: 'POST',
                     body: formData
@@ -108,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const metaDept = document.querySelector('meta[name="current-department"]');
                 const dept = metaDept ? metaDept.getAttribute('content') : '';
                 if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/locations/add', {
                     method: 'POST',
                     body: formData
@@ -148,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const metaDept = document.querySelector('meta[name="current-department"]');
                 const dept = metaDept ? metaDept.getAttribute('content') : '';
                 if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/categories/add', {
                     method: 'POST',
                     body: formData
@@ -188,6 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const metaDept = document.querySelector('meta[name="current-department"]');
                 const dept = metaDept ? metaDept.getAttribute('content') : '';
                 if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/ticket_categories/add', {
                     method: 'POST',
                     body: formData
@@ -214,8 +218,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+function csrfHeaders() {
+    const token = getCsrfToken();
+    return {
+        'X-CSRFToken': token,
+        'X-CSRF-Token': token
+    };
+}
+
 async function fetchJson(url, options) {
-    const resp = await fetch(url, Object.assign({headers: {'Accept': 'application/json'}}, options||{}));
+    const method = (options && options.method) ? options.method.toUpperCase() : 'GET';
+    const base = { headers: {'Accept': 'application/json'} };
+    if (method !== 'GET') {
+        base.headers = Object.assign({}, base.headers, csrfHeaders());
+    }
+    const resp = await fetch(url, Object.assign(base, options||{}));
     const ct = resp.headers.get('content-type') || '';
     if (resp.redirected || resp.url.includes('/auth/login') || (!ct.includes('application/json') && !ct.includes('json'))) {
         try { window.showToast && window.showToast('error', 'Bitte erneut anmelden'); } catch(e) {}
@@ -380,8 +402,12 @@ async function deleteDepartment(name) {
 async function deleteLocation(name) {
     if (confirm(`Möchten Sie den Standort "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/locations/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {
@@ -401,8 +427,12 @@ async function deleteLocation(name) {
 async function deleteCategory(name) {
     if (confirm(`Möchten Sie die Kategorie "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/categories/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {
@@ -422,8 +452,12 @@ async function deleteCategory(name) {
 async function deleteTicketCategory(name) {
     if (confirm(`Möchten Sie die Ticket-Kategorie "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/ticket_categories/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {

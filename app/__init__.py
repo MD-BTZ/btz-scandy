@@ -20,6 +20,7 @@ from flask_session import Session  # Session-Management
 from .constants import Routes
 from app.config.version import VERSION
 import os
+import secrets
 from datetime import datetime, timedelta
 from app.utils.filters import register_filters, status_color, priority_color
 import logging
@@ -201,8 +202,17 @@ def create_app(test_config=None):
     
     # ===== KONFIGURATION LADEN =====
     from app.config import config
-    config_name = 'default' if test_config is None else test_config
-    app.config.from_object(config[config_name])
+    # Konfiguration basierend auf FLASK_ENV wählen, Fallback: development
+    if test_config is None:
+        env_name = os.environ.get('FLASK_ENV', 'development').lower()
+    else:
+        env_name = test_config
+    if env_name not in config:
+        env_name = 'development'
+    app.config.from_object(config[env_name])
+    # Fallback: SECRET_KEY sicher setzen, falls aus Umgebung/Konfig nicht geladen
+    if not app.config.get('SECRET_KEY'):
+        app.config['SECRET_KEY'] = secrets.token_hex(32)
     
     # ===== CSRF-SCHUTZ AKTIVIEREN =====
     csrf.init_app(app)
@@ -253,15 +263,17 @@ def create_app(test_config=None):
     login_manager.init_app(app)
     
     # ===== FLASK-SESSION INITIALISIEREN =====
-    # Session-Konfiguration für bessere Kompatibilität
-    app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['SESSION_FILE_DIR'] = os.path.join(app.root_path, 'flask_session')
-    app.config['SESSION_FILE_THRESHOLD'] = 500
-    app.config['SESSION_FILE_MODE'] = 384
-    app.config['SESSION_COOKIE_SECURE'] = False  # Für lokale Entwicklung
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+    # Session-Konfiguration: Produktionswerte aus Config, in Dev lockerer
+    app.config.setdefault('SESSION_TYPE', 'filesystem')
+    app.config.setdefault('SESSION_FILE_DIR', os.path.join(app.root_path, 'flask_session'))
+    app.config.setdefault('SESSION_FILE_THRESHOLD', 500)
+    app.config.setdefault('SESSION_FILE_MODE', 384)
+    # Nur in Nicht-Produktion die Sicherheit lockern
+    if os.environ.get('FLASK_ENV', 'development').lower() != 'production':
+        app.config['SESSION_COOKIE_SECURE'] = False
+        app.config['SESSION_COOKIE_HTTPONLY'] = True
+        app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config.setdefault('PERMANENT_SESSION_LIFETIME', timedelta(days=7))
     
     Session(app)
 
@@ -305,11 +317,11 @@ def create_app(test_config=None):
             from app.models.user import User
             from app.models.mongodb_database import mongodb
             
-            print(f"load_user aufgerufen für ID: {user_id}")
+            logging.debug(f"load_user aufgerufen für ID: {user_id}")
             
             # Debug: Zeige alle verfügbaren User-IDs
             all_users = MongoDBUser.get_all()
-            print(f"Verfügbare User-IDs: {[str(user.get('_id', 'No ID')) for user in all_users]}")
+            logging.debug(f"Verfügbare User-IDs: {[str(user.get('_id', 'No ID')) for user in all_users]}")
             
             # WICHTIG: user_id ist immer ein String (von Flask-Login)
             # Suche direkt in der Datenbank mit verschiedenen Methoden
@@ -317,9 +329,9 @@ def create_app(test_config=None):
             # Methode 1: Direkte String-Suche
             user_data = mongodb.find_one('users', {'_id': user_id})
             if user_data:
-                print(f"DEBUG: User mit String-ID gefunden: {user_data.get('username')}")
+                logging.debug(f"User mit String-ID gefunden: {user_data.get('username')}")
                 user = User(user_data)
-                print(f"User geladen: {user.username}, ID: {user.id}")
+                logging.debug(f"User geladen: {user.username}, ID: {user.id}")
                 return user
             
             # Methode 2: ObjectId-Suche
@@ -328,29 +340,29 @@ def create_app(test_config=None):
                 obj_id = ObjectId(user_id)
                 user_data = mongodb.find_one('users', {'_id': obj_id})
                 if user_data:
-                    print(f"DEBUG: User mit ObjectId gefunden: {user_data.get('username')}")
+                    logging.debug(f"User mit ObjectId gefunden: {user_data.get('username')}")
                     user = User(user_data)
-                    print(f"User geladen: {user.username}, ID: {user.id}")
+                    logging.debug(f"User geladen: {user.username}, ID: {user.id}")
                     return user
             except Exception as e:
-                print(f"DEBUG: ObjectId-Konvertierung fehlgeschlagen: {e}")
+                logging.debug(f"ObjectId-Konvertierung fehlgeschlagen: {e}")
             
             # Methode 3: Fallback mit MongoDBUser.get_by_id
             user_data = MongoDBUser.get_by_id(user_id)
             if user_data:
-                print(f"DEBUG: User mit MongoDBUser.get_by_id gefunden: {user_data.get('username')}")
+                logging.debug(f"User mit MongoDBUser.get_by_id gefunden: {user_data.get('username')}")
                 user = User(user_data)
-                print(f"User geladen: {user.username}, ID: {user.id}")
+                logging.debug(f"User geladen: {user.username}, ID: {user.id}")
                 return user
             
             # Methode 4: Session-Reparatur - versuche Session zu löschen
-            print(f"Kein User gefunden für ID: {user_id} - Session wird zurückgesetzt")
+            logging.debug(f"Kein User gefunden für ID: {user_id} - Session wird zurückgesetzt")
             try:
                 from flask import session
                 session.clear()
-                print("Session zurückgesetzt")
+                logging.debug("Session zurückgesetzt")
             except Exception as e:
-                print(f"Fehler beim Zurücksetzen der Session: {e}")
+                logging.debug(f"Fehler beim Zurücksetzen der Session: {e}")
             
             return None
         except Exception as e:
@@ -359,9 +371,9 @@ def create_app(test_config=None):
             try:
                 from flask import session
                 session.clear()
-                print("Session nach Fehler zurückgesetzt")
+                logging.debug("Session nach Fehler zurückgesetzt")
             except Exception as session_error:
-                print(f"Fehler beim Zurücksetzen der Session: {session_error}")
+                logging.debug(f"Fehler beim Zurücksetzen der Session: {session_error}")
             return None
     
     # ===== CONTEXT PROCESSORS REGISTRIEREN =====

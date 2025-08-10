@@ -106,6 +106,10 @@ def emergency_admin():
     Notfall-Route zur Erstellung eines Admin-Benutzers
     """
     try:
+        import os
+        # Standardmäßig deaktivieren; nur explizit per ENV aktivieren
+        if os.environ.get('ENABLE_EMERGENCY_ADMIN', 'false').lower() != 'true':
+            return "<h1>403 Forbidden</h1><p>Emergency-Admin ist deaktiviert.</p>", 403
         from werkzeug.security import generate_password_hash
         from datetime import datetime
         

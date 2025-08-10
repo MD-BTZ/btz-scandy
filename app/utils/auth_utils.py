@@ -152,9 +152,5 @@ def check_scrypt_password(password_hash, password):
         
     except Exception as e:
         logger.error(f"Fehler bei scrypt-Passwort-Überprüfung: {e}")
-        # Fallback: Für bekannte Test-Passwörter erlauben wir temporär den Zugang
-        # Das ist nur für die Migration von Backup-Daten gedacht
-        if password in ['admin123', 'password', 'test']:
-            logger.warning(f"Scrypt-Hash-Überprüfung fehlgeschlagen, aber bekanntes Test-Passwort erkannt: {password}")
-            return True
+        # Sicherheitskritisch: Kein permissiver Fallback
         return False 

@@ -3,7 +3,7 @@ from flask_login import current_user
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
 from app.utils.permissions import permission_required
-from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
+from app.utils.database_helpers import get_categories_scoped, get_locations_scoped, get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
 from app.services.consumable_service import ConsumableService
@@ -31,9 +31,9 @@ def index():
             filter_query['department'] = g.current_department
         consumables = list(mongodb.find('consumables', filter_query, sort=[('name', 1)]))
         
-        # Hole Kategorien und Standorte für Filter
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        # Hole Kategorien und Standorte strikt abteilungsgetrennt
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('consumables/index.html',
                              consumables=consumables,
@@ -54,8 +54,8 @@ def add():
             from flask import g
             if not getattr(g, 'current_department', None):
                 flash('Bitte Abteilung wählen, bevor Sie ein Verbrauchsmaterial anlegen', 'error')
-                categories = get_categories_from_settings()
-                locations = get_locations_from_settings()
+                categories = get_categories_scoped()
+                locations = get_locations_scoped()
                 return render_template('consumables/add.html', 
                                      categories=categories, 
                                      locations=locations,
@@ -78,8 +78,8 @@ def add():
                     data['custom_fields'] = custom_values
                 else:
                     flash(f'Fehler bei benutzerdefinierten Feldern: {error_msg}', 'error')
-                    categories = get_categories_from_settings()
-                    locations = get_locations_from_settings()
+                    categories = get_categories_scoped()
+                    locations = get_locations_scoped()
                     return render_template('consumables/add.html', 
                                          categories=categories, 
                                          locations=locations,
@@ -99,8 +99,8 @@ def add():
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
     
     # GET-Anfrage: Formular anzeigen
-    categories = get_categories_from_settings()
-    locations = get_locations_from_settings()
+    categories = get_categories_scoped()
+    locations = get_locations_scoped()
     return render_template('consumables/add.html', 
                        categories=categories, 
                        locations=locations)
@@ -143,8 +143,8 @@ def detail(barcode):
         flash('Verbrauchsmaterial nicht gefunden', 'error')
         return redirect(url_for('consumables.index'))
     
-    categories = get_categories_from_settings()
-    locations = get_locations_from_settings()
+    categories = get_categories_scoped()
+    locations = get_locations_scoped()
     usages = ConsumableService.get_consumable_usages(barcode)
     
     # Erstelle Verlaufsliste

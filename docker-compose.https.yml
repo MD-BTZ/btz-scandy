@@ -8,15 +8,10 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     environment:
-      - MONGODB_URI=mongodb://admin:rdDeW85SpDJ5OOLkQt8vAtBCd@scandy-mongodb-scandy:27017/scandy_scandy?authSource=admin
-      - MONGODB_DB=scandy_scandy
-      - SECRET_KEY=azDs5kZcymluAY6HTnFdJSRFxINLzUWrs5QCj4H43PBumc46Af8ujoCTBKJBKtw3zGVGkBMg
       - FLASK_ENV=production
-      - SYSTEM_NAME=Scandy scandy
-      - TICKET_SYSTEM_NAME=Aufgaben scandy
-      - TOOL_SYSTEM_NAME=Werkzeuge scandy
-      - CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter scandy
       - SESSION_COOKIE_SECURE=True
       - REMEMBER_COOKIE_SECURE=True
       - FORCE_HTTPS=True
@@ -45,10 +40,12 @@ services:
     restart: unless-stopped
     ports:
       - "27017:27017"
+    env_file:
+      - .env
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=rdDeW85SpDJ5OOLkQt8vAtBCd
-      - MONGO_INITDB_DATABASE=scandy_scandy
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGODB_DB}
     volumes:
       - mongodb_data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d
@@ -65,12 +62,14 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+    env_file:
+      - .env
     environment:
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=rdDeW85SpDJ5OOLkQt8vAtBCd
-      - ME_CONFIG_MONGODB_URL=mongodb://admin:rdDeW85SpDJ5OOLkQt8vAtBCd@scandy-mongodb-scandy:27017/
-      - ME_CONFIG_BASICAUTH_USERNAME=admin
-      - ME_CONFIG_BASICAUTH_PASSWORD=admin123
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - ME_CONFIG_MONGODB_URL=${ME_CONFIG_MONGODB_URL}
+      - ME_CONFIG_BASICAUTH_USERNAME=${ME_CONFIG_BASICAUTH_USERNAME}
+      - ME_CONFIG_BASICAUTH_PASSWORD=${ME_CONFIG_BASICAUTH_PASSWORD}
     depends_on:
       scandy-mongodb-scandy:
         condition: service_healthy

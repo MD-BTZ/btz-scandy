@@ -2925,12 +2925,14 @@ def delete_category(name):
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
         # Soft-Delete in dedizierter Collection
-        mongodb.update_one('categories', {
+        ok = mongodb.update_one('categories', {
             'name': decoded_name,
             'department': current_dept
         }, {
             'deleted': True
         })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,
@@ -2949,26 +2951,15 @@ def delete_category(name):
 def get_locations():
     """Gibt alle Standorte zurück"""
     try:
-        # Optionaler Dept-Filter
         req_dept = request.args.get('dept')
-        # Erst: neue Collection 'locations' lesen (pro Abteilung)
         from flask import g
         current_dept = req_dept or getattr(g, 'current_department', None)
-        locations_docs = list(mongodb.find('locations', {'deleted': {'$ne': True}}))
-        # Filter nach Abteilung
-        if current_dept:
-            locations_docs = [d for d in locations_docs if d.get('department') in (None, current_dept)]
-        locations_raw = [d.get('name') for d in locations_docs if d.get('name')]
-        locations = sorted(list({*locations_raw}))
-        # Fallback auf alte Settings-Struktur
-        if not locations:
-            settings = mongodb.find_one('settings', {'key': 'locations'})
-            if settings and isinstance(settings.get('value'), list):
-                locations = settings['value']
-        return jsonify({
-            'success': True,
-            'locations': [{'name': loc} for loc in locations]
-        })
+        if not current_dept:
+            return jsonify({'success': True, 'locations': []})
+        docs = list(mongodb.find('locations', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'locations': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Standorte: {str(e)}")
         return jsonify({
@@ -2989,16 +2980,24 @@ def add_location():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Schreibe in neue Collection 'locations'
+        # Schreibe in neue Collection 'locations' mit Abteilung
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        exists = mongodb.find_one('locations', {'name': {'$regex': f'^{name}$', '$options': 'i'}})
-        if exists and exists.get('department') == current_dept:
+        exists = mongodb.find_one('locations', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
             return jsonify({'success': False, 'message': 'Dieser Standort existiert bereits in dieser Abteilung.'})
-        mongodb.insert_one('locations', {'name': name})
+        mongodb.insert_one('locations', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -3026,31 +3025,17 @@ def delete_location(name):
                 'success': False,
                 'message': 'Der Standort kann nicht gelöscht werden, da er noch von Werkzeugen verwendet wird.'
             })
-
-        # Lade aktuelle Standorte
-        settings = mongodb.find_one('settings', {'key': 'locations'})
-        if settings and isinstance(settings.get('value'), dict):
-            dept_map = settings['value']
-            lst = list(dept_map.get(current_dept) or [])
-            if decoded_name in lst:
-                lst.remove(decoded_name)
-                dept_map[current_dept or 'GLOBAL'] = lst
-                mongodb.update_one('settings', {'key': 'locations'}, {'$set': {'value': dept_map}}, upsert=True)
-        else:
-            current_locations = []
-            if settings and 'value' in settings:
-                value = settings['value']
-                if isinstance(value, str):
-                    current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-                elif isinstance(value, list):
-                    current_locations = value
-            if decoded_name in current_locations:
-                current_locations.remove(decoded_name)
-                try:
-                    mongodb.update_one('settings', {'key': 'locations'}, {'value': current_locations}, upsert=True)
-                except Exception as db_error:
-                    logger.error(f"Datenbankfehler beim Löschen des Standorts: {str(db_error)}")
-                    mongodb.update_one_array('settings', {'key': 'locations'}, {'$set': {'value': current_locations}}, upsert=True)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        ok = mongodb.update_one('locations', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Standort nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,
@@ -3144,12 +3129,14 @@ def delete_ticket_category_json(name):
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
         # Soft-Delete in dedizierter Collection
-        mongodb.update_one('ticket_categories', {
+        ok = mongodb.update_one('ticket_categories', {
             'name': decoded_name,
             'department': current_dept
         }, {
             'deleted': True
         })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Ticket-Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,

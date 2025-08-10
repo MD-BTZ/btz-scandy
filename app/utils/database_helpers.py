@@ -133,6 +133,40 @@ def get_locations_from_settings():
     """
     return get_setting_value('locations', 'locations', 'name')
 
+def get_categories_scoped() -> list:
+    """Liefert Kategorien strikt abteilungsweise aus der dedizierten Collection.
+    Ignoriert settings vollständig (harte Trennung der Abteilungen).
+    """
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            return []
+        items = mongodb.find('categories', {
+            'deleted': {'$ne': True},
+            'department': current_dept
+        })
+        return [item['name'] for item in items if 'name' in item]
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Kategorien (scoped): {e}")
+        return []
+
+def get_locations_scoped() -> list:
+    """Liefert Standorte strikt abteilungsweise aus der dedizierten Collection.
+    Ignoriert settings vollständig (harte Trennung der Abteilungen).
+    """
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            return []
+        items = mongodb.find('locations', {
+            'deleted': {'$ne': True},
+            'department': current_dept
+        })
+        return [item['name'] for item in items if 'name' in item]
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Standorte (scoped): {e}")
+        return []
+
 def get_departments_from_settings():
     """
     Lädt Abteilungen aus der settings Collection oder der departments Collection.
