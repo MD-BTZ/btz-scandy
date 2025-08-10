@@ -145,7 +145,22 @@ def get_categories_scoped() -> list:
             'deleted': {'$ne': True},
             'department': current_dept
         })
-        return [item['name'] for item in items if 'name' in item]
+        raw_names = [item.get('name') for item in items]
+        # Case-insensitive deduplizieren, Trim, stabile Reihenfolge beibehalten
+        seen_lower = set()
+        unique = []
+        for n in raw_names:
+            if not n:
+                continue
+            s = str(n).strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen_lower:
+                continue
+            seen_lower.add(key)
+            unique.append(s)
+        return sorted(unique, key=str.casefold)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Kategorien (scoped): {e}")
         return []
@@ -162,7 +177,22 @@ def get_locations_scoped() -> list:
             'deleted': {'$ne': True},
             'department': current_dept
         })
-        return [item['name'] for item in items if 'name' in item]
+        raw_names = [item.get('name') for item in items]
+        # Case-insensitive deduplizieren, Trim, stabile Reihenfolge beibehalten
+        seen_lower = set()
+        unique = []
+        for n in raw_names:
+            if not n:
+                continue
+            s = str(n).strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen_lower:
+                continue
+            seen_lower.add(key)
+            unique.append(s)
+        return sorted(unique, key=str.casefold)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Standorte (scoped): {e}")
         return []

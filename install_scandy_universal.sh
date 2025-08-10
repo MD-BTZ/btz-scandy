@@ -2693,7 +2693,7 @@ update_installation() {
                 log_warning "Virtual Environment oder requirements.txt nicht gefunden"
             fi
             
-            # Service neu starten
+            # Service neu starten (hart, mit Fehlerprüfung)
             log_info "Starte Scandy-Service neu..."
             systemctl restart scandy 2>/dev/null || {
                 log_warning "systemctl restart scandy fehlgeschlagen"
@@ -2711,15 +2711,15 @@ update_installation() {
                 fi
             }
             
-            # Status prüfen
+            # Status prüfen (Port-Check anstatt /health)
             log_info "Prüfe Service-Status..."
-            sleep 3
-            if systemctl is-active --quiet scandy; then
-                log_success "Service läuft!"
-            else
-                log_warning "Service-Status unklar"
-                systemctl status scandy --no-pager -l
-            fi
+            for i in {1..30}; do
+                if ss -H -ltn | grep -q ":${WEB_PORT} "; then
+                    log_success "Service läuft auf Port ${WEB_PORT}!"
+                    break
+                fi
+                sleep 2
+            done
             ;;
     esac
     
@@ -2980,6 +2980,12 @@ main() {
     
     # Argumente parsen
     parse_arguments "$@"
+    
+    # Root erzwingen (re-exec mit sudo, um interaktive Passwort-Prompts inmitten zu vermeiden)
+    if [ "$EUID" -ne 0 ]; then
+        echo "[INFO] Starte mit Root-Rechten neu..."
+        exec sudo -E bash "$0" "$@"
+    fi
     
     # System-Kompatibilität prüfen
     check_system_compatibility
