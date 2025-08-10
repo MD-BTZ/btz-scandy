@@ -2847,32 +2847,20 @@ def delete_department(name):
 @bp.route('/categories')
 @mitarbeiter_required
 def get_categories_admin():
-    """Gibt alle Kategorien zurück"""
+    """Gibt alle Kategorien der aktuellen/angefragten Abteilung zurück (dedizierte Collection)."""
     try:
-        # Optionaler Dept-Filter
         req_dept = request.args.get('dept')
-        settings = mongodb.find_one('settings', {'key': 'categories'})
-        if settings and isinstance(settings.get('value'), dict):
-            value = settings['value']
-            if req_dept:
-                categories = value.get(req_dept) or value.get('GLOBAL') or value.get('*') or []
-            else:
-                from flask import g
-                current_dept = getattr(g, 'current_department', None)
-                categories = value.get(current_dept) or value.get('GLOBAL') or value.get('*') or []
-        else:
-            # Fallback: Service (global Liste)
-            categories = AdminSystemSettingsService.get_categories_from_settings()
-        return jsonify({
-            'success': True,
-            'categories': [{'name': cat} for cat in categories]
-        })
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': True, 'categories': []})
+        docs = list(mongodb.find('categories', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Kategorien'
-        })
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'})
 
 @bp.route('/categories/add', methods=['POST'])
 @mitarbeiter_required
@@ -2887,23 +2875,24 @@ def add_category():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        # Lese (nur) das Kategorien-Dokument dieser Abteilung als Liste
-        dept_doc = mongodb.find_one('settings', {'key': 'categories', 'department': current_dept})
-        dept_list = []
-        if dept_doc:
-            val = dept_doc.get('value', [])
-            if isinstance(val, list):
-                dept_list = val
-        if any(cat.lower() == name.lower() for cat in dept_list):
+        exists = mongodb.find_one('categories', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
             return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits in dieser Abteilung.'})
-        dept_list = sorted(list(set(dept_list + [name])), key=str.lower)
-        mongodb.update_one('settings', {'key': 'categories', 'department': current_dept}, {'$set': {'value': dept_list}}, upsert=True)
+        mongodb.insert_one('categories', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -2933,31 +2922,15 @@ def delete_category(name):
                 'success': False,
                 'message': 'Die Kategorie kann nicht gelöscht werden, da sie noch von Werkzeugen verwendet wird.'
             })
-
-        # Lade aktuelle Kategorien
-        settings = mongodb.db.settings.find_one({'key': 'categories'})
-        if settings and isinstance(settings.get('value'), dict):
-            dept_map = settings['value']
-            lst = list(dept_map.get(current_dept) or [])
-            if decoded_name in lst:
-                lst.remove(decoded_name)
-                dept_map[current_dept or 'GLOBAL'] = lst
-                mongodb.update_one('settings', {'key': 'categories'}, {'$set': {'value': dept_map}}, upsert=True)
-        else:
-            current_categories = []
-            if settings and 'value' in settings:
-                value = settings['value']
-                if isinstance(value, str):
-                    current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-                elif isinstance(value, list):
-                    current_categories = value
-            if decoded_name in current_categories:
-                current_categories.remove(decoded_name)
-                try:
-                    mongodb.update_one('settings', {'key': 'categories'}, {'value': current_categories}, upsert=True)
-                except Exception as db_error:
-                    logger.error(f"Datenbankfehler beim Löschen der Kategorie: {str(db_error)}")
-                    mongodb.update_one_array('settings', {'key': 'categories'}, {'$set': {'value': current_categories}}, upsert=True)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        mongodb.update_one('categories', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
         
         return jsonify({
             'success': True,
@@ -3094,44 +3067,25 @@ def delete_location(name):
 @bp.route('/ticket_categories')
 @mitarbeiter_required
 def get_ticket_categories():
-    """Gibt alle Ticket-Kategorien zurück"""
+    """Gibt alle Ticket-Kategorien (Handlungsfelder) der aktuellen/angefragten Abteilung zurück."""
     try:
-        # Optionaler Dept-Filter (für dynamisches Nachladen)
         req_dept = request.args.get('dept')
-        settings = None
-        if req_dept:
-            settings = mongodb.db.settings.find_one({'key': 'ticket_categories', 'department': req_dept})
-        if settings is None:
-            settings = mongodb.find_one('settings', {'key': 'ticket_categories'})
-        categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, dict):
-                if req_dept:
-                    categories = value.get(req_dept) or value.get('GLOBAL') or value.get('*') or []
-                else:
-                    from flask import g
-                    current_dept = getattr(g, 'current_department', None)
-                    categories = value.get(current_dept) or value.get('GLOBAL') or value.get('*') or []
-            elif isinstance(value, str):
-                categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                categories = value
-        return jsonify({
-            'success': True,
-            'categories': [{'name': cat} for cat in categories]
-        })
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': True, 'categories': []})
+        docs = list(mongodb.find('ticket_categories', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Ticket-Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Ticket-Kategorien'
-        })
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Ticket-Kategorien'})
 
 @bp.route('/ticket_categories/add', methods=['POST'])
 @admin_required
 def add_ticket_category_json():
-    """Fügt eine neue Ticket-Kategorie hinzu (JSON-API)"""
+    """Fügt eine neue Ticket-Kategorie (Handlungsfeld) abteilungsgebunden hinzu"""
     try:
         # Unterstütze beide Feldnamen für Kompatibilität
         name = request.form.get('name', '').strip() or request.form.get('category', '').strip()
@@ -3141,22 +3095,24 @@ def add_ticket_category_json():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        dept_doc = mongodb.find_one('settings', {'key': 'ticket_categories', 'department': current_dept})
-        dept_list = []
-        if dept_doc:
-            val = dept_doc.get('value', [])
-            if isinstance(val, list):
-                dept_list = val
-        if any(cat.lower() == name.lower() for cat in dept_list):
+        exists = mongodb.find_one('ticket_categories', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
             return jsonify({'success': False, 'message': 'Diese Ticket-Kategorie existiert bereits in dieser Abteilung.'})
-        dept_list = sorted(list(set(dept_list + [name])), key=str.lower)
-        mongodb.update_one('settings', {'key': 'ticket_categories', 'department': current_dept}, {'$set': {'value': dept_list}}, upsert=True)
+        mongodb.insert_one('ticket_categories', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -3172,40 +3128,28 @@ def add_ticket_category_json():
 @bp.route('/ticket_categories/delete/<name>', methods=['POST'])
 @admin_required
 def delete_ticket_category_json(name):
-    """Löscht eine Ticket-Kategorie (JSON-API)"""
+    """Löscht (soft) eine Ticket-Kategorie der aktuellen Abteilung"""
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
-        
-        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
-        tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name})
+        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist (nur aktuelle Abteilung)
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name, 'department': current_dept})
         if tickets_with_category:
             return jsonify({
                 'success': False,
                 'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
             })
-
-        # Ticket-Kategorie aus der Liste entfernen
-        try:
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'$pull': {'value': decoded_name}}
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Löschen der Ticket-Kategorie: {str(db_error)}")
-            # Fallback: Lade alle Kategorien und entferne die gewünschte
-            settings = mongodb.find_one('settings', {'key': 'ticket_categories'})
-            if settings and 'value' in settings:
-                current_categories = settings['value']
-                if isinstance(current_categories, list) and decoded_name in current_categories:
-                    current_categories.remove(decoded_name)
-                    mongodb.update_one(
-                        'settings',
-                        {'key': 'ticket_categories'},
-                        {'value': current_categories},
-                        upsert=True
-                    )
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        mongodb.update_one('ticket_categories', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
         
         return jsonify({
             'success': True,
