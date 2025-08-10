@@ -171,64 +171,78 @@ find_source_dir() {
 
 # MongoDB-URI korrigieren falls nötig
 fix_mongodb_uri() {
-    log_step "Prüfe MongoDB-URI Konfiguration..."
-    
-    if [ ! -f ".env" ]; then
-        log_warning "Keine .env-Datei gefunden"
-        return
+    log_step "Prüfe und repariere MongoDB-URI Konfiguration..."
+
+    # Ziel-.env bestimmen: bevorzugt Live unter /opt/scandy/.env, sonst lokale .env
+    local TARGET_ENV="/opt/scandy/.env"
+    if [ ! -f "$TARGET_ENV" ]; then
+        TARGET_ENV=".env"
     fi
-    
-    # Aktueller Wert
-    CURRENT_URI=$(grep "MONGODB_URI=" .env | cut -d'=' -f2-)
-    INSTANCE_NAME=$(grep "INSTANCE_NAME=" .env | cut -d'=' -f2 2>/dev/null || echo "scandy")
-    
-    # Prüfe ob es eine Docker-Installation ist und localhost verwendet
-    if [ "$UPDATE_MODE" = "docker" ] && [[ "$CURRENT_URI" == *"localhost:"* ]]; then
-        log_warning "Docker-Installation mit localhost MongoDB-URI erkannt - korrigiere..."
-        
-        # Extrahiere Passwort aus aktueller URI
-        MONGO_PASSWORD=$(echo "$CURRENT_URI" | sed -n 's/.*admin:\([^@]*\)@.*/\1/p')
-        
-        if [ -n "$MONGO_PASSWORD" ]; then
-            # Korrigiere URI für Docker
-            NEW_URI="mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/scandy?authSource=admin"
-            
-            # Backup der .env
-            cp .env .env.backup.mongodb-fix
-            
-            # Ersetze URI
-            sed -i "s|MONGODB_URI=.*|MONGODB_URI=$NEW_URI|" .env
-            
-            log_success "MongoDB-URI korrigiert für Docker-Installation"
-            log_info "Backup erstellt: .env.backup.mongodb-fix"
-        else
-            log_warning "Konnte Passwort nicht aus URI extrahieren"
-        fi
-    elif [ "$UPDATE_MODE" != "docker" ] && [[ "$CURRENT_URI" == *"scandy-mongodb-"* ]]; then
-        log_warning "Native Installation mit Container MongoDB-URI erkannt - korrigiere..."
-        
-        # Extrahiere Passwort
-        MONGO_PASSWORD=$(echo "$CURRENT_URI" | sed -n 's/.*admin:\([^@]*\)@.*/\1/p')
-        MONGODB_PORT=$(grep "MONGODB_PORT=" .env | cut -d'=' -f2 2>/dev/null || echo "27017")
-        
-        if [ -n "$MONGO_PASSWORD" ]; then
-            # Korrigiere URI für Native/LXC
-            NEW_URI="mongodb://admin:${MONGO_PASSWORD}@localhost:${MONGODB_PORT}/scandy?authSource=admin"
-            
-            # Backup der .env
-            cp .env .env.backup.mongodb-fix
-            
-            # Ersetze URI
-            sed -i "s|MONGODB_URI=.*|MONGODB_URI=$NEW_URI|" .env
-            
-            log_success "MongoDB-URI korrigiert für Native/LXC-Installation"
-            log_info "Backup erstellt: .env.backup.mongodb-fix"
-        else
-            log_warning "Konnte Passwort nicht aus URI extrahieren"
-        fi
+    if [ ! -f "$TARGET_ENV" ]; then
+        log_warning "Keine .env-Datei gefunden (weder /opt/scandy/.env noch ./ .env)"
+        return 0
+    fi
+
+    # Aktuelle Werte lesen
+    local CURRENT_URI INSTANCE_NAME
+    CURRENT_URI=$(grep -E "^MONGODB_URI=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2-)
+    INSTANCE_NAME=$(grep -E "^INSTANCE_NAME=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2 2>/dev/null || echo "scandy")
+
+    # Falls leer, nichts zu tun
+    if [ -z "$CURRENT_URI" ]; then
+        log_warning "MONGODB_URI nicht gesetzt – überspringe Fix"
+        return 0
+    fi
+
+    # Port bestimmen: bevorzugt aus TARGET_ENV, sonst aktiv lauschenden Port ermitteln
+    local ENV_PORT DETECTED_PORT FINAL_PORT
+    ENV_PORT=$(grep -E "^MONGODB_PORT=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2 2>/dev/null || true)
+    DETECTED_PORT=""
+    if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -q ":27017$"; then
+        DETECTED_PORT=27017
+    elif ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -q ":27018$"; then
+        DETECTED_PORT=27018
+    fi
+    if [ -n "$ENV_PORT" ]; then
+        FINAL_PORT="$ENV_PORT"
+    elif [ -n "$DETECTED_PORT" ]; then
+        FINAL_PORT="$DETECTED_PORT"
     else
-        log_success "MongoDB-URI ist bereits korrekt"
+        FINAL_PORT=27017
     fi
+
+    # Nutzer und Passwort extrahieren (Fallback admin)
+    local USER PASS DBNAME HOST
+    USER=$(echo "$CURRENT_URI" | sed -n 's#^mongodb://\([^:/@]*\)[:/@].*#\1#p')
+    PASS=$(echo "$CURRENT_URI" | sed -n 's#^mongodb://[^:]*:\([^@]*\)@.*#\1#p')
+    HOST="localhost"
+    DBNAME=$(echo "$CURRENT_URI" | sed -n 's#.*/\([^/?]*\)\([?].*\)\?$#\1#p')
+    [ -z "$USER" ] && USER="admin"
+    [ -z "$DBNAME" ] && DBNAME="scandy"
+
+    # Docker vs. Native Hostname
+    if [ "$UPDATE_MODE" = "docker" ]; then
+        HOST="scandy-mongodb-${INSTANCE_NAME}"
+        FINAL_PORT=27017
+    fi
+
+    # authSource=admin sicherstellen
+    local NEW_URI
+    NEW_URI="mongodb://${USER}:${PASS}@${HOST}:${FINAL_PORT}/${DBNAME}?authSource=admin"
+
+    # Schreibe Port-Variable konsistent
+    if grep -qE '^MONGODB_PORT=' "$TARGET_ENV"; then
+        sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${FINAL_PORT}/" "$TARGET_ENV"
+    else
+        printf "\nMONGODB_PORT=%s\n" "$FINAL_PORT" >> "$TARGET_ENV"
+    fi
+
+    # Backup und Ersetzen der URI
+    cp "$TARGET_ENV" "${TARGET_ENV}.backup.mongodb-fix" 2>/dev/null || true
+    sed -i "s#^MONGODB_URI=.*#MONGODB_URI=${NEW_URI}#" "$TARGET_ENV"
+
+    log_success "MongoDB-URI korrigiert in ${TARGET_ENV}"
+    log_info "Beispiel: $(grep -E '^MONGODB_URI=' "$TARGET_ENV" | sed -E 's#(mongodb://[^:]+:)[^@]*#\1****#')"
 }
 
 # SSL-Setup Funktionen

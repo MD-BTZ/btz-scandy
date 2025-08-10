@@ -293,6 +293,8 @@ NON_INTERACTIVE=false
 CREATE_BACKUP=false
 PRODUCTION_MODE=false
 DEV_MODE=false
+SKIP_DB_STEPS=true  # Standard: einfache Installation ohne DB-Eingriffe
+WIPE_MONGO=false    # Optional: MongoDB Datenbestand löschen
 
 # Argumente parsen
 parse_arguments() {
@@ -353,6 +355,19 @@ parse_arguments() {
                 ;;
             --https)
                 ENABLE_HTTPS=true
+                shift
+                ;;
+            --db-auto)
+                SKIP_DB_STEPS=false
+                shift
+                ;;
+            --no-db)
+                SKIP_DB_STEPS=true
+                shift
+                ;;
+            --wipe-mongo|--reset-db)
+                WIPE_MONGO=true
+                SKIP_DB_STEPS=false
                 shift
                 ;;
             -u|--update)
@@ -1378,16 +1393,124 @@ check_port_availability() {
 
 # Prüft, ob bereits ein mongod läuft und auf welchem Standardport
 detect_existing_mongo_port() {
-    # Bevorzugt 27017, alternativ 27018
-    if ss -H -ltnp 2>/dev/null | grep -E '\\b127.0.0.1:27017\\b' | grep -q 'mongod'; then
+    # Erkenne laufenden mongod unabhängig von Bind-Adresse (127.0.0.1, 0.0.0.0, ::)
+    if ss -H -ltnp 2>/dev/null | grep -E ':27017\\b' | grep -q 'mongod'; then
         echo 27017
         return 0
     fi
-    if ss -H -ltnp 2>/dev/null | grep -E '\\b127.0.0.1:27018\\b' | grep -q 'mongod'; then
+    if ss -H -ltnp 2>/dev/null | grep -E ':27018\\b' | grep -q 'mongod'; then
         echo 27018
         return 0
     fi
     return 1
+}
+
+# Prüft per mongosh, ob eine URI authentifizierbar ist
+mongo_ping_uri() {
+    local uri="$1"
+    mongosh --quiet "$uri" --eval 'db.runCommand({ping:1})' >/dev/null 2>&1
+}
+
+# Auth in mongod.conf setzen (enabled/disabled)
+set_mongo_authorization() {
+    local mode="$1"  # enabled|disabled
+    local CONF="/etc/mongod.conf"
+    if ! grep -qE '^\s*security:\s*$' "$CONF"; then
+        printf "\nsecurity:\n  authorization: %s\n" "$mode" | sudo tee -a "$CONF" >/dev/null
+    else
+        if grep -qE '^\s*authorization:' "$CONF"; then
+            sudo sed -i "s/^\s*authorization:.*/  authorization: ${mode}/" "$CONF"
+        else
+            sudo sed -i "/^\s*security:\s*$/a\\  authorization: ${mode}" "$CONF"
+        fi
+    fi
+    sudo systemctl restart mongod || true
+}
+
+# Warten bis mongod auf Port lauscht
+wait_for_mongo_port() {
+    local port="$1"
+    for i in {1..60}; do
+        if ss -H -ltnp 2>/dev/null | grep -E ":${port}\\b" | grep -q 'mongod'; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Erstellt Admin- und App-User und stellt .env auf App-User um
+provision_mongo_users_and_env() {
+    local detected_port="$1"
+    local admin_user="admin"
+    local app_user="scandy_app"
+
+    # sichere Passwörter generieren
+    local ADMIN_PW APP_PW
+    ADMIN_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    APP_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+
+    # Nutzer anlegen (ohne Auth)
+    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${admin_user}',pwd:'${ADMIN_PW}',roles:[{role:'root',db:'admin'}]})" || true
+    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${app_user}',pwd:'${APP_PW}',roles:[{role:'readWrite',db:'scandy'}]})" || true
+
+    # Auth aktivieren
+    set_mongo_authorization enabled
+    wait_for_mongo_port "$detected_port" || true
+
+    # .env setzen: Port + URI auf App-User
+    if [ -f /opt/scandy/.env ]; then
+        sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected_port}/" /opt/scandy/.env || true
+        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin#" /opt/scandy/.env || true
+    fi
+
+    # Verifizieren
+    if ! mongo_ping_uri "mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin"; then
+        log_error "MongoDB-Authentifizierungstest mit App-User fehlgeschlagen"
+        exit 1
+    fi
+}
+
+# Stellt robust sicher, dass Auth aktiv ist und ein funktionsfähiger App-User existiert
+ensure_mongo_auth_and_users() {
+    log_step "Sichere MongoDB-Authentifizierung und Nutzer-Provisioning..."
+
+    local detected_port
+    if detected_port=$(detect_existing_mongo_port); then
+        :
+    else
+        detected_port=${MONGODB_PORT:-27017}
+    fi
+
+    # Optional komplette Datenbank zurücksetzen (ACHTUNG: Datenverlust)
+    if [ "$WIPE_MONGO" = true ]; then
+        log_warning "WIPE_MONGO aktiv – lösche Datenverzeichnis von MongoDB"
+        systemctl stop mongod || true
+        rm -rf /var/lib/mongodb/* || true
+        rm -rf /var/log/mongodb/* || true
+        systemctl start mongod || true
+        # Warten bis Port wieder lauscht
+        for i in {1..60}; do
+            if ss -H -ltnp 2>/dev/null | grep -E ":${detected_port}\\b" | grep -q 'mongod'; then break; fi
+            sleep 1
+        done
+    fi
+
+    # Falls bereits eine gültige URI in /opt/scandy/.env existiert und pingt, belassen
+    local current_uri
+    if [ -f /opt/scandy/.env ]; then
+        current_uri=$(grep -E "^MONGODB_URI=" /opt/scandy/.env | head -n1 | cut -d'=' -f2-)
+        if [ -n "$current_uri" ] && mongo_ping_uri "$current_uri"; then
+            log_success "Vorhandene MONGODB_URI ist gültig"
+            return
+        fi
+    fi
+
+    # Robust: Auth temporär deaktivieren, Nutzer anlegen, Auth aktivieren, verifizieren
+    log_info "(Re)Provision Mongo-User: Auth temporär deaktivieren → Nutzer anlegen → Auth aktivieren"
+    set_mongo_authorization disabled
+    wait_for_mongo_port "$detected_port" || true
+    provision_mongo_users_and_env "$detected_port"
 }
 
 # Öffnet Port 5001 in UFW, falls aktiv
@@ -1419,8 +1542,18 @@ harmonize_env_with_mongo() {
         if [ -f /opt/scandy/.env ]; then
             log_info "Setze MONGODB_PORT und URI auf laufenden Port ${detected}"
             sudo sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected}/" /opt/scandy/.env || true
-            sudo sed -i "s#:27017/#:${detected}/#" /opt/scandy/.env || true
-            sudo sed -i "s#:27018/#:${detected}/#" /opt/scandy/.env || true
+            # Ersetze Port in der URI robust (auch ohne Host-Änderung)
+            sudo sed -i "s#\(MONGODB_URI=mongodb://[^/]\+\):[0-9]\+/#\1:${detected}/#" /opt/scandy/.env || true
+            # Stelle sicher, dass authSource=admin korrekt gesetzt ist
+            if grep -qE '^MONGODB_URI=' /opt/scandy/.env; then
+                current=$(grep -E '^MONGODB_URI=' /opt/scandy/.env | cut -d'=' -f2-)
+                if echo "$current" | grep -q 'authSource='; then
+                    sudo sed -i "s#authSource=[^&]*#authSource=admin#" /opt/scandy/.env || true
+                else
+                    sudo sed -i "s#^MONGODB_URI=\(.*\)#MONGODB_URI=\1&authSource=admin#" /opt/scandy/.env || true
+                    sudo sed -i "s#\?&authSource=admin#?authSource=admin#" /opt/scandy/.env || true
+                fi
+            fi
         fi
     fi
 }
@@ -1458,16 +1591,21 @@ resolve_port_conflicts() {
         MONGODB_PORT=$EXISTING_MONGO
         log_info "Bestehender mongod erkannt – verwende Port $MONGODB_PORT"
     else
-        # Kein mongod entdeckt → Stelle sicher, dass Wunschport frei ist, sonst alternativen suchen
+        # Kein mongod entdeckt → Stelle sicher, dass Wunschport wirklich frei ist
         if ! check_port_availability $MONGODB_PORT; then
-            log_warning "Port $MONGODB_PORT ist belegt, suche alternative..."
-            for ((i=27018; i<=27099; i++)); do
-                if check_port_availability $i; then
-                    MONGODB_PORT=$i
-                    log_success "Alternativer MongoDB-Port: $MONGODB_PORT"
-                    break
-                fi
-            done
+            # Falscher positives Match vermeiden: ist es wirklich mongod?
+            if ss -H -ltnp 2>/dev/null | grep -E ":${MONGODB_PORT}\\b" | grep -vq 'mongod'; then
+                log_warning "Port $MONGODB_PORT ist von anderem Prozess belegt – wähle alternative"
+                for ((i=27018; i<=27099; i++)); do
+                    if check_port_availability $i; then
+                        MONGODB_PORT=$i
+                        log_success "Alternativer MongoDB-Port: $MONGODB_PORT"
+                        break
+                    fi
+                done
+            else
+                log_info "Port $MONGODB_PORT scheint frei oder durch mongod nutzbar."
+            fi
         fi
     fi
     
@@ -2095,9 +2233,33 @@ install_native() {
     # Services starten
     start_native_services
 
-    # Firewall öffnen und .env mit laufendem Mongo-Port harmonisieren
+    # Firewall öffnen
     open_firewall_port
-    harmonize_env_with_mongo
+    # Einfache Standard-Installation: keine DB-Eingriffe
+    if [ "$SKIP_DB_STEPS" = false ]; then
+        # Optionale DB-Autokonfiguration
+        harmonize_env_with_mongo
+        # Nach der Harmonisierung sicherstellen, dass URI und Port strikt konsistent sind
+        if [ -f /opt/scandy/.env ]; then
+            DETECTED_PORT=""
+            if ss -H -ltnp 2>/dev/null | grep -E ':27017\\b' | grep -q 'mongod'; then DETECTED_PORT=27017; fi
+            if ss -H -ltnp 2>/dev/null | grep -E ':27018\\b' | grep -q 'mongod'; then DETECTED_PORT=${DETECTED_PORT:-27018}; fi
+            if [ -n "$DETECTED_PORT" ]; then
+                sudo sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${DETECTED_PORT}/" /opt/scandy/.env || true
+                sudo sed -i "s#\(MONGODB_URI=mongodb://[^/]\+\):[0-9]\+/#\1:${DETECTED_PORT}/#" /opt/scandy/.env || true
+                CUR=$(grep -E '^MONGODB_URI=' /opt/scandy/.env | cut -d'=' -f2-)
+                if echo "$CUR" | grep -q 'authSource='; then
+                    sudo sed -i "s#authSource=[^&]*#authSource=admin#" /opt/scandy/.env || true
+                else
+                    sudo sed -i "s#^MONGODB_URI=\(.*\)#MONGODB_URI=\1&authSource=admin#" /opt/scandy/.env || true
+                    sudo sed -i "s#\?&authSource=admin#?authSource=admin#" /opt/scandy/.env || true
+                fi
+            fi
+        fi
+        ensure_mongo_auth_and_users
+    else
+        log_info "DB-Autokonfiguration übersprungen (--no-db / Standard)"
+    fi
     systemctl restart scandy || true
     
     log_success "Native Installation abgeschlossen!"
