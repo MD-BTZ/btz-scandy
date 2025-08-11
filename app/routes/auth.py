@@ -4,7 +4,7 @@ from app.models.mongodb_database import mongodb
 from werkzeug.security import generate_password_hash
 import secrets
 
-bp = Blueprint('auth', __name__)
+bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 @bp.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
@@ -51,7 +51,7 @@ from typing import Union
 import logging
 import re
 
-bp = Blueprint('auth', __name__, url_prefix='/auth')
+## Blueprint wurde bereits oben definiert – keine Neudefinition hier
 mongodb = MongoDB()
 logger = logging.getLogger(__name__)
 
