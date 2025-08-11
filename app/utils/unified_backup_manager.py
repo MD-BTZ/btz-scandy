@@ -640,7 +640,7 @@ class UnifiedBackupManager:
         return doc
 
     def _anonymize_orphan_user_names(self):
-        """Ersetzt Namen/Bezüge auf nicht vorhandene Benutzer durch 'Anonym'."""
+        """Entfernt Namen/Bezüge auf nicht vorhandene Benutzer (kein Name anzeigen)."""
         from datetime import datetime as _dt
         try:
             from app.models.mongodb_database import mongodb
@@ -665,8 +665,9 @@ class UnifiedBackupManager:
                                 base = field[:-5]
                                 related_user = doc.get(base)
                             if (not related_user) or (related_user not in existing_users):
-                                if doc.get(field) != 'Anonym':
-                                    updates[field] = 'Anonym'
+                                # Leer setzen (kein Anzeigename)
+                                if doc.get(field) != '':
+                                    updates[field] = ''
                     if updates:
                         updates['updated_at'] = _dt.now()
                         mongodb.update_one(collection, {'_id': doc['_id']}, {'$set': updates})
@@ -945,19 +946,47 @@ class UnifiedBackupManager:
                         doc['department'] = target_department
                         if collection_name == 'tickets':
                             doc['target_department'] = target_department
-                        # Vorab: Versuche vorhandenes Dokument ohne Department auf Ziel-Abteilung umzuhängen
-                        if collection_name in ('tools', 'workers', 'consumables') and doc.get('barcode'):
-                            # Reassign nur, wenn bestehendes Dokument KEIN department-Feld hat
-                            reassigned = mongodb.update_one(
-                                collection_name,
-                                {'barcode': doc['barcode'], 'department': {'$exists': False}},
-                                {'$set': {'department': target_department}},
-                                upsert=False
-                            )
-                            if reassigned:
-                                reassigned_count += 1
-                                # Optional: weitere Felder aktualisieren? Vorsichtig: Nur Dept setzen um Daten nicht zu überschreiben
+                        # Idempotentes Einfügen
+                        if collection_name in ('tools', 'workers', 'consumables'):
+                            bc = self._normalize_barcode(doc.get('barcode'))
+                            if not bc:
+                                # Ohne Barcode kein Upsert möglich -> Insert
+                                mongodb.insert_one(collection_name, doc)
+                                inserted_count += 1
                                 continue
+                            doc['barcode'] = bc
+                            # Legacy-Reassign: vorhandenes Dokument ohne department umhängen
+                            try:
+                                reassigned = mongodb.update_one(
+                                    collection_name,
+                                    {'barcode': bc, 'department': {'$exists': False}},
+                                    {'$set': {'department': target_department}},
+                                    upsert=False
+                                )
+                                if reassigned:
+                                    reassigned_count += 1
+                            except Exception:
+                                pass
+                            ok = mongodb.update_one(
+                                collection_name,
+                                {'barcode': bc, 'department': target_department},
+                                {'$set': doc},
+                                upsert=True
+                            )
+                            if ok:
+                                inserted_count += 1
+                            continue
+                        if collection_name == 'tickets' and doc.get('ticket_number'):
+                            ok = mongodb.update_one(
+                                'tickets',
+                                {'ticket_number': doc['ticket_number'], 'department': target_department},
+                                {'$set': doc},
+                                upsert=True
+                            )
+                            if ok:
+                                inserted_count += 1
+                            continue
+                        # Fallback: Insert
                         mongodb.insert_one(collection_name, doc)
                         inserted_count += 1
                     except DuplicateKeyError as e:
@@ -977,6 +1006,44 @@ class UnifiedBackupManager:
                 report['total_failed'] += failed_count
                 report['total_duplicates'] += duplicate_count
                 report['total_reassigned'] = report.get('total_reassigned', 0) + reassigned_count
+            # Benutzer global importieren (idempotent über username)
+            try:
+                users_docs = data_section.get('users')
+                if isinstance(users_docs, list):
+                    from werkzeug.security import generate_password_hash
+                    for doc in users_docs:
+                        try:
+                            fixed = self._fix_json_document(doc)
+                            username = (fixed.get('username') or '').strip()
+                            if not username:
+                                continue
+                            if not fixed.get('password_hash'):
+                                if fixed.get('password'):
+                                    fixed['password_hash'] = generate_password_hash(fixed['password'])
+                                else:
+                                    pw = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+                                    fixed['password_hash'] = generate_password_hash(pw)
+                            fixed.pop('password', None)
+                            fixed.setdefault('role', 'anwender')
+                            fixed.setdefault('is_active', True)
+                            # Department-Felder auf User entfernen (global), allowed/default bleiben erhalten
+                            for k in ['department', 'departments']:
+                                fixed.pop(k, None)
+                            mongodb.update_one('users', {'username': username}, {'$setOnInsert': {'created_at': datetime.now()}, '$set': fixed}, upsert=True)
+                        except Exception as _ue:
+                            if len(report['errors']) < 20:
+                                report['errors'].append(f"user({username}): {_ue}")
+                    # Optional: Statistik
+                    report['users_imported'] = True
+            except Exception as ue:
+                report['errors'].append(f"users: {ue}")
+
+            # Orphan-Namen anonymisieren/leeren
+            try:
+                self._anonymize_orphan_user_names()
+            except Exception as ae:
+                report['errors'].append(f"anonymize: {ae}")
+
             # Erfolg, wenn Insert stattfand oder nur Duplikate vorlagen
             report['ok'] = (report['total_inserted'] > 0 and len(report['errors']) == 0) or (
                 report['total_inserted'] == 0 and report['total_failed'] == 0 and report['total_duplicates'] > 0
