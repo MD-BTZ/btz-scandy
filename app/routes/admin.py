@@ -1761,12 +1761,23 @@ def add_user():
         # Validierung mit ValidationService
         is_valid, errors, processed_data = ValidationService.validate_user_form(form_data, is_edit=False)
         
+        # Departments für Formularkontext
+        from app.services.admin_system_settings_service import AdminSystemSettingsService
+        departments = AdminSystemSettingsService.get_departments_from_settings()
+        allowed_departments = request.form.getlist('allowed_departments')
+        default_department = request.form.get('default_department') or None
+        
         if not is_valid:
             for error in errors:
                 flash(error, 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
-                                 form_data=request.form)
+                                 form_data=request.form,
+                                 departments=departments,
+                                 user_allowed_departments=allowed_departments,
+                                 user_default_department=default_department,
+                                 handlungsfelder=get_ticket_categories_from_settings(),
+                                 user_handlungsfelder=request.form.getlist('handlungsfelder'))
         
         # Automatische Passwort-Generierung wenn keines eingegeben wurde
         if not processed_data['password']:
@@ -1798,7 +1809,9 @@ def add_user():
             'canteen_plan_enabled': request.form.get('canteen_plan_enabled') == 'on',
             'is_active': request.form.get('is_active') == 'on',
             'handlungsfelder': handlungsfelder,
-            'expiry_date': expiry_date
+            'expiry_date': expiry_date,
+            'allowed_departments': allowed_departments,
+            'default_department': default_department
         }
         
         # Passwort nur hinzufügen falls angegeben
@@ -1842,7 +1855,12 @@ def add_user():
             flash(message, 'error')
             return render_template('admin/user_form.html', 
                                  roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
-                                 form_data=request.form)
+                                 form_data=request.form,
+                                 departments=departments,
+                                 user_allowed_departments=allowed_departments,
+                                 user_default_department=default_department,
+                                 handlungsfelder=get_ticket_categories_from_settings(),
+                                 user_handlungsfelder=handlungsfelder)
     
     # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
     handlungsfelder = get_ticket_categories_from_settings()
