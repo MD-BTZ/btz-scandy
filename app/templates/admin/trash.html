@@ -15,6 +15,7 @@
                 <p>Anzahl gelöschter {{ app_labels.consumables.name }}: {{ consumables|length }}</p>
                 <p>Anzahl gelöschter Mitarbeiter: {{ workers|length }}</p>
                 <p>Anzahl gelöschter Tickets: {{ tickets|length }}</p>
+                <p>Anzahl gelöschter Benutzer: {{ users|length }}</p>
             </div>
         </div>
     </div>
@@ -186,6 +187,46 @@
             </div>
         </div>
     </div>
+
+    <!-- Benutzer Tabelle -->
+    <div class="mb-8">
+        <h2 class="text-xl font-bold mb-2">Gelöschte Benutzer</h2>
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <div class="overflow-x-auto w-full">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Name</th>
+                                <th>Rolle</th>
+                                <th>Gelöscht am</th>
+                                <th class="text-right">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr class="hover data-row">
+                                <td><div class="badge badge-outline">{{ user.username }}</div></td>
+                                <td>{{ user.firstname }} {{ user.lastname }}</td>
+                                <td><div class="badge badge-secondary badge-outline">{{ user.role }}</div></td>
+                                <td>{{ user.deleted_at }}</td>
+                                <td class="text-right">
+                                    <div class="btn-group">
+                                        <button onclick="restoreItem('user', '{{ user._id }}')" class="btn btn-sm btn-primary"><i class="fas fa-undo mr-2"></i>Wiederherstellen</button>
+                                        <button onclick="deletePermanently('user', '{{ user._id }}')" class="btn btn-sm btn-error"><i class="fas fa-trash mr-2"></i>Endgültig löschen</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-4">Keine gelöschten Benutzer vorhanden</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script nonce="{{ csp_nonce }}">
@@ -214,7 +255,9 @@ function restoreItem(type, barcode) {
 
 function deletePermanently(type, barcode) {
     if (confirm('Möchten Sie diesen Eintrag wirklich endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
-        fetch(`/admin/${type}s/${barcode}/delete-permanent`, {
+        const map = { tool: 'tools', consumable: 'consumables', worker: 'workers', ticket: 'tickets', user: 'users' };
+        const path = map[type] || `${type}s`;
+        fetch(`/admin/${path}/${barcode}/delete-permanent`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'

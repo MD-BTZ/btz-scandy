@@ -139,6 +139,8 @@
                             </span>
                         {% elif user.is_active %}
                             <span class="badge badge-success">Aktiv</span>
+                        {% elif user.get('deleted') %}
+                            <span class="badge badge-warning">Zum Löschen markiert</span>
                         {% else %}
                             <span class="badge badge-ghost">Inaktiv</span>
                         {% endif %}
@@ -175,14 +177,15 @@
                             
 
                             
-                            {# Löschen-Button mit Bestätigung #}
+                            {# Löschen in Papierkorb #}
                             <form action="{{ url_for('admin.delete_user', user_id=user._id) }}" method="post" class="inline-block"
-                                  onsubmit="return confirm('Sind Sie sicher, dass Sie den Benutzer {{ user.username|e }} unwiderruflich löschen möchten?');">
+                                  onsubmit="return confirm('Benutzer {{ user.username|e }} in den Papierkorb verschieben?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline btn-error" title="Löschen">
+                                <button type="submit" class="btn btn-sm btn-outline btn-warning" title="In Papierkorb verschieben">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </form>
+                            {# Endgültig löschen entfernt: immer über Papierkorb #}
                         </div>
                     </td>
                 </tr>

@@ -866,11 +866,14 @@ def trash():
         # Gelöschte Tickets
         tickets = mongodb.find('tickets', {'deleted': True}, sort=[('deleted_at', -1)])
         
+        # Gelöschte Benutzer (global, nicht gescoped)
+        deleted_users = mongodb.find('users', {'deleted': True}, sort=[('deleted_at', -1)])
         return render_template('admin/trash.html',
                            tools=tools,
                            consumables=consumables,
                            workers=workers,
-                           tickets=tickets)
+                           tickets=tickets,
+                           users=deleted_users)
     except Exception as e:
         logger.error(f"Fehler beim Laden des Papierkorbs: {str(e)}", exc_info=True)
         flash('Fehler beim Laden des Papierkorbs', 'error')
@@ -943,6 +946,17 @@ def restore_item(type, barcode):
             mongodb.update_one('tickets', 
                              {'_id': convert_id_for_query(decoded_barcode)}, 
                              {'$set': {'deleted': False, 'deleted_at': None}})
+        elif type == 'user':
+            # Benutzer wiederherstellen (global)
+            try:
+                from bson import ObjectId
+                oid = ObjectId(decoded_barcode) if len(decoded_barcode) == 24 else decoded_barcode
+            except Exception:
+                oid = decoded_barcode
+            user = mongodb.find_one('users', {'_id': oid, 'deleted': True})
+            if not user:
+                return jsonify({'success': False, 'message': 'Benutzer nicht gefunden'}), 404
+            mongodb.update_one('users', {'_id': oid}, {'$set': {'deleted': False, 'deleted_at': None, 'is_active': True}})
         else:
             return jsonify({
                 'success': False,
@@ -4250,6 +4264,19 @@ def delete_ticket_permanent(ticket_id):
             'message': f'Fehler beim Löschen: {str(e)}'
         }), 500
 
+@bp.route('/users/<user_id>/delete-permanent', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_user_permanent_api(user_id):
+    """Benutzer endgültig löschen (Papierkorb -> endgültig)"""
+    try:
+        success, message = AdminUserService.delete_user(user_id, permanent=True)
+        if success:
+            return jsonify({'success': True, 'message': message})
+        return jsonify({'success': False, 'message': message}), 400
+    except Exception as e:
+        logger.error(f"Fehler beim endgültigen Löschen des Benutzers: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Interner Serverfehler'}), 500
 
 
 
@@ -4275,8 +4302,14 @@ def delete_user(user_id):
             flash('Sie können Ihren eigenen Account nicht löschen', 'error')
             return redirect(url_for('admin.manage_users'))
         
+        # Permanent-Flag aus Formular (optional)
+        permanent = False
+        try:
+            permanent = (request.form.get('permanent') == '1')
+        except Exception:
+            permanent = False
         # Benutzer löschen mit AdminUserService
-        success, message = AdminUserService.delete_user(user_id)
+        success, message = AdminUserService.delete_user(user_id, permanent=permanent)
         
         if success:
             flash(message, 'success')

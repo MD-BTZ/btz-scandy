@@ -223,12 +223,13 @@ class AdminUserService:
             return False, f"Fehler beim Aktualisieren des Benutzers: {str(e)}"
 
     @staticmethod
-    def delete_user(user_id: str) -> Tuple[bool, str]:
+    def delete_user(user_id: str, permanent: bool = False) -> Tuple[bool, str]:
         """
-        Löscht einen Benutzer (soft delete)
+        Löscht einen Benutzer. Standard: Soft-Delete (deaktivieren). Optional: permanent löschen.
         
         Args:
             user_id: ID des zu löschenden Benutzers
+            permanent: True für permanentes Löschen
             
         Returns:
             (success, message)
@@ -239,23 +240,55 @@ class AdminUserService:
             if not user:
                 return False, "Benutzer nicht gefunden"
             
-            # Admin-Benutzer können nicht gelöscht werden
-            if user.get('role') == 'admin':
-                return False, "Admin-Benutzer können nicht gelöscht werden"
+            # Admin-Benutzer dürfen ebenfalls gelöscht werden (über Papierkorb)
             
-            # Benutzer deaktivieren statt löschen
-            mongodb.update_one('users', {'_id': user_id}, {
-                '$set': {
-                    'is_active': False,
-                    'updated_at': datetime.now()
-                }
-            })
-            
-            # Deaktiviere auch den zugehörigen Mitarbeiter-Eintrag
-            AdminUserService._deactivate_worker_from_user(user_id)
-            
-            logger.info(f"Benutzer deaktiviert: {user.get('username', 'Unknown')} (ID: {user_id})")
-            return True, f"Benutzer '{user.get('username', 'Unknown')}' erfolgreich deaktiviert"
+            if permanent:
+                # Permanente Löschung
+                from bson import ObjectId
+                oid = ObjectId(user_id) if len(str(user_id)) == 24 else user_id
+                mongodb.delete_one('users', {'_id': oid})
+                # Referenzen bereinigen
+                try:
+                    # Timesheets löschen
+                    mongodb.delete_many('timesheets', {'user_id': user.get('username')})
+                    # Tickets/History/Messages: User-Bezüge leeren
+                    from datetime import datetime as _dt
+                    for coll in ['tickets', 'ticket_history', 'messages', 'ticket_messages']:
+                        mongodb.update_many(coll, {'$or': [
+                            {'created_by': user.get('username')},
+                            {'assigned_to': user.get('username')},
+                            {'author': user.get('username')},
+                            {'user': user.get('username')}
+                        ]}, {'$set': {
+                            'created_by': None,
+                            'assigned_to': None,
+                            'author': None,
+                            'user': None,
+                            'updated_at': _dt.now()
+                        }})
+                except Exception:
+                    pass
+                # Zugehörigen Worker ggf. löschen/deaktivieren
+                try:
+                    AdminUserService._deactivate_worker_from_user(user_id)
+                except Exception:
+                    pass
+                logger.info(f"Benutzer permanent gelöscht: {user.get('username', 'Unknown')} (ID: {user_id})")
+                return True, f"Benutzer '{user.get('username', 'Unknown')}' dauerhaft gelöscht"
+            else:
+                # Soft-Delete (Papierkorb)
+                mongodb.update_one('users', {'_id': user_id}, {
+                    '$set': {
+                        'is_active': False,
+                        'deleted': True,
+                        'deleted_at': datetime.now(),
+                        'updated_at': datetime.now()
+                    }
+                })
+                # Deaktiviere auch den zugehörigen Mitarbeiter-Eintrag
+                AdminUserService._deactivate_worker_from_user(user_id)
+                logger.info(f"Benutzer deaktiviert: {user.get('username', 'Unknown')} (ID: {user_id})")
+                return True, f"Benutzer '{user.get('username', 'Unknown')}' erfolgreich deaktiviert"
             
         except Exception as e:
             logger.error(f"Fehler beim Löschen des Benutzers {user_id}: {str(e)}")
