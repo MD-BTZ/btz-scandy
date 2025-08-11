@@ -65,6 +65,14 @@ read_env_value() {
     echo "${line#*=}"
 }
 
+# URL-encode Helfer (für Passwörter in URIs)
+url_encode() {
+    python3 - <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote_plus(sys.stdin.read().strip()))
+PY
+}
+
 # Hilfe anzeigen
 show_help() {
     echo
@@ -1460,8 +1468,9 @@ provision_mongo_users_and_env() {
 
     # .env setzen: Port + URI auf App-User
     if [ -f /opt/scandy/.env ]; then
+        PW_ENC=$(printf "%s" "$APP_PW" | url_encode)
         sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected_port}/" /opt/scandy/.env || true
-        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin#" /opt/scandy/.env || true
+        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${PW_ENC}@localhost:${detected_port}/scandy?authSource=admin#" /opt/scandy/.env || true
     fi
 
     # Verifizieren
@@ -1755,11 +1764,13 @@ create_env_file() {
 
     # MongoDB-URI je nach Installationsmodus setzen (Port immer konsistent zu MONGODB_PORT)
     if [ "$INSTALL_MODE" = "docker" ]; then
-        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/${MONGODB_DB}?authSource=admin"
+        PW_ENC=$(printf "%s" "$MONGO_PASSWORD" | url_encode)
+        MONGODB_URI="mongodb://admin:${PW_ENC}@scandy-mongodb-${INSTANCE_NAME}:27017/${MONGODB_DB}?authSource=admin"
     else
         # Stelle sicher, dass MONGODB_PORT gesetzt ist
         MONGODB_PORT=${MONGODB_PORT:-27017}
-        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@localhost:${MONGODB_PORT}/${MONGODB_DB}?authSource=admin"
+        PW_ENC=$(printf "%s" "$MONGO_PASSWORD" | url_encode)
+        MONGODB_URI="mongodb://admin:${PW_ENC}@localhost:${MONGODB_PORT}/${MONGODB_DB}?authSource=admin"
     fi
 
     cat > .env << EOF
@@ -1824,6 +1835,18 @@ EOF
 
     # Zugangsdaten für Dokumentationszwecke protokollieren (sicher, nur lokal)
     write_credentials_log
+
+    # Schutz: Leere Passwörter/URIs verhindern
+    if ! grep -qE '^MONGO_INITDB_ROOT_PASSWORD=.+' .env; then
+        sed -i "s#^MONGO_INITDB_ROOT_PASSWORD=.*#MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}#" .env
+    fi
+    if grep -q '^MONGODB_URI=' .env; then
+        if grep -q 'mongodb://[^:]*:@' .env; then
+            # Falsch generierte URI (leeres Passwort) reparieren
+            PW_ENC_FIX=$(printf "%s" "$MONGO_PASSWORD" | url_encode)
+            sed -i "s#mongodb://\([^:/]*\):@#mongodb://\1:${PW_ENC_FIX}@#" .env
+        fi
+    fi
 }
 
 # SSL-Zertifikate einrichten
@@ -2045,6 +2068,7 @@ write_credentials_log() {
         echo "MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}"
         echo "MONGODB_DB=${MONGODB_DB:-scandy}"
         echo "MONGODB_URI=${MONGODB_URI}"
+        echo "MONGODB_URI_NOTE=Passwort ist URL-encodet"
         echo
         echo "[App]"
         echo "SECRET_KEY=${SECRET_KEY}"
