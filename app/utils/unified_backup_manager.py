@@ -755,8 +755,41 @@ class UnifiedBackupManager:
                     if collection_name == 'tickets':
                         # Ziel-Abteilung in Tickets ggf. zusätzlich setzen
                         doc['target_department'] = target_department
-                    # Einzelnes Dokument einfügen
+                    # Einfügen/Upsert mit Duplikat-Schutz
                     try:
+                        # Legacy-Dokumente ohne Department bevorzugt umhängen statt duplizieren
+                        if collection_name in ('tools', 'workers', 'consumables') and doc.get('barcode'):
+                            try:
+                                mongodb.update_one(
+                                    collection_name,
+                                    {'barcode': doc['barcode'], 'department': {'$exists': False}},
+                                    {'$set': {'department': target_department}},
+                                    upsert=False
+                                )
+                            except Exception:
+                                pass
+                            # Idempotentes Upsert pro (department, barcode)
+                            ok = mongodb.update_one(
+                                collection_name,
+                                {'barcode': doc['barcode'], 'department': target_department},
+                                {'$set': doc},
+                                upsert=True
+                            )
+                            if ok:
+                                inserted_count += 1
+                            continue
+                        # Tickets: Upsert per ticket_number, falls vorhanden
+                        if collection_name == 'tickets' and doc.get('ticket_number'):
+                            ok = mongodb.update_one(
+                                'tickets',
+                                {'ticket_number': doc['ticket_number'], 'department': target_department},
+                                {'$set': doc},
+                                upsert=True
+                            )
+                            if ok:
+                                inserted_count += 1
+                            continue
+                        # Fallback: normales Insert
                         mongodb.insert_one(collection_name, doc)
                         inserted_count += 1
                     except Exception as e:
@@ -767,7 +800,7 @@ class UnifiedBackupManager:
                 total_failed += failed_count
                 print(f"    ✅ {inserted_count} eingefügt, ❌ {failed_count} fehlgeschlagen in {collection_name}")
             print(f"✅ JSON-Backup (scoped) abgeschlossen – Gesamt: {total_inserted} eingefügt, {total_failed} fehlgeschlagen")
-            # Optional: Benutzer global importieren, wenn vorhanden (zusammenführen per Username)
+            # Optional: Benutzer global importieren, wenn vorhanden (idempotent über username)
             try:
                 users_docs = data_section.get('users')
                 if isinstance(users_docs, list):
@@ -776,6 +809,10 @@ class UnifiedBackupManager:
                     for doc in users_docs:
                         try:
                             fixed = self._fix_json_document(doc)
+                            username = (fixed.get('username') or '').strip()
+                            if not username:
+                                continue
+                            # Passwort sicherstellen
                             if not fixed.get('password_hash'):
                                 if fixed.get('password'):
                                     fixed['password_hash'] = generate_password_hash(fixed['password'])
@@ -785,9 +822,12 @@ class UnifiedBackupManager:
                             fixed.pop('password', None)
                             fixed.setdefault('role', 'anwender')
                             fixed.setdefault('is_active', True)
-                            username = fixed.get('username')
-                            if username:
-                                mongodb.update_one('users', {'username': username}, {'$set': fixed}, upsert=True)
+                            # Department-Felder entfernen, Nutzer sind global
+                            for k in ['department', 'allowed_departments', 'default_department', 'departments']:
+                                if k in fixed and k != 'allowed_departments' and k != 'default_department':
+                                    fixed.pop(k, None)
+                            # Idempotentes Upsert am username
+                            mongodb.update_one('users', {'username': username}, {'$setOnInsert': {'created_at': datetime.now()}, '$set': fixed}, upsert=True)
                         except Exception as e:
                             print(f"    ⚠️  Nutzer-Import: {e}")
             except Exception as e:
