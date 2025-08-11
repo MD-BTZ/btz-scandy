@@ -301,7 +301,8 @@ NON_INTERACTIVE=false
 CREATE_BACKUP=false
 PRODUCTION_MODE=false
 DEV_MODE=false
-SKIP_DB_STEPS=true  # Standard: einfache Installation ohne DB-Eingriffe
+# Standard ab jetzt: DB-Automatik aktiv (kann via --no-db deaktiviert werden)
+SKIP_DB_STEPS=false
 WIPE_MONGO=false    # Optional: MongoDB Datenbestand löschen
 
 # Argumente parsen
@@ -2290,7 +2291,7 @@ install_native() {
 
     # Firewall öffnen
     open_firewall_port
-    # Einfache Standard-Installation: keine DB-Eingriffe
+    # Standard: DB-Autokonfiguration
     if [ "$SKIP_DB_STEPS" = false ]; then
         # Optionale DB-Autokonfiguration
         harmonize_env_with_mongo
@@ -2313,7 +2314,7 @@ install_native() {
         fi
         ensure_mongo_auth_and_users
     else
-        log_info "DB-Autokonfiguration übersprungen (--no-db / Standard)"
+        log_info "DB-Autokonfiguration übersprungen (--no-db)"
     fi
     systemctl restart scandy || true
     

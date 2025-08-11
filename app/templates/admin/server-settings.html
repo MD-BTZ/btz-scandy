@@ -333,107 +333,7 @@
                 </div>
             </div>
             
-            <!-- Software-Verwaltung -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title text-xl mb-4">
-                        <i class="fas fa-desktop text-primary mr-2"></i>
-                        Software-Verwaltung
-                    </h2>
-                    
-                    <div class="space-y-4">
-                        <!-- Software hinzufügen -->
-                        <div class="bg-base-200 rounded-lg p-4">
-                            <h3 class="font-semibold mb-3">Neue Software hinzufügen</h3>
-                            <form id="addSoftwareForm" class="space-y-3">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">Name</span>
-                                        </label>
-                                        <input type="text" name="name" class="input input-bordered input-sm" required>
-                                    </div>
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">Kategorie</span>
-                                        </label>
-                                        <input type="text" name="category" class="input input-bordered input-sm" placeholder="z.B. Office, CAD, Grafik">
-                                    </div>
-                                </div>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">Beschreibung</span>
-                                    </label>
-                                    <textarea name="description" class="textarea textarea-bordered textarea-sm h-16" placeholder="Optionale Beschreibung"></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-plus mr-2"></i>Software hinzufügen
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <!-- Software-Liste -->
-                        <div class="bg-base-200 rounded-lg p-4">
-                            <h3 class="font-semibold mb-3">Verfügbare Software</h3>
-                            <div id="softwareList" class="space-y-2 max-h-60 overflow-y-auto">
-                                <!-- Wird per JavaScript geladen -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Nutzergruppen-Verwaltung -->
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title text-xl mb-4">
-                        <i class="fas fa-users text-primary mr-2"></i>
-                        Nutzergruppen-Verwaltung
-                    </h2>
-                    
-                    <div class="space-y-4">
-                        <!-- Nutzergruppe hinzufügen -->
-                        <div class="bg-base-200 rounded-lg p-4">
-                            <h3 class="font-semibold mb-3">Neue Nutzergruppe hinzufügen</h3>
-                            <form id="addUserGroupForm" class="space-y-3">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">Name</span>
-                                        </label>
-                                        <input type="text" name="name" class="input input-bordered input-sm" required>
-                                    </div>
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">Beschreibung</span>
-                                        </label>
-                                        <input type="text" name="description" class="input input-bordered input-sm" placeholder="z.B. Teilnehmer Laptops">
-                                    </div>
-                                </div>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">Software-Pakete</span>
-                                    </label>
-                                    <div id="softwareCheckboxes" class="space-y-2 max-h-40 overflow-y-auto border border-base-300 rounded-lg p-3">
-                                        <!-- Wird per JavaScript geladen -->
-                                    </div>
-                                </div>
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-plus mr-2"></i>Nutzergruppe hinzufügen
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <!-- Nutzergruppen-Liste -->
-                        <div class="bg-base-200 rounded-lg p-4">
-                            <h3 class="font-semibold mb-3">Verfügbare Nutzergruppen</h3>
-                            <div id="userGroupsList" class="space-y-2 max-h-60 overflow-y-auto">
-                                <!-- Wird per JavaScript geladen -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Software- und Nutzergruppen-Verwaltung sind ausgelagert in eigene Seiten -->
         </div>
     </div>
 
@@ -600,7 +500,8 @@ function renderSoftwareCheckboxes() {
 }
 
 // Software hinzufügen
-document.getElementById('addSoftwareForm').addEventListener('submit', async function(e) {
+const addSoftwareForm = document.getElementById('addSoftwareForm');
+if (addSoftwareForm) addSoftwareForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
@@ -706,7 +607,8 @@ function renderUserGroupsList() {
 }
 
 // Nutzergruppe hinzufügen
-document.getElementById('addUserGroupForm').addEventListener('submit', async function(e) {
+const addUserGroupForm = document.getElementById('addUserGroupForm');
+if (addUserGroupForm) addUserGroupForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
@@ -767,8 +669,7 @@ function editUserGroup(id) {
 
 // Seite laden
 document.addEventListener('DOMContentLoaded', function() {
-    loadSoftware();
-    loadUserGroups();
+    // Software/Nutzergruppen existieren in den System-Einstellungen nicht mehr
     loadDepartments();
 });
 

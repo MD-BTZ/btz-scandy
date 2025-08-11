@@ -513,14 +513,17 @@ class UnifiedBackupManager:
             client = MongoClient(mongo_uri)
             db = client[db_name]
             
-            # Collections wiederherstellen
-            for collection_name, documents in backup_data.items():
+            # Datenbereich ermitteln (neu: data, alt: flach)
+            data_section = backup_data['data'] if ('metadata' in backup_data and 'data' in backup_data) else backup_data
+
+            # Collections wiederherstellen (inkl. users)
+            for collection_name, documents in data_section.items():
                 if collection_name == 'metadata':
                     continue
                 
                 print(f"  📊 Stelle Collection wieder her: {collection_name}")
                 
-                # Collection leeren
+                # Collection leeren (vollständiger Import)
                 db[collection_name].delete_many({})
                 
                 # Dokumente wiederherstellen

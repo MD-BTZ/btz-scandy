@@ -1847,54 +1847,9 @@ def add_user():
 @bp.route('/migrate_users_to_workers', methods=['POST'])
 @admin_required
 def migrate_users_to_workers():
-    """Migriert bestehende Benutzer zu Mitarbeitern"""
-    try:
-        from app.services.admin_user_service import AdminUserService
-        
-        # Hole alle aktiven Benutzer
-        users = mongodb.find('users', {'is_active': True})
-        users = list(users)
-        
-        migrated_count = 0
-        skipped_count = 0
-        error_count = 0
-        
-        for user in users:
-            try:
-                # Prüfe ob bereits ein Mitarbeiter-Eintrag existiert
-                existing_worker = mongodb.find_one('workers', {
-                    'user_id': str(user['_id']),
-                    'deleted': {'$ne': True}
-                })
-                
-                if existing_worker:
-                    skipped_count += 1
-                    continue
-                
-                # Erstelle Mitarbeiter-Eintrag
-                success = AdminUserService._create_worker_from_user(user, str(user['_id']))
-                if success:
-                    migrated_count += 1
-                else:
-                    error_count += 1
-                    
-            except Exception as e:
-                logger.error(f"Fehler bei Migration von Benutzer {user.get('username', 'Unknown')}: {e}")
-                error_count += 1
-        
-        message = f"Migration abgeschlossen: {migrated_count} Benutzer migriert, {skipped_count} übersprungen, {error_count} Fehler"
-        
-        if error_count == 0:
-            flash(message, 'success')
-        else:
-            flash(message, 'warning')
-            
-        return redirect(url_for('admin.manage_users'))
-        
-    except Exception as e:
-        logger.error(f"Fehler bei der Benutzer-Migration: {e}")
-        flash(f'Fehler bei der Migration: {str(e)}', 'error')
-        return redirect(url_for('admin.manage_users'))
+    """Deaktiviert: Die Benutzer→Mitarbeiter Migration wurde entfernt."""
+    flash('Die Funktion wurde entfernt. Bitte verwalten Sie Mitarbeiter über die dedizierten Formulare.', 'info')
+    return redirect(url_for('admin.manage_users'))
 
 @bp.route('/edit_user/<user_id>', methods=['GET', 'POST'])
 @mitarbeiter_required
