@@ -708,6 +708,16 @@ class UnifiedBackupManager:
     def import_json_backup_scoped(self, json_file_path: str, target_department: str) -> bool:
         """Importiert ein altes JSON-Backup und weist alle Daten der angegebenen Abteilung zu."""
         try:
+            # Stelle sicher, dass während des Imports das Department-Scoping mit der Ziel-Abteilung übereinstimmt
+            try:
+                from flask import g, has_app_context
+                _had_ctx = has_app_context()
+                _old_dep = getattr(g, 'current_department', None) if _had_ctx else None
+                if _had_ctx:
+                    g.current_department = target_department
+            except Exception:
+                _had_ctx = False
+                _old_dep = None
             if not target_department:
                 print("❌ Keine Ziel-Abteilung angegeben")
                 return False
@@ -844,6 +854,14 @@ class UnifiedBackupManager:
         except Exception as e:
             print(f"❌ Fehler beim scoped-Import: {e}")
             return False
+        finally:
+            # Ursprüngliches Department im Kontext wiederherstellen
+            try:
+                if _had_ctx:
+                    from flask import g
+                    g.current_department = _old_dep
+            except Exception:
+                pass
 
     def import_json_backup_scoped_report(self, json_file_path: str, target_department: str) -> dict:
         """
@@ -861,6 +879,16 @@ class UnifiedBackupManager:
             'errors': []
         }
         try:
+            # Department-Kontext für den Import setzen (falls App-Kontext vorhanden)
+            try:
+                from flask import g, has_app_context
+                _had_ctx = has_app_context()
+                _old_dep = getattr(g, 'current_department', None) if _had_ctx else None
+                if _had_ctx:
+                    g.current_department = target_department
+            except Exception:
+                _had_ctx = False
+                _old_dep = None
             if not target_department:
                 report['errors'].append('Keine Ziel-Abteilung angegeben')
                 return report
@@ -933,6 +961,13 @@ class UnifiedBackupManager:
         except Exception as e:
             report['errors'].append(str(e))
             return report
+        finally:
+            try:
+                if _had_ctx:
+                    from flask import g
+                    g.current_department = _old_dep
+            except Exception:
+                pass
     
     # ===== Hintergrund-Jobs für Import =====
     def start_import_job(self, json_file_path: str, target_department: str) -> str:
