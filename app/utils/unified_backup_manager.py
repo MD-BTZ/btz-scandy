@@ -854,15 +854,22 @@ class UnifiedBackupManager:
                                 else:
                                     pw = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
                                     fixed['password_hash'] = generate_password_hash(pw)
+                            # Felder bereinigen
                             fixed.pop('password', None)
+                            fixed.pop('_id', None)
+                            created_at_val = fixed.pop('created_at', None)
                             fixed.setdefault('role', 'anwender')
                             fixed.setdefault('is_active', True)
                             # Department-Felder entfernen, Nutzer sind global
-                            for k in ['department', 'allowed_departments', 'default_department', 'departments']:
-                                if k in fixed and k != 'allowed_departments' and k != 'default_department':
-                                    fixed.pop(k, None)
-                            # Idempotentes Upsert am username
-                            mongodb.update_one('users', {'username': username}, {'$setOnInsert': {'created_at': datetime.now()}, '$set': fixed}, upsert=True)
+                            for k in ['department', 'departments']:
+                                fixed.pop(k, None)
+                            # Idempotentes Upsert am username (created_at nur on-insert)
+                            mongodb.update_one(
+                                'users',
+                                {'username': username},
+                                {'$setOnInsert': {'created_at': created_at_val or datetime.now()}, '$set': fixed},
+                                upsert=True
+                            )
                         except Exception as e:
                             print(f"    ⚠️  Nutzer-Import: {e}")
             except Exception as e:
@@ -1011,6 +1018,8 @@ class UnifiedBackupManager:
                 users_docs = data_section.get('users')
                 if isinstance(users_docs, list):
                     from werkzeug.security import generate_password_hash
+                    from pymongo import UpdateOne
+                    ops = []
                     for doc in users_docs:
                         try:
                             fixed = self._fix_json_document(doc)
@@ -1023,17 +1032,29 @@ class UnifiedBackupManager:
                                 else:
                                     pw = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
                                     fixed['password_hash'] = generate_password_hash(pw)
+                            created_at_val = fixed.pop('created_at', None)
                             fixed.pop('password', None)
+                            fixed.pop('_id', None)
                             fixed.setdefault('role', 'anwender')
                             fixed.setdefault('is_active', True)
                             # Department-Felder auf User entfernen (global), allowed/default bleiben erhalten
                             for k in ['department', 'departments']:
                                 fixed.pop(k, None)
-                            mongodb.update_one('users', {'username': username}, {'$setOnInsert': {'created_at': datetime.now()}, '$set': fixed}, upsert=True)
+                            ops.append(UpdateOne(
+                                {'username': username},
+                                {'$setOnInsert': {'created_at': created_at_val or datetime.now()}, '$set': fixed},
+                                upsert=True
+                            ))
                         except Exception as _ue:
                             if len(report['errors']) < 20:
-                                report['errors'].append(f"user({username}): {_ue}")
-                    # Optional: Statistik
+                                report['errors'].append(f"user({fixed.get('username','?')}): {_ue}")
+                    if ops:
+                        try:
+                            res = mongodb.db.users.bulk_write(ops, ordered=False)
+                            report['users_upserted'] = getattr(res, 'upserted_count', 0)
+                            report['users_matched'] = getattr(res, 'matched_count', 0)
+                        except Exception as be:
+                            report['errors'].append(f"users.bulk: {be}")
                     report['users_imported'] = True
             except Exception as ue:
                 report['errors'].append(f"users: {ue}")
