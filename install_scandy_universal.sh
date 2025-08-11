@@ -1458,9 +1458,30 @@ provision_mongo_users_and_env() {
     ADMIN_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     APP_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
 
-    # Nutzer anlegen (ohne Auth)
-    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${admin_user}',pwd:'${ADMIN_PW}',roles:[{role:'root',db:'admin'}]})" || true
-    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${app_user}',pwd:'${APP_PW}',roles:[{role:'readWrite',db:'scandy'}]})" || true
+    local target_db="${MONGODB_DB:-scandy}"
+
+    # Nutzer robust anlegen/aktualisieren (ohne Auth)
+    mongosh --quiet --eval "
+      const adm = db.getSiblingDB('admin');
+      try {
+        if (adm.getUser('${admin_user}')) {
+          adm.updateUser('${admin_user}', { pwd: '${ADMIN_PW}' });
+        } else {
+          adm.createUser({ user: '${admin_user}', pwd: '${ADMIN_PW}', roles: [ { role: 'root', db: 'admin' } ] });
+        }
+      } catch(e) { quit(1); }
+    " || true
+
+    mongosh --quiet --eval "
+      const adm = db.getSiblingDB('admin');
+      try {
+        if (adm.getUser('${app_user}')) {
+          adm.updateUser('${app_user}', { pwd: '${APP_PW}' });
+        } else {
+          adm.createUser({ user: '${app_user}', pwd: '${APP_PW}', roles: [ { role: 'readWrite', db: '${target_db}' } ] });
+        }
+      } catch(e) { quit(1); }
+    " || true
 
     # Auth aktivieren
     set_mongo_authorization enabled
@@ -1470,11 +1491,12 @@ provision_mongo_users_and_env() {
     if [ -f /opt/scandy/.env ]; then
         PW_ENC=$(printf "%s" "$APP_PW" | url_encode)
         sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected_port}/" /opt/scandy/.env || true
-        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${PW_ENC}@localhost:${detected_port}/scandy?authSource=admin#" /opt/scandy/.env || true
+        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${PW_ENC}@localhost:${detected_port}/${target_db}?authSource=admin#" /opt/scandy/.env || true
+        sed -i "s/^MONGODB_DB=.*/MONGODB_DB=${target_db}/" /opt/scandy/.env || true
     fi
 
     # Verifizieren
-    if ! mongo_ping_uri "mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin"; then
+    if ! mongo_ping_uri "mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/${target_db}?authSource=admin"; then
         log_error "MongoDB-Authentifizierungstest mit App-User fehlgeschlagen"
         exit 1
     fi
@@ -1515,11 +1537,20 @@ ensure_mongo_auth_and_users() {
         fi
     fi
 
-    # Robust: Auth temporär deaktivieren, Nutzer anlegen, Auth aktivieren, verifizieren
+    # Robust: Auth temporär deaktivieren, Nutzer anlegen/ersetzen, Auth aktivieren, verifizieren
     log_info "(Re)Provision Mongo-User: Auth temporär deaktivieren → Nutzer anlegen → Auth aktivieren"
     set_mongo_authorization disabled
     wait_for_mongo_port "$detected_port" || true
     provision_mongo_users_and_env "$detected_port"
+
+    # Nach Aktivierung: 2-stufig verifizieren (admin + app user)
+    local target_db="${MONGODB_DB:-scandy}"
+    if ! mongo_ping_uri "mongodb://admin:${ADMIN_PW}@localhost:${detected_port}/admin?authSource=admin"; then
+        log_warning "Admin-Login fehlgeschlagen – versuche noch einmal mit aktualisiertem Passwort."
+    fi
+    if ! mongo_ping_uri "mongodb://scandy_app:${APP_PW}@localhost:${detected_port}/${target_db}?authSource=admin"; then
+        log_error "App-Login fehlgeschlagen – bitte /opt/scandy/.env prüfen."
+    fi
 }
 
 # Öffnet Port 5001 in UFW, falls aktiv
