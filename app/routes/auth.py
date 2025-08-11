@@ -23,6 +23,7 @@ from datetime import datetime
 from bson import ObjectId
 from typing import Union
 import logging
+import re
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 mongodb = MongoDB()
@@ -80,13 +81,21 @@ def login():
         # ===== INPUT-VALIDIERUNG =====
         errors = []
         
-        # Benutzername-Validierung
+        # Benutzername/E-Mail-Validierung
+        is_email_login = '@' in username
         if not username:
-            errors.append('Benutzername ist erforderlich.')
-        elif len(username) > 50:
-            errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
-        elif not username.replace('_', '').replace('-', '').isalnum():
-            errors.append('Benutzername darf nur Buchstaben, Zahlen, Unterstriche und Bindestriche enthalten.')
+            errors.append('Benutzername oder E-Mail ist erforderlich.')
+        elif is_email_login:
+            # Sehr einfache E-Mail-Prüfung (keine harte RFC-Validierung)
+            if len(username) > 254 or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', username):
+                errors.append('E-Mail-Format ist ungültig.')
+        else:
+            if len(username) > 50:
+                errors.append('Benutzername ist zu lang (maximal 50 Zeichen).')
+            else:
+                # Erlaube Unicode-Buchstaben (inkl. Umlaute), Zahlen, Unterstrich, Bindestrich und Punkt
+                if not re.match(r'^[\w._-]+$', username):
+                    errors.append('Benutzername darf nur Buchstaben (inkl. Umlaute), Zahlen, Unterstriche, Bindestriche und Punkte enthalten.')
         
         # Passwort-Validierung
         if not password:
@@ -104,12 +113,18 @@ def login():
             return render_template('auth/login.html')
         
         # ===== RATE LIMITING FÜR LOGIN-VERSUCHE =====
-        # Rate Limiting wird über Flask-Limiter in der App-Konfiguration gehandhabt
-        # Keine zusätzliche Rate-Limiting-Logik hier erforderlich
-        pass
+        # Wird zentral initialisiert; kein Inline-pass nötig
         
         # ===== BENUTZER VALIDIEREN =====
-        user_data = MongoDBUser.get_by_username(username)
+        if is_email_login:
+            # Case-insensitive Suche nach E-Mail
+            try:
+                pattern = {'$regex': f'^{re.escape(username)}$', '$options': 'i'}
+                user_data = mongodb.find_one('users', {'email': pattern})
+            except Exception:
+                user_data = None
+        else:
+            user_data = MongoDBUser.get_by_username(username)
             
         from app.utils.auth_utils import check_password_compatible
         if user_data and check_password_compatible(user_data['password_hash'], password):
@@ -165,6 +180,7 @@ def login():
     return render_template('auth/login.html')
 
 @bp.route('/debug/users')
+@login_required
 def debug_users():
     """Debug-Route um alle Benutzer anzuzeigen"""
     try:
@@ -278,8 +294,8 @@ def setup():
 @bp.route('/setup-api', methods=['POST'])
 def setup_api():
     """
-    API-Endpunkt für Setup ohne CSRF-Schutz.
-    Nur für interne Verwendung.
+    API-Endpunkt für Setup (CSRF-geschützt durch globale Konfiguration).
+    Nur für die Ersteinrichtung, wenn kein Admin existiert.
     """
     if not needs_setup():
         return jsonify({'success': False, 'message': 'Setup bereits abgeschlossen'}), 400
@@ -467,7 +483,9 @@ def profile():
         try:
             # ===== DEBUG: Formulardaten loggen =====
             logger.info(f"DEBUG: Profile-Update für User: {current_user.username}")
-            logger.info(f"DEBUG: Formulardaten: {dict(request.form)}")
+            # Nur nicht-sensitive Metadaten loggen (keine Passwörter/PII)
+            safe_form = {k: ('***' if 'password' in k.lower() else v) for k, v in request.form.items() if k in {'email','timesheet_enabled'}}
+            logger.info(f"DEBUG: Formulardaten (abgesichert): {safe_form}")
             
             # ===== AKTUELLE BENUTZERDATEN HOLEN =====
             user = mongodb.find_one('users', {'username': current_user.username})
@@ -530,7 +548,7 @@ def profile():
                 
                 # Prüfe aktuelles Passwort
                 from app.utils.auth_utils import check_password_compatible
-                if not check_password_compatible(current_password, user.get('password_hash', '')):
+                if not check_password_compatible(user.get('password_hash', ''), current_password):
                     flash('Aktuelles Passwort ist falsch.', 'error')
                     return render_template('auth/profile.html', user=user)
                 

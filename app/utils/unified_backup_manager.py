@@ -14,6 +14,8 @@ import subprocess
 import zipfile
 import tempfile
 from datetime import datetime
+import threading
+import uuid
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from bson import ObjectId
@@ -39,6 +41,9 @@ class UnifiedBackupManager:
         self.include_media = True      # Medien einschließen
         self.compress_backups = True   # Backups komprimieren
         
+        # Import-Job Verwaltung (Statusablage in MongoDB)
+        # Hinweis: Für Persistenz/Mehrprozess-Sicherheit wird MongoDB genutzt, nicht nur RAM.
+
     def create_backup(self, include_media: bool = True, compress: bool = True) -> Optional[str]:
         """
         Erstellt ein vollständiges Backup (Datenbank + Medien)
@@ -81,6 +86,11 @@ class UnifiedBackupManager:
             if final_backup_path:
                 print(f"✅ Backup erfolgreich erstellt: {final_backup_path}")
                 self._cleanup_temp_files([db_backup_path, media_backup_path, config_backup_path])
+                # Alte Backups (>7 Tage) aufräumen
+                try:
+                    self._prune_old_backups(days=7)
+                except Exception as e:
+                    print(f"⚠️  Konnte alte Backups nicht bereinigen: {e}")
                 return final_backup_path
             else:
                 return None
@@ -534,25 +544,33 @@ class UnifiedBackupManager:
             return False
     
     def _validate_json_backup(self, backup_data: Dict) -> bool:
-        """Validiert JSON-Backup-Daten"""
-        if not isinstance(backup_data, dict):
+        """Validiert JSON-Backup-Daten (tolerant für alte Formate)."""
+        try:
+            if not isinstance(backup_data, dict):
+                return False
+
+            # Prüfe Struktur (neu: metadata+data, alt: flach)
+            if 'metadata' in backup_data and 'data' in backup_data and isinstance(backup_data['data'], dict):
+                data_section = backup_data['data']
+            else:
+                data_section = backup_data
+
+            if not isinstance(data_section, dict):
+                return False
+
+            # Akzeptiere, wenn mindestens eine relevante Collection vorhanden ist
+            relevant = {
+                'tools', 'workers', 'consumables', 'lendings', 'consumable_usages',
+                'tickets', 'ticket_messages', 'ticket_notes', 'auftrag_details', 'auftrag_material',
+                'users', 'settings'
+            }
+            present = [k for k in data_section.keys() if k in relevant]
+            if not present:
+                print("JSON enthält keine relevanten Collections")
+                return False
+            return True
+        except Exception:
             return False
-        
-        # Prüfe ob es das neue Format ist
-        if 'metadata' in backup_data and 'data' in backup_data:
-            data_section = backup_data['data']
-        else:
-            data_section = backup_data
-        
-        # Mindestanforderungen
-        required_collections = ['tools', 'workers', 'consumables', 'settings']
-        missing_collections = [coll for coll in required_collections if coll not in data_section]
-        
-        if missing_collections:
-            print(f"Fehlende Collections: {missing_collections}")
-            return False
-        
-        return True
     
     def _fix_json_document(self, doc: Dict) -> Dict:
         """Korrigiert JSON-Dokument für MongoDB-Import"""
@@ -610,7 +628,256 @@ class UnifiedBackupManager:
                 print(f"Fehler beim Lesen von Backup {backup_file.name}: {e}")
         
         return sorted(backups, key=lambda x: x['created_at'], reverse=True)
+
+    def _prune_old_backups(self, days: int = 7):
+        """Löscht Backup-ZIP-Dateien, die älter als 'days' Tage sind."""
+        cutoff = datetime.now().timestamp() - days * 86400
+        removed = 0
+        for backup_file in self.backup_dir.glob('scandy_backup_*.zip'):
+            try:
+                if backup_file.stat().st_mtime < cutoff:
+                    backup_file.unlink()
+                    removed += 1
+            except Exception:
+                continue
+        if removed:
+            print(f"🧹 {removed} alte Backups (> {days} Tage) gelöscht")
+
+    def import_json_backup_scoped(self, json_file_path: str, target_department: str) -> bool:
+        """Importiert ein altes JSON-Backup und weist alle Daten der angegebenen Abteilung zu."""
+        try:
+            if not target_department:
+                print("❌ Keine Ziel-Abteilung angegeben")
+                return False
+            print(f"🔄 Importiere JSON-Backup (Department={target_department}): {json_file_path}")
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            if not self._validate_json_backup(backup_data):
+                print("❌ Ungültiges JSON-Backup")
+                return False
+            # Verwende die bestehende App-Datenbankverbindung
+            from app.models.mongodb_database import mongodb
+            # Datenbereich extrahieren
+            data_section = backup_data['data'] if ('metadata' in backup_data and 'data' in backup_data) else backup_data
+            # Collections importieren – 'settings' nur selektiv
+            scoped_collections = ['tools', 'workers', 'consumables', 'lendings', 'consumable_usages', 'tickets', 'ticket_messages', 'ticket_notes', 'auftrag_details', 'auftrag_material']
+            total_inserted = 0
+            total_failed = 0
+            for collection_name, documents in data_section.items():
+                if collection_name == 'metadata':
+                    continue
+                if collection_name not in scoped_collections:
+                    # Überspringe nicht-relevante oder system-Collections
+                    continue
+                print(f"  📊 Stelle Collection wieder her (scoped): {collection_name}")
+                inserted_count = 0
+                failed_count = 0
+                for doc in documents or []:
+                    doc = self._fix_json_document(doc)
+                    # IDs immer entfernen, um Kollisionen zu vermeiden
+                    if '_id' in doc:
+                        try:
+                            del doc['_id']
+                        except Exception:
+                            pass
+                    # Alte/inkompatible Abteilungsfelder entfernen
+                    dept_like_fields = ['department', 'allowed_departments', 'default_department', 'departments', 'dept', 'dept_id', 'source_department', 'target_department']
+                    for key in list(doc.keys()):
+                        if key in dept_like_fields:
+                            try:
+                                del doc[key]
+                            except Exception:
+                                pass
+                    # Department erzwingen
+                    doc['department'] = target_department
+                    if collection_name == 'tickets':
+                        # Ziel-Abteilung in Tickets ggf. zusätzlich setzen
+                        doc['target_department'] = target_department
+                    # Einzelnes Dokument einfügen
+                    try:
+                        mongodb.insert_one(collection_name, doc)
+                        inserted_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        # Kurz-Log, aber Import fortsetzen
+                        print(f"    ⚠️  Fehler beim Einfügen in {collection_name}: {e}")
+                total_inserted += inserted_count
+                total_failed += failed_count
+                print(f"    ✅ {inserted_count} eingefügt, ❌ {failed_count} fehlgeschlagen in {collection_name}")
+            print(f"✅ JSON-Backup (scoped) abgeschlossen – Gesamt: {total_inserted} eingefügt, {total_failed} fehlgeschlagen")
+            # Erfolg, wenn mindestens ein Dokument eingefügt wurde
+            return total_inserted > 0
+        except Exception as e:
+            print(f"❌ Fehler beim scoped-Import: {e}")
+            return False
+
+    def import_json_backup_scoped_report(self, json_file_path: str, target_department: str) -> dict:
+        """
+        Wie import_json_backup_scoped, liefert aber eine Detail-Statistik zurück.
+        Rückgabe:
+          { ok: bool, total_inserted: int, total_failed: int,
+            per_collection: { name: {inserted:int, failed:int} }, errors: [str,...] }
+        """
+        report = {
+            'ok': False,
+            'total_inserted': 0,
+            'total_failed': 0,
+            'total_duplicates': 0,
+            'per_collection': {},
+            'errors': []
+        }
+        try:
+            if not target_department:
+                report['errors'].append('Keine Ziel-Abteilung angegeben')
+                return report
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            if not self._validate_json_backup(backup_data):
+                report['errors'].append('Ungültiges JSON-Backup')
+                return report
+            from app.models.mongodb_database import mongodb
+            data_section = backup_data['data'] if ('metadata' in backup_data and 'data' in backup_data) else backup_data
+            scoped_collections = ['tools', 'workers', 'consumables', 'lendings', 'consumable_usages', 'tickets', 'ticket_messages', 'ticket_notes', 'auftrag_details', 'auftrag_material']
+            from pymongo.errors import DuplicateKeyError
+            for collection_name, documents in data_section.items():
+                if collection_name == 'metadata':
+                    continue
+                if collection_name not in scoped_collections:
+                    continue
+                inserted_count = 0
+                failed_count = 0
+                duplicate_count = 0
+                reassigned_count = 0
+                for doc in documents or []:
+                    try:
+                        doc = self._fix_json_document(doc)
+                        if '_id' in doc:
+                            del doc['_id']
+                        for key in ['department', 'allowed_departments', 'default_department', 'departments', 'dept', 'dept_id', 'source_department', 'target_department']:
+                            if key in doc:
+                                del doc[key]
+                        doc['department'] = target_department
+                        if collection_name == 'tickets':
+                            doc['target_department'] = target_department
+                        # Vorab: Versuche vorhandenes Dokument ohne Department auf Ziel-Abteilung umzuhängen
+                        if collection_name in ('tools', 'workers', 'consumables') and doc.get('barcode'):
+                            # Reassign nur, wenn bestehendes Dokument KEIN department-Feld hat
+                            reassigned = mongodb.update_one(
+                                collection_name,
+                                {'barcode': doc['barcode'], 'department': {'$exists': False}},
+                                {'$set': {'department': target_department}},
+                                upsert=False
+                            )
+                            if reassigned:
+                                reassigned_count += 1
+                                # Optional: weitere Felder aktualisieren? Vorsichtig: Nur Dept setzen um Daten nicht zu überschreiben
+                                continue
+                        mongodb.insert_one(collection_name, doc)
+                        inserted_count += 1
+                    except DuplicateKeyError as e:
+                        # Duplikat: als übersprungen zählen, nicht als Fehler
+                        duplicate_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        if len(report['errors']) < 20:
+                            report['errors'].append(f"{collection_name}: {e}")
+                report['per_collection'][collection_name] = {
+                    'inserted': inserted_count,
+                    'failed': failed_count,
+                    'duplicates': duplicate_count,
+                    'reassigned': reassigned_count
+                }
+                report['total_inserted'] += inserted_count
+                report['total_failed'] += failed_count
+                report['total_duplicates'] += duplicate_count
+                report['total_reassigned'] = report.get('total_reassigned', 0) + reassigned_count
+            # Erfolg, wenn Insert stattfand oder nur Duplikate vorlagen
+            report['ok'] = (report['total_inserted'] > 0 and len(report['errors']) == 0) or (
+                report['total_inserted'] == 0 and report['total_failed'] == 0 and report['total_duplicates'] > 0
+            )
+            return report
+        except Exception as e:
+            report['errors'].append(str(e))
+            return report
     
+    # ===== Hintergrund-Jobs für Import =====
+    def start_import_job(self, json_file_path: str, target_department: str) -> str:
+        """Startet einen Hintergrund-Import-Job und gibt die Job-ID zurück."""
+        job_id = str(uuid.uuid4())
+        try:
+            from app.models.mongodb_database import mongodb
+            now = datetime.now()
+            job_doc = {
+                '_id': job_id,
+                'type': 'json_scoped_import',
+                'status': 'running',
+                'created_at': now,
+                'updated_at': now,
+                'file_path': json_file_path,
+                'target_department': target_department,
+                'progress': {'inserted': 0, 'failed': 0, 'duplicates': 0},
+                'result': None,
+                'errors': []
+            }
+            mongodb.insert_one('import_jobs', job_doc)
+
+            # Hintergrund-Thread starten
+            thread = threading.Thread(target=self._run_import_job, args=(job_id,), daemon=True)
+            thread.start()
+            return job_id
+        except Exception as e:
+            # Fallback: Job nicht gestartet
+            return ''
+
+    def _run_import_job(self, job_id: str):
+        """Führt den Import-Job im Hintergrund aus und aktualisiert den Status in MongoDB."""
+        from app.models.mongodb_database import mongodb
+        try:
+            job = mongodb.find_one('import_jobs', {'_id': job_id})
+            if not job:
+                return
+            json_file_path = job.get('file_path')
+            target_department = job.get('target_department')
+
+            # Import ausführen (mit Report)
+            report = self.import_json_backup_scoped_report(json_file_path, target_department)
+
+            # Status aktualisieren
+            status = 'done' if report.get('ok') else 'error'
+            mongodb.update_one('import_jobs', {'_id': job_id}, {'$set': {
+                'status': status,
+                'updated_at': datetime.now(),
+                'result': report,
+                'progress': {
+                    'inserted': report.get('total_inserted', 0),
+                    'failed': report.get('total_failed', 0),
+                    'duplicates': report.get('total_duplicates', 0)
+                },
+                'errors': report.get('errors', [])
+            }})
+        except Exception as e:
+            mongodb.update_one('import_jobs', {'_id': job_id}, {'$set': {
+                'status': 'error',
+                'updated_at': datetime.now(),
+                'errors': [str(e)]
+            }})
+
+    def get_import_job(self, job_id: str) -> dict:
+        """Liest den Status eines Import-Jobs aus MongoDB."""
+        try:
+            from app.models.mongodb_database import mongodb
+            job = mongodb.find_one('import_jobs', {'_id': job_id})
+            if not job:
+                return {'exists': False}
+            # Konvertiere Datumswerte für JSON-Ausgabe
+            for k in ['created_at', 'updated_at']:
+                if k in job and isinstance(job[k], datetime):
+                    job[k] = job[k].isoformat()
+            job['exists'] = True
+            return job
+        except Exception as e:
+            return {'exists': False, 'error': str(e)}
+
     def _cleanup_temp_files(self, temp_paths: List[Optional[Path]]):
         """Räumt temporäre Dateien auf"""
         for temp_path in temp_paths:

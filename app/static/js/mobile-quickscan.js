@@ -14,14 +14,10 @@
 
   function setButtonState() {
     const confirmBtn = $('confirmMobileQuickscan');
-    confirmBtn.disabled = !(selectedItem && selectedWorker);
-    // Menge/Rückgabedatum erst bei bestätigungsbereit anzeigen
-    const showQty = selectedItem && selectedWorker && selectedItem.type === 'consumable';
-    const showReturn = selectedItem && selectedWorker && selectedItem.type === 'tool' && selectedItem.status !== 'ausgeliehen';
-    const showActionBar = !!(selectedItem && selectedWorker);
-    $('actionBar').classList.toggle('hidden', !showActionBar);
-    $('quantityRow').classList.toggle('hidden', !showQty);
-    $('returnDateRow').classList.toggle('hidden', !showReturn);
+    if (confirmBtn) {
+      confirmBtn.disabled = !(selectedItem && selectedWorker);
+    }
+    // Hinweis: optionale Felder/Leisten sind in der aktuellen UI entfernt
   }
 
   function setStep(step) {
@@ -33,7 +29,8 @@
     workerBtn.classList.remove('border-primary');
     if (step === 'item') itemBtn.classList.add('border-primary');
     if (step === 'worker') workerBtn.classList.add('border-primary');
-    $('scanHint').textContent = step === 'item' ? 'Scanne Artikel-Barcode…' : 'Scanne Mitarbeiter-Barcode…';
+    const hint = $('scanHint');
+    if (hint) hint.textContent = step === 'item' ? 'Scanne Artikel-Barcode…' : 'Scanne Mitarbeiter-Barcode…';
   }
 
   async function startCamera() {
@@ -134,8 +131,10 @@
           status: item.status,
           quantity: typeof item.quantity === 'number' ? item.quantity : (item.current_stock || item.current_amount || 0)
         };
-        $('itemSummary').textContent = `${selectedItem.name}`;
-        $('scanItemBtn').classList.add('border-success');
+        const itemSum = $('itemSummary');
+        if (itemSum) itemSum.textContent = `${selectedItem.name}`;
+        const itemBtn = $('scanItemBtn');
+        if (itemBtn) itemBtn.classList.add('btn-primary');
         // Felder erst beim bestätigungsbereiten Zustand anzeigen (in setButtonState)
       } else {
         toast('error', 'Artikel nicht gefunden');
@@ -152,8 +151,10 @@
       if (data.success) {
         const w = data.worker;
         selectedWorker = { barcode: w.barcode, firstname: w.firstname || '', lastname: w.lastname || '' };
-        $('workerSummary').textContent = `${selectedWorker.firstname} ${selectedWorker.lastname}`.trim();
-        $('scanWorkerBtn').classList.add('border-success');
+        const workerSum = $('workerSummary');
+        if (workerSum) workerSum.textContent = `${selectedWorker.firstname} ${selectedWorker.lastname}`.trim();
+        const workerBtn = $('scanWorkerBtn');
+        if (workerBtn) workerBtn.classList.add('btn-primary');
       } else {
         toast('error', 'Mitarbeiter nicht gefunden');
       }
@@ -170,11 +171,13 @@
       action: selectedItem.type === 'consumable' ? 'use' : (selectedItem.status === 'ausgeliehen' ? 'return' : 'lend')
     };
     if (selectedItem.type === 'consumable') {
-      const qty = parseInt($('qtyInput').value || '1', 10);
+      const qtyEl = $('qtyInput');
+      const qty = parseInt((qtyEl && qtyEl.value) ? qtyEl.value : '1', 10);
       payload.quantity = Math.max(1, isNaN(qty) ? 1 : qty);
     }
     if (selectedItem.type === 'tool' && selectedItem.status !== 'ausgeliehen') {
-      const dateVal = $('returnDateInput').value;
+      const dateEl = $('returnDateInput');
+      const dateVal = dateEl ? dateEl.value : '';
       if (dateVal) payload.expected_return_date = dateVal;
     }
     try {
@@ -200,11 +203,16 @@
     selectedWorker = null;
     $('itemSummary').textContent = 'Tippen zum Scannen';
     $('workerSummary').textContent = 'Tippen zum Scannen';
-    $('scanItemBtn').classList.remove('border-success', 'border-primary');
-    $('scanWorkerBtn').classList.remove('border-success', 'border-primary');
-    $('quantityRow').classList.add('hidden');
-    $('returnDateRow').classList.add('hidden');
-    $('qtyInput').value = '1';
+    const itemBtn2 = $('scanItemBtn');
+    const workerBtn2 = $('scanWorkerBtn');
+    if (itemBtn2) itemBtn2.classList.remove('btn-primary');
+    if (workerBtn2) workerBtn2.classList.remove('btn-primary');
+    const qtyRow = $('quantityRow');
+    if (qtyRow) qtyRow.classList.add('hidden');
+    const retRow = $('returnDateRow');
+    if (retRow) retRow.classList.add('hidden');
+    const qtyInput = $('qtyInput');
+    if (qtyInput) qtyInput.value = '1';
     setStep('item');
     setButtonState();
     if (!keepCamera) stopCamera();
@@ -235,19 +243,31 @@
       const ok = await applyTorch(!torchOn);
       if (!ok) toast('info', 'Blitz nicht verfügbar');
     });
-    $('qtyDec').addEventListener('click', (e) => {
-      e.preventDefault();
-      const el = $('qtyInput');
-      const v = Math.max(1, (parseInt(el.value || '1', 10) || 1) - 1);
-      el.value = String(v);
-    });
-    $('qtyInc').addEventListener('click', (e) => {
-      e.preventDefault();
-      const el = $('qtyInput');
-      const v = Math.max(1, (parseInt(el.value || '1', 10) || 1) + 1);
-      el.value = String(v);
-    });
+    const dec = $('qtyDec');
+    if (dec) {
+      dec.addEventListener('click', (e) => {
+        e.preventDefault();
+        const el = $('qtyInput');
+        if (!el) return;
+        const v = Math.max(1, (parseInt(el.value || '1', 10) || 1) - 1);
+        el.value = String(v);
+      });
+    }
+    const inc = $('qtyInc');
+    if (inc) {
+      inc.addEventListener('click', (e) => {
+        e.preventDefault();
+        const el = $('qtyInput');
+        if (!el) return;
+        const v = Math.max(1, (parseInt(el.value || '1', 10) || 1) + 1);
+        el.value = String(v);
+      });
+    }
     $('confirmMobileQuickscan').addEventListener('click', confirmAction);
+    const resetBtn = document.getElementById('resetMobileQuickscan');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => resetState(true));
+    }
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

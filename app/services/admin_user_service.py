@@ -73,6 +73,17 @@ class AdminUserService:
             if existing_user:
                 return False, "Benutzername existiert bereits", None
             
+            # Multi‑Department Pflicht: Mindestens eine erlaubte Abteilung
+            allowed_departments = user_data.get('allowed_departments') or []
+            default_department = user_data.get('default_department')
+            if not allowed_departments and default_department:
+                # Falls nur Standard gesetzt ist, als erlaubte Abteilung übernehmen
+                allowed_departments = [default_department]
+            if not allowed_departments:
+                return False, "Mindestens eine Abteilung muss zugewiesen werden", None
+            if default_department and default_department not in allowed_departments:
+                allowed_departments.append(default_department)
+
             # Passwort generieren falls nicht angegeben
             password = user_data.get('password', '')
             if not password:
@@ -94,12 +105,19 @@ class AdminUserService:
                 'email': user_data.get('email', ''),
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
-                'department': user_data.get('department', ''),
+                # Multi-Department Felder
+                'allowed_departments': allowed_departments,
+                'default_department': default_department or allowed_departments[0],
                 'handlungsfelder': user_data.get('handlungsfelder', []),
-                'expiry_date': user_data.get('expiry_date', None),
+                # Neues, einfaches Löschdatum
+                'delete_at': user_data.get('delete_at', None),
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
+
+            # Standard: Für Teilnehmer ohne explizites Datum -> 1 Jahr
+            if new_user.get('role') == 'teilnehmer' and not new_user.get('delete_at'):
+                new_user['delete_at'] = datetime.now() + timedelta(days=365)
             
             # Benutzer in Datenbank speichern
             user_id = mongodb.insert_one('users', new_user)
@@ -144,9 +162,10 @@ class AdminUserService:
                 'updated_at': datetime.now()
             }
             
-            # Aktualisierbare Felder (ohne Abteilung)
+            # Aktualisierbare Felder inkl. Multi-Department
             updatable_fields = ['username', 'role', 'is_active', 'timesheet_enabled', 
-                              'email', 'firstname', 'lastname', 'handlungsfelder', 'expiry_date']
+                              'email', 'firstname', 'lastname', 'handlungsfelder', 'delete_at',
+                              'allowed_departments', 'default_department']
             
             for field in updatable_fields:
                 if field in user_data:
@@ -175,10 +194,25 @@ class AdminUserService:
                 if existing_user:
                     return False, "Benutzername existiert bereits"
             
+            # Multi‑Department Pflicht validieren
+            new_allowed = update_data.get('allowed_departments', user.get('allowed_departments', []))
+            new_default = update_data.get('default_department', user.get('default_department'))
+            if not new_allowed and new_default:
+                new_allowed = [new_default]
+                update_data['allowed_departments'] = new_allowed
+            if not new_allowed:
+                return False, "Mindestens eine Abteilung muss zugewiesen werden"
+            if not new_default:
+                new_default = new_allowed[0]
+                update_data['default_department'] = new_default
+            if new_default not in new_allowed:
+                new_allowed.append(new_default)
+                update_data['allowed_departments'] = new_allowed
+
             # Benutzer aktualisieren
             mongodb.update_one('users', {'_id': user_id}, {'$set': update_data})
             
-            # Synchronisiere Mitarbeiter-Eintrag falls vorhanden
+            # Synchronisiere Mitarbeiter-Eintrag falls vorhanden (inkl. delete_at)
             AdminUserService._sync_worker_from_user(user_id, update_data)
             
             logger.info(f"Benutzer aktualisiert: {user.get('username', 'Unknown')} (ID: {user_id})")
@@ -348,7 +382,7 @@ class AdminUserService:
                 'user_id': user_id,  # Verknüpfung zur Benutzer-ID
                 'firstname': user_data.get('firstname', ''),
                 'lastname': user_data.get('lastname', ''),
-                'department': user_data.get('department', ''),
+                'department': user_data.get('default_department') or (user_data.get('allowed_departments', [])[:1] or [''])[0],
                 'email': user_data.get('email', ''),
                 'role': user_data.get('role', 'anwender'),
                 'created_at': datetime.now(),
@@ -400,8 +434,10 @@ class AdminUserService:
                 worker_update_data['lastname'] = user_update_data['lastname']
             if 'email' in user_update_data:
                 worker_update_data['email'] = user_update_data['email']
-            if 'department' in user_update_data:
-                worker_update_data['department'] = user_update_data['department']
+            if 'default_department' in user_update_data:
+                worker_update_data['department'] = user_update_data['default_department']
+            if 'delete_at' in user_update_data:
+                worker_update_data['delete_at'] = user_update_data['delete_at']
             
             # Aktualisiere Mitarbeiter-Eintrag
             mongodb.update_one('workers', 

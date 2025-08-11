@@ -81,7 +81,7 @@
 </dialog>
 
 <!-- JsBarcode Library -->
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script nonce="{{ csp_nonce }}" src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
 <!-- VIBE Easter Egg Overlay -->
 <div id="vibeOverlay" class="fixed inset-0 bg-black/80 z-[9999999] hidden">
@@ -96,7 +96,7 @@
     </video>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
     // Bestehender Code für das Zebra-Easter Egg
     let lastInput = '';
     const danceCode = 'DANCE';

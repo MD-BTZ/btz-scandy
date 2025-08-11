@@ -4,6 +4,9 @@ from app.config.version import VERSION
 import traceback
 import logging
 from app.models.mongodb_database import mongodb
+from flask_login import current_user
+from flask import g
+from flask_wtf.csrf import generate_csrf
 
 # Import mit try-except um Circular Imports zu vermeiden
 try:
@@ -235,3 +238,52 @@ def register_context_processors(app):
     app.context_processor(inject_unfilled_timesheet_days)
     app.context_processor(inject_feature_settings)
     app.context_processor(inject_custom_fields)
+    app.context_processor(inject_departments)
+    app.context_processor(inject_csrf_token)
+
+def inject_csrf_token():
+    """Stellt csrf_token() in allen Templates bereit"""
+    try:
+        return {'csrf_token': generate_csrf}
+    except Exception:
+        # Fallback: leere Funktion, um Template-Fehler zu vermeiden
+        return {'csrf_token': (lambda: '')}
+
+def inject_departments():
+    """Injiziert Departments (Auswahl + aktuelles Department) in Templates.
+    Zusätzlich wird eine konfliktfreie Variable `departments_ctx` bereitgestellt,
+    um Überschneidungen mit View-Variablen namens `departments` zu vermeiden.
+    """
+    try:
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            ctx = {'allowed': [], 'current': None}
+            return {'departments': ctx, 'departments_ctx': ctx}
+
+        # Benutzer lesen
+        user = mongodb.find_one('users', {'username': current_user.username})
+
+        # Globale Departments laden (für Admins nötig)
+        all_departments = []
+        try:
+            depts_setting = mongodb.find_one('settings', {'key': 'departments'})
+            if depts_setting and isinstance(depts_setting.get('value'), list):
+                all_departments = [d for d in depts_setting['value'] if isinstance(d, str) and d.strip()]
+        except Exception:
+            all_departments = []
+
+        # Admins: automatisch Zugriff auf alle Abteilungen
+        if getattr(current_user, 'role', None) == 'admin' and all_departments:
+            allowed = all_departments
+        else:
+            allowed = user.get('allowed_departments', []) if user else []
+        current = getattr(g, 'current_department', None)
+        default = user.get('default_department') if user else None
+        if not current:
+            current = default
+        ctx = {'allowed': allowed, 'current': current}
+        return {'departments': ctx, 'departments_ctx': ctx}
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Departments Context Fehler: {e}")
+        ctx = {'allowed': [], 'current': None}
+        return {'departments': ctx, 'departments_ctx': ctx}

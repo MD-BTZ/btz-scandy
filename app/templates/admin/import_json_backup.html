@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}JSON-Backup importieren{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+  <h1 class="text-2xl font-bold mb-6">JSON-Backup importieren</h1>
+  <div class="alert alert-info mb-4">
+    <i class="fas fa-info-circle mr-2"></i>
+    Wählen Sie ein altes JSON-Backup und geben Sie den Namen der Ziel-Abteilung an. Alle Daten werden dieser Abteilung zugewiesen.
+  </div>
+  <form method="POST" enctype="multipart/form-data" class="space-y-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-control">
+      <label class="label"><span class="label-text">Backup-Datei (JSON)</span></label>
+      <input type="file" name="backup_file" accept=".json" class="file-input file-input-bordered w-full" required>
+    </div>
+    <div class="form-control">
+      <label class="label"><span class="label-text">Ziel-Abteilung</span></label>
+      <input type="text" name="department_name" class="input input-bordered w-full" placeholder="z. B. IT" required>
+    </div>
+    <div class="form-control mt-4">
+      <button type="submit" class="btn btn-primary"><i class="fas fa-upload mr-2"></i>Import starten</button>
+      <a href="{{ url_for('admin.dashboard') }}" class="btn ml-2">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

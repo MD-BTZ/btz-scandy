@@ -1266,4 +1266,4 @@ python debug_system.py
 
 **Ende der Dokumentation**
 
-*Diese Dokumentation wurde automatisch generiert basierend auf dem aktuellen Code-Stand von Scandy Version Beta 0.8.1 (Januar 2025). Für Updates und Erweiterungen dieser Dokumentation sollte sie entsprechend dem Code-Stand angepasst werden.*
+*Diese Dokumentation wurde automatisch generiert basierend auf dem aktuellen Code-Stand von Scandy Version Beta 0.8.1 (Januar 2025). Für Updates und Erweiterungen dieser Dokumentation sollte sie entsprechend dem Code-Stand angepasst werden.*.syst

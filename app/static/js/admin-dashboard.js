@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/departments/add', {
                     method: 'POST',
                     body: formData
@@ -105,6 +106,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/locations/add', {
                     method: 'POST',
                     body: formData
@@ -142,6 +147,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/categories/add', {
                     method: 'POST',
                     body: formData
@@ -179,6 +188,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Hinzufügen...';
                 
                 const formData = new FormData(this);
+                const metaDept = document.querySelector('meta[name="current-department"]');
+                const dept = metaDept ? metaDept.getAttribute('content') : '';
+                if (dept) formData.append('dept', dept);
+                formData.append('csrf_token', getCsrfToken());
                 const response = await fetch('/admin/ticket_categories/add', {
                     method: 'POST',
                     body: formData
@@ -205,6 +218,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+function csrfHeaders() {
+    const token = getCsrfToken();
+    return {
+        'X-CSRFToken': token,
+        'X-CSRF-Token': token
+    };
+}
+
+async function fetchJson(url, options) {
+    const method = (options && options.method) ? options.method.toUpperCase() : 'GET';
+    const base = { headers: {'Accept': 'application/json'} };
+    if (method !== 'GET') {
+        base.headers = Object.assign({}, base.headers, csrfHeaders());
+    }
+    const resp = await fetch(url, Object.assign(base, options||{}));
+    const ct = resp.headers.get('content-type') || '';
+    if (resp.redirected || resp.url.includes('/auth/login') || (!ct.includes('application/json') && !ct.includes('json'))) {
+        try { window.showToast && window.showToast('error', 'Bitte erneut anmelden'); } catch(e) {}
+        window.location.href = '/auth/login';
+        throw new Error('Not authenticated');
+    }
+    if (!resp.ok) {
+        throw new Error('Request failed');
+    }
+    return resp.json();
+}
+
 // Lade Abteilungen
 async function loadDepartments() {
     const tbody = document.getElementById('departmentsList');
@@ -215,8 +260,7 @@ async function loadDepartments() {
 
     try {
         console.log('Lade Abteilungen von /admin/departments');
-        const response = await fetch('/admin/departments');
-        const data = await response.json();
+        const data = await fetchJson('/admin/departments');
         if (data.success) {
             console.log('Abteilungen geladen:', data.departments);
             tbody.innerHTML = data.departments.map(dept => `
@@ -247,9 +291,11 @@ async function loadLocations() {
     }
 
     try {
-        console.log('Lade Standorte von /admin/locations');
-        const response = await fetch('/admin/locations');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        console.log('Lade Standorte von /admin/locations für Dept:', dept);
+        const url = dept ? `/admin/locations?dept=${encodeURIComponent(dept)}` : '/admin/locations';
+        const data = await fetchJson(url);
         if (data.success) {
             console.log('Standorte geladen:', data.locations);
             tbody.innerHTML = data.locations.map(loc => `
@@ -277,8 +323,10 @@ async function loadCategories() {
     if (!tbody) return;
 
     try {
-        const response = await fetch('/admin/categories');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        const url = dept ? `/admin/categories?dept=${encodeURIComponent(dept)}` : '/admin/categories';
+        const data = await fetchJson(url);
         if (data.success) {
             tbody.innerHTML = data.categories.map(cat => `
                 <tr>
@@ -305,8 +353,10 @@ async function loadTicketCategories() {
     if (!tbody) return;
 
     try {
-        const response = await fetch('/admin/ticket_categories');
-        const data = await response.json();
+        const metaDept = document.querySelector('meta[name="current-department"]');
+        const dept = metaDept ? metaDept.getAttribute('content') : '';
+        const url = dept ? `/admin/ticket_categories?dept=${encodeURIComponent(dept)}` : '/admin/ticket_categories';
+        const data = await fetchJson(url);
         if (data.success) {
             tbody.innerHTML = data.categories.map(cat => `
                 <tr>
@@ -352,8 +402,12 @@ async function deleteDepartment(name) {
 async function deleteLocation(name) {
     if (confirm(`Möchten Sie den Standort "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/locations/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {
@@ -373,8 +427,12 @@ async function deleteLocation(name) {
 async function deleteCategory(name) {
     if (confirm(`Möchten Sie die Kategorie "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/categories/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {
@@ -394,8 +452,12 @@ async function deleteCategory(name) {
 async function deleteTicketCategory(name) {
     if (confirm(`Möchten Sie die Ticket-Kategorie "${decodeURIComponent(name)}" wirklich löschen?`)) {
         try {
+            const fd = new FormData();
+            fd.append('csrf_token', getCsrfToken());
             const response = await fetch(`/admin/ticket_categories/delete/${name}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: fd
             });
             const data = await response.json();
             if (data.success) {

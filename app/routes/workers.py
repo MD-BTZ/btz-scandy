@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.models.mongodb_models import MongoDBWorker
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import login_required, admin_required, mitarbeiter_required, teilnehmer_required
+from app.utils.permissions import permission_required
 from app.utils.database_helpers import get_departments_from_settings
 from datetime import datetime, timedelta
 from flask_login import current_user
@@ -60,11 +61,16 @@ def find_document_by_id(collection: str, id_value: str):
 
 @bp.route('/')
 @mitarbeiter_required
+@permission_required('workers', 'view')
 def index():
     """Zeigt die Mitarbeiter-Übersicht an"""
     try:
-        # Hole alle nicht gelöschten Mitarbeiter
-        workers = mongodb.find('workers', {'deleted': {'$ne': True}})
+        # Hole alle nicht gelöschten Mitarbeiter der aktuellen Abteilung
+        from flask import g
+        worker_filter = {'deleted': {'$ne': True}}
+        if getattr(g, 'current_department', None):
+            worker_filter['department'] = g.current_department
+        workers = mongodb.find('workers', worker_filter)
         workers = list(workers)
         
         # Für jeden Mitarbeiter die aktiven Ausleihen zählen und Benutzer-Informationen hinzufügen
@@ -114,6 +120,7 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @mitarbeiter_required
+@permission_required('workers', 'create')
 def add():
     # Lade Abteilungen
     departments = get_departments_from_settings()
@@ -122,14 +129,19 @@ def add():
         barcode = request.form['barcode']
         firstname = request.form['firstname']
         lastname = request.form['lastname']
-        department = request.form.get('department', '')
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            flash('Bitte Abteilung wählen, bevor Sie einen Mitarbeiter anlegen', 'error')
+            return render_template('workers/add.html', departments=departments, form_data=request.form)
+        department = current_dept
         email = request.form.get('email', '')
         
         try:
             # Prüfe ob der Barcode bereits existiert
-            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
-            existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}})
+            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
+            existing_consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
+            existing_worker = mongodb.find_one('workers', {'barcode': barcode, 'deleted': {'$ne': True}, 'department': department})
             
             if existing_tool or existing_consumable or existing_worker:
                 flash('Dieser Barcode existiert bereits', 'error')
@@ -172,10 +184,17 @@ def add():
                                    'email': email
                                })
             
-    return render_template('workers/add.html', departments=departments)
+    # GET: aktive Abteilung vorausgewählt anzeigen
+    try:
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+    except Exception:
+        current_dept = None
+    return render_template('workers/add.html', departments=departments, form_data={'department': current_dept} )
 
 @bp.route('/<string:original_barcode>', methods=['GET', 'POST'])
 @mitarbeiter_required
+@permission_required('workers', 'view')
 def details(original_barcode):
     """Details eines Mitarbeiters anzeigen und bearbeiten"""
     try:
@@ -388,6 +407,7 @@ def details(original_barcode):
 
 @bp.route('/<barcode>/edit', methods=['POST'])
 @mitarbeiter_required
+@permission_required('workers', 'edit')
 def edit(barcode):
     """Bearbeitet einen Mitarbeiter über Modal"""
     try:
@@ -450,6 +470,7 @@ def edit(barcode):
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
 @mitarbeiter_required
+@permission_required('workers', 'delete')
 def delete_by_barcode(barcode):
     """Löscht einen Mitarbeiter (Soft Delete)"""
     try:
@@ -744,6 +765,7 @@ def timesheet_list():
         # Migration-Fehler nicht blockieren, nur loggen
         print(f"Migration-Fehler (nicht kritisch): {e}")
     
+    # Wochenberichte sind nutzerspezifisch und nicht abteilungsgebunden
     user_id = current_user.username
     sort = request.args.get('sort', 'kw_desc')
     

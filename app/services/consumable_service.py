@@ -5,6 +5,7 @@ Alle Verbrauchsmaterial-Funktionen an einem Ort
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from app.models.mongodb_database import mongodb
+from flask import g
 from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
 import logging
 
@@ -16,7 +17,10 @@ class ConsumableService:
     @staticmethod
     def get_all_consumables() -> List[Dict[str, Any]]:
         try:
-            return list(mongodb.find('consumables', {'deleted': {'$ne': True}}))
+            query = {'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                query['department'] = g.current_department
+            return list(mongodb.find('consumables', query))
         except Exception as e:
             logger.error(f"Fehler beim Laden der Verbrauchsmaterialien: {str(e)}")
             return []
@@ -25,9 +29,15 @@ class ConsumableService:
     def add_consumable(data: Dict[str, Any]) -> Tuple[bool, str]:
         try:
             barcode = data.get('barcode')
-            # Prüfe auf Barcode-Duplikate
+            dept = getattr(g, 'current_department', None)
+            if not dept:
+                return False, 'Bitte Abteilung wählen, bevor Sie ein Verbrauchsmaterial anlegen'
+            # Prüfe auf Barcode-Duplikate innerhalb der aktuellen Abteilung
             for collection in ['tools', 'consumables', 'workers']:
-                if mongodb.find_one(collection, {'barcode': barcode, 'deleted': {'$ne': True}}):
+                uniq_query = {'barcode': barcode, 'deleted': {'$ne': True}}
+                if dept:
+                    uniq_query['department'] = dept
+                if mongodb.find_one(collection, uniq_query):
                     return False, 'Barcode bereits vergeben'
             
             consumable_data = {
@@ -38,6 +48,7 @@ class ConsumableService:
                 'quantity': int(data.get('quantity', 0)),
                 'min_quantity': int(data.get('min_quantity', 0)),
                 'description': data.get('description', ''),
+                'department': dept,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now(),
                 'deleted': False
@@ -56,12 +67,18 @@ class ConsumableService:
     def update_consumable(barcode: str, data: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
         try:
             new_barcode = data.get('barcode')
-            current = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
+            filter_query = {'barcode': barcode, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                filter_query['department'] = g.current_department
+            current = mongodb.find_one('consumables', filter_query)
             if not current:
                 return False, 'Verbrauchsmaterial nicht gefunden', None
             if new_barcode != barcode:
                 for collection in ['tools', 'consumables', 'workers']:
-                    if mongodb.find_one(collection, {'barcode': new_barcode, 'deleted': {'$ne': True}}):
+                    uniq_query = {'barcode': new_barcode, 'deleted': {'$ne': True}}
+                    if getattr(g, 'current_department', None):
+                        uniq_query['department'] = g.current_department
+                    if mongodb.find_one(collection, uniq_query):
                         return False, f'Der Barcode "{new_barcode}" existiert bereits', None
             update_data = {
                 'name': data.get('name'),
@@ -77,7 +94,10 @@ class ConsumableService:
             # Benutzerdefinierte Felder hinzufügen, falls vorhanden
             if 'custom_fields' in data:
                 update_data['custom_fields'] = data['custom_fields']
-            mongodb.update_one('consumables', {'barcode': barcode}, {'$set': update_data})
+            update_filter = {'barcode': barcode}
+            if getattr(g, 'current_department', None):
+                update_filter['department'] = g.current_department
+            mongodb.update_one('consumables', update_filter, {'$set': update_data})
             # Bestandsänderung protokollieren
             if int(data.get('quantity', current['quantity'])) != current['quantity']:
                 usage_data = {
@@ -95,7 +115,10 @@ class ConsumableService:
     @staticmethod
     def get_consumable_detail(barcode: str) -> Optional[Dict[str, Any]]:
         try:
-            return mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
+            filter_query = {'barcode': barcode, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                filter_query['department'] = g.current_department
+            return mongodb.find_one('consumables', filter_query)
         except Exception as e:
             logger.error(f"Fehler beim Laden des Verbrauchsmaterials: {str(e)}")
             return None
@@ -139,7 +162,10 @@ class ConsumableService:
         """Passt den Bestand eines Verbrauchsmaterials an"""
         try:
             # Verbrauchsmaterial finden
-            consumable = mongodb.find_one('consumables', {'barcode': barcode, 'deleted': {'$ne': True}})
+            filter_query = {'barcode': barcode, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                filter_query['department'] = g.current_department
+            consumable = mongodb.find_one('consumables', filter_query)
             if not consumable:
                 return False, 'Verbrauchsmaterial nicht gefunden'
             
@@ -152,8 +178,11 @@ class ConsumableService:
                 return False, f'Bestand kann nicht unter 0 fallen. Aktueller Bestand: {current_quantity}'
             
             # Bestand aktualisieren
+            update_filter = {'barcode': barcode}
+            if getattr(g, 'current_department', None):
+                update_filter['department'] = g.current_department
             mongodb.update_one('consumables', 
-                             {'barcode': barcode}, 
+                             update_filter, 
                              {'$set': {'quantity': new_quantity, 'updated_at': datetime.now()}})
             
             # Verwendung protokollieren

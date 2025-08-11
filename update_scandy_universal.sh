@@ -70,6 +70,7 @@ ROLLBACK=false
 ENABLE_SSL=false
 LOCAL_SSL=false
 ENABLE_HTTPS=false
+SKIP_DEPS=false
 
 # Argumente parsen
 parse_arguments() {
@@ -86,6 +87,7 @@ parse_arguments() {
             --ssl) ENABLE_SSL=true; shift ;;
             --local-ssl) LOCAL_SSL=true; ENABLE_SSL=true; shift ;;
             --https) ENABLE_HTTPS=true; shift ;;
+            --no-deps) SKIP_DEPS=true; shift ;;
             *) log_error "Unbekannte Option: $1"; show_help; exit 1 ;;
         esac
     done
@@ -110,66 +112,139 @@ detect_install_mode() {
     fi
 }
 
+# Service-Namen für systemd bestimmen (einheitlich)
+get_service_name() {
+    local instance_name="$1"
+    if [ -z "$instance_name" ] || [ "$instance_name" = "scandy" ]; then
+        echo "scandy"
+    else
+        echo "scandy-$instance_name"
+    fi
+}
+
+# Git Safe Directory setzen (für Root und scandy)
+ensure_git_safe_dir() {
+    local dir="$1"
+    git config --global --add safe.directory "$dir" 2>/dev/null || true
+    if id scandy &>/dev/null; then
+        sudo -u scandy git config --global --add safe.directory "$dir" 2>/dev/null || true
+    fi
+}
+
+# Sitzungspfad und Berechtigungen sicherstellen
+ensure_runtime_dirs() {
+    local base="/opt/scandy/app"
+    sudo -u scandy mkdir -p "$base/flask_session" 2>/dev/null || sudo mkdir -p "$base/flask_session"
+    sudo chown -R scandy:scandy "$base/flask_session" 2>/dev/null || true
+    sudo find "$base/flask_session" -type d -exec chmod 700 {} + 2>/dev/null || true
+    sudo find "$base/flask_session" -type f -exec chmod 600 {} + 2>/dev/null || true
+    # häufig benötigte Verzeichnisse
+    for d in uploads backups logs; do
+        sudo -u scandy mkdir -p "$base/$d" 2>/dev/null || sudo mkdir -p "$base/$d"
+        sudo chown -R scandy:scandy "$base/$d" 2>/dev/null || true
+    done
+}
+
+# Quellcode-Verzeichnis ermitteln (für Kopieren aus Arbeitskopie)
+find_source_dir() {
+    # 1) Aktuelles Arbeitsverzeichnis (wenn es wie eine Scandy-Arbeitskopie aussieht)
+    local cwd="$(pwd)"
+    if [ -d "$cwd/app" ] && [ -f "$cwd/requirements.txt" ]; then
+        echo "$cwd"
+        return 0
+    fi
+    # 2) Übliche Pfade
+    for d in \
+        "/home/scandy/Scandy2" \
+        "/home/woschj/Scandy2" \
+        "/root/Scandy2" \
+        "/Scandy" \
+        "/scandy2" \
+        "/scandy"; do
+        if [ -d "$d/app" ] && [ -f "$d/requirements.txt" ]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    # 3) Kein Source gefunden
+    echo ""
+    return 1
+}
+
 # MongoDB-URI korrigieren falls nötig
 fix_mongodb_uri() {
-    log_step "Prüfe MongoDB-URI Konfiguration..."
-    
-    if [ ! -f ".env" ]; then
-        log_warning "Keine .env-Datei gefunden"
-        return
+    log_step "Prüfe und repariere MongoDB-URI Konfiguration..."
+
+    # Ziel-.env bestimmen: bevorzugt Live unter /opt/scandy/.env, sonst lokale .env
+    local TARGET_ENV="/opt/scandy/.env"
+    if [ ! -f "$TARGET_ENV" ]; then
+        TARGET_ENV=".env"
     fi
-    
-    # Aktueller Wert
-    CURRENT_URI=$(grep "MONGODB_URI=" .env | cut -d'=' -f2-)
-    INSTANCE_NAME=$(grep "INSTANCE_NAME=" .env | cut -d'=' -f2 2>/dev/null || echo "scandy")
-    
-    # Prüfe ob es eine Docker-Installation ist und localhost verwendet
-    if [ "$UPDATE_MODE" = "docker" ] && [[ "$CURRENT_URI" == *"localhost:"* ]]; then
-        log_warning "Docker-Installation mit localhost MongoDB-URI erkannt - korrigiere..."
-        
-        # Extrahiere Passwort aus aktueller URI
-        MONGO_PASSWORD=$(echo "$CURRENT_URI" | sed -n 's/.*admin:\([^@]*\)@.*/\1/p')
-        
-        if [ -n "$MONGO_PASSWORD" ]; then
-            # Korrigiere URI für Docker
-            NEW_URI="mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/scandy?authSource=admin"
-            
-            # Backup der .env
-            cp .env .env.backup.mongodb-fix
-            
-            # Ersetze URI
-            sed -i "s|MONGODB_URI=.*|MONGODB_URI=$NEW_URI|" .env
-            
-            log_success "MongoDB-URI korrigiert für Docker-Installation"
-            log_info "Backup erstellt: .env.backup.mongodb-fix"
-        else
-            log_warning "Konnte Passwort nicht aus URI extrahieren"
-        fi
-    elif [ "$UPDATE_MODE" != "docker" ] && [[ "$CURRENT_URI" == *"scandy-mongodb-"* ]]; then
-        log_warning "Native Installation mit Container MongoDB-URI erkannt - korrigiere..."
-        
-        # Extrahiere Passwort
-        MONGO_PASSWORD=$(echo "$CURRENT_URI" | sed -n 's/.*admin:\([^@]*\)@.*/\1/p')
-        MONGODB_PORT=$(grep "MONGODB_PORT=" .env | cut -d'=' -f2 2>/dev/null || echo "27017")
-        
-        if [ -n "$MONGO_PASSWORD" ]; then
-            # Korrigiere URI für Native/LXC
-            NEW_URI="mongodb://admin:${MONGO_PASSWORD}@localhost:${MONGODB_PORT}/scandy?authSource=admin"
-            
-            # Backup der .env
-            cp .env .env.backup.mongodb-fix
-            
-            # Ersetze URI
-            sed -i "s|MONGODB_URI=.*|MONGODB_URI=$NEW_URI|" .env
-            
-            log_success "MongoDB-URI korrigiert für Native/LXC-Installation"
-            log_info "Backup erstellt: .env.backup.mongodb-fix"
-        else
-            log_warning "Konnte Passwort nicht aus URI extrahieren"
-        fi
+    if [ ! -f "$TARGET_ENV" ]; then
+        log_warning "Keine .env-Datei gefunden (weder /opt/scandy/.env noch ./ .env)"
+        return 0
+    fi
+
+    # Aktuelle Werte lesen
+    local CURRENT_URI INSTANCE_NAME
+    CURRENT_URI=$(grep -E "^MONGODB_URI=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2-)
+    INSTANCE_NAME=$(grep -E "^INSTANCE_NAME=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2 2>/dev/null || echo "scandy")
+
+    # Falls leer, nichts zu tun
+    if [ -z "$CURRENT_URI" ]; then
+        log_warning "MONGODB_URI nicht gesetzt – überspringe Fix"
+        return 0
+    fi
+
+    # Port bestimmen: bevorzugt aus TARGET_ENV, sonst aktiv lauschenden Port ermitteln
+    local ENV_PORT DETECTED_PORT FINAL_PORT
+    ENV_PORT=$(grep -E "^MONGODB_PORT=" "$TARGET_ENV" | head -n1 | cut -d'=' -f2 2>/dev/null || true)
+    DETECTED_PORT=""
+    if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -q ":27017$"; then
+        DETECTED_PORT=27017
+    elif ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -q ":27018$"; then
+        DETECTED_PORT=27018
+    fi
+    if [ -n "$ENV_PORT" ]; then
+        FINAL_PORT="$ENV_PORT"
+    elif [ -n "$DETECTED_PORT" ]; then
+        FINAL_PORT="$DETECTED_PORT"
     else
-        log_success "MongoDB-URI ist bereits korrekt"
+        FINAL_PORT=27017
     fi
+
+    # Nutzer und Passwort extrahieren (Fallback admin)
+    local USER PASS DBNAME HOST
+    USER=$(echo "$CURRENT_URI" | sed -n 's#^mongodb://\([^:/@]*\)[:/@].*#\1#p')
+    PASS=$(echo "$CURRENT_URI" | sed -n 's#^mongodb://[^:]*:\([^@]*\)@.*#\1#p')
+    HOST="localhost"
+    DBNAME=$(echo "$CURRENT_URI" | sed -n 's#.*/\([^/?]*\)\([?].*\)\?$#\1#p')
+    [ -z "$USER" ] && USER="admin"
+    [ -z "$DBNAME" ] && DBNAME="scandy"
+
+    # Docker vs. Native Hostname
+    if [ "$UPDATE_MODE" = "docker" ]; then
+        HOST="scandy-mongodb-${INSTANCE_NAME}"
+        FINAL_PORT=27017
+    fi
+
+    # authSource=admin sicherstellen
+    local NEW_URI
+    NEW_URI="mongodb://${USER}:${PASS}@${HOST}:${FINAL_PORT}/${DBNAME}?authSource=admin"
+
+    # Schreibe Port-Variable konsistent
+    if grep -qE '^MONGODB_PORT=' "$TARGET_ENV"; then
+        sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${FINAL_PORT}/" "$TARGET_ENV"
+    else
+        printf "\nMONGODB_PORT=%s\n" "$FINAL_PORT" >> "$TARGET_ENV"
+    fi
+
+    # Backup und Ersetzen der URI
+    cp "$TARGET_ENV" "${TARGET_ENV}.backup.mongodb-fix" 2>/dev/null || true
+    sed -i "s#^MONGODB_URI=.*#MONGODB_URI=${NEW_URI}#" "$TARGET_ENV"
+
+    log_success "MongoDB-URI korrigiert in ${TARGET_ENV}"
+    log_info "Beispiel: $(grep -E '^MONGODB_URI=' "$TARGET_ENV" | sed -E 's#(mongodb://[^:]+:)[^@]*#\1****#')"
 }
 
 # SSL-Setup Funktionen
@@ -342,7 +417,7 @@ create_backup() {
         # Konfiguration sichern
         [ -f ".env" ] && cp .env "$BACKUP_DIR/"
         [ -f "docker-compose.yml" ] && cp docker-compose.yml "$BACKUP_DIR/"
-        
+.        
         # Daten sichern (je nach Modus)
         case $UPDATE_MODE in
             docker)
@@ -404,29 +479,58 @@ update_native() {
     
     # Service stoppen
     INSTANCE_NAME=$(grep "INSTANCE_NAME=" .env | cut -d'=' -f2 2>/dev/null || echo "scandy")
-    log_info "Stoppe Service scandy-$INSTANCE_NAME..."
-    sudo systemctl stop scandy-$INSTANCE_NAME
+    SERVICE_NAME=$(get_service_name "$INSTANCE_NAME")
+    log_info "Stoppe Service $SERVICE_NAME..."
+    sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
     
-    # Code aktualisieren
-    log_info "Aktualisiere Code..."
+    # Code aus Arbeitskopie nach /opt/scandy übernehmen (Git-frei)
+    SRC_DIR="$(find_source_dir)"
+    if [ -z "$SRC_DIR" ]; then
+        log_error "Keine Arbeitskopie gefunden (mit app/ und requirements.txt). Abbruch."
+        exit 1
+    fi
+    log_info "Verwende Arbeitskopie: $SRC_DIR"
+
+    # Nach /opt/scandy wechseln für Folgeschritte
     cd /opt/scandy
-    git pull || log_warning "Git pull fehlgeschlagen"
+
+    log_info "Synchronisiere Code: $SRC_DIR/app/ -> /opt/scandy/app/"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete \
+            --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+            "$SRC_DIR/app/" "/opt/scandy/app/"
+    else
+        # Fallback ohne rsync (kein --delete)
+        cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
+    fi
+    # Optional: requirements.txt aktualisieren
+    if [ -f "$SRC_DIR/requirements.txt" ]; then
+        cp -f "$SRC_DIR/requirements.txt" "/opt/scandy/requirements.txt" 2>/dev/null || true
+    fi
+    sudo chown -R scandy:scandy /opt/scandy/app || true
     
     # Dependencies aktualisieren
-    log_info "Aktualisiere Python-Pakete..."
-    sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+    if [ "$SKIP_DEPS" = false ]; then
+        log_info "Aktualisiere Python-Pakete..."
+        sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt || true
+    else
+        log_info "Überspringe Paket-Update (--no-deps)"
+    fi
+
+    # Laufzeitverzeichnisse & Berechtigungen
+    ensure_runtime_dirs
     
     # Service starten
     log_info "Starte Service..."
-    sudo systemctl start scandy-$INSTANCE_NAME
+    sudo systemctl start "$SERVICE_NAME"
     
     # Status prüfen
     sleep 5
-    if systemctl is-active --quiet scandy-$INSTANCE_NAME; then
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
         log_success "Native Update abgeschlossen"
     else
         log_error "Service konnte nicht gestartet werden"
-        sudo systemctl status scandy-$INSTANCE_NAME
+        sudo systemctl status "$SERVICE_NAME"
     fi
 }
 
@@ -438,31 +542,37 @@ update_lxc() {
     log_info "Stoppe Scandy-Prozess..."
     pkill -f "gunicorn.*scandy" || true
     
-    # Code aktualisieren
-    log_info "Aktualisiere Code..."
-    cd /opt/scandy
-    git pull || log_warning "Git pull fehlgeschlagen"
-    
-    # Stelle sicher, dass alle Dateien korrekt kopiert sind
-    log_info "Stelle sicher, dass Code korrekt kopiert ist..."
-    
-    # Prüfe ob app-Verzeichnis existiert
-    if [ ! -d "app" ]; then
-        log_error "app-Verzeichnis nicht gefunden!"
+    # Code aus Arbeitskopie synchronisieren (Git-frei)
+    SRC_DIR="$(find_source_dir)"
+    if [ -z "$SRC_DIR" ]; then
+        log_error "Keine Arbeitskopie gefunden (mit app/ und requirements.txt). Abbruch."
         exit 1
     fi
-    
-    # Kopiere Code in den Container (falls nötig)
-    if [ -d "/opt/scandy/app" ]; then
-        log_info "Kopiere aktualisierten Code..."
-        cp -r app/* /opt/scandy/app/ 2>/dev/null || {
-            log_warning "Konnte Code nicht kopieren, verwende Git-Version"
-        }
+    log_info "Verwende Arbeitskopie: $SRC_DIR"
+    cd /opt/scandy
+    log_info "Synchronisiere Code: $SRC_DIR/app/ -> /opt/scandy/app/"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete \
+            --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+            "$SRC_DIR/app/" "/opt/scandy/app/"
+    else
+        cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
     fi
+    if [ -f "$SRC_DIR/requirements.txt" ]; then
+        cp -f "$SRC_DIR/requirements.txt" "/opt/scandy/requirements.txt" 2>/dev/null || true
+    fi
+    sudo chown -R scandy:scandy /opt/scandy/app || true
     
     # Dependencies aktualisieren
-    log_info "Aktualisiere Python-Pakete..."
-    sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+    if [ "$SKIP_DEPS" = false ]; then
+        log_info "Aktualisiere Python-Pakete..."
+        sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt || true
+    else
+        log_info "Überspringe Paket-Update (--no-deps)"
+    fi
+
+    # Laufzeitverzeichnisse & Berechtigungen
+    ensure_runtime_dirs
     
     # Service starten
     log_info "Starte Scandy..."

@@ -78,7 +78,7 @@
     color: #6b7280 !important;
 }
 </style>
-<script>
+<script nonce="{{ csp_nonce }}">
 // Nachrichten-Funktionen für das neue Layout
 function loadPublicMessages() {
     console.log('loadPublicMessages aufgerufen');
@@ -615,7 +615,7 @@ console.log('saveTicketChanges verfügbar:', typeof saveTicketChanges);
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Alte messageForm Event-Listener entfernt - wird durch das neue Layout ersetzt
 
 

@@ -12,12 +12,34 @@ Hauptfunktionen:
 """
 
 from app.models.mongodb_database import mongodb
+from flask import g
 import logging
 from datetime import datetime
 from bson import ObjectId
 from app.models.mongodb_database import mongodb
 
 logger = logging.getLogger(__name__)
+
+def _extract_by_department(value, department):
+    """Hilfsfunktion: Extrahiert eine Liste für ein Department aus settings.value.
+    Unterstützt sowohl List[str] (global) als auch Dict[str, List[str]] (per Department).
+    """
+    if isinstance(value, dict):
+        if department and value.get(department):
+            return value.get(department) or []
+        # Fallbacks: 'GLOBAL' oder '*'
+        for key in ('GLOBAL', '*', 'default'):
+            if key in value and isinstance(value[key], list):
+                return value[key]
+        # Oder alle Werte zusammenführen
+        merged = []
+        for lst in value.values():
+            if isinstance(lst, list):
+                merged.extend(lst)
+        return merged
+    # List[str]
+    return value if isinstance(value, list) else []
+
 
 def get_setting_value(setting_key, fallback_collection=None, fallback_field='name'):
     """
@@ -43,12 +65,12 @@ def get_setting_value(setting_key, fallback_collection=None, fallback_field='nam
         settings_doc = mongodb.find_one('settings', {'key': setting_key})
         if settings_doc and 'value' in settings_doc:
             value = settings_doc['value']
-            # Wenn es ein String ist, splitte ihn an Kommas
+            # String (Legacy)
             if isinstance(value, str):
                 return [item.strip() for item in value.split(',') if item.strip()]
-            # Wenn es bereits eine Liste ist, verwende sie direkt
-            elif isinstance(value, list):
-                return value
+            # Department-sensitiv extrahieren
+            current_dept = getattr(g, 'current_department', None)
+            return _extract_by_department(value, current_dept)
         
         # Fallback: Verwende die ursprüngliche Collection
         if fallback_collection:
@@ -70,6 +92,29 @@ def get_ticket_categories_from_settings():
     """
     return get_setting_value('ticket_categories')
 
+def get_setting_map(setting_key) -> dict:
+    """Liest settings.value roh und liefert immer ein Mapping {dept: [..]}.
+
+    - Wenn value eine Liste ist, wird {'GLOBAL': value} zurückgegeben
+    - Wenn value ein Mapping ist, wird es direkt zurückgegeben
+    - Sonst ein leeres Mapping
+    """
+    try:
+        settings_doc = mongodb.find_one('settings', {'key': setting_key})
+        if not settings_doc:
+            return {}
+        value = settings_doc.get('value', [])
+        if isinstance(value, list):
+            return {'GLOBAL': value}
+        if isinstance(value, dict):
+            return value
+        return {}
+    except Exception:
+        return {}
+
+def get_ticket_categories_map() -> dict:
+    return get_setting_map('ticket_categories')
+
 def get_categories_from_settings():
     """
     Lädt Kategorien aus der settings Collection oder der categories Collection.
@@ -87,6 +132,70 @@ def get_locations_from_settings():
         list: Liste der Standorte
     """
     return get_setting_value('locations', 'locations', 'name')
+
+def get_categories_scoped() -> list:
+    """Liefert Kategorien strikt abteilungsweise aus der dedizierten Collection.
+    Ignoriert settings vollständig (harte Trennung der Abteilungen).
+    """
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            return []
+        items = mongodb.find('categories', {
+            'deleted': {'$ne': True},
+            'department': current_dept
+        })
+        raw_names = [item.get('name') for item in items]
+        # Case-insensitive deduplizieren, Trim, stabile Reihenfolge beibehalten
+        seen_lower = set()
+        unique = []
+        for n in raw_names:
+            if not n:
+                continue
+            s = str(n).strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen_lower:
+                continue
+            seen_lower.add(key)
+            unique.append(s)
+        return sorted(unique, key=str.casefold)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Kategorien (scoped): {e}")
+        return []
+
+def get_locations_scoped() -> list:
+    """Liefert Standorte strikt abteilungsweise aus der dedizierten Collection.
+    Ignoriert settings vollständig (harte Trennung der Abteilungen).
+    """
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if not current_dept:
+            return []
+        items = mongodb.find('locations', {
+            'deleted': {'$ne': True},
+            'department': current_dept
+        })
+        raw_names = [item.get('name') for item in items]
+        # Case-insensitive deduplizieren, Trim, stabile Reihenfolge beibehalten
+        seen_lower = set()
+        unique = []
+        for n in raw_names:
+            if not n:
+                continue
+            s = str(n).strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen_lower:
+                continue
+            seen_lower.add(key)
+            unique.append(s)
+        return sorted(unique, key=str.casefold)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Standorte (scoped): {e}")
+        return []
 
 def get_departments_from_settings():
     """

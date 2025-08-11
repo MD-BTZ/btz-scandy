@@ -53,6 +53,18 @@ log_step() {
     echo -e "${PURPLE}[STEP]${NC} $1"
 }
 
+# Sichere .env-Auslese ohne Sourcing (verhindert Shell-Fehler bei Leerzeichen/Sonderzeichen)
+read_env_value() {
+    local key="$1"
+    local file=".env"
+    [ -f "$file" ] || return 1
+    # Nur erste Übereinstimmung nehmen; Kommentare/Leerzeilen ignorieren
+    local line
+    line=$(grep -E "^${key}=" "$file" | head -n1 || true)
+    [ -n "$line" ] || return 1
+    echo "${line#*=}"
+}
+
 # Hilfe anzeigen
 show_help() {
     echo
@@ -268,7 +280,7 @@ EOF
 # Variablen initialisieren
 INSTALL_MODE=""
 INSTANCE_NAME="scandy"
-WEB_PORT=5000
+WEB_PORT=5001
 MONGODB_PORT=27017
 MONGO_EXPRESS_PORT=8081
 DOMAIN=""
@@ -277,9 +289,12 @@ LOCAL_SSL=false
 ENABLE_HTTPS=false
 UPDATE_ONLY=false
 FORCE_INSTALL=false
+NON_INTERACTIVE=false
 CREATE_BACKUP=false
 PRODUCTION_MODE=false
 DEV_MODE=false
+SKIP_DB_STEPS=true  # Standard: einfache Installation ohne DB-Eingriffe
+WIPE_MONGO=false    # Optional: MongoDB Datenbestand löschen
 
 # Argumente parsen
 parse_arguments() {
@@ -342,6 +357,19 @@ parse_arguments() {
                 ENABLE_HTTPS=true
                 shift
                 ;;
+            --db-auto)
+                SKIP_DB_STEPS=false
+                shift
+                ;;
+            --no-db)
+                SKIP_DB_STEPS=true
+                shift
+                ;;
+            --wipe-mongo|--reset-db)
+                WIPE_MONGO=true
+                SKIP_DB_STEPS=false
+                shift
+                ;;
             -u|--update)
                 UPDATE_ONLY=true
                 shift
@@ -360,6 +388,10 @@ parse_arguments() {
                 ;;
             --dev)
                 DEV_MODE=true
+                shift
+                ;;
+            --non-interactive)
+                NON_INTERACTIVE=true
                 shift
                 ;;
             --check-system)
@@ -1352,15 +1384,194 @@ detect_best_install_mode_auto() {
 # Port-Verfügbarkeit prüfen
 check_port_availability() {
     local port=$1
-    if netstat -tuln 2>/dev/null | grep -q ":$port " || ss -tuln 2>/dev/null | grep -q ":$port "; then
-        return 1  # Port ist belegt
+    if netstat -ltn 2>/dev/null | awk '{print $4}' | grep -q ":$port$" || ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -q ":$port$"; then
+        return 1  # Port ist belegt (es lauscht bereits jemand)
     else
         return 0  # Port ist frei
     fi
 }
 
+# Prüft, ob bereits ein mongod läuft und auf welchem Standardport
+detect_existing_mongo_port() {
+    # Erkenne laufenden mongod unabhängig von Bind-Adresse (127.0.0.1, 0.0.0.0, ::)
+    if ss -H -ltnp 2>/dev/null | grep -E ':27017\\b' | grep -q 'mongod'; then
+        echo 27017
+        return 0
+    fi
+    if ss -H -ltnp 2>/dev/null | grep -E ':27018\\b' | grep -q 'mongod'; then
+        echo 27018
+        return 0
+    fi
+    return 1
+}
+
+# Prüft per mongosh, ob eine URI authentifizierbar ist
+mongo_ping_uri() {
+    local uri="$1"
+    mongosh --quiet "$uri" --eval 'db.runCommand({ping:1})' >/dev/null 2>&1
+}
+
+# Auth in mongod.conf setzen (enabled/disabled)
+set_mongo_authorization() {
+    local mode="$1"  # enabled|disabled
+    local CONF="/etc/mongod.conf"
+    if ! grep -qE '^\s*security:\s*$' "$CONF"; then
+        printf "\nsecurity:\n  authorization: %s\n" "$mode" | sudo tee -a "$CONF" >/dev/null
+    else
+        if grep -qE '^\s*authorization:' "$CONF"; then
+            sudo sed -i "s/^\s*authorization:.*/  authorization: ${mode}/" "$CONF"
+        else
+            sudo sed -i "/^\s*security:\s*$/a\\  authorization: ${mode}" "$CONF"
+        fi
+    fi
+    sudo systemctl restart mongod || true
+}
+
+# Warten bis mongod auf Port lauscht
+wait_for_mongo_port() {
+    local port="$1"
+    for i in {1..60}; do
+        if ss -H -ltnp 2>/dev/null | grep -E ":${port}\\b" | grep -q 'mongod'; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Erstellt Admin- und App-User und stellt .env auf App-User um
+provision_mongo_users_and_env() {
+    local detected_port="$1"
+    local admin_user="admin"
+    local app_user="scandy_app"
+
+    # sichere Passwörter generieren
+    local ADMIN_PW APP_PW
+    ADMIN_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    APP_PW=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+
+    # Nutzer anlegen (ohne Auth)
+    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${admin_user}',pwd:'${ADMIN_PW}',roles:[{role:'root',db:'admin'}]})" || true
+    mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'${app_user}',pwd:'${APP_PW}',roles:[{role:'readWrite',db:'scandy'}]})" || true
+
+    # Auth aktivieren
+    set_mongo_authorization enabled
+    wait_for_mongo_port "$detected_port" || true
+
+    # .env setzen: Port + URI auf App-User
+    if [ -f /opt/scandy/.env ]; then
+        sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected_port}/" /opt/scandy/.env || true
+        sed -i "s#^MONGODB_URI=.*#MONGODB_URI=mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin#" /opt/scandy/.env || true
+    fi
+
+    # Verifizieren
+    if ! mongo_ping_uri "mongodb://${app_user}:${APP_PW}@localhost:${detected_port}/scandy?authSource=admin"; then
+        log_error "MongoDB-Authentifizierungstest mit App-User fehlgeschlagen"
+        exit 1
+    fi
+}
+
+# Stellt robust sicher, dass Auth aktiv ist und ein funktionsfähiger App-User existiert
+ensure_mongo_auth_and_users() {
+    log_step "Sichere MongoDB-Authentifizierung und Nutzer-Provisioning..."
+
+    local detected_port
+    if detected_port=$(detect_existing_mongo_port); then
+        :
+    else
+        detected_port=${MONGODB_PORT:-27017}
+    fi
+
+    # Optional komplette Datenbank zurücksetzen (ACHTUNG: Datenverlust)
+    if [ "$WIPE_MONGO" = true ]; then
+        log_warning "WIPE_MONGO aktiv – lösche Datenverzeichnis von MongoDB"
+        systemctl stop mongod || true
+        rm -rf /var/lib/mongodb/* || true
+        rm -rf /var/log/mongodb/* || true
+        systemctl start mongod || true
+        # Warten bis Port wieder lauscht
+        for i in {1..60}; do
+            if ss -H -ltnp 2>/dev/null | grep -E ":${detected_port}\\b" | grep -q 'mongod'; then break; fi
+            sleep 1
+        done
+    fi
+
+    # Falls bereits eine gültige URI in /opt/scandy/.env existiert und pingt, belassen
+    local current_uri
+    if [ -f /opt/scandy/.env ]; then
+        current_uri=$(grep -E "^MONGODB_URI=" /opt/scandy/.env | head -n1 | cut -d'=' -f2-)
+        if [ -n "$current_uri" ] && mongo_ping_uri "$current_uri"; then
+            log_success "Vorhandene MONGODB_URI ist gültig"
+            return
+        fi
+    fi
+
+    # Robust: Auth temporär deaktivieren, Nutzer anlegen, Auth aktivieren, verifizieren
+    log_info "(Re)Provision Mongo-User: Auth temporär deaktivieren → Nutzer anlegen → Auth aktivieren"
+    set_mongo_authorization disabled
+    wait_for_mongo_port "$detected_port" || true
+    provision_mongo_users_and_env "$detected_port"
+}
+
+# Öffnet Port 5001 in UFW, falls aktiv
+open_firewall_port() {
+    if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q 'Status: active'; then
+        if ! sudo ufw status | grep -qE "${WEB_PORT}/tcp\s+ALLOW"; then
+            log_info "Erlaube TCP ${WEB_PORT} via UFW"
+            yes | sudo ufw allow ${WEB_PORT}/tcp >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+# Stellt sicher, dass die systemd-Unit die .env lädt
+ensure_systemd_envfile() {
+    local service_name=$(get_service_name "$INSTANCE_NAME")
+    local unit_file="/etc/systemd/system/${service_name}.service"
+    if [ -f "$unit_file" ] && ! grep -q '^EnvironmentFile=\-/opt/scandy/.env' "$unit_file"; then
+        log_info "Erweitere systemd-Unit um EnvironmentFile"
+        # Füge EnvironmentFile Zeile nach der PATH-Variable ein
+        sudo sed -i 's#^Environment=PATH=/opt/scandy/venv/bin#Environment=PATH=/opt/scandy/venv/bin\nEnvironmentFile=\-/opt/scandy/.env#' "$unit_file"
+        systemctl daemon-reload
+    fi
+}
+
+# Harmonisiert .env mit laufendem mongod-Port
+harmonize_env_with_mongo() {
+    local detected
+    if detected=$(detect_existing_mongo_port); then
+        if [ -f /opt/scandy/.env ]; then
+            log_info "Setze MONGODB_PORT und URI auf laufenden Port ${detected}"
+            sudo sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${detected}/" /opt/scandy/.env || true
+            # Ersetze Port in der URI robust (auch ohne Host-Änderung)
+            sudo sed -i "s#\(MONGODB_URI=mongodb://[^/]\+\):[0-9]\+/#\1:${detected}/#" /opt/scandy/.env || true
+            # Stelle sicher, dass authSource=admin korrekt gesetzt ist
+            if grep -qE '^MONGODB_URI=' /opt/scandy/.env; then
+                current=$(grep -E '^MONGODB_URI=' /opt/scandy/.env | cut -d'=' -f2-)
+                if echo "$current" | grep -q 'authSource='; then
+                    sudo sed -i "s#authSource=[^&]*#authSource=admin#" /opt/scandy/.env || true
+                else
+                    sudo sed -i "s#^MONGODB_URI=\(.*\)#MONGODB_URI=\1&authSource=admin#" /opt/scandy/.env || true
+                    sudo sed -i "s#\?&authSource=admin#?authSource=admin#" /opt/scandy/.env || true
+                fi
+            fi
+        fi
+    fi
+}
+
 # Automatische Port-Berechnung bei Konflikten
 resolve_port_conflicts() {
+    # Im Update-Modus niemals Ports ändern – vorhandene übernehmen
+    if [ "$UPDATE_ONLY" = true ] && [ -f .env ]; then
+        EXISTING_WEB_PORT=$(read_env_value WEB_PORT)
+        EXISTING_MONGO_PORT=$(read_env_value MONGODB_PORT)
+        EXISTING_MONGO_EXPRESS_PORT=$(read_env_value MONGO_EXPRESS_PORT)
+        [ -n "$EXISTING_WEB_PORT" ] && WEB_PORT="$EXISTING_WEB_PORT"
+        [ -n "$EXISTING_MONGO_PORT" ] && MONGODB_PORT="$EXISTING_MONGO_PORT"
+        [ -n "$EXISTING_MONGO_EXPRESS_PORT" ] && MONGO_EXPRESS_PORT="$EXISTING_MONGO_EXPRESS_PORT"
+        log_info "Update-Modus: Ports aus bestehender .env übernommen (keine automatische Änderung)."
+        return
+    fi
+
     log_step "Prüfe Port-Verfügbarkeit..."
     
     # Web-Port prüfen
@@ -1375,16 +1586,27 @@ resolve_port_conflicts() {
         done
     fi
     
-    # MongoDB-Port prüfen
-    if ! check_port_availability $MONGODB_PORT; then
-        log_warning "Port $MONGODB_PORT ist belegt, suche alternative..."
-        for ((i=27018; i<=27099; i++)); do
-            if check_port_availability $i; then
-                MONGODB_PORT=$i
-                log_success "Alternativer MongoDB-Port: $MONGODB_PORT"
-                break
+    # MongoDB-Port prüfen: Wenn bereits ein mongod läuft, nutze dessen Port (nicht ändern)
+    if EXISTING_MONGO=$(detect_existing_mongo_port); then
+        MONGODB_PORT=$EXISTING_MONGO
+        log_info "Bestehender mongod erkannt – verwende Port $MONGODB_PORT"
+    else
+        # Kein mongod entdeckt → Stelle sicher, dass Wunschport wirklich frei ist
+        if ! check_port_availability $MONGODB_PORT; then
+            # Falscher positives Match vermeiden: ist es wirklich mongod?
+            if ss -H -ltnp 2>/dev/null | grep -E ":${MONGODB_PORT}\\b" | grep -vq 'mongod'; then
+                log_warning "Port $MONGODB_PORT ist von anderem Prozess belegt – wähle alternative"
+                for ((i=27018; i<=27099; i++)); do
+                    if check_port_availability $i; then
+                        MONGODB_PORT=$i
+                        log_success "Alternativer MongoDB-Port: $MONGODB_PORT"
+                        break
+                    fi
+                done
+            else
+                log_info "Port $MONGODB_PORT scheint frei oder durch mongod nutzbar."
             fi
-        done
+        fi
     fi
     
     # Mongo Express-Port prüfen
@@ -1421,20 +1643,125 @@ create_backup() {
 # .env Datei erstellen
 create_env_file() {
     log_step "Erstelle .env-Konfiguration..."
-    
-    # Sichere Passwörter generieren
-    MONGO_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
-    SECRET_KEY=$(openssl rand -base64 64 | tr -d "=+/" | cut -c1-50)
-    
-    # MongoDB-URI je nach Installationsmodus setzen
-    if [ "$INSTALL_MODE" = "docker" ]; then
-        # Docker: Verwende Container-Namen
-        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/scandy?authSource=admin"
-    else
-        # Native/LXC: Verwende localhost
-        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@localhost:${MONGODB_PORT}/scandy?authSource=admin"
+
+    # Eventuell existierende .env Werte sicher einlesen (kein source)
+    if [ -f .env ]; then
+        EXISTING_MONGODB_DB=$(read_env_value MONGODB_DB)
+        EXISTING_SYSTEM_NAME=$(read_env_value SYSTEM_NAME)
+        EXISTING_TICKET_SYSTEM_NAME=$(read_env_value TICKET_SYSTEM_NAME)
+        EXISTING_TOOL_SYSTEM_NAME=$(read_env_value TOOL_SYSTEM_NAME)
+        EXISTING_CONSUMABLE_SYSTEM_NAME=$(read_env_value CONSUMABLE_SYSTEM_NAME)
+        EXISTING_MONGO_PW=$(read_env_value MONGO_INITDB_ROOT_PASSWORD)
+        EXISTING_SECRET_KEY=$(read_env_value SECRET_KEY)
+        EXISTING_ENABLE_EA=$(read_env_value ENABLE_EMERGENCY_ADMIN)
+        EXISTING_FLASK_ENV=$(read_env_value FLASK_ENV)
+        EXISTING_FLASK_DEBUG=$(read_env_value FLASK_DEBUG)
+        EXISTING_ME_PASS=$(read_env_value ME_CONFIG_BASICAUTH_PASSWORD)
     fi
-    
+
+    # Defaults
+    DEFAULT_DB_NAME=${EXISTING_MONGODB_DB:-${MONGODB_DB:-scandy}}
+    DEFAULT_SYSTEM_NAME=${EXISTING_SYSTEM_NAME:-${SYSTEM_NAME:-"Scandy - $INSTANCE_NAME"}}
+    DEFAULT_TICKET_NAME=${EXISTING_TICKET_SYSTEM_NAME:-${TICKET_SYSTEM_NAME:-"Aufgaben"}}
+    DEFAULT_TOOL_NAME=${EXISTING_TOOL_SYSTEM_NAME:-${TOOL_SYSTEM_NAME:-"Werkzeuge"}}
+    DEFAULT_CONSUMABLE_NAME=${EXISTING_CONSUMABLE_SYSTEM_NAME:-${CONSUMABLE_SYSTEM_NAME:-"Verbrauchsgüter"}}
+
+    # Sichere Passwörter ggf. generieren
+    GEN_MONGO_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    GEN_SECRET_KEY=$(openssl rand -base64 64 | tr -d "=+/" | cut -c1-50)
+
+    if [ "$NON_INTERACTIVE" = true ]; then
+        MONGO_PASSWORD=${EXISTING_MONGO_PW:-${MONGO_INITDB_ROOT_PASSWORD:-$GEN_MONGO_PASSWORD}}
+        SECRET_KEY=${EXISTING_SECRET_KEY:-$GEN_SECRET_KEY}
+        MONGODB_DB=${MONGODB_DB:-$DEFAULT_DB_NAME}
+        SYSTEM_NAME=${SYSTEM_NAME:-$DEFAULT_SYSTEM_NAME}
+        TICKET_SYSTEM_NAME=${TICKET_SYSTEM_NAME:-$DEFAULT_TICKET_NAME}
+        TOOL_SYSTEM_NAME=${TOOL_SYSTEM_NAME:-$DEFAULT_TOOL_NAME}
+        CONSUMABLE_SYSTEM_NAME=${CONSUMABLE_SYSTEM_NAME:-$DEFAULT_CONSUMABLE_NAME}
+        ENABLE_EMERGENCY_ADMIN=${EXISTING_ENABLE_EA:-${ENABLE_EMERGENCY_ADMIN:-false}}
+        FLASK_ENV=${EXISTING_FLASK_ENV:-${FLASK_ENV:-$([ "$PRODUCTION_MODE" = true ] && echo production || echo development)}}
+        FLASK_DEBUG=${EXISTING_FLASK_DEBUG:-${FLASK_DEBUG:-$([ "$PRODUCTION_MODE" = true ] && echo 0 || echo 1)}}
+        ME_CONFIG_BASICAUTH_PASSWORD=${EXISTING_ME_PASS:-${ME_CONFIG_BASICAUTH_PASSWORD:-$MONGO_PASSWORD}}
+    else
+        echo
+        echo -e "${WHITE}Interaktive .env-Erstellung${NC}"
+        read -p "MongoDB Datenbankname [${DEFAULT_DB_NAME}]: " MONGODB_DB_INPUT
+        MONGODB_DB=${MONGODB_DB_INPUT:-$DEFAULT_DB_NAME}
+
+        read -p "Systemname [${DEFAULT_SYSTEM_NAME}]: " SYSTEM_NAME_INPUT
+        SYSTEM_NAME=${SYSTEM_NAME_INPUT:-$DEFAULT_SYSTEM_NAME}
+
+        read -p "Bezeichnung Tickets [${DEFAULT_TICKET_NAME}]: " TICKET_NAME_INPUT
+        TICKET_SYSTEM_NAME=${TICKET_NAME_INPUT:-$DEFAULT_TICKET_NAME}
+
+        read -p "Bezeichnung Werkzeuge [${DEFAULT_TOOL_NAME}]: " TOOL_NAME_INPUT
+        TOOL_SYSTEM_NAME=${TOOL_NAME_INPUT:-$DEFAULT_TOOL_NAME}
+
+        read -p "Bezeichnung Verbrauchsgüter [${DEFAULT_CONSUMABLE_NAME}]: " CONSUMABLE_NAME_INPUT
+        CONSUMABLE_SYSTEM_NAME=${CONSUMABLE_NAME_INPUT:-$DEFAULT_CONSUMABLE_NAME}
+
+        echo -n "MongoDB Admin-Passwort setzen (leer = auto-generieren)"; [ -n "$EXISTING_MONGO_PW" ] && echo -n " [ges.: ****]"; echo -n ": "
+        read MONGO_PW_INPUT
+        if [ -z "$MONGO_PW_INPUT" ]; then
+            if [ -n "$EXISTING_MONGO_PW" ]; then
+                MONGO_PASSWORD="$EXISTING_MONGO_PW"
+                log_info "Bestehendes MongoDB-Passwort übernommen"
+            else
+                MONGO_PASSWORD=$GEN_MONGO_PASSWORD
+                log_info "MongoDB Passwort automatisch generiert"
+            fi
+        else
+            MONGO_PASSWORD=$MONGO_PW_INPUT
+        fi
+
+        echo -n "SECRET_KEY setzen (leer = auto-generieren)"; [ -n "$EXISTING_SECRET_KEY" ] && echo -n " [ges.: ****]"; echo -n ": "
+        read SECRET_KEY_INPUT
+        if [ -z "$SECRET_KEY_INPUT" ]; then
+            if [ -n "$EXISTING_SECRET_KEY" ]; then
+                SECRET_KEY="$EXISTING_SECRET_KEY"
+                log_info "Bestehenden SECRET_KEY übernommen"
+            else
+                SECRET_KEY=$GEN_SECRET_KEY
+                log_info "SECRET_KEY automatisch generiert"
+            fi
+        else
+            SECRET_KEY=$SECRET_KEY_INPUT
+        fi
+
+        read -p "Produktionsmodus verwenden? (y/N): " USE_PROD
+        if [[ "$USE_PROD" =~ ^[Yy]$ ]]; then
+            PRODUCTION_MODE=true
+        fi
+
+        DEFAULT_EA=$([ "${EXISTING_ENABLE_EA:-false}" = "true" ] && echo "Y" || echo "N")
+        read -p "Emergency-Admin-Route aktivieren? (nur lokal!) (y/N) [${DEFAULT_EA}]: " ENABLE_EA
+        if [[ "$ENABLE_EA" =~ ^[Yy]$ ]]; then
+            ENABLE_EMERGENCY_ADMIN=true
+        else
+            ENABLE_EMERGENCY_ADMIN=false
+        fi
+
+        echo -n "Mongo-Express Passwort (BasicAuth) [leer = gleich Mongo-Admin-Passwort]"; [ -n "$EXISTING_ME_PASS" ] && echo -n " [ges.: ****]"; echo -n ": "
+        read ME_PASS_INPUT
+        if [ -z "$ME_PASS_INPUT" ]; then
+            ME_CONFIG_BASICAUTH_PASSWORD="$MONGO_PASSWORD"
+        else
+            ME_CONFIG_BASICAUTH_PASSWORD="$ME_PASS_INPUT"
+        fi
+
+        FLASK_ENV=$([ "$PRODUCTION_MODE" = true ] && echo "production" || echo "development")
+        FLASK_DEBUG=$([ "$PRODUCTION_MODE" = true ] && echo 0 || echo 1)
+    fi
+
+    # MongoDB-URI je nach Installationsmodus setzen (Port immer konsistent zu MONGODB_PORT)
+    if [ "$INSTALL_MODE" = "docker" ]; then
+        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/${MONGODB_DB}?authSource=admin"
+    else
+        # Stelle sicher, dass MONGODB_PORT gesetzt ist
+        MONGODB_PORT=${MONGODB_PORT:-27017}
+        MONGODB_URI="mongodb://admin:${MONGO_PASSWORD}@localhost:${MONGODB_PORT}/${MONGODB_DB}?authSource=admin"
+    fi
+
     cat > .env << EOF
 # Scandy Universal Configuration
 # Generated: $(date)
@@ -1451,18 +1778,21 @@ MONGO_EXPRESS_PORT=$MONGO_EXPRESS_PORT
 
 # Database Configuration
 MONGODB_URI=$MONGODB_URI
-MONGODB_DB=scandy
+MONGODB_DB=$MONGODB_DB
 MONGO_INITDB_ROOT_PASSWORD=$MONGO_PASSWORD
-MONGO_INITDB_DATABASE=scandy
+MONGO_INITDB_DATABASE=$MONGODB_DB
+MONGO_INITDB_ROOT_USERNAME=admin
+ME_CONFIG_MONGODB_URL=mongodb://admin:${MONGO_PASSWORD}@scandy-mongodb-${INSTANCE_NAME}:27017/
 
 # Security
 SECRET_KEY=$SECRET_KEY
+ENABLE_EMERGENCY_ADMIN=$ENABLE_EMERGENCY_ADMIN
 
 # System Names
-SYSTEM_NAME=Scandy - $INSTANCE_NAME
-TICKET_SYSTEM_NAME=Ticket-System
-TOOL_SYSTEM_NAME=Werkzeug-Verwaltung
-CONSUMABLE_SYSTEM_NAME=Verbrauchsgüter-Verwaltung
+SYSTEM_NAME=$SYSTEM_NAME
+TICKET_SYSTEM_NAME=$TICKET_SYSTEM_NAME
+TOOL_SYSTEM_NAME=$TOOL_SYSTEM_NAME
+CONSUMABLE_SYSTEM_NAME=$CONSUMABLE_SYSTEM_NAME
 
 # Features
 ENABLE_TICKET_SYSTEM=true
@@ -1470,9 +1800,10 @@ ENABLE_JOB_BOARD=false
 ENABLE_WEEKLY_REPORTS=true
 
 # Production Settings
-FLASK_ENV=$([ "$PRODUCTION_MODE" = true ] && echo "production" || echo "development")
-SESSION_COOKIE_SECURE=$([ "$ENABLE_SSL" = true ] && echo "true" || echo "false")
-REMEMBER_COOKIE_SECURE=$([ "$ENABLE_SSL" = true ] && echo "true" || echo "false")
+FLASK_ENV=$FLASK_ENV
+FLASK_DEBUG=$FLASK_DEBUG
+SESSION_COOKIE_SECURE=false
+REMEMBER_COOKIE_SECURE=false
 
 # Domain Configuration
 $([ -n "$DOMAIN" ] && echo "DOMAIN=$DOMAIN" || echo "# DOMAIN=")
@@ -1483,6 +1814,10 @@ $([ -n "$DOMAIN" ] && echo "DOMAIN=$DOMAIN" || echo "# DOMAIN=")
 # MAIL_USERNAME=your-email@gmail.com
 # MAIL_PASSWORD=your-app-password
 # MAIL_DEFAULT_SENDER=your-email@gmail.com
+
+# Mongo Express Basic Auth
+ME_CONFIG_BASICAUTH_USERNAME=admin
+ME_CONFIG_BASICAUTH_PASSWORD=$ME_CONFIG_BASICAUTH_PASSWORD
 EOF
 
     log_success ".env-Datei erstellt"
@@ -1510,11 +1845,17 @@ setup_ssl_certificates() {
 
 # Docker Compose Befehl ermitteln
 get_docker_compose_cmd() {
-    if [ "$DOCKER_COMPOSE_V2" = true ]; then
+    # Bevorzugt docker compose (V2). Fallback: docker-compose Binary.
+    if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
         echo "$DOCKER_CMD compose"
-    else
-        echo "$DOCKER_CMD-compose"
+        return
     fi
+    if command -v docker-compose &> /dev/null; then
+        echo "docker-compose"
+        return
+    fi
+    # Letzter Fallback
+    echo "$DOCKER_CMD compose"
 }
 
 # Docker-Installation
@@ -1885,9 +2226,41 @@ install_native() {
     
     # Systemd-Services erstellen
     create_systemd_services
-    
+
+    # EnvironmentFile sicher in Unit eintragen
+    ensure_systemd_envfile
+
     # Services starten
     start_native_services
+
+    # Firewall öffnen
+    open_firewall_port
+    # Einfache Standard-Installation: keine DB-Eingriffe
+    if [ "$SKIP_DB_STEPS" = false ]; then
+        # Optionale DB-Autokonfiguration
+        harmonize_env_with_mongo
+        # Nach der Harmonisierung sicherstellen, dass URI und Port strikt konsistent sind
+        if [ -f /opt/scandy/.env ]; then
+            DETECTED_PORT=""
+            if ss -H -ltnp 2>/dev/null | grep -E ':27017\\b' | grep -q 'mongod'; then DETECTED_PORT=27017; fi
+            if ss -H -ltnp 2>/dev/null | grep -E ':27018\\b' | grep -q 'mongod'; then DETECTED_PORT=${DETECTED_PORT:-27018}; fi
+            if [ -n "$DETECTED_PORT" ]; then
+                sudo sed -i "s/^MONGODB_PORT=.*/MONGODB_PORT=${DETECTED_PORT}/" /opt/scandy/.env || true
+                sudo sed -i "s#\(MONGODB_URI=mongodb://[^/]\+\):[0-9]\+/#\1:${DETECTED_PORT}/#" /opt/scandy/.env || true
+                CUR=$(grep -E '^MONGODB_URI=' /opt/scandy/.env | cut -d'=' -f2-)
+                if echo "$CUR" | grep -q 'authSource='; then
+                    sudo sed -i "s#authSource=[^&]*#authSource=admin#" /opt/scandy/.env || true
+                else
+                    sudo sed -i "s#^MONGODB_URI=\(.*\)#MONGODB_URI=\1&authSource=admin#" /opt/scandy/.env || true
+                    sudo sed -i "s#\?&authSource=admin#?authSource=admin#" /opt/scandy/.env || true
+                fi
+            fi
+        fi
+        ensure_mongo_auth_and_users
+    else
+        log_info "DB-Autokonfiguration übersprungen (--no-db / Standard)"
+    fi
+    systemctl restart scandy || true
     
     log_success "Native Installation abgeschlossen!"
 }
@@ -1954,11 +2327,43 @@ EOF
         $INSTALL_CMD mongodb-org
     fi
     
-    # MongoDB konfigurieren
+    # MongoDB konfigurieren und starten
     systemctl enable mongod
-    systemctl start mongod
-    
-    log_success "MongoDB installiert und gestartet"
+    # Stelle sicher, dass mongod läuft; starte es notfalls neu
+    systemctl restart mongod || systemctl start mongod || true
+
+    # Port-Konfiguration: Falls MONGODB_PORT != 27017, passe /etc/mongod.conf an
+    # und starte mongod neu. Dadurch wird verhindert, dass .env und mongod-Port auseinanderlaufen.
+    if [ -n "${MONGODB_PORT}" ] && [ "${MONGODB_PORT}" != "27017" ]; then
+        CONF="/etc/mongod.conf"
+        if [ -f "$CONF" ]; then
+            # Stelle sicher, dass ein net:-Block existiert und setze/ersetze port:
+            if grep -qE '^\s*net:\s*$' "$CONF"; then
+                # Es gibt bereits einen net:-Block
+                if grep -qE '^\s*port:\s*[0-9]+' "$CONF"; then
+                    # Ersetze bestehende port:-Zeile (mit Einrückung 2 Leerzeichen)
+                    sed -i "s/^\s*port:\s*[0-9]\+/  port: ${MONGODB_PORT}/" "$CONF"
+                else
+                    # Füge port unter net: hinzu
+                    sed -i "/^\s*net:\s*$/a\\  port: ${MONGODB_PORT}" "$CONF"
+                fi
+            else
+                # Kein net:-Block vorhanden → füge am Ende hinzu
+                printf "\nnet:\n  port: %s\n" "${MONGODB_PORT}" >> "$CONF"
+            fi
+            systemctl restart mongod
+        fi
+    fi
+
+    # Warte kurz, bis mongod lauscht
+    for i in {1..20}; do
+        if ss -tln 2>/dev/null | grep -q ":${MONGODB_PORT}"; then
+            break
+        fi
+        sleep 1
+    done
+
+    log_success "MongoDB installiert, konfiguriert und gestartet (Port ${MONGODB_PORT})"
 }
 
 # Python-Umgebung einrichten
@@ -2064,7 +2469,7 @@ create_systemd_services() {
     # Service-Namen bestimmen
     service_name=$(get_service_name "$INSTANCE_NAME")
     
-    # Scandy Service
+    # Scandy Service (bindet an WEB_PORT aus .env)
     cat > /etc/systemd/system/${service_name}.service << EOF
 [Unit]
 Description=Scandy Application - ${INSTANCE_NAME}
@@ -2076,6 +2481,7 @@ User=scandy
 Group=scandy
 WorkingDirectory=/opt/scandy
 Environment=PATH=/opt/scandy/venv/bin
+EnvironmentFile=-/opt/scandy/.env
 ExecStart=/opt/scandy/venv/bin/gunicorn --bind 0.0.0.0:${WEB_PORT} --workers 4 app.wsgi:application
 Restart=always
 RestartSec=10
@@ -2097,13 +2503,13 @@ start_native_services() {
     
     systemctl start mongod
     service_name=$(get_service_name "$INSTANCE_NAME")
-    systemctl start "$service_name"
-    systemctl start nginx
+    systemctl restart "$service_name" || systemctl start "$service_name" || true
+    systemctl restart nginx || systemctl start nginx || true
     
-    # Warte auf Services
-    for i in {1..30}; do
-        if curl -f http://localhost:${WEB_PORT}/health &>/dev/null; then
-            log_success "Alle Services sind bereit"
+    # Warte auf Services (Port-Check statt /health-Route)
+    for i in {1..60}; do
+        if ss -tln 2>/dev/null | grep -q ":${WEB_PORT}"; then
+            log_success "App lauscht auf Port ${WEB_PORT}"
             break
         fi
         sleep 2
@@ -2150,7 +2556,7 @@ update_installation() {
             
             # Images entfernen aber Volumes behalten
             log_info "Entferne alte Images..."
-            $DOCKER_CMD image rm scandy-local:dev-scandy 2>/dev/null || true
+            $DOCKER_CMD image rm scandy-local:dev-${INSTANCE_NAME} 2>/dev/null || true
             
             # Requirements explizit neu installieren
             log_info "Baue Images komplett neu..."
@@ -2449,7 +2855,7 @@ update_installation() {
                 log_warning "Virtual Environment oder requirements.txt nicht gefunden"
             fi
             
-            # Service neu starten
+            # Service neu starten (hart, mit Fehlerprüfung)
             log_info "Starte Scandy-Service neu..."
             systemctl restart scandy 2>/dev/null || {
                 log_warning "systemctl restart scandy fehlgeschlagen"
@@ -2467,15 +2873,15 @@ update_installation() {
                 fi
             }
             
-            # Status prüfen
+            # Status prüfen (Port-Check anstatt /health)
             log_info "Prüfe Service-Status..."
-            sleep 3
-            if systemctl is-active --quiet scandy; then
-                log_success "Service läuft!"
-            else
-                log_warning "Service-Status unklar"
-                systemctl status scandy --no-pager -l
-            fi
+            for i in {1..30}; do
+                if ss -H -ltn | grep -q ":${WEB_PORT} "; then
+                    log_success "Service läuft auf Port ${WEB_PORT}!"
+                    break
+                fi
+                sleep 2
+            done
             ;;
     esac
     
@@ -2737,6 +3143,12 @@ main() {
     # Argumente parsen
     parse_arguments "$@"
     
+    # Root erzwingen (re-exec mit sudo, um interaktive Passwort-Prompts inmitten zu vermeiden)
+    if [ "$EUID" -ne 0 ]; then
+        echo "[INFO] Starte mit Root-Rechten neu..."
+        exec sudo -E bash "$0" "$@"
+    fi
+    
     # System-Kompatibilität prüfen
     check_system_compatibility
     
@@ -2744,17 +3156,17 @@ main() {
     DOCKER_COMPOSE_CMD=$(get_docker_compose_cmd)
     log_info "Verwende Docker Compose: $DOCKER_COMPOSE_CMD"
     
-    # Installation starten
+    # Installationsmodus bestimmen (kann UPDATE_ONLY in der Interaktion setzen)
+    if [ -z "$INSTALL_MODE" ] || [ "$INSTALL_MODE" = "auto" ]; then
+        # Interaktive Auswahl verwenden
+        interactive_installation_mode
+    fi
+    
+    # Falls im interaktiven Modus "Update" gewählt wurde, jetzt Update ausführen
     if [ "$UPDATE_ONLY" = true ]; then
         update_installation
         show_final_info
         exit 0
-    fi
-    
-    # Installationsmodus bestimmen
-    if [ -z "$INSTALL_MODE" ] || [ "$INSTALL_MODE" = "auto" ]; then
-        # Interaktive Auswahl verwenden
-        interactive_installation_mode
     fi
     
     log_info "Installationsmodus: $INSTALL_MODE"
@@ -2767,8 +3179,12 @@ main() {
     # Backup erstellen
     create_backup
     
-    # .env-Datei erstellen
-    create_env_file
+    # .env-Datei erstellen (nur bei Neuinstallation oder wenn keine .env vorhanden ist)
+    if [ ! -f .env ]; then
+        create_env_file
+    else
+        log_info ".env bereits vorhanden – vorhandene Konfiguration wird verwendet (keine Abfrage)."
+    fi
     
     # Verzeichnisse erstellen
     mkdir -p data logs backups

@@ -9,7 +9,7 @@ import io
 class MediaManager:
     """Universelles Medien-Management-System"""
     
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf'}
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'}
     MAX_IMAGES_PER_ENTITY = 10
     MAX_IMAGE_SIZE = (1920, 1080)  # 1080p
     

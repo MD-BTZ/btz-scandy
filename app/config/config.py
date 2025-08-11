@@ -7,6 +7,33 @@ import secrets
 from datetime import datetime
 from flask import request, redirect
 
+# Einfache .env-Ladung (ohne Abhängigkeit), damit ENV-Variablen wie SECRET_KEY
+# auch unter systemd/Gunicorn konsistent in allen Workern verfügbar sind
+def _load_env_files():
+    candidates = [
+        Path(__file__).resolve().parents[2] / '.env',  # Projektwurzel/.env
+        Path('/opt/scandy/.env')
+    ]
+    for env_path in candidates:
+        try:
+            if env_path.exists():
+                with env_path.open('r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#') or '=' not in line:
+                            continue
+                        key, val = line.split('=', 1)
+                        key = key.strip()
+                        val = val.strip().strip('"').strip("'")
+                        # Nur setzen, wenn nicht bereits im Prozess-ENV vorhanden
+                        if key and key not in os.environ:
+                            os.environ[key] = val
+        except Exception:
+            # Silent fallback – ENV bleibt unverändert
+            pass
+
+_load_env_files()
+
 class Config:
     """Basis-Konfigurationsklasse"""
     # Basis-Verzeichnis der Anwendung
@@ -31,6 +58,7 @@ class Config:
     
     # Sicherheit
     SECRET_KEY = os.environ.get('SECRET_KEY')
+    ENABLE_HTTPS = os.environ.get('ENABLE_HTTPS', 'false').lower() == 'true'
     
     # Server-Einstellungen
     HOST = '0.0.0.0'
@@ -143,7 +171,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     """Entwicklungs-Konfiguration"""
-    DEBUG = True
+    DEBUG = os.environ.get('FLASK_DEBUG', '1') in ('1', 'true', 'True')
     TESTING = False
     SECRET_KEY = 'dev-key-not-for-production'
     SESSION_COOKIE_SECURE = False
@@ -162,10 +190,10 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     """Produktions-Konfiguration"""
-    DEBUG = False
+    DEBUG = os.environ.get('FLASK_DEBUG', '0') in ('1', 'true', 'True')
     TESTING = False
     
-    # Erweiterte Sicherheitseinstellungen
+    # Erweiterte Sicherheitseinstellungen (an HTTPS koppelbar)
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
@@ -179,7 +207,8 @@ class ProductionConfig(Config):
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',
         'X-XSS-Protection': '1; mode=block',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'",
+        # CSP mit Nonce-Unterstützung. Templates sollten nonce="{{ csp_nonce }}" an Script-/Style-Tags setzen.
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'nonce-{nonce}' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'",
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         'Permissions-Policy': 'geolocation=(), microphone=(), camera=()'
     }
@@ -193,20 +222,45 @@ class ProductionConfig(Config):
         # Produktionsspezifische Initialisierung
         if not app.config['SECRET_KEY']:
             app.config['SECRET_KEY'] = secrets.token_hex(32)
+
+        # Cookie-Sicherheit abhängig von ENABLE_HTTPS steuern
+        enable_https = os.environ.get('ENABLE_HTTPS', 'false').lower() == 'true'
+        if not enable_https:
+            app.config['SESSION_COOKIE_SECURE'] = False
+            app.config['REMEMBER_COOKIE_SECURE'] = False
         
-        # Security Headers hinzufügen
+        # Security Headers hinzufügen (CSP Nonce einsetzen)
         @app.after_request
         def add_security_headers(response):
             for header, value in cls.SECURITY_HEADERS.items():
-                response.headers[header] = value
+                if header == 'Content-Security-Policy':
+                    try:
+                        from flask import g
+                        nonce = getattr(g, 'csp_nonce', '')
+                        response.headers[header] = value.format(nonce=nonce)
+                    except Exception:
+                        response.headers[header] = value.replace("{nonce}", "")
+                else:
+                    response.headers[header] = value
             return response
         
         # HTTPS-Umleitung für Produktion
+        if enable_https:
+            @app.before_request
+            def force_https():
+                if not request.is_secure and request.headers.get('X-Forwarded-Proto', 'http') == 'http':
+                    url = request.url.replace('http://', 'https://', 1)
+                    return redirect(url, code=301)
+
+        # CSP Nonce pro Request erzeugen
         @app.before_request
-        def force_https():
-            if not request.is_secure and request.headers.get('X-Forwarded-Proto', 'http') == 'http':
-                url = request.url.replace('http://', 'https://', 1)
-                return redirect(url, code=301)
+        def set_csp_nonce():
+            try:
+                import secrets as _secrets
+                from flask import g
+                g.csp_nonce = _secrets.token_urlsafe(16)
+            except Exception:
+                pass
 
 # Konfigurationen
 config = {

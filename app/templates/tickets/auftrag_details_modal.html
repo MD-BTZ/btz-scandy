@@ -131,8 +131,8 @@
     </div>
 </dialog>
 
-<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/tickets.js') }}"></script>
+<script nonce="{{ csp_nonce }}">
 // Setze die Ticket-ID für die JavaScript-Funktionen
 const ticketId = '{{ ticket._id }}';
 

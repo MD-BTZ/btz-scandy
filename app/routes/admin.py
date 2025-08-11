@@ -5,6 +5,7 @@ from app.models.mongodb_models import MongoDBUser
 from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
+import json
 import colorsys
 import logging
 from datetime import datetime, timedelta
@@ -21,6 +22,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.database_helpers import get_categories_from_settings, get_ticket_categories_from_settings, get_departments_from_settings, get_locations_from_settings
 from docxtpl import DocxTemplate
 from urllib.parse import unquote
+from werkzeug.utils import secure_filename
+import tempfile
+import os
 import pandas as pd
 import tempfile
 from typing import Union
@@ -38,6 +42,14 @@ from app.services.admin_debug_service import AdminDebugService
 from app.services.admin_system_settings_service import AdminSystemSettingsService
 from app.services.excel_export_service import ExcelExportService
 from app.services.custom_fields_service import CustomFieldsService
+from app.utils.permissions import (
+    get_role_permissions,
+    set_role_permissions,
+    DEFAULT_ROLE_PERMISSIONS,
+    ALLOWED_ACTIONS,
+    get_all_actions,
+    normalize_permissions,
+)
 
 from app.utils.id_helpers import convert_id_for_query, find_document_by_id, find_user_by_id
 
@@ -1705,11 +1717,14 @@ def manage_users():
             else:
                 flash(f'Warnung: {expired_count} Benutzerkonten sind abgelaufen und sollten überprüft werden!', 'warning')
         
-        return render_template('admin/users.html', users=users, expired_users=expired_users)
+        # Rollenrechte für Anzeige in der Rollenübersicht
+        from app.utils.permissions import get_role_permissions
+        role_permissions = get_role_permissions()
+        return render_template('admin/users.html', users=users, expired_users=expired_users, role_permissions=role_permissions)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Benutzer: {e}")
         flash('Fehler beim Laden der Benutzer', 'error')
-        return render_template('admin/users.html', users=[], expired_users=[])
+        return render_template('admin/users.html', users=[], expired_users=[], role_permissions={})
 
 @bp.route('/add_user', methods=['GET', 'POST'])
 @mitarbeiter_required
@@ -1818,10 +1833,16 @@ def add_user():
     # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
     handlungsfelder = get_ticket_categories_from_settings()
     
+    # Abteilungen aus Settings
+    from app.services.admin_system_settings_service import AdminSystemSettingsService
+    departments = AdminSystemSettingsService.get_departments_from_settings()
     return render_template('admin/user_form.html', 
                          roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                          handlungsfelder=handlungsfelder,
-                         user_handlungsfelder=[])
+                         user_handlungsfelder=[],
+                         departments=departments,
+                         user_allowed_departments=[],
+                         user_default_department='')
 
 @bp.route('/migrate_users_to_workers', methods=['POST'])
 @admin_required
@@ -1895,11 +1916,16 @@ def edit_user(user_id):
         handlungsfelder = get_ticket_categories_from_settings()
         user_handlungsfelder = user.get('handlungsfelder', [])
         
+        from app.services.admin_system_settings_service import AdminSystemSettingsService
+        departments = AdminSystemSettingsService.get_departments_from_settings()
         return render_template('admin/user_form.html', 
                              user=user,
                              roles=['admin', 'mitarbeiter', 'anwender', 'teilnehmer'],
                              handlungsfelder=handlungsfelder,
-                             user_handlungsfelder=user_handlungsfelder)
+                             user_handlungsfelder=user_handlungsfelder,
+                             departments=departments,
+                             user_allowed_departments=user.get('allowed_departments', []),
+                             user_default_department=user.get('default_department',''))
     
     # POST-Request: Verarbeite die Formulardaten
     try:
@@ -1956,6 +1982,12 @@ def edit_user(user_id):
         if processed_data['password']:
             user_data['password'] = processed_data['password']
         
+        # Abteilungsrechte
+        allowed_departments = request.form.getlist('allowed_departments')
+        default_department = request.form.get('default_department') or None
+        user_data['allowed_departments'] = allowed_departments
+        user_data['default_department'] = default_department if default_department else None
+
         success, message = AdminUserService.update_user(user_id, user_data)
         
         if success:
@@ -2537,6 +2569,64 @@ def feature_settings():
         flash('Fehler beim Laden der Feature-Einstellungen', 'error')
         return redirect(url_for('admin.dashboard'))
 
+
+@bp.route('/role_permissions', methods=['GET', 'POST'])
+@admin_required
+def role_permissions():
+    """Rollen- und Berechtigungs-Matrix verwalten."""
+    try:
+        if request.method == 'POST':
+            # Erwartet JSON im Formularfeld 'permissions' oder einzelne Checkboxen
+            if request.is_json:
+                payload = request.get_json()
+                permissions = payload.get('permissions', {})
+            else:
+                # Aus HTML-Form-Checkboxen zusammensetzen: name="perm[role][area][action]"
+                permissions = get_role_permissions()
+                # Flaches Formular in Matrix zurückschreiben
+                for key, value in request.form.items():
+                    if not key.startswith('perm[') or value != 'on':
+                        continue
+                    try:
+                        # perm[role][area][action]
+                        parts = key.split('[')
+                        role = parts[1][:-1]
+                        area = parts[2][:-1]
+                        action = parts[3][:-1]
+                        permissions.setdefault(role, {}).setdefault(area, [])
+                        if action not in permissions[role][area]:
+                            permissions[role][area].append(action)
+                    except Exception:
+                        continue
+
+            # Guardrail: Admin immer alles und unzulässige Aktionen filtern
+            permissions['admin'] = DEFAULT_ROLE_PERMISSIONS['admin']
+            permissions = normalize_permissions(permissions)
+
+            if set_role_permissions(permissions):
+                flash('Berechtigungen erfolgreich gespeichert', 'success')
+            else:
+                flash('Fehler beim Speichern der Berechtigungen', 'error')
+            return redirect(url_for('admin.role_permissions'))
+
+        # GET: aktuelle Matrix anzeigen
+        permissions = get_role_permissions()
+        # Bereiche: aus erlaubten Bereichen, ergänzt um evtl. vorhandene Einträge
+        areas = sorted(set(ALLOWED_ACTIONS.keys()) | {a for r in permissions.values() for a in r.keys()})
+        # Aktionen: Superset aller erlaubten Aktionen
+        actions = get_all_actions()
+        roles = sorted(permissions.keys())
+        return render_template('admin/role_permissions.html',
+                               permissions=permissions,
+                               roles=roles,
+                               areas=areas,
+                               actions=actions,
+                               allowed_actions=ALLOWED_ACTIONS)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Rollenrechte: {str(e)}")
+        flash('Fehler beim Laden der Rollenrechte', 'error')
+        return redirect(url_for('admin.dashboard'))
+
 # =============================================================================
 # FELDVERWALTUNG - Standard- und benutzerdefinierte Felder
 # =============================================================================
@@ -2757,20 +2847,20 @@ def delete_department(name):
 @bp.route('/categories')
 @mitarbeiter_required
 def get_categories_admin():
-    """Gibt alle Kategorien zurück"""
+    """Gibt alle Kategorien der aktuellen/angefragten Abteilung zurück (dedizierte Collection)."""
     try:
-        # Verwende den AdminSystemSettingsService
-        categories = AdminSystemSettingsService.get_categories_from_settings()
-        return jsonify({
-            'success': True,
-            'categories': [{'name': cat} for cat in categories]
-        })
+        req_dept = request.args.get('dept')
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': True, 'categories': []})
+        docs = list(mongodb.find('categories', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Kategorien'
-        })
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'})
 
 @bp.route('/categories/add', methods=['POST'])
 @mitarbeiter_required
@@ -2785,43 +2875,24 @@ def add_category():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Lade aktuelle Kategorien
-        settings = mongodb.db.settings.find_one({'key': 'categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(cat.lower() == name.lower() for cat in current_categories):
-            return jsonify({
-                'success': False,
-                'message': 'Diese Kategorie existiert bereits.'
-            })
-
-        # Kategorie zur Liste hinzufügen
-        current_categories.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'categories'},
-                {'value': current_categories},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern der Kategorie: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'categories'},
-                {'$set': {'value': current_categories}},
-                upsert=True
-            )
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        exists = mongodb.find_one('categories', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
+            return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits in dieser Abteilung.'})
+        mongodb.insert_one('categories', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -2840,44 +2911,28 @@ def delete_category(name):
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
+        # Aktuelle Abteilung bestimmen
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
         
-        # Überprüfen, ob die Kategorie in Verwendung ist
-        tools_with_category = mongodb.db.tools.find_one({'category': decoded_name})
+        # Überprüfen, ob die Kategorie in Verwendung ist (nur aktuelle Abteilung)
+        tools_with_category = mongodb.db.tools.find_one({'category': decoded_name, 'department': current_dept})
         if tools_with_category:
             return jsonify({
                 'success': False,
                 'message': 'Die Kategorie kann nicht gelöscht werden, da sie noch von Werkzeugen verwendet wird.'
             })
-
-        # Lade aktuelle Kategorien
-        settings = mongodb.db.settings.find_one({'key': 'categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Kategorie aus der Liste entfernen
-        if decoded_name in current_categories:
-            current_categories.remove(decoded_name)
-            try:
-                mongodb.update_one(
-                    'settings',
-                    {'key': 'categories'},
-                    {'value': current_categories},
-                    upsert=True
-                )
-            except Exception as db_error:
-                logger.error(f"Datenbankfehler beim Löschen der Kategorie: {str(db_error)}")
-                # Fallback: Versuche es mit update_one_array
-                mongodb.update_one_array(
-                    'settings',
-                    {'key': 'categories'},
-                    {'$set': {'value': current_categories}},
-                    upsert=True
-                )
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        ok = mongodb.update_one('categories', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,
@@ -2896,12 +2951,15 @@ def delete_category(name):
 def get_locations():
     """Gibt alle Standorte zurück"""
     try:
-        # Verwende den AdminSystemSettingsService
-        locations = AdminSystemSettingsService.get_locations_from_settings()
-        return jsonify({
-            'success': True,
-            'locations': [{'name': loc} for loc in locations]
-        })
+        req_dept = request.args.get('dept')
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': True, 'locations': []})
+        docs = list(mongodb.find('locations', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'locations': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Standorte: {str(e)}")
         return jsonify({
@@ -2922,43 +2980,24 @@ def add_location():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Lade aktuelle Standorte
-        settings = mongodb.db.settings.find_one({'key': 'locations'})
-        current_locations = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-            elif isinstance(value, list):
-                current_locations = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(loc.lower() == name.lower() for loc in current_locations):
-            return jsonify({
-                'success': False,
-                'message': 'Dieser Standort existiert bereits.'
-            })
-
-        # Standort zur Liste hinzufügen
-        current_locations.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'locations'},
-                {'value': current_locations},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern des Standorts: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'locations'},
-                {'$set': {'value': current_locations}},
-                upsert=True
-            )
+        # Schreibe in neue Collection 'locations' mit Abteilung
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        exists = mongodb.find_one('locations', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
+            return jsonify({'success': False, 'message': 'Dieser Standort existiert bereits in dieser Abteilung.'})
+        mongodb.insert_one('locations', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -2977,44 +3016,26 @@ def delete_location(name):
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
-        
-        # Überprüfen, ob der Standort in Verwendung ist
-        tools_with_location = mongodb.db.tools.find_one({'location': decoded_name})
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        # Überprüfen, ob der Standort in Verwendung ist (nur aktuelle Abteilung)
+        tools_with_location = mongodb.db.tools.find_one({'location': decoded_name, 'department': current_dept})
         if tools_with_location:
             return jsonify({
                 'success': False,
                 'message': 'Der Standort kann nicht gelöscht werden, da er noch von Werkzeugen verwendet wird.'
             })
-
-        # Lade aktuelle Standorte
-        settings = mongodb.db.settings.find_one({'key': 'locations'})
-        current_locations = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_locations = [loc.strip() for loc in value.split(',') if loc.strip()]
-            elif isinstance(value, list):
-                current_locations = value
-        
-        # Standort aus der Liste entfernen
-        if decoded_name in current_locations:
-            current_locations.remove(decoded_name)
-            try:
-                mongodb.update_one(
-                    'settings',
-                    {'key': 'locations'},
-                    {'value': current_locations},
-                    upsert=True
-                )
-            except Exception as db_error:
-                logger.error(f"Datenbankfehler beim Löschen des Standorts: {str(db_error)}")
-                # Fallback: Versuche es mit update_one_array
-                mongodb.update_one_array(
-                    'settings',
-                    {'key': 'locations'},
-                    {'$set': {'value': current_locations}},
-                    upsert=True
-                )
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        ok = mongodb.update_one('locations', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Standort nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,
@@ -3031,31 +3052,25 @@ def delete_location(name):
 @bp.route('/ticket_categories')
 @mitarbeiter_required
 def get_ticket_categories():
-    """Gibt alle Ticket-Kategorien zurück"""
+    """Gibt alle Ticket-Kategorien (Handlungsfelder) der aktuellen/angefragten Abteilung zurück."""
     try:
-        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
-        categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                categories = value
-        return jsonify({
-            'success': True,
-            'categories': [{'name': cat} for cat in categories]
-        })
+        req_dept = request.args.get('dept')
+        from flask import g
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': True, 'categories': []})
+        docs = list(mongodb.find('ticket_categories', {'deleted': {'$ne': True}}))
+        docs = [d for d in docs if d.get('department') == current_dept]
+        names = sorted({d.get('name') for d in docs if d.get('name')})
+        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Ticket-Kategorien: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Fehler beim Laden der Ticket-Kategorien'
-        })
+        return jsonify({'success': False, 'message': 'Fehler beim Laden der Ticket-Kategorien'})
 
 @bp.route('/ticket_categories/add', methods=['POST'])
 @admin_required
 def add_ticket_category_json():
-    """Fügt eine neue Ticket-Kategorie hinzu (JSON-API)"""
+    """Fügt eine neue Ticket-Kategorie (Handlungsfeld) abteilungsgebunden hinzu"""
     try:
         # Unterstütze beide Feldnamen für Kompatibilität
         name = request.form.get('name', '').strip() or request.form.get('category', '').strip()
@@ -3065,43 +3080,24 @@ def add_ticket_category_json():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfen ob Ticket-Kategorie bereits existiert
-        settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
-        current_categories = []
-        if settings and 'value' in settings:
-            value = settings['value']
-            if isinstance(value, str):
-                current_categories = [cat.strip() for cat in value.split(',') if cat.strip()]
-            elif isinstance(value, list):
-                current_categories = value
-        
-        # Prüfe auf Duplikate (case-insensitive)
-        if any(cat.lower() == name.lower() for cat in current_categories):
-            return jsonify({
-                'success': False,
-                'message': 'Diese Ticket-Kategorie existiert bereits.'
-            })
-
-        # Ticket-Kategorie zur Liste hinzufügen
-        current_categories.append(name)
-        
-        # Speichere als Array mit robuster Methode
-        try:
-            mongodb.update_one(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'value': current_categories},
-                upsert=True
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Speichern der Ticket-Kategorie: {str(db_error)}")
-            # Fallback: Versuche es mit update_one_array
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'$set': {'value': current_categories}},
-                upsert=True
-            )
+        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
+        from flask import g
+        req_dept = request.form.get('dept')
+        current_dept = req_dept or getattr(g, 'current_department', None)
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        exists = mongodb.find_one('ticket_categories', {
+            'name': {'$regex': f'^{name}$', '$options': 'i'},
+            'department': current_dept,
+            'deleted': {'$ne': True}
+        })
+        if exists:
+            return jsonify({'success': False, 'message': 'Diese Ticket-Kategorie existiert bereits in dieser Abteilung.'})
+        mongodb.insert_one('ticket_categories', {
+            'name': name,
+            'department': current_dept,
+            'deleted': False
+        })
 
         return jsonify({
             'success': True,
@@ -3117,40 +3113,30 @@ def add_ticket_category_json():
 @bp.route('/ticket_categories/delete/<name>', methods=['POST'])
 @admin_required
 def delete_ticket_category_json(name):
-    """Löscht eine Ticket-Kategorie (JSON-API)"""
+    """Löscht (soft) eine Ticket-Kategorie der aktuellen Abteilung"""
     try:
         # URL-dekodieren
         decoded_name = unquote(name)
-        
-        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist
-        tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name})
+        # Überprüfen, ob die Ticket-Kategorie in Verwendung ist (nur aktuelle Abteilung)
+        from flask import g
+        current_dept = getattr(g, 'current_department', None)
+        tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name, 'department': current_dept})
         if tickets_with_category:
             return jsonify({
                 'success': False,
                 'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
             })
-
-        # Ticket-Kategorie aus der Liste entfernen
-        try:
-            mongodb.update_one_array(
-                'settings',
-                {'key': 'ticket_categories'},
-                {'$pull': {'value': decoded_name}}
-            )
-        except Exception as db_error:
-            logger.error(f"Datenbankfehler beim Löschen der Ticket-Kategorie: {str(db_error)}")
-            # Fallback: Lade alle Kategorien und entferne die gewünschte
-            settings = mongodb.db.settings.find_one({'key': 'ticket_categories'})
-            if settings and 'value' in settings:
-                current_categories = settings['value']
-                if isinstance(current_categories, list) and decoded_name in current_categories:
-                    current_categories.remove(decoded_name)
-                    mongodb.update_one(
-                        'settings',
-                        {'key': 'ticket_categories'},
-                        {'value': current_categories},
-                        upsert=True
-                    )
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        # Soft-Delete in dedizierter Collection
+        ok = mongodb.update_one('ticket_categories', {
+            'name': decoded_name,
+            'department': current_dept
+        }, {
+            'deleted': True
+        })
+        if not ok:
+            return jsonify({'success': False, 'message': 'Ticket-Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
         return jsonify({
             'success': True,
@@ -4965,6 +4951,24 @@ def email_settings():
         flash('Fehler beim Laden der E-Mail-Einstellungen.', 'error')
         return redirect(url_for('admin.dashboard'))
 
+@bp.route('/switch-department/<department>')
+@login_required
+def switch_department(department):
+    """Setzt das aktive Department in der Session, falls der Benutzer berechtigt ist."""
+    try:
+        user = mongodb.find_one('users', {'username': current_user.username})
+        allowed = user.get('allowed_departments', []) if user else []
+        if department in allowed:
+            session['department'] = department
+            flash(f'Aktives Department: {department}', 'success')
+        else:
+            flash('Keine Berechtigung für diese Abteilung', 'error')
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Fehler beim Wechseln des Departments: {e}")
+        flash('Fehler beim Wechseln des Departments', 'error')
+    return redirect(request.referrer or url_for('main.index'))
+
 @bp.route('/admin/email/diagnose', methods=['POST'])
 @login_required
 @admin_required
@@ -5071,6 +5075,86 @@ def test_weekly_backup():
             'success': False,
             'message': f'Fehler beim Versenden: {str(e)}'
         })
+
+@bp.route('/backup/import_json', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def import_json_backup_scoped():
+    """Importiert ein altes JSON-Backup in eine benannte Abteilung."""
+    try:
+        if request.method == 'POST':
+            dept_name = (request.form.get('department_name') or '').strip()
+            file = request.files.get('backup_file')
+            if not dept_name:
+                flash('Bitte Abteilungsnamen angeben', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+            if not file or file.filename == '':
+                flash('Bitte eine JSON-Backup-Datei auswählen', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+            if not file.filename.lower().endswith('.json'):
+                flash('Ungültiges Dateiformat. Bitte eine .json Datei wählen', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+
+            # Datei temporär speichern
+            filename = secure_filename(file.filename)
+            tmp_dir = tempfile.mkdtemp()
+            tmp_path = os.path.join(tmp_dir, filename)
+            file.save(tmp_path)
+
+            # Import als Hintergrund-Job starten, um Timeouts zu vermeiden
+            from app.utils.unified_backup_manager import unified_backup_manager
+            job_id = unified_backup_manager.start_import_job(tmp_path, dept_name)
+
+            # Abteilung in den Systemeinstellungen anlegen und Benutzerberechtigungen erweitern
+            try:
+                # Departments-Liste pflegen
+                existing_depts_doc = mongodb.find_one('settings', {'key': 'departments'})
+                if existing_depts_doc and isinstance(existing_depts_doc.get('value'), list):
+                    if dept_name not in existing_depts_doc['value']:
+                        new_list = existing_depts_doc['value'] + [dept_name]
+                        mongodb.update_one('settings', {'_id': existing_depts_doc['_id']}, {'$set': {'value': new_list}})
+                else:
+                    mongodb.insert_one('settings', {'key': 'departments', 'value': [dept_name]})
+
+                # Aktuellen Benutzer für die neue Abteilung berechtigen
+                if hasattr(current_user, 'username'):
+                    mongodb.update_one('users', {'username': current_user.username}, {'$addToSet': {'allowed_departments': dept_name}})
+            except Exception as dep_e:
+                logger.warning(f"Konnte Abteilung/Berechtigung nicht automatisch anlegen: {dep_e}")
+            if not job_id:
+                flash('Import konnte nicht gestartet werden.', 'error')
+                return redirect(url_for('admin.import_json_backup_scoped'))
+
+            # Weiterleitung auf Status-Seite
+            return redirect(url_for('admin.import_json_backup_status', job_id=job_id))
+
+        return render_template('admin/import_json_backup.html')
+    except Exception as e:
+        logger.error(f"Fehler beim JSON-Import: {e}")
+        flash('Fehler beim Import', 'error')
+        return redirect(url_for('admin.import_json_backup_scoped'))
+
+@bp.route('/backup/import_json/job/<job_id>.json', methods=['GET'])
+@login_required
+@admin_required
+def import_json_backup_job_status(job_id: str):
+    try:
+        from app.utils.unified_backup_manager import unified_backup_manager
+        job = unified_backup_manager.get_import_job(job_id)
+        return jsonify(job)
+    except Exception as e:
+        return jsonify({'exists': False, 'error': str(e)}), 500
+
+@bp.route('/backup/import_json/status/<job_id>', methods=['GET'])
+@login_required
+@admin_required
+def import_json_backup_status(job_id: str):
+    try:
+        return render_template('admin/import_json_backup_status.html', job_id=job_id)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Status-Seite: {e}")
+        flash('Fehler beim Laden des Status', 'error')
+        return redirect(url_for('admin.dashboard'))
 
 @bp.route('/version/check', methods=['GET'])
 @login_required

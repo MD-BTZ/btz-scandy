@@ -4,7 +4,7 @@
 
 {% block head %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Tab-Funktionalität für Tickets - muss vor den onclick-Events verfügbar sein
 function showTab(tab) {
     console.log('showTab aufgerufen mit:', tab); // Debug

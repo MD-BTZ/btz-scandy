@@ -89,7 +89,7 @@ def upload_media(entity_type, entity_id):
             return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'})
         
         # Erweiterte Dateivalidierung
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'bmp', 'tiff'}
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'bmp', 'tiff'}
         file_extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
         
         if file_extension not in allowed_extensions:
@@ -347,6 +347,7 @@ def delete_media(entity_type, entity_id, filename):
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<entity_type>/<entity_id>/list')
+@login_required
 def get_media_list(entity_type, entity_id):
     """Listet alle Medien für eine Entität auf"""
     try:
@@ -373,7 +374,7 @@ def get_media_list(entity_type, entity_id):
         
         # Medien-Liste erstellen
         media_list = []
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf'}
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'}
         
         for filename in all_files:
             file_path = os.path.join(upload_folder, filename)
@@ -406,6 +407,7 @@ def get_media_list(entity_type, entity_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @bp.route('/<entity_type>/<entity_id>/count')
+@login_required
 def get_media_count(entity_type, entity_id):
     """Anzahl der Medien einer Entität"""
     try:
@@ -425,6 +427,7 @@ def get_media_count(entity_type, entity_id):
         })
 
 @bp.route('/test-upload/<entity_type>/<entity_id>')
+@login_required
 def test_upload_route(entity_type, entity_id):
     """Test-Route für Upload-Debugging"""
     try:
@@ -443,6 +446,7 @@ def test_upload_route(entity_type, entity_id):
         })
 
 @bp.route('/simple-upload/<entity_type>/<entity_id>', methods=['GET', 'POST'])
+@login_required
 def simple_upload_test(entity_type, entity_id):
     """Einfache Upload-Test-Seite"""
     if request.method == 'POST':

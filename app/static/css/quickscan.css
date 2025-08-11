@@ -1,3 +1,13 @@
+/* iOS Viewport-Fallbacks für Kamera-Container */
+.camera-container {
+  height: 45dvh;
+}
+@supports not (height: 1dvh) {
+  .camera-container { height: calc(45vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+}
+@supports (height: 1svh) {
+  .camera-container { height: 45svh; }
+}
 /* QuickScan Styles */
 
 /* Card States - Spezifischere Selektoren */

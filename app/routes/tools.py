@@ -2,7 +2,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.services.tool_service import ToolService
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
-from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
+from app.utils.permissions import permission_required
+from app.utils.database_helpers import get_categories_scoped, get_locations_scoped, get_categories_from_settings, get_locations_from_settings
 from datetime import datetime
 import logging
 from app.models.mongodb_database import mongodb, is_feature_enabled
@@ -58,6 +59,7 @@ def get_user_groups():
 
 @bp.route('/')
 @login_required
+@permission_required('tools', 'view')
 def index():
     """Werkzeuge-Übersicht"""
     # Prüfe ob Werkzeuge-Feature aktiviert ist
@@ -66,13 +68,13 @@ def index():
         return redirect(url_for('main.index'))
     
     try:
-        # Hole alle Werkzeuge über den ToolService (filtert automatisch gelöschte)
+        # Hole alle Werkzeuge über den ToolService (filtert automatisch gelöschte und per Abteilung)
         tool_service = get_tool_service()
         tools = tool_service.get_all_tools()
         
-        # Hole Kategorien und Standorte für Filter
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        # Hole Kategorien und Standorte strikt abteilungsgetrennt
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         # Hole Software und Nutzergruppen für Software-Management Feature
         software_presets = get_software_presets()
@@ -93,6 +95,7 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('tools', 'create')
 @not_teilnehmer_required
 def add():
     """Neues Werkzeug hinzufügen"""
@@ -142,8 +145,8 @@ def add():
                     flash(f'Fehler bei benutzerdefinierten Feldern: {error_msg}', 'error')
                     return render_template('tools/add.html', 
                                          form_data=tool_data,
-                                         categories=get_categories_from_settings(),
-                                         locations=get_locations_from_settings(),
+                                         categories=get_categories_scoped(),
+                                         locations=get_locations_scoped(),
                                          software_presets=get_software_presets(),
                                          user_groups=get_user_groups(),
                                          feature_settings=get_feature_settings_safe())
@@ -157,8 +160,8 @@ def add():
                 flash('Name und Barcode sind erforderlich', 'error')
                 return render_template('tools/add.html', 
                                      form_data=tool_data,
-                                     categories=get_categories_from_settings(),
-                                     locations=get_locations_from_settings(),
+                                     categories=get_categories_scoped(),
+                                     locations=get_locations_scoped(),
                                      software_presets=get_software_presets(),
                                      user_groups=get_user_groups(),
                                      feature_settings=get_feature_settings_safe())
@@ -174,8 +177,8 @@ def add():
                 flash(message, 'error')
                 return render_template('tools/add.html', 
                                      form_data=tool_data,
-                                     categories=get_categories_from_settings(),
-                                     locations=get_locations_from_settings(),
+                                     categories=get_categories_scoped(),
+                                     locations=get_locations_scoped(),
                                      software_presets=get_software_presets(),
                                      user_groups=get_user_groups(),
                                      feature_settings=get_feature_settings_safe())
@@ -185,16 +188,16 @@ def add():
             flash('Fehler beim Erstellen des Werkzeugs', 'error')
             return render_template('tools/add.html', 
                                  form_data=tool_data,
-                                 categories=get_categories_from_settings(),
-                                 locations=get_locations_from_settings(),
+                                 categories=get_categories_scoped(),
+                                 locations=get_locations_scoped(),
                                  software_presets=get_software_presets(),
                                  user_groups=get_user_groups(),
                                  feature_settings=get_feature_settings_safe())
     
     # GET Request - Formular anzeigen
     try:
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         software_presets = get_software_presets()
         user_groups = get_user_groups()
         
@@ -211,6 +214,7 @@ def add():
 
 @bp.route('/<barcode>')
 @login_required
+@permission_required('tools', 'view')
 def detail(barcode):
     """Zeigt die Details eines Werkzeugs"""
     try:
@@ -223,8 +227,8 @@ def detail(barcode):
             return redirect(url_for('tools.index'))
         
         # Hole Kategorien und Standorte
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         software_presets = get_software_presets()
         user_groups = get_user_groups()
         
@@ -248,6 +252,7 @@ def detail(barcode):
 
 @bp.route('/<barcode>/edit', methods=['POST'])
 @login_required
+@permission_required('tools', 'edit')
 def edit(barcode):
     """Bearbeitet ein Werkzeug über Modal"""
     try:
@@ -323,6 +328,7 @@ def edit(barcode):
 
 @bp.route('/<string:barcode>/status', methods=['POST'])
 @login_required
+@permission_required('tools', 'edit')
 def change_status(barcode):
     """Ändert den Status eines Werkzeugs"""
     try:
@@ -343,6 +349,7 @@ def change_status(barcode):
 
 @bp.route('/<string:barcode>/delete', methods=['POST'])
 @login_required
+@permission_required('tools', 'delete')
 @admin_required
 def delete(barcode):
     """Löscht ein Werkzeug"""
@@ -380,8 +387,8 @@ def search():
         tools = tool_service.search_tools(query)
         
         # Hole Kategorien und Standorte
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('tools/index.html',
                            tools=tools,
@@ -405,8 +412,8 @@ def by_category(category):
         tools = tool_service.get_tools_by_category(category)
         
         # Hole Kategorien und Standorte
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('tools/index.html',
                            tools=tools,
@@ -430,8 +437,8 @@ def by_location(location):
         tools = tool_service.get_tools_by_location(location)
         
         # Hole Kategorien und Standorte
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('tools/index.html',
                            tools=tools,
@@ -455,8 +462,8 @@ def by_status(status):
         tools = tool_service.get_tools_by_status(status)
         
         # Hole Kategorien und Standorte
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('tools/index.html',
                            tools=tools,
@@ -472,6 +479,7 @@ def by_status(status):
 
 @bp.route('/statistics')
 @login_required
+@permission_required('tools', 'export')
 @admin_required
 def statistics():
     """Zeigt Werkzeug-Statistiken"""
@@ -491,6 +499,7 @@ def statistics():
 
 @bp.route('/export')
 @login_required
+@permission_required('tools', 'export')
 @admin_required
 def export():
     """Exportiert Werkzeuge als CSV"""

@@ -235,3 +235,17 @@ Nach der Installation werden erstellt:
 2. **Backup-Strategie**: Konfiguriere automatische Backups
 3. **Monitoring**: Richte Logging und Monitoring ein
 4. **SSL/TLS**: Konfiguriere HTTPS für Produktion 
+
+## Migration wichtiger Sicherheitsänderungen (August 2025)
+
+- Docker Compose liest jetzt Secrets und URIs aus `.env` (statt Klartext in `docker-compose.https.yml`).
+  - Aktion: `.env` anhand `env.example` erstellen/aktualisieren und sichere Werte setzen:
+    - `MONGO_INITDB_ROOT_PASSWORD`, `SECRET_KEY`, `ME_CONFIG_BASICAUTH_PASSWORD`
+    - `MONGODB_URI=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@scandy-mongodb:27017/${MONGODB_DB}?authSource=admin`
+- Notfall-Adminroute `/emergency-admin` ist standardmäßig deaktiviert.
+  - Nur falls erforderlich und ausschließlich lokal: `ENABLE_EMERGENCY_ADMIN=true` setzen, danach wieder entfernen.
+- Passwortprüfung: Unsicherer scrypt-Fallback entfernt.
+  - Falls alte Backups scrypt-Hashes enthalten, bitte Benutzerpasswörter über Admin-UI zurücksetzen.
+- Debug/Config:
+  - Produktion: `FLASK_ENV=production`, `FLASK_DEBUG=0` setzen.
+  - Entwicklung: `FLASK_ENV=development`, optional `FLASK_DEBUG=1`.

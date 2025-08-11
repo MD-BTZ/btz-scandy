@@ -281,7 +281,7 @@
 </div>
 
 <!-- JavaScript für Job-Löschung -->
-<script>
+<script nonce="{{ csp_nonce }}">
 function deleteJob(jobId) {
     if (confirm('Sind Sie sicher, dass Sie diesen Job löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.')) {
         fetch(`/jobs/${jobId}/delete`, {

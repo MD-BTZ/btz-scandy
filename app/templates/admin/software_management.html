@@ -185,7 +185,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Software-Verwaltung
 let softwareList = [];
 let userGroupsList = [];

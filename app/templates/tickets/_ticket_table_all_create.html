@@ -111,7 +111,7 @@
     </table>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 function deleteTicket(id) {
     if (!confirm('Möchten Sie dieses Ticket wirklich löschen?')) {
         return;

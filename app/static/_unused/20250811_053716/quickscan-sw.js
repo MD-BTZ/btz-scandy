@@ -1,9 +1,9 @@
 // Service Worker für Scandy Quickscan PWA
-const CACHE_NAME = 'scandy-quickscan-v2';
+const CACHE_NAME = 'scandy-quickscan-v3';
 const urlsToCache = [
   '/mobile/quickscan',
   '/static/css/quickscan.css',
-  '/static/js/quickscan.js',
+  '/static/js/quickscan.js?v=2',
   '/static/images/scandy-logo.png',
   '/static/images/scandy-favicon.png',
   'https://cdn.jsdelivr.net/npm/daisyui@4.10.2/dist/full.css',

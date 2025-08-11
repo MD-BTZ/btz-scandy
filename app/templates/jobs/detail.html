@@ -357,7 +357,7 @@
 </div>
 
 <!-- JavaScript für Kommentare und Löschfunktionen -->
-<script>
+<script nonce="{{ csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     // Kommentar hinzufügen
     const commentForm = document.getElementById('commentForm');

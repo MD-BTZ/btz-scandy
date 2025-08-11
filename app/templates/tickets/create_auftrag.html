@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.0.7/dist/full.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <style>
+    <style nonce="{{ csp_nonce }}">
         body {
             background: linear-gradient(135deg, #f3f4f6 0%, #e0e7ff 100%);
             min-height: 100vh;
@@ -60,8 +60,21 @@
 
                 <form method="POST" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <!-- Titel und Kategorie -->
+                    <!-- Abteilung und Titel/Kategorie -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        {% if current_user.is_authenticated %}
+                        <div class="form-control md:col-span-2">
+                            <label class="label">
+                                <span class="label-text font-semibold">Abteilung</span>
+                            </label>
+                            <select id="target_department" name="target_department" class="select select-bordered w-full">
+                                <option value="">(Aktuelle Abteilung verwenden)</option>
+                                {% for dep in (departments_ctx.allowed or departments.allowed) %}
+                                <option value="{{ dep }}" {% if departments_ctx.current == dep %}selected{% endif %}>{{ dep }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
                         <div class="form-control">
                             <label class="label">
                                 <span class="label-text font-semibold">Auftragstitel *</span>
@@ -73,7 +86,7 @@
                             <label class="label">
                                 <span class="label-text font-semibold">Handlungsfeld *</span>
                             </label>
-                            <select name="category" class="select select-bordered w-full" required>
+                            <select id="category" name="category" class="select select-bordered w-full" required>
                                 <option value="">Handlungsfeld auswählen</option>
                                 {% for cat in categories %}
                                 <option value="{{ cat }}">{{ cat }}</option>
@@ -177,4 +190,27 @@
 {% endif %}
 
 <!-- Tickets JavaScript -->
-<script src="{{ url_for('static', filename='js/tickets.js') }}"></script> 
+<script nonce="{{ csp_nonce }}">
+// Dynamisches Nachladen der Handlungsfelder nach Abteilung
+document.addEventListener('DOMContentLoaded', function(){
+  const deptSelect = document.getElementById('target_department');
+  const catSelect = document.getElementById('category');
+  if (!deptSelect || !catSelect) return;
+  async function refreshCategories(){
+    const dept = deptSelect.value || '';
+    try {
+      const resp = await fetch(`/admin/ticket_categories?dept=${encodeURIComponent(dept)}`, {headers: {'X-Requested-With':'fetch'}});
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data || !Array.isArray(data.categories)) return;
+      const selected = catSelect.value;
+      catSelect.innerHTML = '<option value="">Handlungsfeld auswählen</option>' +
+        data.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      // Versuche Auswahl zu erhalten, falls vorhanden
+      if ([...catSelect.options].some(o => o.value === selected)) catSelect.value = selected;
+    } catch(e) { /* ignore */ }
+  }
+  deptSelect.addEventListener('change', refreshCategories);
+});
+</script>
+<script src="{{ url_for('static', filename='js/tickets.js') }}"></script>

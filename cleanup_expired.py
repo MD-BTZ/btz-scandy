@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Flask-App importieren
 from app import create_app
-from app.services.cleanup_service import CleanupService
+# Altes CleanupService entfällt. Einfaches Skript für delete_at-basierte Bereinigung.
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -30,38 +30,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def main():
-    """Hauptfunktion für die automatische Bereinigung"""
+    """Hauptfunktion für die automatische Bereinigung via TTL/Backstop"""
     try:
-        logger.info("Starte automatische Bereinigung abgelaufener Daten...")
-        
-        # Flask-App erstellen
+        logger.info("Starte automatische Bereinigung abgelaufener Benutzer (delete_at)...")
+
         app = create_app()
-        
         with app.app_context():
-            # Cleanup ausführen
-            results = CleanupService.cleanup_all()
-            
-            if 'error' in results:
-                logger.error(f"Fehler bei der Bereinigung: {results['error']}")
-                return 1
-            
-            # Ergebnisse loggen
-            user_count = results['users']['deleted_count']
-            job_count = results['jobs']['deleted_count']
-            total_count = results['total']['deleted_count']
-            
-            logger.info(f"Bereinigung abgeschlossen:")
-            logger.info(f"  - {user_count} abgelaufene Benutzer gelöscht")
-            logger.info(f"  - {job_count} abgelaufene Jobs gelöscht")
-            logger.info(f"  - Insgesamt {total_count} Einträge bereinigt")
-            
-            if total_count > 0:
-                logger.info("Bereinigung erfolgreich abgeschlossen")
-            else:
-                logger.info("Keine abgelaufenen Daten gefunden")
-            
+            from app.models.mongodb_database import mongodb
+            from datetime import datetime
+
+            now = datetime.now()
+            # Hartes Löschen alter Nutzer als Backstop, falls TTL-Index (delete_at) noch nicht greift
+            deleted_users = mongodb.delete_many('users', {'delete_at': {'$lte': now}})
+            # Zugehörige Worker ebenfalls löschen (Soft Delete, falls gewünscht hart löschen)
+            # Hier: harte Löschung falls delete_at erreicht
+            deleted_workers = mongodb.delete_many('workers', {'delete_at': {'$lte': now}})
+
+            total = deleted_users + deleted_workers
+            logger.info(f"Bereinigung abgeschlossen: users={deleted_users}, workers={deleted_workers}, total={total}")
             return 0
-            
     except Exception as e:
         logger.error(f"Kritischer Fehler bei der Bereinigung: {e}")
         return 1

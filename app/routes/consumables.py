@@ -2,7 +2,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.models.mongodb_database import mongodb, is_feature_enabled
 from app.utils.decorators import admin_required, login_required, mitarbeiter_required, not_teilnehmer_required
-from app.utils.database_helpers import get_categories_from_settings, get_locations_from_settings
+from app.utils.permissions import permission_required
+from app.utils.database_helpers import get_categories_scoped, get_locations_scoped, get_categories_from_settings, get_locations_from_settings
 from datetime import datetime, timedelta
 import logging
 from app.services.consumable_service import ConsumableService
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @bp.route('/')
 @login_required
+@permission_required('consumables', 'view')
 @not_teilnehmer_required
 def index():
     """Zeigt alle Verbrauchsmaterialien an"""
@@ -22,12 +24,16 @@ def index():
         return redirect(url_for('main.index'))
     
     try:
-        # Hole alle Verbrauchsmaterialien
-        consumables = list(mongodb.find('consumables', {}, sort=[('name', 1)]))
+        # Hole alle Verbrauchsmaterialien der aktuellen Abteilung
+        from flask import g
+        filter_query = {}
+        if getattr(g, 'current_department', None):
+            filter_query['department'] = g.current_department
+        consumables = list(mongodb.find('consumables', filter_query, sort=[('name', 1)]))
         
-        # Hole Kategorien und Standorte für Filter
-        categories = get_categories_from_settings()
-        locations = get_locations_from_settings()
+        # Hole Kategorien und Standorte strikt abteilungsgetrennt
+        categories = get_categories_scoped()
+        locations = get_locations_scoped()
         
         return render_template('consumables/index.html',
                              consumables=consumables,
@@ -40,10 +46,20 @@ def index():
 
 @bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('consumables', 'create')
 def add():
     """Fügt ein neues Verbrauchsmaterial hinzu"""
     if request.method == 'POST':
         try:
+            from flask import g
+            if not getattr(g, 'current_department', None):
+                flash('Bitte Abteilung wählen, bevor Sie ein Verbrauchsmaterial anlegen', 'error')
+                categories = get_categories_scoped()
+                locations = get_locations_scoped()
+                return render_template('consumables/add.html', 
+                                     categories=categories, 
+                                     locations=locations,
+                                     form_data=request.form)
             data = {
                 'name': request.form.get('name'),
                 'barcode': request.form.get('barcode'),
@@ -62,8 +78,8 @@ def add():
                     data['custom_fields'] = custom_values
                 else:
                     flash(f'Fehler bei benutzerdefinierten Feldern: {error_msg}', 'error')
-                    categories = get_categories_from_settings()
-                    locations = get_locations_from_settings()
+                    categories = get_categories_scoped()
+                    locations = get_locations_scoped()
                     return render_template('consumables/add.html', 
                                          categories=categories, 
                                          locations=locations,
@@ -83,14 +99,15 @@ def add():
             flash('Fehler beim Hinzufügen des Verbrauchsmaterials', 'error')
     
     # GET-Anfrage: Formular anzeigen
-    categories = get_categories_from_settings()
-    locations = get_locations_from_settings()
+    categories = get_categories_scoped()
+    locations = get_locations_scoped()
     return render_template('consumables/add.html', 
                        categories=categories, 
                        locations=locations)
 
 @bp.route('/<string:barcode>', methods=['GET', 'POST'])
 @login_required
+@permission_required('consumables', 'edit')
 def detail(barcode):
     """Zeigt die Details eines Verbrauchsmaterials und verarbeitet Updates"""
     if request.method == 'POST':
@@ -126,8 +143,8 @@ def detail(barcode):
         flash('Verbrauchsmaterial nicht gefunden', 'error')
         return redirect(url_for('consumables.index'))
     
-    categories = get_categories_from_settings()
-    locations = get_locations_from_settings()
+    categories = get_categories_scoped()
+    locations = get_locations_scoped()
     usages = ConsumableService.get_consumable_usages(barcode)
     
     # Erstelle Verlaufsliste
@@ -161,6 +178,7 @@ def detail(barcode):
 
 @bp.route('/<barcode>/adjust-stock', methods=['POST'])
 @login_required
+@permission_required('consumables', 'edit')
 def adjust_stock(barcode):
     """Passt den Bestand eines Verbrauchsmaterials an"""
     try:
@@ -179,6 +197,7 @@ def adjust_stock(barcode):
 
 @bp.route('/<barcode>/delete', methods=['DELETE'])
 @login_required
+@permission_required('consumables', 'delete')
 def delete(barcode):
     """Löscht ein Verbrauchsmaterial"""
     try:
@@ -193,6 +212,7 @@ def delete(barcode):
 
 @bp.route('/<barcode>/forecast')
 @login_required
+@permission_required('consumables', 'view')
 def forecast(barcode):
     """Zeigt eine Vorhersage für ein Verbrauchsmaterial an"""
     try:
@@ -207,6 +227,7 @@ def forecast(barcode):
 
 @bp.route('/export')
 @login_required
+@permission_required('consumables', 'export')
 def export():
     """Exportiert alle Verbrauchsmaterialien als CSV"""
     try:

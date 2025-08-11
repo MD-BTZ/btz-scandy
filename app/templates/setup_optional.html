@@ -109,7 +109,7 @@
     </form>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 function addInputField(button, name) {
     const container = button.parentElement;
     const newInput = document.createElement('div');

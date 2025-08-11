@@ -30,7 +30,7 @@
             </label>
             <input type="week" name="week" class="input input-bordered w-full max-w-xs" required value="{{ ts and ts.year ~ '-W' ~ '%02d'|format(ts.kw) or '' }}">
         </div>
-        <style>
+        <style nonce="{{ csp_nonce }}">
             /* Aktives Tab einfärben */
             input[name="tab-days"]:checked + label.tab {
                 background-color: #2563eb; /* Tailwind bg-primary */
@@ -87,7 +87,7 @@
         </div>
     </form>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
 // Tabs umschalten
 const tabs = document.querySelectorAll('input[name="tab-days"]');
 const panels = document.querySelectorAll('.tab-content');

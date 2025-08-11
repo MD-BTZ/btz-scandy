@@ -78,7 +78,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 // QuickScan-Button für nicht eingeloggte Nutzer deaktivieren
 window.addEventListener('DOMContentLoaded', function() {
     var trigger = document.getElementById('quickScanTrigger');

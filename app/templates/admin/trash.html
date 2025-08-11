@@ -188,7 +188,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 function restoreItem(type, barcode) {
     if (confirm('Möchten Sie diesen Eintrag wirklich wiederherstellen?')) {
         fetch(`/admin/trash/restore/${type}/${barcode}`, {

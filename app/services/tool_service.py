@@ -4,7 +4,7 @@ Alle Werkzeug-Funktionalitäten an einem Ort
 """
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
-from flask import current_app
+from flask import current_app, g
 from app.models.mongodb_database import mongodb
 from app.services.lending_service import LendingService
 from app.services.utility_service import UtilityService
@@ -40,7 +40,10 @@ class ToolService:
             List: Liste aller Werkzeuge
         """
         try:
-            tools = list(mongodb.find('tools', {'deleted': {'$ne': True}}))
+            query = {'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                query['department'] = g.current_department
+            tools = list(mongodb.find('tools', query))
             
             # Datetime-Felder konvertieren und zusätzliche Informationen hinzufügen
             processed_tools = []
@@ -107,7 +110,10 @@ class ToolService:
             Optional[Dict]: Werkzeug-Daten oder None
         """
         try:
-            tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
+            query = {'barcode': barcode, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                query['department'] = g.current_department
+            tool = mongodb.find_one('tools', query)
             if tool:
                 tool = self._convert_datetime_fields(tool)
                 tool['id'] = str(tool['_id'])
@@ -129,6 +135,9 @@ class ToolService:
         """
         try:
             # Validierung
+            dept = getattr(g, 'current_department', None)
+            if not dept:
+                return False, 'Bitte Abteilung wählen, bevor Sie ein Werkzeug anlegen', None
             if not tool_data.get('name'):
                 return False, 'Name ist erforderlich', None
             
@@ -137,8 +146,11 @@ class ToolService:
             
             barcode = tool_data['barcode']
             
-            # Prüfe ob der Barcode bereits existiert
-            existing_tool = mongodb.find_one('tools', {'barcode': barcode, 'deleted': {'$ne': True}})
+            # Prüfe ob der Barcode bereits existiert (nur innerhalb der aktuellen Abteilung)
+            uniqueness_query = {'barcode': barcode, 'deleted': {'$ne': True}}
+            if dept:
+                uniqueness_query['department'] = dept
+            existing_tool = mongodb.find_one('tools', uniqueness_query)
             if existing_tool:
                 return False, 'Dieser Barcode existiert bereits', None
             
@@ -156,6 +168,7 @@ class ToolService:
                 'mac_address_wlan': tool_data.get('mac_address_wlan', ''),
                 'user_groups': tool_data.get('user_groups', []),
                 'additional_software': tool_data.get('additional_software', []),
+                'department': dept,
                 'created_at': datetime.now(),
                 'modified_at': datetime.now(),
                 'deleted': False
@@ -195,7 +208,10 @@ class ToolService:
             new_barcode = tool_data.get('barcode')
             if new_barcode and new_barcode != barcode:
                 # Prüfe ob der neue Barcode bereits existiert
-                existing_tool = mongodb.find_one('tools', {'barcode': new_barcode, 'deleted': {'$ne': True}})
+                existing_query = {'barcode': new_barcode, 'deleted': {'$ne': True}}
+                if getattr(g, 'current_department', None):
+                    existing_query['department'] = g.current_department
+                existing_tool = mongodb.find_one('tools', existing_query)
                 if existing_tool:
                     return False, f'Der Barcode "{new_barcode}" existiert bereits', barcode
             else:
@@ -238,7 +254,10 @@ class ToolService:
                 update_data['barcode'] = new_barcode
             
             # Update durchführen
-            mongodb.update_one('tools', {'barcode': barcode}, {'$set': update_data})
+            filter_query = {'barcode': barcode}
+            if getattr(g, 'current_department', None):
+                filter_query['department'] = g.current_department
+            mongodb.update_one('tools', filter_query, {'$set': update_data})
             
             logger.info(f"Werkzeug aktualisiert: {barcode} -> {new_barcode}")
             return True, 'Werkzeug erfolgreich aktualisiert', new_barcode
@@ -270,7 +289,10 @@ class ToolService:
             
             if permanent:
                 # Permanente Löschung
-                mongodb.delete_one('tools', {'barcode': barcode})
+                delete_query = {'barcode': barcode}
+                if getattr(g, 'current_department', None):
+                    delete_query['department'] = g.current_department
+                mongodb.delete_one('tools', delete_query)
                 # Auch alle zugehörigen Ausleihen löschen
                 mongodb.delete_many('lendings', {'tool_barcode': barcode})
                 
@@ -278,8 +300,11 @@ class ToolService:
                 return True, 'Werkzeug permanent gelöscht'
             else:
                 # Soft-Delete
+                soft_filter = {'barcode': barcode}
+                if getattr(g, 'current_department', None):
+                    soft_filter['department'] = g.current_department
                 mongodb.update_one('tools', 
-                                 {'barcode': barcode}, 
+                                 soft_filter, 
                                  {'$set': {
                                      'deleted': True,
                                      'deleted_at': datetime.now()
@@ -317,8 +342,11 @@ class ToolService:
                 return False, 'Ein ausgeliehenes Werkzeug kann nicht als defekt markiert werden'
             
             # Status aktualisieren
+            filter_query = {'barcode': barcode}
+            if getattr(g, 'current_department', None):
+                filter_query['department'] = g.current_department
             mongodb.update_one('tools', 
-                             {'barcode': barcode}, 
+                             filter_query, 
                              {'$set': {'status': new_status, 'modified_at': datetime.now()}})
             
             logger.info(f"Werkzeug-Status geändert: {barcode} -> {new_status}")
@@ -414,6 +442,8 @@ class ToolService:
                 ]
             }
             
+            if getattr(g, 'current_department', None):
+                search_query['department'] = g.current_department
             tools = list(mongodb.find('tools', search_query))
             
             # Datetime-Felder konvertieren
@@ -438,10 +468,10 @@ class ToolService:
             List: Liste der Werkzeuge in der Kategorie
         """
         try:
-            tools = list(mongodb.find('tools', {
-                'category': category,
-                'deleted': {'$ne': True}
-            }))
+            query = {'category': category, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                query['department'] = g.current_department
+            tools = list(mongodb.find('tools', query))
             
             # Datetime-Felder konvertieren
             for tool in tools:
@@ -465,10 +495,10 @@ class ToolService:
             List: Liste der Werkzeuge am Standort
         """
         try:
-            tools = list(mongodb.find('tools', {
-                'location': location,
-                'deleted': {'$ne': True}
-            }))
+            query = {'location': location, 'deleted': {'$ne': True}}
+            if getattr(g, 'current_department', None):
+                query['department'] = g.current_department
+            tools = list(mongodb.find('tools', query))
             
             # Datetime-Felder konvertieren
             for tool in tools:
@@ -502,10 +532,10 @@ class ToolService:
                 return borrowed_tools
             else:
                 # Für andere Status direkt in der tools Collection suchen
-                tools = list(mongodb.find('tools', {
-                    'status': status,
-                    'deleted': {'$ne': True}
-                }))
+                query = {'status': status, 'deleted': {'$ne': True}}
+                if getattr(g, 'current_department', None):
+                    query['department'] = g.current_department
+                tools = list(mongodb.find('tools', query))
                 
                 # Datetime-Felder konvertieren
                 for tool in tools:

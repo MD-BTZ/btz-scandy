@@ -278,7 +278,7 @@
     {% endif %}
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 'use strict';
 
 // Namespace für die manuelle Ausleihe
@@ -610,7 +610,7 @@ function returnTool(barcode) {
 }
 </script>
 
-<style>
+<style nonce="{{ csp_nonce }}">
 /* Aktiver Button-Zustand */
 .btn-active {
     @apply bg-primary text-primary-content;

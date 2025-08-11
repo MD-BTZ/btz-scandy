@@ -1,7 +1,9 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, abort, send_file, render_template_string, current_app
 from app.models.mongodb_models import MongoDBTicket
 from app.models.mongodb_database import mongodb, is_feature_enabled
+from flask import g
 from app.utils.decorators import login_required, admin_required, not_teilnehmer_required
+from app.utils.permissions import permission_required
 from app.utils.database_helpers import get_ticket_categories_from_settings, get_categories_from_settings, get_next_ticket_number, get_departments_from_settings
 from app.models.user import User
 from app.services.ticket_service import TicketService
@@ -31,6 +33,16 @@ def check_ticket_permission(ticket, username, role):
     if role == 'admin':
         return True
     
+    # Department-Gleichheit prüfen: Ticket muss in gleicher Abteilung liegen (falls gesetzt)
+    try:
+        current_dept = getattr(g, 'current_department', None)
+        if current_dept:
+            ticket_dept = ticket.get('department')
+            if ticket_dept and ticket_dept != current_dept:
+                return False
+    except Exception:
+        pass
+
     # Erstellt von dem Benutzer
     if ticket.get('created_by') == username:
         return True
@@ -147,6 +159,7 @@ def find_document_by_id(collection: str, id_value: str):
 
 @bp.route('/debug/tickets')
 @login_required
+@permission_required('tickets', 'view')
 def debug_tickets():
     """Debug-Route um alle Tickets anzuzeigen"""
     try:
@@ -173,6 +186,7 @@ def debug_tickets():
 
 @bp.route('/debug/test-ticket/<ticket_id>')
 @login_required
+@permission_required('tickets', 'view')
 def test_ticket(ticket_id):
     """Testet das Finden eines spezifischen Tickets"""
     try:
@@ -220,6 +234,7 @@ def test_ticket(ticket_id):
 
 @bp.route('/debug/normalize-ticket-ids')
 @login_required
+@permission_required('tickets', 'view')
 def normalize_ticket_ids():
     """Normalisiert alle Ticket-IDs zu Strings"""
     try:
@@ -319,6 +334,7 @@ def normalize_all_ids():
 
 @bp.route('/debug/test-update-ticket/<ticket_id>')
 @login_required
+@permission_required('tickets', 'edit')
 def test_update_ticket(ticket_id):
     """Testet die update_ticket-Route mit einer spezifischen Ticket-ID"""
     try:
@@ -351,6 +367,7 @@ def test_update_ticket(ticket_id):
 
 @bp.route('/debug/test-mongodb')
 @login_required
+@permission_required('tickets', 'view')
 def test_mongodb():
     """Testet die MongoDB-Verbindung und -Operationen"""
     try:
@@ -385,6 +402,7 @@ def test_mongodb():
 
 @bp.route('/debug/test-specific-ticket/<ticket_id>')
 @login_required
+@permission_required('tickets', 'view')
 def test_specific_ticket(ticket_id):
     """Testet eine spezifische Ticket-ID mit allen Methoden"""
     try:
@@ -439,6 +457,7 @@ def test_specific_ticket(ticket_id):
 
 @bp.route('/debug/test-update-operation/<ticket_id>')
 @login_required
+@permission_required('tickets', 'edit')
 def test_update_operation(ticket_id):
     """Testet die Update-Operation für ein spezifisches Ticket"""
     try:
@@ -626,6 +645,7 @@ def analyze_ticket(ticket_id):
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
+@permission_required('tickets', 'create')
 def create():
     """Erstellt ein neues Ticket"""
     # Prüfe ob Ticketsystem aktiviert ist
@@ -763,6 +783,7 @@ def create():
 
 @bp.route('/view/<ticket_id>')
 @login_required
+@permission_required('tickets', 'view')
 def view(ticket_id):
     """Zeigt die Details eines Tickets für den Benutzer."""
     logging.info(f"Lade Ticket {ticket_id} für Benutzer {current_user.username}")
@@ -901,6 +922,7 @@ def view(ticket_id):
 
 @bp.route('/<ticket_id>/messages')
 @login_required
+@permission_required('tickets', 'view')
 def get_ticket_messages(ticket_id):
     """Lädt Nachrichten für ein Ticket"""
     logging.info(f"get_ticket_messages aufgerufen für Ticket {ticket_id}")
@@ -944,6 +966,7 @@ def get_ticket_messages(ticket_id):
 
 @bp.route('/<ticket_id>/add-message', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 def add_message(ticket_id):
     """Fügt eine neue Nachricht zu einem Ticket hinzu"""
     try:
@@ -1012,6 +1035,7 @@ def add_message(ticket_id):
 
 @bp.route('/<id>')
 @login_required
+@permission_required('tickets', 'view')
 def detail(id):
     """Zeigt die Details eines Tickets."""
     try:
@@ -1101,6 +1125,7 @@ def detail(id):
 
 @bp.route('/<id>/delete', methods=['POST'])
 @login_required
+@permission_required('tickets', 'delete')
 def delete(id):
     """Löscht ein Ticket."""
     try:
@@ -1144,6 +1169,7 @@ def delete(id):
 
 @bp.route('/<id>/auftrag-details-modal')
 @login_required
+@permission_required('tickets', 'view')
 def auftrag_details_modal(id):
     try:
         # Robuste ID-Behandlung für verschiedene ID-Typen
@@ -1198,6 +1224,7 @@ def auftrag_details_modal(id):
 
 @bp.route('/<id>/update-status', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 def update_status(id):
     """Aktualisiert den Status eines Tickets und weist es ggf. automatisch zu"""
     try:
@@ -1280,6 +1307,7 @@ def update_status(id):
 
 @bp.route('/<id>/update-assignment', methods=['POST'])
 @login_required
+@permission_required('tickets', 'assign')
 def update_assignment(id):
     """Aktualisiert die Zuweisung eines Tickets (unterstützt Mehrfachzuweisungen)"""
     try:
@@ -1360,6 +1388,7 @@ def update_assignment(id):
 
 @bp.route('/<id>/update-due-date', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 def update_due_date(id):
     """Aktualisiert das Fälligkeitsdatum eines Tickets"""
     try:
@@ -1418,6 +1447,7 @@ def update_due_date(id):
 
 @bp.route('/<id>/update-details', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 def update_details(id):
     """Aktualisiert die Auftragsdetails eines Tickets"""
     try:
@@ -1639,6 +1669,7 @@ def update_details(id):
 
 @bp.route('/<id>/export')
 @login_required
+@permission_required('tickets', 'export')
 @admin_required
 def export_ticket(id):
     """Exportiert das Ticket als ausgefülltes Word-Dokument."""
@@ -1784,6 +1815,7 @@ def export_ticket(id):
 
 @bp.route('/<id>/note', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 @admin_required
 def add_note(id):
     """Fügt eine neue Notiz zu einem Ticket hinzu"""
@@ -1834,20 +1866,46 @@ def add_note(id):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 def get_unassigned_ticket_count():
-    count = mongodb.count_documents('tickets', {
-        '$and': [
-            {
-                '$or': [
-                    {'assigned_to': None},
-                    {'assigned_to': ''},
-                    {'assigned_to': {'$exists': False}}
-                ]
-            },
-            {'status': 'offen'},
-            {'deleted': {'$ne': True}}
-        ]
-    })
-    return count
+    """Zählt offene, nicht zugewiesene Tickets nur im aktuellen Department,
+    die der eingeloggte Nutzer sehen darf."""
+    try:
+        from flask import g
+        from flask_login import current_user
+        # Basis-Filter
+        filter_query = {
+            '$and': [
+                {
+                    '$or': [
+                        {'assigned_to': None},
+                        {'assigned_to': ''},
+                        {'assigned_to': {'$exists': False}}
+                    ]
+                },
+                {'status': 'offen'},
+                {'deleted': {'$ne': True}}
+            ]
+        }
+        # Department-Filter anwenden
+        current_dept = getattr(g, 'current_department', None)
+        if current_dept:
+            filter_query['department'] = current_dept
+
+        # Sichtbarkeit nach Rolle einschränken
+        if getattr(current_user, 'role', None) != 'admin':
+            username = getattr(current_user, 'username', None)
+            role = getattr(current_user, 'role', None)
+            # Sichtbare Tickets für Nicht‑Admins: eigene, zugewiesene oder in erlaubten Bereichen
+            or_visibility = [
+                {'created_by': username},
+                {'assigned_to': username},
+            ]
+            if role:
+                or_visibility.append({'visible_roles': role})
+            filter_query['$and'].append({'$or': or_visibility})
+
+        return mongodb.count_documents('tickets', filter_query)
+    except Exception:
+        return 0
 
 # Kontextprozessor für alle Templates
 @bp.app_context_processor
@@ -1857,6 +1915,7 @@ def inject_unread_tickets_count():
 
 @bp.route('/auftrag-neu', methods=['GET', 'POST'])
 @login_required
+@permission_required('tickets', 'view')
 def public_create_order():
     """Interne Auftragserstellung für eingeloggte Benutzer."""
     if request.method == 'GET':
@@ -1891,6 +1950,11 @@ def _handle_auftrag_creation(external=False):
             kontakt = request.form.get('kontakt', '')  # Kontaktdaten
             bereich = request.form.get('bereich', '')  # Bereich
             auftraggeber_typ = request.form.get('auftraggeber_typ', 'extern')  # Intern/Extern
+            # Ziel-Abteilung (optional, nur intern relevant)
+            target_department = request.form.get('target_department')
+            current_dept = getattr(g, 'current_department', None)
+            if target_department == '':
+                target_department = None
             
             # Validiere die Pflichtfelder
             if not title:
@@ -1933,7 +1997,8 @@ def _handle_auftrag_creation(external=False):
                 'created_at': datetime.now(),
                 'updated_at': datetime.now(),
                 'ticket_number': get_next_ticket_number(),  # Neue Auftragsnummer
-                'is_external': not current_user.is_authenticated  # Markiere externe Aufträge
+                'is_external': not current_user.is_authenticated,  # Markiere externe Aufträge
+                'department': (target_department or current_dept)
             }
             
             result = mongodb.insert_one('tickets', ticket_data)
@@ -2006,6 +2071,7 @@ def _handle_auftrag_creation(external=False):
 
 @bp.route('/<id>/auftrag-details')
 @login_required
+@permission_required('tickets', 'view')
 def auftrag_details_page(id):
     try:
         # Robuste ID-Behandlung für verschiedene ID-Typen
@@ -2097,6 +2163,7 @@ def auftrag_details_page(id):
 
 @bp.route('/<id>/update-ticket', methods=['POST'])
 @login_required
+@permission_required('tickets', 'edit')
 def update_ticket(id):
     """Aktualisiert die grundlegenden Ticket-Details wie estimated_time, category, due_date"""
     try:
@@ -2233,6 +2300,7 @@ def update_ticket(id):
 
 @bp.route('/debug/unassigned-tickets')
 @login_required
+@permission_required('tickets', 'view')
 def debug_unassigned_tickets():
     """Debug-Route um nicht zugewiesene Tickets anzuzeigen"""
     try:

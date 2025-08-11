@@ -11,9 +11,9 @@ import json
 from typing import Dict, List, Any, Optional, Union
 import os
 import time
+from flask import g
 
-# Logger deaktiviert für Gunicorn-Kompatibilität
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 class MongoDBDatabase:
     """MongoDB-Datenbankklasse für Scandy"""
@@ -69,6 +69,60 @@ class MongoDBDatabase:
         if self._db is None:
             self._connect()
         return self._db[collection_name]
+
+    # --- Multi-Department Scoping (abwärtskompatibel) ---
+    _SCOPED_COLLECTIONS = {
+        'tools', 'consumables', 'workers', 'lendings', 'consumable_usages',
+        'tickets', 'messages', 'ticket_history', 'timesheets', 'homepage_notices',
+        'settings',
+        # Neue referenzielle Collections pro Abteilung
+        'locations', 'categories', 'ticket_categories'
+    }
+
+    @staticmethod
+    def _get_current_department() -> Optional[str]:
+        try:
+            return getattr(g, 'current_department', None)
+        except Exception:
+            return None
+
+    @classmethod
+    def _augment_filter_with_department(cls, collection_name: str, base_filter: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Erzwingt Department-Scoping für lesende/ändernde Operationen.
+        Abwärtskompatibel: Matcht auch Dokumente ohne 'department'-Feld.
+        """
+        if collection_name not in cls._SCOPED_COLLECTIONS:
+            return base_filter or {}
+        # Sonderfall: globale Settings (departments) sind NICHT gescoped
+        try:
+            if collection_name == 'settings' and isinstance(base_filter, dict):
+                key_val = base_filter.get('key')
+                if key_val == 'departments' or (isinstance(key_val, dict) and key_val.get('$regex') == '^departments$'):
+                    return base_filter or {}
+        except Exception:
+            pass
+        current_department = cls._get_current_department()
+        if not current_department:
+            # Ohne gesetztes Department: alle Dokumente zulassen (Legacy-Modus)
+            return base_filter or {}
+        scoped_clause = {'$or': [
+            {'department': current_department},
+            {'department': {'$exists': False}}
+        ]}
+        if not base_filter:
+            return scoped_clause
+        # Kombiniere mit AND
+        return {'$and': [base_filter, scoped_clause]}
+
+    @classmethod
+    def _ensure_department_on_insert(cls, collection_name: str, document: Dict[str, Any]) -> Dict[str, Any]:
+        if collection_name not in cls._SCOPED_COLLECTIONS:
+            return document
+        current_department = cls._get_current_department()
+        if current_department and 'department' not in document:
+            document['department'] = current_department
+        return document
     
     def insert_one(self, collection_name: str, document: Dict[str, Any]) -> str:
         """Fügt ein Dokument in eine Collection ein"""
@@ -77,6 +131,9 @@ class MongoDBDatabase:
         # Timestamps hinzufügen
         document['created_at'] = datetime.now()
         document['updated_at'] = datetime.now()
+
+        # Department setzen (falls relevant)
+        document = self._ensure_department_on_insert(collection_name, document)
         
         result = collection.insert_one(document)
         return str(result.inserted_id)
@@ -89,6 +146,7 @@ class MongoDBDatabase:
         for doc in documents:
             doc['created_at'] = datetime.now()
             doc['updated_at'] = datetime.now()
+            doc = self._ensure_department_on_insert(collection_name, doc)
         
         result = collection.insert_many(documents)
         return [str(id) for id in result.inserted_ids]
@@ -99,6 +157,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.find_one(processed_filter)
         
@@ -118,6 +178,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         cursor = collection.find(processed_filter)
         
@@ -145,6 +207,8 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         # Prüfe ob update_dict bereits MongoDB-Operatoren enthält
         has_operators = any(key.startswith('$') for key in update_dict.keys())
@@ -161,6 +225,16 @@ class MongoDBDatabase:
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
         try:
+            # Bei Upsert in gescopten Collections sicherstellen, dass 'department' gesetzt wird
+            if upsert and collection_name in self._SCOPED_COLLECTIONS:
+                current_department = self._get_current_department()
+                # Nicht für globale Settings 'departments'
+                is_global_departments = (collection_name == 'settings' and isinstance(filter_dict, dict) and filter_dict.get('key') == 'departments')
+                if current_department and not is_global_departments:
+                    if '$set' in update_dict:
+                        update_dict['$set']['department'] = current_department
+                    else:
+                        update_dict = {'$set': {**update_dict, 'department': current_department}}
             result = collection.update_one(processed_filter, update_dict, upsert=upsert)
             
             # Debug-Logs für bessere Fehlerdiagnose
@@ -234,7 +308,10 @@ class MongoDBDatabase:
             # Erstelle $set Modifier falls nicht vorhanden
             update_dict = {'$set': {**update_dict, 'updated_at': datetime.now()}}
         
-        result = collection.update_many(filter_dict, update_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
+        result = collection.update_many(processed_filter, update_dict)
         return result.modified_count
     
     def delete_one(self, collection_name: str, filter_dict: Dict[str, Any]) -> bool:
@@ -243,6 +320,7 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.delete_one(processed_filter)
         return result.deleted_count > 0
@@ -253,6 +331,7 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         result = collection.delete_many(processed_filter)
         return result.deleted_count
@@ -266,12 +345,21 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         return collection.count_documents(processed_filter)
     
     def aggregate(self, collection_name: str, pipeline: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Führt eine Aggregation-Pipeline aus"""
         collection = self.get_collection(collection_name)
+        # Department-Scoping vorschalten (abwärtskompatibel)
+        current_department = self._get_current_department()
+        if collection_name in self._SCOPED_COLLECTIONS and current_department:
+            scoped_match = {'$match': {'$or': [
+                {'department': current_department},
+                {'department': {'$exists': False}}
+            ]}}
+            pipeline = [scoped_match] + (pipeline or [])
         cursor = collection.aggregate(pipeline)
         
         results = []
@@ -291,27 +379,46 @@ class MongoDBDatabase:
         
         # Konvertiere String-IDs zu ObjectIds in filter_dict
         processed_filter = self._process_filter_ids(filter_dict)
+        # Department-Scoping anwenden
+        processed_filter = self._augment_filter_with_department(collection_name, processed_filter)
         
         return list(collection.distinct(field, processed_filter))
     
-    def create_index(self, collection_name: str, field: str, unique: bool = False, sparse: bool = False):
-        """Erstellt einen Index für eine Collection"""
+    def create_index(self, collection_name: str, field: Union[str, List[tuple]], unique: bool = False, sparse: bool = False, expire_after_seconds: Optional[int] = None):
+        """Erstellt einen Index für eine Collection.
+        Unterstützt auch TTL-Indizes via expire_after_seconds.
+        """
         collection = self.get_collection(collection_name)
         try:
-            # Prüfe ob Index bereits existiert
-            existing_indexes = collection.list_indexes()
-            index_name = f"{field}_1"
-            
-            for index in existing_indexes:
-                if index['name'] == index_name:
-                    # Index existiert bereits, überspringe
-                    return
-            
-            # Erstelle Index nur wenn er nicht existiert
-            collection.create_index(field, unique=unique, sparse=sparse)
+            # Versuche vorhandene Indizes zu finden (Best effort; bei Compound stimmt der einfache Name evtl. nicht)
+            try:
+                existing_indexes = list(collection.list_indexes())
+            except Exception:
+                existing_indexes = []
+
+            # Bestimme einen erwarteten Namen nur für Single-Field-Strings
+            expected_name = None
+            if isinstance(field, str):
+                expected_name = f"{field}_1"
+
+            if expected_name:
+                for index in existing_indexes:
+                    if index.get('name') == expected_name:
+                        return
+
+            # Index erstellen (TTL falls expire_after_seconds gesetzt ist)
+            collection.create_index(
+                field,
+                unique=unique,
+                sparse=sparse,
+                expireAfterSeconds=expire_after_seconds if expire_after_seconds is not None else None
+            )
         except Exception as e:
-            # Ignoriere Fehler wenn Index bereits existiert
-            if "already exists" not in str(e) and "IndexKeySpecsConflict" not in str(e):
+            # Ignoriere bekannte Konflikte
+            message = str(e)
+            if ("already exists" not in message and 
+                "IndexKeySpecsConflict" not in message and 
+                "InvalidIndexSpecificationOption" not in message):
                 raise e
     
     def drop_collection(self, collection_name: str):
