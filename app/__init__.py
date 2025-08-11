@@ -409,7 +409,18 @@ def create_app(test_config=None):
 
     # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
-    
+    # Nach Blueprint-Registrierung: nur Login und Reset-Password von CSRF ausnehmen
+    # (vermeidet Zirkularimporte und hält übrige Auth-Routen geschützt)
+    try:
+        login_view = app.view_functions.get('auth.login')
+        reset_view = app.view_functions.get('auth.reset_password')
+        if login_view:
+            csrf.exempt(login_view)
+        if reset_view:
+            csrf.exempt(reset_view)
+        logging.info("CSRF-Ausnahme gesetzt für 'auth.login' und 'auth.reset_password'")
+    except Exception as e:
+        logging.warning(f"Konnte CSRF-Exemptions nicht setzen: {e}")
 
     
     # ===== AUTOMATISCHES BACKUP-SYSTEM STARTEN =====

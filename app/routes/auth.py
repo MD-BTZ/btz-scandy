@@ -7,7 +7,6 @@ import secrets
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 @bp.route('/reset_password', methods=['GET', 'POST'])
-@csrf.exempt
 def reset_password():
     if request.method == 'POST':
         username_or_email = (request.form.get('username') or '').strip()
@@ -80,10 +79,9 @@ def get_objectid_if_possible(id_value):
             return id_value
     return id_value
 
-from app import csrf
+ 
 
 @bp.route('/login', methods=['GET', 'POST'])
-@csrf.exempt
 def login():
     """
     Benutzeranmeldung.
