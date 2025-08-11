@@ -1,3 +1,29 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from app.models.mongodb_database import mongodb
+from werkzeug.security import generate_password_hash
+import secrets
+
+bp = Blueprint('auth', __name__)
+
+@bp.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        username_or_email = (request.form.get('username') or '').strip()
+        if not username_or_email:
+            flash('Bitte Benutzername oder E-Mail eingeben', 'error')
+            return render_template('auth/reset_password.html')
+        # User suchen per username oder email
+        user = mongodb.find_one('users', {'username': username_or_email}) or mongodb.find_one('users', {'email': username_or_email})
+        if not user:
+            flash('Kein Benutzer gefunden', 'error')
+            return render_template('auth/reset_password.html')
+        # Temporäres Passwort generieren
+        temp_pw = secrets.token_urlsafe(10)
+        mongodb.update_one('users', {'_id': user['_id']}, {'$set': {'password_hash': generate_password_hash(temp_pw)}})
+        flash(f'Das Passwort wurde zurückgesetzt. Neues Passwort: {temp_pw}', 'success')
+        return redirect(url_for('auth.login'))
+    return render_template('auth/reset_password.html')
 """
 Authentifizierung und Benutzerverwaltung
 
