@@ -268,7 +268,7 @@
 {% endblock %}
 
 <!-- Barcode Scanner Script -->
-<script>
+<script nonce="{{ csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     // Fokus auf Barcode-Feld setzen
     document.querySelector('input[name="barcode"]').focus();

@@ -210,7 +210,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 document.getElementById('messageForm').addEventListener('submit', function(e) {
     e.preventDefault();
     

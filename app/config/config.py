@@ -207,7 +207,8 @@ class ProductionConfig(Config):
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',
         'X-XSS-Protection': '1; mode=block',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'",
+        # CSP mit Nonce-Unterstützung. Templates sollten nonce="{{ csp_nonce }}" an Script-/Style-Tags setzen.
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'nonce-{nonce}' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'",
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         'Permissions-Policy': 'geolocation=(), microphone=(), camera=()'
     }
@@ -228,11 +229,19 @@ class ProductionConfig(Config):
             app.config['SESSION_COOKIE_SECURE'] = False
             app.config['REMEMBER_COOKIE_SECURE'] = False
         
-        # Security Headers hinzufügen
+        # Security Headers hinzufügen (CSP Nonce einsetzen)
         @app.after_request
         def add_security_headers(response):
             for header, value in cls.SECURITY_HEADERS.items():
-                response.headers[header] = value
+                if header == 'Content-Security-Policy':
+                    try:
+                        from flask import g
+                        nonce = getattr(g, 'csp_nonce', '')
+                        response.headers[header] = value.format(nonce=nonce)
+                    except Exception:
+                        response.headers[header] = value.replace("{nonce}", "")
+                else:
+                    response.headers[header] = value
             return response
         
         # HTTPS-Umleitung für Produktion
@@ -242,6 +251,16 @@ class ProductionConfig(Config):
                 if not request.is_secure and request.headers.get('X-Forwarded-Proto', 'http') == 'http':
                     url = request.url.replace('http://', 'https://', 1)
                     return redirect(url, code=301)
+
+        # CSP Nonce pro Request erzeugen
+        @app.before_request
+        def set_csp_nonce():
+            try:
+                import secrets as _secrets
+                from flask import g
+                g.csp_nonce = _secrets.token_urlsafe(16)
+            except Exception:
+                pass
 
 # Konfigurationen
 config = {

@@ -170,7 +170,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Einfache JavaScript-Funktionen für Auftragsdetails
 function addMaterialRow() {
     console.log('addMaterialRow aufgerufen');

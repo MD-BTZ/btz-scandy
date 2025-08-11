@@ -2,7 +2,7 @@
 
 {% block head %}
     <!-- Lending Service -->
-    <script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -106,7 +106,7 @@
     </div>
 
     {% if not config.SERVER_MODE %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         function syncNow() {
             fetch('/api/sync', {
                 method: 'POST',

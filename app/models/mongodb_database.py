@@ -72,7 +72,7 @@ class MongoDBDatabase:
 
     # --- Multi-Department Scoping (abwärtskompatibel) ---
     _SCOPED_COLLECTIONS = {
-        'tools', 'consumables', 'workers', 'lendings', 'consumable_usage',
+        'tools', 'consumables', 'workers', 'lendings', 'consumable_usages',
         'tickets', 'messages', 'ticket_history', 'timesheets', 'homepage_notices',
         'settings',
         # Neue referenzielle Collections pro Abteilung

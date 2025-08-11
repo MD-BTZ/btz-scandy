@@ -180,6 +180,7 @@ def login():
     return render_template('auth/login.html')
 
 @bp.route('/debug/users')
+@login_required
 def debug_users():
     """Debug-Route um alle Benutzer anzuzeigen"""
     try:
@@ -293,8 +294,8 @@ def setup():
 @bp.route('/setup-api', methods=['POST'])
 def setup_api():
     """
-    API-Endpunkt für Setup ohne CSRF-Schutz.
-    Nur für interne Verwendung.
+    API-Endpunkt für Setup (CSRF-geschützt durch globale Konfiguration).
+    Nur für die Ersteinrichtung, wenn kein Admin existiert.
     """
     if not needs_setup():
         return jsonify({'success': False, 'message': 'Setup bereits abgeschlossen'}), 400
@@ -482,7 +483,9 @@ def profile():
         try:
             # ===== DEBUG: Formulardaten loggen =====
             logger.info(f"DEBUG: Profile-Update für User: {current_user.username}")
-            logger.info(f"DEBUG: Formulardaten: {dict(request.form)}")
+            # Nur nicht-sensitive Metadaten loggen (keine Passwörter/PII)
+            safe_form = {k: ('***' if 'password' in k.lower() else v) for k, v in request.form.items() if k in {'email','timesheet_enabled'}}
+            logger.info(f"DEBUG: Formulardaten (abgesichert): {safe_form}")
             
             # ===== AKTUELLE BENUTZERDATEN HOLEN =====
             user = mongodb.find_one('users', {'username': current_user.username})
@@ -545,7 +548,7 @@ def profile():
                 
                 # Prüfe aktuelles Passwort
                 from app.utils.auth_utils import check_password_compatible
-                if not check_password_compatible(current_password, user.get('password_hash', '')):
+                if not check_password_compatible(user.get('password_hash', ''), current_password):
                     flash('Aktuelles Passwort ist falsch.', 'error')
                     return render_template('auth/profile.html', user=user)
                 

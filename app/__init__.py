@@ -247,9 +247,9 @@ def create_app(test_config=None):
     except Exception as e:
         logging.error(f"Fehler bei MongoDB-Initialisierung: {e}")
     
-    # ===== ID-NORMALISIERUNG BEIM START =====
-    # Nur ausführen, wenn nicht explizit deaktiviert
-    if not os.environ.get('DISABLE_ID_NORMALIZATION', 'false').lower() == 'true':
+    # ===== ID-NORMALISIERUNG BEIM START (opt-in) =====
+    # Standard: deaktiviert, kann über ENABLE_ID_NORMALIZATION_ON_START=true aktiviert werden
+    if os.environ.get('ENABLE_ID_NORMALIZATION_ON_START', 'false').lower() == 'true':
         try:
             with app.app_context():
                 normalize_database_ids()
@@ -257,7 +257,7 @@ def create_app(test_config=None):
         except Exception as e:
             logging.error(f"Fehler bei ID-Normalisierung: {e}")
     else:
-        logging.info("ID-Normalisierung beim Start deaktiviert")
+        logging.info("ID-Normalisierung beim Start ist deaktiviert (ENABLE_ID_NORMALIZATION_ON_START=false)")
     
     # ===== FLASK-LOGIN INITIALISIEREN =====
     login_manager.init_app(app)
@@ -291,10 +291,19 @@ def create_app(test_config=None):
                 try:
                     from app.models.mongodb_database import mongodb
                     user = mongodb.find_one('users', {'username': current_user.username})
-                    if user:
-                        dept = user.get('default_department') or (user.get('allowed_departments') or [None])[0]
-                        if dept:
-                            session['department'] = dept
+                    # Admins: Standardmäßig erste globale Abteilung wählen, wenn vorhanden
+                    if getattr(current_user, 'role', None) == 'admin':
+                        depts_setting = mongodb.find_one('settings', {'key': 'departments'})
+                        all_departments = depts_setting.get('value', []) if depts_setting else []
+                        if isinstance(all_departments, list) and all_departments:
+                            dept = all_departments[0]
+                        else:
+                            dept = user.get('default_department') or (user.get('allowed_departments') or [None])[0]
+                    else:
+                        if user:
+                            dept = user.get('default_department') or (user.get('allowed_departments') or [None])[0]
+                    if dept:
+                        session['department'] = dept
                 except Exception:
                     pass
             g.current_department = dept
@@ -470,6 +479,14 @@ def create_app(test_config=None):
     
     # ===== KOMPRIMIERUNG AKTIVIEREN =====
     Compress(app)
+
+    # ===== CSP Nonce für Templates bereitstellen =====
+    @app.context_processor
+    def security_processor():
+        try:
+            return {'csp_nonce': getattr(g, 'csp_nonce', '')}
+        except Exception:
+            return {'csp_nonce': ''}
     
     # ===== E-MAIL-SYSTEM INITIALISIEREN =====
     try:

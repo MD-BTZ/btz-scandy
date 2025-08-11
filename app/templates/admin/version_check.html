@@ -90,7 +90,7 @@ docker compose restart</code></pre>
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     // Versionsstatus laden
     loadVersionStatus();

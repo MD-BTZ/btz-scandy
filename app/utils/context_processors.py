@@ -261,7 +261,21 @@ def inject_departments():
 
         # Benutzer lesen
         user = mongodb.find_one('users', {'username': current_user.username})
-        allowed = user.get('allowed_departments', []) if user else []
+
+        # Globale Departments laden (für Admins nötig)
+        all_departments = []
+        try:
+            depts_setting = mongodb.find_one('settings', {'key': 'departments'})
+            if depts_setting and isinstance(depts_setting.get('value'), list):
+                all_departments = [d for d in depts_setting['value'] if isinstance(d, str) and d.strip()]
+        except Exception:
+            all_departments = []
+
+        # Admins: automatisch Zugriff auf alle Abteilungen
+        if getattr(current_user, 'role', None) == 'admin' and all_departments:
+            allowed = all_departments
+        else:
+            allowed = user.get('allowed_departments', []) if user else []
         current = getattr(g, 'current_department', None)
         default = user.get('default_department') if user else None
         if not current:

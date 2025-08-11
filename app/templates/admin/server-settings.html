@@ -5,9 +5,9 @@
 {% block head %}
 {{ super() }}
 <!-- Toast Script -->
-<script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
 <!-- Backup Script -->
-<script src="{{ url_for('static', filename='js/backup.js') }}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/backup.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -483,7 +483,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Icon Selector Funktionalität
 let currentIconInput = null;
 let currentIconPreview = null;

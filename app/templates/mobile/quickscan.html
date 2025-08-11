@@ -26,7 +26,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/quickscan.css') }}">
     
-    <style>
+    <style nonce="{{ csp_nonce }}">
         /* Mobile-spezifische Styles */
         body {
             -webkit-user-select: none;
@@ -165,7 +165,7 @@
     </div>
 
     <!-- Service Worker für PWA -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // Service Worker registrieren
         // Für Debug ggf. deaktivieren: Service Worker kann Layout-Caches halten
         if ('serviceWorker' in navigator) {
@@ -178,9 +178,9 @@
     </script>
 
     <!-- Quickscan JavaScript -->
-    <script src="{{ url_for('static', filename='js/quickscan.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/scanner.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/mobile-quickscan.js') }}?v=2"></script>
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/quickscan.js') }}?v=2"></script>
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/scanner.js') }}?v=2"></script>
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/mobile-quickscan.js') }}?v=2"></script>
     
     <!-- Entfernt: Bottom Action Bar -->
     

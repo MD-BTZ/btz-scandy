@@ -70,6 +70,7 @@ ROLLBACK=false
 ENABLE_SSL=false
 LOCAL_SSL=false
 ENABLE_HTTPS=false
+SKIP_DEPS=false
 
 # Argumente parsen
 parse_arguments() {
@@ -86,6 +87,7 @@ parse_arguments() {
             --ssl) ENABLE_SSL=true; shift ;;
             --local-ssl) LOCAL_SSL=true; ENABLE_SSL=true; shift ;;
             --https) ENABLE_HTTPS=true; shift ;;
+            --no-deps) SKIP_DEPS=true; shift ;;
             *) log_error "Unbekannte Option: $1"; show_help; exit 1 ;;
         esac
     done
@@ -415,7 +417,7 @@ create_backup() {
         # Konfiguration sichern
         [ -f ".env" ] && cp .env "$BACKUP_DIR/"
         [ -f "docker-compose.yml" ] && cp docker-compose.yml "$BACKUP_DIR/"
-        
+.        
         # Daten sichern (je nach Modus)
         case $UPDATE_MODE in
             docker)
@@ -481,32 +483,39 @@ update_native() {
     log_info "Stoppe Service $SERVICE_NAME..."
     sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
     
-    # Code aktualisieren
-    log_info "Aktualisiere Code..."
-    cd /opt/scandy
-    ensure_git_safe_dir "/opt/scandy"
-    git pull || log_warning "Git pull fehlgeschlagen"
-
-    # Optional: Code aus Arbeitskopie nach /opt/scandy übernehmen (falls vorhanden)
+    # Code aus Arbeitskopie nach /opt/scandy übernehmen (Git-frei)
     SRC_DIR="$(find_source_dir)"
-    if [ -n "$SRC_DIR" ] && [ "$SRC_DIR" != "/opt/scandy" ]; then
-        log_info "Synchronisiere Code aus Arbeitskopie: $SRC_DIR -> /opt/scandy/app/"
-        if command -v rsync >/dev/null 2>&1; then
-            rsync -av --delete \
-                --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
-                "$SRC_DIR/app/" "/opt/scandy/app/"
-        else
-            # Fallback ohne rsync (kein --delete)
-            cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
-        fi
-        sudo chown -R scandy:scandy /opt/scandy/app || true
-    else
-        log_info "Keine separate Arbeitskopie gefunden – verwende Git-Stand in /opt/scandy"
+    if [ -z "$SRC_DIR" ]; then
+        log_error "Keine Arbeitskopie gefunden (mit app/ und requirements.txt). Abbruch."
+        exit 1
     fi
+    log_info "Verwende Arbeitskopie: $SRC_DIR"
+
+    # Nach /opt/scandy wechseln für Folgeschritte
+    cd /opt/scandy
+
+    log_info "Synchronisiere Code: $SRC_DIR/app/ -> /opt/scandy/app/"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete \
+            --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+            "$SRC_DIR/app/" "/opt/scandy/app/"
+    else
+        # Fallback ohne rsync (kein --delete)
+        cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
+    fi
+    # Optional: requirements.txt aktualisieren
+    if [ -f "$SRC_DIR/requirements.txt" ]; then
+        cp -f "$SRC_DIR/requirements.txt" "/opt/scandy/requirements.txt" 2>/dev/null || true
+    fi
+    sudo chown -R scandy:scandy /opt/scandy/app || true
     
     # Dependencies aktualisieren
-    log_info "Aktualisiere Python-Pakete..."
-    sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+    if [ "$SKIP_DEPS" = false ]; then
+        log_info "Aktualisiere Python-Pakete..."
+        sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt || true
+    else
+        log_info "Überspringe Paket-Update (--no-deps)"
+    fi
 
     # Laufzeitverzeichnisse & Berechtigungen
     ensure_runtime_dirs
@@ -533,32 +542,34 @@ update_lxc() {
     log_info "Stoppe Scandy-Prozess..."
     pkill -f "gunicorn.*scandy" || true
     
-    # Code aktualisieren
-    log_info "Aktualisiere Code..."
-    cd /opt/scandy
-    ensure_git_safe_dir "/opt/scandy"
-    git pull || log_warning "Git pull fehlgeschlagen"
-    
-    # Stelle sicher, dass alle Dateien korrekt kopiert sind
-    log_info "Stelle sicher, dass Code korrekt kopiert ist..."
-    
-    # Prüfe ob app-Verzeichnis existiert
-    if [ ! -d "app" ]; then
-        log_error "app-Verzeichnis nicht gefunden!"
+    # Code aus Arbeitskopie synchronisieren (Git-frei)
+    SRC_DIR="$(find_source_dir)"
+    if [ -z "$SRC_DIR" ]; then
+        log_error "Keine Arbeitskopie gefunden (mit app/ und requirements.txt). Abbruch."
         exit 1
     fi
-    
-    # Kopiere Code in den Container (falls nötig)
-    if [ -d "/opt/scandy/app" ]; then
-        log_info "Kopiere aktualisierten Code..."
-        cp -r app/* /opt/scandy/app/ 2>/dev/null || {
-            log_warning "Konnte Code nicht kopieren, verwende Git-Version"
-        }
+    log_info "Verwende Arbeitskopie: $SRC_DIR"
+    cd /opt/scandy
+    log_info "Synchronisiere Code: $SRC_DIR/app/ -> /opt/scandy/app/"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete \
+            --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+            "$SRC_DIR/app/" "/opt/scandy/app/"
+    else
+        cp -r "$SRC_DIR/app/"* "/opt/scandy/app/" 2>/dev/null || true
     fi
+    if [ -f "$SRC_DIR/requirements.txt" ]; then
+        cp -f "$SRC_DIR/requirements.txt" "/opt/scandy/requirements.txt" 2>/dev/null || true
+    fi
+    sudo chown -R scandy:scandy /opt/scandy/app || true
     
     # Dependencies aktualisieren
-    log_info "Aktualisiere Python-Pakete..."
-    sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt
+    if [ "$SKIP_DEPS" = false ]; then
+        log_info "Aktualisiere Python-Pakete..."
+        sudo -u scandy venv/bin/pip install --upgrade -r requirements.txt || true
+    else
+        log_info "Überspringe Paket-Update (--no-deps)"
+    fi
 
     # Laufzeitverzeichnisse & Berechtigungen
     ensure_runtime_dirs

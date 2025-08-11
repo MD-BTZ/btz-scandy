@@ -5,11 +5,11 @@
 {% block head %}
 {{ super() }}
 <!-- Toast Script -->
-<script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
 <!-- Lending Service -->
-<script src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/lending-service.js') }}" defer></script>
 <!-- Admin Dashboard Script -->
-<script src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/admin-dashboard.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -359,9 +359,9 @@
 {% block scripts %}
 {{ super() }}
 <!-- Trenddaten als JSON, damit kein Jinja in JS-Code stört -->
-<script id="consumable-trend-data" type="application/json">{{ (stats.consumable_trend if stats is defined and stats.consumable_trend is defined else {}) | tojson | safe }}</script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
+<script nonce="{{ csp_nonce }}" id="consumable-trend-data" type="application/json">{{ (stats.consumable_trend if stats is defined and stats.consumable_trend is defined else {}) | tojson | safe }}</script>
+<script nonce="{{ csp_nonce }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script nonce="{{ csp_nonce }}">
 // Chart initialisieren wenn das Element existiert und Daten vorhanden sind
 function initChart() {
     const chartCanvas = document.getElementById('consumableTrendChart');

@@ -106,7 +106,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Lösch-Funktion
 function deleteConsumable(barcode) {
     if (confirm('Möchten Sie dieses Verbrauchsmaterial wirklich löschen?')) {

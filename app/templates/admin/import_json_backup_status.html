@@ -13,7 +13,7 @@
     <a href="{{ url_for('admin.dashboard') }}" class="btn">Zurück zum Dashboard</a>
   </div>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
 const jobId = {{ job_id|tojson }};
 const box = document.getElementById('statusBox');
 const details = document.getElementById('details');
