@@ -2737,6 +2737,18 @@ def get_departments():
             'message': 'Fehler beim Laden der Abteilungen'
         })
 
+# Abteilungsverwaltung (Seite)
+@bp.route('/departments/manage')
+@mitarbeiter_required
+def departments_manage_page():
+    """Seite zur Verwaltung der Abteilungen (Bereiche)."""
+    try:
+        return render_template('admin/departments.html')
+    except Exception as e:
+        logger.error(f"Fehler beim Rendern der Abteilungsseite: {e}")
+        flash('Fehler beim Laden der Abteilungsverwaltung', 'error')
+        return redirect(url_for('admin.system'))
+
 @bp.route('/departments/add', methods=['POST'])
 @mitarbeiter_required
 def add_department():

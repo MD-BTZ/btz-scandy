@@ -414,6 +414,11 @@
                                 <i class="fas fa-cogs mr-2"></i>Systemverwaltung
                             </a>
                         </li>
+                        <li>
+                            <a href="{{ url_for('admin.departments_manage_page') }}" class="{% if request.endpoint and 'departments_manage_page' in request.endpoint %}active{% endif %}">
+                                <i class="fas fa-building mr-2"></i>Abteilungen
+                            </a>
+                        </li>
                         {% if feature_settings.get('software_management', False) %}
                         <li>
                             <a href="{{ url_for('admin.software_management') }}" class="{% if request.endpoint and 'admin.software_management' in request.endpoint %}active{% endif %}">

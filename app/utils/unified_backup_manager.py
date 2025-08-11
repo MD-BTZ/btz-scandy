@@ -18,6 +18,8 @@ import threading
 import uuid
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
+import random
+import string
 from bson import ObjectId
 
 class UnifiedBackupManager:
@@ -532,12 +534,32 @@ class UnifiedBackupManager:
                     fixed_documents = []
                     for doc in documents:
                         fixed_doc = self._fix_json_document(doc)
+                        # Spezielle Behandlung für Benutzer: Passwort sicherstellen
+                        if collection_name == 'users':
+                            try:
+                                from werkzeug.security import generate_password_hash
+                                if not fixed_doc.get('password_hash'):
+                                    if fixed_doc.get('password'):
+                                        fixed_doc['password_hash'] = generate_password_hash(fixed_doc['password'])
+                                    else:
+                                        pw = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+                                        fixed_doc['password_hash'] = generate_password_hash(pw)
+                                fixed_doc.pop('password', None)
+                                fixed_doc.setdefault('role', 'anwender')
+                                fixed_doc.setdefault('is_active', True)
+                            except Exception:
+                                pass
                         fixed_documents.append(fixed_doc)
                     
                     # Dokumente einfügen
                     if fixed_documents:
                         db[collection_name].insert_many(fixed_documents)
                         print(f"    ✅ {len(fixed_documents)} Dokumente wiederhergestellt")
+            # Nach dem Import: Verwaiste Nutzernamen anonymisieren
+            try:
+                self._anonymize_orphan_user_names()
+            except Exception as e:
+                print(f"⚠️  Konnte Orphan-Namen nicht anonymisieren: {e}")
             
             print(f"✅ JSON-Backup erfolgreich importiert")
             return True
@@ -600,6 +622,43 @@ class UnifiedBackupManager:
                     pass
         
         return doc
+
+    def _anonymize_orphan_user_names(self):
+        """Ersetzt Namen/Bezüge auf nicht vorhandene Benutzer durch 'Anonym'."""
+        from datetime import datetime as _dt
+        try:
+            from app.models.mongodb_database import mongodb
+            existing_users = set(u.get('username') for u in mongodb.find('users', {}) if u.get('username'))
+            anonymized = 0
+            # Felder, die Usernamen enthalten können
+            username_fields = ['created_by', 'assigned_to', 'reporter', 'author', 'user', 'username']
+            name_fields = ['created_by_name', 'assigned_to_name', 'reporter_name', 'author_name', 'user_name']
+            for collection in ['tickets', 'messages', 'ticket_messages', 'ticket_history']:
+                docs = list(mongodb.find(collection, {}))
+                for doc in docs:
+                    updates = {}
+                    # Username-Felder: nullen, wenn User nicht existiert
+                    for field in username_fields:
+                        if field in doc and doc.get(field) and doc.get(field) not in existing_users:
+                            updates[field] = None
+                    # Namens-Felder: auf 'Anonym' setzen, wenn korrespondierender Benutzer fehlt
+                    for field in name_fields:
+                        if field in doc and doc.get(field):
+                            related_user = None
+                            if field.endswith('_name'):
+                                base = field[:-5]
+                                related_user = doc.get(base)
+                            if (not related_user) or (related_user not in existing_users):
+                                if doc.get(field) != 'Anonym':
+                                    updates[field] = 'Anonym'
+                    if updates:
+                        updates['updated_at'] = _dt.now()
+                        mongodb.update_one(collection, {'_id': doc['_id']}, {'$set': updates})
+                        anonymized += 1
+            if anonymized:
+                print(f"  🔒 {anonymized} Dokumente anonymisiert (fehlende Benutzer)")
+        except Exception as e:
+            print(f"⚠️  Anonymisierung fehlgeschlagen: {e}")
     
     def list_backups(self) -> List[Dict[str, Any]]:
         """Listet alle verfügbaren Backups auf"""
@@ -708,6 +767,38 @@ class UnifiedBackupManager:
                 total_failed += failed_count
                 print(f"    ✅ {inserted_count} eingefügt, ❌ {failed_count} fehlgeschlagen in {collection_name}")
             print(f"✅ JSON-Backup (scoped) abgeschlossen – Gesamt: {total_inserted} eingefügt, {total_failed} fehlgeschlagen")
+            # Optional: Benutzer global importieren, wenn vorhanden (zusammenführen per Username)
+            try:
+                users_docs = data_section.get('users')
+                if isinstance(users_docs, list):
+                    from app.models.mongodb_database import mongodb
+                    from werkzeug.security import generate_password_hash
+                    for doc in users_docs:
+                        try:
+                            fixed = self._fix_json_document(doc)
+                            if not fixed.get('password_hash'):
+                                if fixed.get('password'):
+                                    fixed['password_hash'] = generate_password_hash(fixed['password'])
+                                else:
+                                    pw = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+                                    fixed['password_hash'] = generate_password_hash(pw)
+                            fixed.pop('password', None)
+                            fixed.setdefault('role', 'anwender')
+                            fixed.setdefault('is_active', True)
+                            username = fixed.get('username')
+                            if username:
+                                mongodb.update_one('users', {'username': username}, {'$set': fixed}, upsert=True)
+                        except Exception as e:
+                            print(f"    ⚠️  Nutzer-Import: {e}")
+            except Exception as e:
+                print(f"⚠️  Benutzer-Import (scoped) übersprungen: {e}")
+
+            # Nachzug: Orphan-Namen anonymisieren
+            try:
+                self._anonymize_orphan_user_names()
+            except Exception as e:
+                print(f"⚠️  Orphan-Anonymisierung (scoped) fehlgeschlagen: {e}")
+
             # Erfolg, wenn mindestens ein Dokument eingefügt wurde
             return total_inserted > 0
         except Exception as e:
