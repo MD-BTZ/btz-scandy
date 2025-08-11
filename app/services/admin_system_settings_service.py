@@ -151,29 +151,74 @@ class AdminSystemSettingsService:
             departments = AdminSystemSettingsService.get_departments_from_settings()
             if name not in departments:
                 return False, f"Abteilung '{name}' nicht gefunden"
-            
-            # Prüfe ob Abteilung noch verwendet wird
-            workers_count = mongodb.count_documents('workers', {
-                'department': name,
-                'deleted': {'$ne': True}
-            })
-            
-            if workers_count > 0:
-                return False, f"Abteilung '{name}' wird noch von {workers_count} Mitarbeitern verwendet"
-            
-            # Entferne Abteilung
-            departments.remove(name)
-            
-            # Update Einstellung
-            mongodb.update_one('settings', {'key': 'departments'}, {
-                '$set': {
-                    'value': departments,
-                    'updated_at': datetime.now()
-                }
-            })
-            
-            logger.info(f"Abteilung '{name}' erfolgreich gelöscht")
-            return True, f"Abteilung '{name}' erfolgreich gelöscht"
+            # Kaskadierendes Löschen aller Daten dieser Abteilung
+            deleted_counts: Dict[str, int] = {}
+            try:
+                # 1) IDs der Tickets der Abteilung sammeln (für Messages/History)
+                ticket_ids = [t['_id'] for t in mongodb.db.tickets.find({'department': name}, {'_id': 1})]
+
+                # 2) Collections, die direkt das Feld 'department' tragen
+                dept_collections = [
+                    'tools', 'consumables', 'workers', 'lendings', 'consumable_usages',
+                    'tickets', 'timesheets', 'homepage_notices',
+                    'locations', 'categories', 'ticket_categories'
+                ]
+                for coll in dept_collections:
+                    try:
+                        res = mongodb.db[coll].delete_many({'department': name})
+                        deleted_counts[coll] = getattr(res, 'deleted_count', 0)
+                    except Exception as ce:
+                        logger.warning(f"Konnte Collection '{coll}' nicht bereinigen: {ce}")
+                        deleted_counts[coll] = 0
+
+                # 3) Settings-Einträge der Abteilung entfernen (globale 'departments' bleibt unberührt, da ohne department-Feld)
+                try:
+                    res = mongodb.db.settings.delete_many({'department': name})
+                    deleted_counts['settings'] = getattr(res, 'deleted_count', 0)
+                except Exception as se:
+                    logger.warning(f"Konnte Settings nicht bereinigen: {se}")
+                    deleted_counts['settings'] = 0
+
+                # 4) Ticket-Messages/-History/-Notes mit Bezug zu Tickets der Abteilung entfernen
+                ref_collections = ['messages', 'ticket_history', 'ticket_messages', 'ticket_notes']
+                for coll in ref_collections:
+                    try:
+                        res = mongodb.db[coll].delete_many({
+                            '$or': [
+                                {'department': name},
+                                {'ticket_id': {'$in': ticket_ids}} if ticket_ids else {'_id': None}
+                            ]
+                        })
+                        deleted_counts[coll] = getattr(res, 'deleted_count', 0)
+                    except Exception as re:
+                        logger.warning(f"Konnte referenzielle Collection '{coll}' nicht bereinigen: {re}")
+                        deleted_counts[coll] = 0
+
+                # 5) Nutzerberechtigungen bereinigen: Abteilung aus allowed_departments entfernen, default_department leeren
+                try:
+                    mongodb.db.users.update_many({}, {'$pull': {'allowed_departments': name}})
+                    mongodb.db.users.update_many({'default_department': name}, {'$unset': {'default_department': ""}})
+                except Exception as ue:
+                    logger.warning(f"Konnte Nutzerberechtigungen nicht bereinigen: {ue}")
+            except Exception as cascade_e:
+                logger.error(f"Fehler beim kaskadierenden Löschen der Abteilung '{name}': {cascade_e}")
+                return False, f"Fehler beim Löschen der Abteilung und zugehöriger Daten: {cascade_e}"
+
+            # 6) Abteilung aus globaler Liste entfernen
+            try:
+                departments.remove(name)
+                mongodb.update_one('settings', {'key': 'departments'}, {
+                    '$set': {
+                        'value': departments,
+                        'updated_at': datetime.now()
+                    }
+                })
+            except Exception as list_e:
+                logger.warning(f"Abteilung aus Liste konnte nicht entfernt werden: {list_e}")
+
+            summary = ", ".join([f"{k}: {v}" for k, v in deleted_counts.items()])
+            logger.info(f"Abteilung '{name}' gelöscht. Gelöschte Dokumente – {summary}")
+            return True, f"Abteilung '{name}' und alle zugehörigen Daten wurden gelöscht ({summary})."
             
         except Exception as e:
             logger.error(f"Fehler beim Löschen der Abteilung '{name}': {str(e)}")

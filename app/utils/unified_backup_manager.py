@@ -46,6 +46,22 @@ class UnifiedBackupManager:
         # Import-Job Verwaltung (Statusablage in MongoDB)
         # Hinweis: Für Persistenz/Mehrprozess-Sicherheit wird MongoDB genutzt, nicht nur RAM.
 
+    # ===== Normalisierungs-Helfer =====
+    @staticmethod
+    def _norm_str(value: Any) -> Optional[str]:
+        try:
+            if value is None:
+                return None
+            s = str(value).strip()
+            return s if s else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _normalize_barcode(value: Any) -> Optional[str]:
+        # Barcodes als getrimmten String behandeln (Groß/Kleinschreibung beibehalten)
+        return UnifiedBackupManager._norm_str(value)
+
     def create_backup(self, include_media: bool = True, compress: bool = True) -> Optional[str]:
         """
         Erstellt ein vollständiges Backup (Datenbank + Medien)
@@ -768,11 +784,19 @@ class UnifiedBackupManager:
                     # Einfügen/Upsert mit Duplikat-Schutz
                     try:
                         # Legacy-Dokumente ohne Department bevorzugt umhängen statt duplizieren
-                        if collection_name in ('tools', 'workers', 'consumables') and doc.get('barcode'):
+                        if collection_name in ('tools', 'workers', 'consumables'):
+                            # Barcode normalisieren
+                            bc = self._normalize_barcode(doc.get('barcode'))
+                            if not bc:
+                                # Ohne Barcode keine Idempotenz möglich -> Insert als Fallback
+                                mongodb.insert_one(collection_name, doc)
+                                inserted_count += 1
+                                continue
+                            doc['barcode'] = bc
                             try:
                                 mongodb.update_one(
                                     collection_name,
-                                    {'barcode': doc['barcode'], 'department': {'$exists': False}},
+                                    {'barcode': bc, 'department': {'$exists': False}},
                                     {'$set': {'department': target_department}},
                                     upsert=False
                                 )
@@ -781,7 +805,7 @@ class UnifiedBackupManager:
                             # Idempotentes Upsert pro (department, barcode)
                             ok = mongodb.update_one(
                                 collection_name,
-                                {'barcode': doc['barcode'], 'department': target_department},
+                                {'barcode': bc, 'department': target_department},
                                 {'$set': doc},
                                 upsert=True
                             )

@@ -12,6 +12,13 @@
   <div class="card bg-base-100 shadow-xl">
     <div class="card-body">
       <h2 class="card-title mb-4">Bereiche verwalten</h2>
+      <div class="alert alert-warning mb-4">
+        <i class="fas fa-triangle-exclamation mr-2"></i>
+        <div>
+          <div class="font-semibold">Achtung: Löschen einer Abteilung entfernt alle zugehörigen Daten dauerhaft.</div>
+          <div class="text-sm opacity-80">Werkzeuge, Verbrauchsmaterial, Mitarbeiter, Tickets, Ausleihen, Kategorien/Standorte/Handlungsfelder und abteilungsbezogene Einstellungen werden endgültig gelöscht.</div>
+        </div>
+      </div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="bg-base-200 rounded-lg p-4">
           <form id="addDepartmentForm" class="flex gap-2 items-end">
@@ -31,9 +38,31 @@
       </div>
     </div>
   </div>
+
+  <!-- Lösch-Bestätigungs-Modal -->
+  <dialog id="confirmDeleteDialog" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg mb-2"><i class="fas fa-trash text-error mr-2"></i>Abteilung löschen</h3>
+      <p class="mb-4">Bitte gib zur Bestätigung den Namen der Abteilung ein. Dieser Vorgang löscht alle Daten dieser Abteilung dauerhaft.</p>
+      <div class="form-control mb-2">
+        <label class="label"><span class="label-text">Abteilungsname</span></label>
+        <input id="confirmNameInput" class="input input-bordered" placeholder="Namen erneut eingeben">
+      </div>
+      <div id="confirmError" class="text-error text-sm hidden">Name stimmt nicht überein.</div>
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="btn">Abbrechen</button>
+        </form>
+        <button id="confirmDeleteBtn" class="btn btn-error"><i class="fas fa-trash mr-2"></i>Endgültig löschen</button>
+      </div>
+    </div>
+  </dialog>
 </div>
 
 <script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+let pendingDeleteName = null;
+
 async function loadDepartments(){
   try{
     const res = await fetch('{{ url_for('admin.get_departments') }}');
@@ -44,7 +73,7 @@ async function loadDepartments(){
     const items = (data.departments||[]).map(d=>`
       <div class="flex items-center justify-between p-2 bg-base-100 rounded border">
         <div class="font-medium">${d.name}</div>
-        <button class="btn btn-error btn-xs" onclick="deleteDepartment('${d.name}')"><i class="fas fa-trash"></i></button>
+        <button class="btn btn-error btn-xs" onclick="openDeleteDialog('${d.name}')"><i class="fas fa-trash"></i></button>
       </div>`).join('');
     c.innerHTML = items || '<div class="text-sm opacity-70">Keine Abteilungen vorhanden</div>';
   }catch(e){
@@ -60,14 +89,34 @@ document.getElementById('addDepartmentForm').addEventListener('submit', async (e
   if(data.success){ e.target.reset(); loadDepartments(); }
 });
 
-async function deleteDepartment(name){
-  if(!confirm(
-    `Abteilung "${name}" löschen?`
-  )) return;
-  const res = await fetch(`/admin/departments/delete/${encodeURIComponent(name)}`, {method:'POST'});
-  const data = await res.json();
-  if(data.success){ loadDepartments(); }
+function openDeleteDialog(name){
+  pendingDeleteName = name;
+  document.getElementById('confirmNameInput').value = '';
+  document.getElementById('confirmError').classList.add('hidden');
+  document.getElementById('confirmDeleteDialog').showModal();
 }
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async ()=>{
+  const input = document.getElementById('confirmNameInput').value.trim();
+  if(input !== pendingDeleteName){
+    document.getElementById('confirmError').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('confirmError').classList.add('hidden');
+  document.getElementById('confirmDeleteDialog').close();
+  try{
+    const res = await fetch(`/admin/departments/delete/${encodeURIComponent(pendingDeleteName)}`, {
+      method:'POST',
+      headers: { 'X-CSRFToken': csrfToken }
+    });
+    const data = await res.json();
+    if(data.success){
+      loadDepartments();
+    }else{
+      window.showToast && window.showToast('error', data.message||'Löschen fehlgeschlagen');
+    }
+  }catch(e){ console.error(e); }
+});
 
 document.addEventListener('DOMContentLoaded', loadDepartments);
 </script>
