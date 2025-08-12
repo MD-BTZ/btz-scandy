@@ -104,12 +104,16 @@ class Config:
             BASE_URL = f"http://localhost:{PORT}"
     
     # Sicherheitseinstellungen - für HTTP/Proxy-Setups lockerer
+    # Für HTTP (Port 80) müssen Cookies ohne Secure-Flag gesetzt werden
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für Login
     REMEMBER_COOKIE_SECURE = os.environ.get('REMEMBER_COOKIE_SECURE', 'False').lower() == 'true'
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für Login
+    
+    # Debug: Zeige aktuelle Cookie-Konfiguration
+    print(f"DEBUG: Session-Cookies - SECURE: {SESSION_COOKIE_SECURE}, SAMESITE: {SESSION_COOKIE_SAMESITE}")
     
     # Datumsformat-Konfiguration (Deutsch)
     DATE_FORMAT = '%d.%m.%Y'

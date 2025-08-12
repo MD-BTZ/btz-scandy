@@ -263,19 +263,31 @@ def create_app(test_config=None):
     login_manager.init_app(app)
     
     # ===== FLASK-SESSION INITIALISIEREN =====
-    # Session-Konfiguration: Produktionswerte aus Config, in Dev lockerer
+    # Session-Konfiguration: Verwende Werte aus der Config-Klasse
     app.config.setdefault('SESSION_TYPE', 'filesystem')
     app.config.setdefault('SESSION_FILE_DIR', os.path.join(app.root_path, 'flask_session'))
     app.config.setdefault('SESSION_FILE_THRESHOLD', 500)
     app.config.setdefault('SESSION_FILE_MODE', 384)
-    # Nur in Nicht-Produktion die Sicherheit lockern
-    if os.environ.get('FLASK_ENV', 'development').lower() != 'production':
-        app.config['SESSION_COOKIE_SECURE'] = False
-        app.config['SESSION_COOKIE_HTTPONLY'] = True
-        app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    
+    # Session-Cookie-Einstellungen aus der Config-Klasse verwenden
+    # Diese werden bereits in der Config-Klasse korrekt gesetzt
     app.config.setdefault('PERMANENT_SESSION_LIFETIME', timedelta(days=7))
     
+    # Debug: Zeige aktuelle Session-Konfiguration
+    app.logger.info(f"Session-Konfiguration: SECURE={app.config.get('SESSION_COOKIE_SECURE')}, "
+                   f"SAMESITE={app.config.get('SESSION_COOKIE_SAMESITE')}, "
+                   f"HTTPONLY={app.config.get('SESSION_COOKIE_HTTPONLY')}")
+    
     Session(app)
+    
+    # Debug: Zeige Session-Status nach dem Login
+    @app.after_request
+    def debug_session_after_request(response):
+        """Debug: Zeige Session-Status nach jeder Request"""
+        if request.endpoint == 'auth.login' and response.status_code == 302:
+            app.logger.info(f"DEBUG: Nach Login - Session: {dict(session)}")
+            app.logger.info(f"DEBUG: Response Headers: {dict(response.headers)}")
+        return response
 
     # ===== Department aus Session in Request-Context laden =====
     @app.before_request
