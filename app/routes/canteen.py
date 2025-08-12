@@ -29,13 +29,39 @@ def index():
         credentials_status = service.get_credentials_status()
         
         meals = service.get_two_weeks_meals()  # Hole 2 Wochen Daten
+        api_current = url_for('canteen.api_current_week', _external=True)
+        api_two_weeks = url_for('canteen.api_two_weeks', _external=True)
+        api_status = url_for('canteen.api_status', _external=True)
+        embed_url = url_for('canteen.embed', _external=True)
+        api_key_value = config.get('CANTEEN_API_KEY')
         return render_template('canteen/index.html', 
                              meals=meals, 
-                             credentials_status=credentials_status)
+                             credentials_status=credentials_status,
+                             api_current=api_current,
+                             api_two_weeks=api_two_weeks,
+                             api_status=api_status,
+                             embed_url=embed_url,
+                             canteen_api_key=api_key_value)
     except Exception as e:
         logger.error(f"Fehler beim Laden der Kantinenplan-Seite: {e}")
         flash('Fehler beim Laden der Daten', 'error')
         return redirect(url_for('dashboard.index'))
+
+@bp.route('/canteen/embed')
+def embed():
+    """Schlanke Einbettungsansicht (für iframe/WordPress). Optionaler api_key via Querystring."""
+    try:
+        # Basis-API-URL
+        api_current = url_for('canteen.api_current_week', _external=True)
+        # Optionalen API-Key anfügen (falls in WordPress gewünscht)
+        api_key = request.args.get('api_key', '').strip()
+        if api_key:
+            sep = '&' if '?' in api_current else '?'
+            api_current = f"{api_current}{sep}api_key={api_key}"
+        return render_template('canteen/embed.html', api_current=api_current)
+    except Exception as e:
+        logger.error(f"Fehler beim Rendern der Canteen-Embed-Ansicht: {e}")
+        return jsonify({'success': False, 'error': 'Embed nicht verfügbar'}), 500
 
 @bp.route('/canteen/update', methods=['POST'])
 def update_canteen_plan():
@@ -58,7 +84,7 @@ def update_canteen_plan():
             date = request.form.get(f'date_{i}')
             meat_dish = request.form.get(f'meat_dish_{i}', '').strip()
             vegan_dish = request.form.get(f'vegan_dish_{i}', '').strip()
-            dessert = request.form.get(f'dessert_{i}', '').strip()
+            dessert = 'Tagesdessert'
             
             if date:
                 meals_data.append({
@@ -141,28 +167,28 @@ def api_current_week():
             date = meal.get('date', '')
             meat_dish = meal.get('meat_dish', '').strip()
             vegan_dish = meal.get('vegan_dish', '').strip()
-            dessert = meal.get('dessert', '').strip()  # Neues Dessert-Feld
-            
-            # Formatiere Datum für WordPress (z.B. "Montag, 15.01.2024")
+            dessert = meal.get('dessert', '').strip()
+
+            # Datum ohne Wochentag (Format: 15.01.2024)
             if date:
                 try:
                     date_obj = datetime.strptime(date, '%Y-%m-%d')
-                    formatted_date = f"{weekdays[i % 5]}, {date_obj.strftime('%d.%m.%Y')}"
+                    date_label = date_obj.strftime('%d.%m.%Y')
                 except:
-                    formatted_date = f"{weekdays[i % 5]}, {date}"
+                    date_label = date
             else:
-                # Fallback: Verwende aktuelles Datum für diese Woche
+                # Fallback: Datum anhand aktueller Woche bestimmen
                 today = datetime.now()
                 monday = today - timedelta(days=today.weekday())
                 target_date = monday + timedelta(days=i)
-                formatted_date = f"{weekdays[i % 5]}, {target_date.strftime('%d.%m.%Y')}"
-            
+                date_label = target_date.strftime('%d.%m.%Y')
+
             week_data.append({
-                'date': formatted_date,
+                'date': date_label,
+                'weekday': weekdays[i % 5],
                 'meat_dish': meat_dish,
                 'vegan_dish': vegan_dish,
-                'dessert': dessert,  # Neues Dessert-Feld
-                'weekday': weekdays[i % 5]
+                'dessert': dessert
             })
         
         return jsonify({
@@ -195,28 +221,26 @@ def api_two_weeks():
             date = meal.get('date', '')
             meat_dish = meal.get('meat_dish', '').strip()
             vegan_dish = meal.get('vegan_dish', '').strip()
-            dessert = meal.get('dessert', '').strip()  # Neues Dessert-Feld
-            
-            # Formatiere Datum für WordPress (z.B. "Montag, 15.01.2024")
+            dessert = meal.get('dessert', '').strip()
+
             if date:
                 try:
                     date_obj = datetime.strptime(date, '%Y-%m-%d')
-                    formatted_date = f"{weekdays[i % 5]}, {date_obj.strftime('%d.%m.%Y')}"
+                    date_label = date_obj.strftime('%d.%m.%Y')
                 except:
-                    formatted_date = f"{weekdays[i % 5]}, {date}"
+                    date_label = date
             else:
-                # Fallback: Verwende aktuelles Datum für diese Woche
                 today = datetime.now()
                 monday = today - timedelta(days=today.weekday())
                 target_date = monday + timedelta(days=i)
-                formatted_date = f"{weekdays[i % 5]}, {target_date.strftime('%d.%m.%Y')}"
-            
+                date_label = target_date.strftime('%d.%m.%Y')
+
             two_weeks_data.append({
-                'date': formatted_date,
+                'date': date_label,
+                'weekday': weekdays[i % 5],
                 'meat_dish': meat_dish,
                 'vegan_dish': vegan_dish,
-                'dessert': dessert,  # Neues Dessert-Feld
-                'weekday': weekdays[i % 5]
+                'dessert': dessert
             })
         
         return jsonify({
@@ -244,6 +268,11 @@ def api_status():
             'server_info': {
                 'host': status.get('host'),
                 'path': status.get('path')
+            },
+            'api_urls': {
+                'current_week': url_for('canteen.api_current_week', _external=True),
+                'two_weeks': url_for('canteen.api_two_weeks', _external=True),
+                'status': url_for('canteen.api_status', _external=True)
             }
         })
         
@@ -278,7 +307,12 @@ def debug_canteen():
             'database_status': db_status,
             'feature_enabled': feature_enabled,
             'user_status': user_status,
-            'current_user_id': str(current_user.get_id()) if current_user.is_authenticated else None
+            'current_user_id': str(current_user.get_id()) if current_user.is_authenticated else None,
+            'api_urls': {
+                'current_week': url_for('canteen.api_current_week', _external=True),
+                'two_weeks': url_for('canteen.api_two_weeks', _external=True),
+                'status': url_for('canteen.api_status', _external=True)
+            }
         })
         
     except Exception as e:

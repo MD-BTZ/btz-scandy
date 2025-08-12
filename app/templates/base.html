@@ -450,13 +450,7 @@
                                 <i class="fas fa-hand-holding mr-2"></i>Manuelle Ausleihe
                             </a>
                         </li>
-                        {% if feature_settings.get('canteen_plan', False) and current_user.role == 'admin' %}
-                        <li>
-                            <a href="{{ url_for('canteen.index') }}" class="{% if request.endpoint and 'canteen.index' in request.endpoint %}active{% endif %}">
-                                <i class="fas fa-utensils mr-2"></i>Kantinenplan verwalten
-                            </a>
-                        </li>
-                        {% endif %}
+                        {# Entfernt: Kantinenplan verwalten (Duplikat) #}
                     </ul>
                 </div>
                 <a href="{{ url_for('admin.trash') }}" 

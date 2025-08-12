@@ -2,8 +2,46 @@
 
 {% block title %}Kantinenplan - Scandy{% endblock %}
 
+{% block head %}
+<style nonce="{{ csp_nonce }}">
+  /* Erzwinge helles Farbschema für Form-Felder dieser Seite */
+  #canteen-page, #canteen-page * { color-scheme: light; }
+
+  /* Sichtbare Texte in Eingabefeldern erzwingen (unabhängig von Browser-Themes/Autofill) */
+  #canteen-page input[type="text"],
+  #canteen-page .form-control {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border-color: #d1d5db;
+  }
+
+  #canteen-page input::placeholder {
+    color: #6b7280 !important; /* neutral-500 */
+    opacity: 1;
+  }
+
+  /* WebKit/Chrome Autofill Fix */
+  #canteen-page input:-webkit-autofill,
+  #canteen-page input:-webkit-autofill:hover,
+  #canteen-page input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #111111 !important;
+    transition: background-color 5000s ease-in-out 0s;
+    box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    caret-color: #111111;
+  }
+
+  /* Firefox Autofill Fix */
+  #canteen-page input:-moz-autofill {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    caret-color: #111111;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div id="canteen-page" class="container mx-auto px-4 py-8">
     <!-- Seitentitel -->
     <div class="mb-8">
         <h1 class="text-3xl font-bold text-base-content mb-2">
@@ -72,11 +110,7 @@
                                            placeholder="z.B. Veganes Curry mit Reis">
                                 </td>
                                 <td>
-                                    <input type="text" 
-                                           name="dessert_{{ loop.index0 }}" 
-                                           value="{{ meal.dessert }}" 
-                                           class="form-control"
-                                           placeholder="z.B. Apfelkuchen">
+                                    <span class="badge">Tagesdessert</span>
                                 </td>
                                 <!-- Verstecktes Datums-Feld -->
                                 <input type="hidden" name="date_{{ loop.index0 }}" value="{{ meal.date }}">
@@ -119,6 +153,22 @@
                 <p><strong>1-Wochen-Anzeige:</strong> Nur die aktuelle Woche wird im WordPress angezeigt</p>
                 <p><strong>API-basiert:</strong> Daten werden über sichere API bereitgestellt</p>
                 <p><strong>Sofortige Anzeige:</strong> Die Daten sind sofort im WordPress-Kantinenplan sichtbar</p>
+                <div class="mt-4 p-3 bg-base-200 rounded space-y-2">
+                    <p class="font-semibold"><i class="fas fa-link mr-2"></i>API-URLs</p>
+                    <p class="text-xs break-all">Aktuelle Woche: <code>{{ api_current }}</code></p>
+                    <p class="text-xs break-all">Zwei Wochen: <code>{{ api_two_weeks }}</code></p>
+                    <p class="text-xs break-all">Status: <code>{{ api_status }}</code></p>
+
+                    <p class="font-semibold mt-2"><i class="fas fa-code mr-2"></i>Embed/iframe</p>
+                    <p class="text-xs break-all">Embed-URL: <code>{{ embed_url }}</code></p>
+                    {% if canteen_api_key %}
+                    <p class="text-xs break-all">Embed-URL (mit api_key): <code>{{ embed_url }}?api_key={{ canteen_api_key }}</code></p>
+                    {% endif %}
+                    <details class="mt-1">
+                      <summary class="cursor-pointer text-xs opacity-80">iframe Beispiel</summary>
+                      <pre class="text-xs bg-base-300 p-2 rounded overflow-auto">&lt;iframe src="{{ embed_url }}{% if canteen_api_key %}?api_key={{ canteen_api_key }}{% endif %}" style="width:100%;max-width:900px;height:460px;border:0;overflow:hidden;"&gt;&lt;/iframe&gt;</pre>
+                    </details>
+                </div>
             </div>
         </div>
     </div>

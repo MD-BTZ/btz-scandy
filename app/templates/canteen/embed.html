@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kantinenplan – Embed</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;margin:0;padding:0;background:#fff;color:#111}
+    .canteen-plan{max-width:900px;margin:0 auto;padding:16px}
+    .title{font-size:20px;font-weight:700;margin:8px 0 16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f3f4f6}
+    tr.today{background:#fff7ed}
+    .footer{margin-top:8px;color:#6b7280;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="canteen-plan" id="canteen-root">
+    <div class="title">Kantinenplan – Aktuelle Woche</div>
+    <div id="canteen-loading">Lade Kantinenplan…</div>
+    <div id="canteen-error" style="display:none;color:#b91c1c">Fehler beim Laden des Kantinenplans.</div>
+    <table id="canteen-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th>Datum</th>
+          <th>Menü 1 (Fleisch)</th>
+          <th>Menü 2 (Vegan)</th>
+          <th>Dessert</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="footer" id="canteen-generated"></div>
+  </div>
+
+  <script>
+    (function(){
+      const apiUrl = '{{ api_current or url_for("canteen.api_current_week", _external=True) }}';
+      const loading = document.getElementById('canteen-loading');
+      const errorEl = document.getElementById('canteen-error');
+      const table = document.getElementById('canteen-table');
+      const tbody = table.querySelector('tbody');
+      const gen = document.getElementById('canteen-generated');
+
+      fetch(apiUrl)
+        .then(r=>r.json())
+        .then(data=>{
+          loading.style.display='none';
+          if(!data || !data.success){
+            errorEl.style.display='block';
+            return;
+          }
+          const week = data.week || [];
+          const weekdays = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+          const today = new Date();
+          const todayName = weekdays[today.getDay()-1];
+          tbody.innerHTML = week.map(row=>{
+            const isToday = row.weekday === todayName;
+            return `<tr class="${isToday?'today':''}">`
+              + `<td>${row.weekday||''}</td>`
+              + `<td>${row.date||''}</td>`
+              + `<td>${row.meat_dish||''}</td>`
+              + `<td>${row.vegan_dish||''}</td>`
+              + `<td>${row.dessert||'Tagesdessert'}</td>`
+              + `</tr>`;
+          }).join('');
+          table.style.display='table';
+          gen.textContent = data.generated_at ? `Stand: ${new Date(data.generated_at).toLocaleString('de-DE')}` : '';
+        })
+        .catch(()=>{
+          loading.style.display='none';
+          errorEl.style.display='block';
+        });
+    })();
+  </script>
+</body>
+</html>
+
+
