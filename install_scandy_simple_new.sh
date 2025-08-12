@@ -236,14 +236,14 @@ fi
 
 # Prüfe welche App-Dateien existieren
 log "Prüfe verfügbare App-Dateien..."
-log "Root-Verzeichnis:"
-ls -la *.py 2>/dev/null || echo "Keine Python-Dateien im Root gefunden"
+log "Verzeichnis /opt/scandy nach dem Kopieren:"
+ls -la /opt/scandy/ | head -10
 
-if [ -d "app" ]; then
-    log "App-Verzeichnis:"
-    ls -la app/ | head -10
+if [ -d "/opt/scandy/app" ]; then
+    log "App-Verzeichnis in /opt/scandy:"
+    ls -la /opt/scandy/app/ | head -10
     log "Python-Dateien im app/ Verzeichnis:"
-    find app/ -name "*.py" -maxdepth 1 2>/dev/null || echo "Keine Python-Dateien im app/ Verzeichnis"
+    find /opt/scandy/app/ -name "*.py" -maxdepth 1 2>/dev/null || echo "Keine Python-Dateien im app/ Verzeichnis"
 fi
 
 # Berechtigungen setzen
