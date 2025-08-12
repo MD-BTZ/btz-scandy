@@ -95,15 +95,27 @@ cd /opt/scandy
 rm -rf app/ config/ *.py 2>/dev/null || true
 
 # Kopiere neuen Code
+CURRENT_DIR=$(pwd)
+log "Aktuelles Verzeichnis: $CURRENT_DIR"
+
 if [ -d "/home/$(logname)/Scandy2" ]; then
-    cp -r /home/$(logname)/Scandy2/* . 2>/dev/null || true
+    cp -r /home/$(logname)/Scandy2/* /opt/scandy/ 2>/dev/null || true
     success "Code von /home/$(logname)/Scandy2 aktualisiert"
 elif [ -d "/home/woschj/Scandy2" ]; then
-    cp -r /home/woschj/Scandy2/* . 2>/dev/null || true
+    cp -r /home/woschj/Scandy2/* /opt/scandy/ 2>/dev/null || true
     success "Code von /home/woschj/Scandy2 aktualisiert"
+elif [ -d "$CURRENT_DIR/app" ] || [ -f "$CURRENT_DIR/app.py" ] || [ -f "$CURRENT_DIR/requirements.txt" ]; then
+    # Aktuelles Verzeichnis enthält Scandy-Code
+    log "Scandy-Code im aktuellen Verzeichnis gefunden - kopiere nach /opt/scandy"
+    cp -r "$CURRENT_DIR"/* /opt/scandy/ 2>/dev/null || true
+    success "Code vom aktuellen Verzeichnis ($CURRENT_DIR) aktualisiert"
 else
-    info "Scandy-Code nicht gefunden - verwende aktuelles Verzeichnis"
-    cp -r ./* /opt/scandy/ 2>/dev/null || true
+    error "Kein Scandy-Code gefunden!"
+    log "Verfügbare Verzeichnisse:"
+    ls -la /home/ 2>/dev/null || echo "Keine /home Verzeichnisse"
+    log "Aktuelles Verzeichnis Inhalt:"
+    ls -la "$CURRENT_DIR" | head -10
+    exit 1
 fi
 
 # Berechtigungen setzen
