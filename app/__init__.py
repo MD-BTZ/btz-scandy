@@ -106,7 +106,8 @@ def normalize_database_ids():
 
 # Flask-Login Manager konfigurieren
 login_manager = LoginManager()
-login_manager.session_protection = "strong"
+# Für HTTP (Port 80) weniger strenge Session-Protection
+login_manager.session_protection = "basic"  # Weniger streng für HTTP
 login_manager.login_view = 'auth.login'
 login_manager.login_message = "Bitte melden Sie sich an, um auf diese Seite zuzugreifen."
 login_manager.login_message_category = "info"
@@ -269,8 +270,15 @@ def create_app(test_config=None):
     app.config.setdefault('SESSION_FILE_THRESHOLD', 500)
     app.config.setdefault('SESSION_FILE_MODE', 384)
     
-    # Session-Cookie-Einstellungen aus der Config-Klasse verwenden
-    # Diese werden bereits in der Config-Klasse korrekt gesetzt
+    # Session-Cookie-Einstellungen für HTTP (Port 80) korrekt setzen
+    # Diese überschreiben die Config-Klasse für HTTP-Umgebungen
+    if not app.config.get('SESSION_COOKIE_SECURE', False):
+        app.config['SESSION_COOKIE_SECURE'] = False
+        app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+        app.config['REMEMBER_COOKIE_SECURE'] = False
+        app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+        app.logger.info("Session-Konfiguration für HTTP angepasst")
+    
     app.config.setdefault('PERMANENT_SESSION_LIFETIME', timedelta(days=7))
     
     # Debug: Zeige aktuelle Session-Konfiguration
@@ -287,6 +295,13 @@ def create_app(test_config=None):
         if request.endpoint == 'auth.login' and response.status_code == 302:
             app.logger.info(f"DEBUG: Nach Login - Session: {dict(session)}")
             app.logger.info(f"DEBUG: Response Headers: {dict(response.headers)}")
+            
+            # Prüfe Session-Cookies
+            if 'Set-Cookie' in response.headers:
+                app.logger.info(f"DEBUG: Session-Cookies gesetzt: {response.headers['Set-Cookie']}")
+            else:
+                app.logger.warning("DEBUG: Keine Session-Cookies gesetzt!")
+                
         return response
 
     # ===== Department aus Session in Request-Context laden =====

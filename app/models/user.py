@@ -76,7 +76,8 @@ class User(UserMixin):
         return str(self.id)
     
     def is_authenticated(self):
-        return True
+        # Prüfe ob der User aktiv ist und nicht zur Löschung vorgesehen
+        return self._active and not self.is_scheduled_for_deletion
     
     def is_anonymous(self):
         return False

@@ -198,12 +198,13 @@ class ProductionConfig(Config):
     TESTING = False
     
     # Erweiterte Sicherheitseinstellungen (an HTTPS koppelbar)
-    SESSION_COOKIE_SECURE = True
-    REMEMBER_COOKIE_SECURE = True
+    # Für HTTP (Port 80) müssen Cookies ohne Secure-Flag gesetzt werden
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+    REMEMBER_COOKIE_SECURE = os.environ.get('REMEMBER_COOKIE_SECURE', 'False').lower() == 'true'
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Strict'
+    SESSION_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für HTTP
     REMEMBER_COOKIE_HTTPONLY = True
-    REMEMBER_COOKIE_SAMESITE = 'Strict'
+    REMEMBER_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für HTTP
     
     # Security Headers
     SECURITY_HEADERS = {
