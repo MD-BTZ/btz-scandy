@@ -354,7 +354,8 @@ if [[ "$APP_FILE" == *"wsgi.py" ]]; then
     # WSGI-Datei gefunden - verwende Gunicorn
     # Extrahiere den Modulnamen ohne .py
     MODULE_NAME=$(echo "$APP_FILE" | sed 's/\.py$//' | sed 's/\//\./g')
-    EXEC_START="/opt/scandy/venv/bin/gunicorn --bind 0.0.0.0:\${WEB_PORT} --workers 2 --timeout 120 $MODULE_NAME:app"
+    # Scandy verwendet 'app' als Variable, nicht 'application'
+    EXEC_START="/opt/scandy/venv/bin/gunicorn --bind 0.0.0.0:\${WEB_PORT} --workers 2 --timeout 120 --chdir /opt/scandy $MODULE_NAME:app"
     log "Verwende Gunicorn für WSGI-App: $MODULE_NAME:app"
 else
     # Normale Python-Datei - verwende Python direkt
@@ -399,12 +400,42 @@ fi
 # 9. Services starten
 log "Starte Services..."
 systemctl restart mongod
-systemctl restart scandy
+
+# Starte Scandy mit besserer Fehlerbehandlung
+log "Starte Scandy-Service..."
+if systemctl restart scandy; then
+    success "Scandy-Service gestartet"
+else
+    error "Fehler beim Starten des Scandy-Services"
+    log "Service-Status:"
+    systemctl status scandy --no-pager 2>/dev/null || echo "Service-Status nicht verfügbar"
+    
+    # Versuche manuellen Start
+    log "Versuche manuellen Start..."
+    cd /opt/scandy
+    source venv/bin/activate
+    if [ -f "app/wsgi.py" ]; then
+        log "Starte manuell mit Gunicorn..."
+        nohup venv/bin/gunicorn --bind 0.0.0.0:$WEB_PORT --workers 2 --timeout 120 app.wsgi:app > /var/log/scandy.log 2>&1 &
+        SCANDY_PID=$!
+        echo $SCANDY_PID > /var/run/scandy.pid
+        sleep 3
+        
+        if kill -0 $SCANDY_PID 2>/dev/null; then
+            success "Scandy läuft manuell (PID: $SCANDY_PID)"
+        else
+            error "Auch manueller Start fehlgeschlagen"
+            log "Logs:"
+            tail -20 /var/log/scandy.log 2>/dev/null || echo "Keine Logs verfügbar"
+        fi
+    fi
+fi
 
 # 10. Warten auf App-Start
 log "Warte auf App-Start..."
 for i in {1..60}; do
-    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT "; then
+    # Prüfe sowohl Systemd-Service als auch manuellen Prozess
+    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT " || [ -f "/var/run/scandy.pid" ]; then
         success "Scandy läuft auf Port $WEB_PORT"
         break
     fi
@@ -416,6 +447,18 @@ for i in {1..60}; do
         # Zeige Service-Status alle 10 Sekunden
         log "Service-Status:"
         systemctl status scandy --no-pager 2>/dev/null | head -10 || echo "Service-Status nicht verfügbar"
+        
+        # Prüfe manuellen Prozess
+        if [ -f "/var/run/scandy.pid" ]; then
+            MANUAL_PID=$(cat /var/run/scandy.pid)
+            if kill -0 $MANUAL_PID 2>/dev/null; then
+                log "Manueller Prozess läuft (PID: $MANUAL_PID)"
+            fi
+        fi
+        
+        # Prüfe Port
+        log "Port-Status:"
+        ss -H -ltn 2>/dev/null | grep ":$WEB_PORT " || echo "Port $WEB_PORT nicht aktiv"
     fi
     
     if [ $i -eq 60 ]; then
@@ -429,6 +472,13 @@ for i in {1..60}; do
         log "App-Logs:"
         journalctl -u scandy --no-pager -n 20 2>/dev/null || echo "Journalctl nicht verfügbar"
         
+        log "Manuelle Logs:"
+        if [ -f "/var/log/scandy.log" ]; then
+            tail -20 /var/log/scandy.log
+        else
+            echo "Keine manuellen Logs verfügbar"
+        fi
+        
         log "Verfügbare Dateien in /opt/scandy:"
         ls -la /opt/scandy/ | head -10
         
@@ -441,6 +491,7 @@ for i in {1..60}; do
         echo "EXEC_START: $EXEC_START"
         
         info "Prüfe Logs: journalctl -u scandy -f"
+        info "Oder manuelle Logs: tail -f /var/log/scandy.log"
         exit 1
     fi
     sleep 2

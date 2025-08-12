@@ -246,7 +246,8 @@ if [[ "$APP_FILE" == *"wsgi.py" ]]; then
     # WSGI-Datei gefunden - verwende Gunicorn
     # Extrahiere den Modulnamen ohne .py
     MODULE_NAME=$(echo "$APP_FILE" | sed 's/\.py$//' | sed 's/\//\./g')
-    EXEC_START="/opt/scandy/venv/bin/gunicorn --bind 0.0.0.0:\${WEB_PORT} --workers 2 --timeout 120 $MODULE_NAME:app"
+    # Scandy verwendet 'app' als Variable, nicht 'application'
+    EXEC_START="/opt/scandy/venv/bin/gunicorn --bind 0.0.0.0:\${WEB_PORT} --workers 2 --timeout 120 --chdir /opt/scandy $MODULE_NAME:app"
     log "Verwende Gunicorn für WSGI-App: $MODULE_NAME:app"
 else
     # Normale Python-Datei - verwende Python direkt
@@ -299,6 +300,10 @@ for i in {1..60}; do
         # Zeige Service-Status alle 10 Sekunden
         log "Service-Status:"
         systemctl status scandy --no-pager 2>/dev/null | head -10 || echo "Service-Status nicht verfügbar"
+        
+        # Prüfe Port
+        log "Port-Status:"
+        ss -H -ltn 2>/dev/null | grep ":$WEB_PORT " || echo "Port $WEB_PORT nicht aktiv"
     fi
     
     if [ $i -eq 60 ]; then
