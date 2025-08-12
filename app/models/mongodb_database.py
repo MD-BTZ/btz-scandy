@@ -102,6 +102,11 @@ class MongoDBDatabase:
                     return base_filter or {}
         except Exception:
             pass
+        # Wenn der Filter bereits ein Department enthält, kein zusätzliches Scoping
+        if base_filter and isinstance(base_filter, dict):
+            if 'department' in base_filter:
+                return base_filter
+        
         current_department = cls._get_current_department()
         if not current_department:
             # Ohne gesetztes Department: alle Dokumente zulassen (Legacy-Modus)
@@ -481,7 +486,16 @@ class LazyMongoDB:
 mongodb = LazyMongoDB() 
 
 def get_feature_settings():
-    """Holt alle Feature-Einstellungen"""
+    """Holt alle Feature-Einstellungen (Legacy-Funktion)"""
+    try:
+        from app.models.feature_system import feature_system
+        return feature_system.get_feature_settings()
+    except ImportError:
+        # Fallback für alte Versionen
+        return _legacy_get_feature_settings()
+
+def _legacy_get_feature_settings():
+    """Legacy-Funktion für Feature-Einstellungen"""
     try:
         # Fallback: Standard-Einstellungen wenn MongoDB nicht verfügbar
         default_settings = {
@@ -495,8 +509,7 @@ def get_feature_settings():
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
-            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
-            # Werkzeug-Felder (standardmäßig aktiviert)
+            'canteen_plan': False,
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,
             'tool_field_mac_address': True,
@@ -542,8 +555,7 @@ def get_feature_settings():
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
-            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
-            # Werkzeug-Felder (standardmäßig aktiviert)
+            'canteen_plan': False,
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,
             'tool_field_mac_address': True,
@@ -553,7 +565,16 @@ def get_feature_settings():
         }
 
 def set_feature_setting(feature_name, enabled):
-    """Setzt eine Feature-Einstellung"""
+    """Setzt eine Feature-Einstellung (Legacy-Funktion)"""
+    try:
+        from app.models.feature_system import feature_system
+        return feature_system.set_feature_setting(feature_name, enabled)
+    except ImportError:
+        # Fallback für alte Versionen
+        return _legacy_set_feature_setting(feature_name, enabled)
+
+def _legacy_set_feature_setting(feature_name, enabled):
+    """Legacy-Funktion für Feature-Einstellungen"""
     try:
         mongodb.update_one('settings', 
                          {'key': f'feature_{feature_name}'}, 
@@ -565,7 +586,16 @@ def set_feature_setting(feature_name, enabled):
         return False
 
 def is_feature_enabled(feature_name):
-    """Prüft ob ein Feature aktiviert ist"""
+    """Prüft ob ein Feature aktiviert ist (Legacy-Funktion)"""
+    try:
+        from app.models.feature_system import feature_system
+        return feature_system.is_feature_enabled(feature_name)
+    except ImportError:
+        # Fallback für alte Versionen
+        return _legacy_is_feature_enabled(feature_name)
+
+def _legacy_is_feature_enabled(feature_name):
+    """Legacy-Funktion für Feature-Einstellungen"""
     try:
         # Standard-Einstellungen
         default_settings = {
@@ -579,8 +609,7 @@ def is_feature_enabled(feature_name):
             'software_management': False,
             'job_board': False,
             'weekly_reports': False,
-            'canteen_plan': False,  # Kantinenplan-Feature (standardmäßig deaktiviert)
-            # Werkzeug-Felder (standardmäßig aktiviert)
+            'canteen_plan': False,
             'tool_field_serial_number': True,
             'tool_field_invoice_number': True,
             'tool_field_mac_address': True,

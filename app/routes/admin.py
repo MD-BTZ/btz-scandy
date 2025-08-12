@@ -15,7 +15,8 @@ from io import BytesIO
 import time
 from PIL import Image
 from app.config.config import Config
-from app.models.mongodb_database import mongodb, get_feature_settings, set_feature_setting, is_feature_enabled
+from app.models.mongodb_database import mongodb
+from app.models.feature_system import feature_system, get_feature_settings, set_feature_setting, is_feature_enabled
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1776,7 +1777,7 @@ def add_user():
                                  departments=departments,
                                  user_allowed_departments=allowed_departments,
                                  user_default_department=default_department,
-                                 handlungsfelder=get_ticket_categories_from_settings(),
+                                 handlungsfelder=handlungsfeld_service.get_handlungsfelder_for_department(session.get('department')) if session.get('department') else get_ticket_categories_from_settings(),
                                  user_handlungsfelder=request.form.getlist('handlungsfelder'))
         
         # Automatische Passwort-Generierung wenn keines eingegeben wurde
@@ -1859,11 +1860,17 @@ def add_user():
                                  departments=departments,
                                  user_allowed_departments=allowed_departments,
                                  user_default_department=default_department,
-                                 handlungsfelder=get_ticket_categories_from_settings(),
+                                 handlungsfelder=handlungsfeld_service.get_handlungsfelder_for_department(session.get('department')) if session.get('department') else get_ticket_categories_from_settings(),
                                  user_handlungsfelder=handlungsfelder)
     
-    # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-    handlungsfelder = get_ticket_categories_from_settings()
+    # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+    from app.services.handlungsfeld_service import handlungsfeld_service
+    current_department = session.get('department')
+    if current_department:
+        handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+    else:
+        # Fallback zu globalen Kategorien
+        handlungsfelder = get_ticket_categories_from_settings()
     
     # Abteilungen aus Settings
     from app.services.admin_system_settings_service import AdminSystemSettingsService
@@ -1899,8 +1906,15 @@ def edit_user(user_id):
     
     # GET-Request: Zeige das Formular mit den aktuellen Daten
     if request.method == 'GET':
-        # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-        handlungsfelder = get_ticket_categories_from_settings()
+        # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+        from app.services.handlungsfeld_service import handlungsfeld_service
+        current_department = session.get('department')
+        if current_department:
+            handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+        else:
+            # Fallback zu globalen Kategorien
+            handlungsfelder = get_ticket_categories_from_settings()
+        
         user_handlungsfelder = user.get('handlungsfelder', [])
         
         from app.services.admin_system_settings_service import AdminSystemSettingsService
@@ -1928,8 +1942,15 @@ def edit_user(user_id):
         if not is_valid:
             for error in errors:
                 flash(error, 'error')
-            # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-            handlungsfelder = get_ticket_categories_from_settings()
+            # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+            from app.services.handlungsfeld_service import handlungsfeld_service
+            current_department = session.get('department')
+            if current_department:
+                handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+            else:
+                # Fallback zu globalen Kategorien
+                handlungsfelder = get_ticket_categories_from_settings()
+            
             user_handlungsfelder = user.get('handlungsfelder', [])
             
             return render_template('admin/user_form.html', 
@@ -1982,8 +2003,15 @@ def edit_user(user_id):
             return redirect(url_for('admin.manage_users'))
         else:
             flash(message, 'error')
-            # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-            handlungsfelder = get_ticket_categories_from_settings()
+            # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+            from app.services.handlungsfeld_service import handlungsfeld_service
+            current_department = session.get('department')
+            if current_department:
+                handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+            else:
+                # Fallback zu globalen Kategorien
+                handlungsfelder = get_ticket_categories_from_settings()
+            
             user_handlungsfelder = user.get('handlungsfelder', [])
             
             return render_template('admin/user_form.html', 
@@ -1995,8 +2023,15 @@ def edit_user(user_id):
     except Exception as e:
         logger.error(f"Fehler beim Aktualisieren des Benutzers: {e}")
         flash('Fehler beim Aktualisieren des Benutzers', 'error')
-        # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-        handlungsfelder = get_ticket_categories_from_settings()
+        # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+        from app.services.handlungsfeld_service import handlungsfeld_service
+        current_department = session.get('department')
+        if current_department:
+            handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+        else:
+            # Fallback zu globalen Kategorien
+            handlungsfelder = get_ticket_categories_from_settings()
+        
         user_handlungsfelder = user.get('handlungsfelder', [])
         
         return render_template('admin/user_form.html', 
@@ -2005,8 +2040,15 @@ def edit_user(user_id):
                              handlungsfelder=handlungsfelder,
                              user_handlungsfelder=user_handlungsfelder)
     
-    # Hole alle verfügbaren Handlungsfelder (Ticket-Kategorien)
-    handlungsfelder = get_ticket_categories_from_settings()
+    # Hole alle verfügbaren Handlungsfelder für die aktuelle Abteilung
+    from app.services.handlungsfeld_service import handlungsfeld_service
+    current_department = session.get('department')
+    if current_department:
+        handlungsfelder = handlungsfeld_service.get_handlungsfelder_for_department(current_department)
+    else:
+        # Fallback zu globalen Kategorien
+        handlungsfelder = get_ticket_categories_from_settings()
+    
     user_handlungsfelder = user.get('handlungsfelder', [])
     
     return render_template('admin/user_form.html', 
@@ -2513,8 +2555,14 @@ def software_management():
 @bp.route('/feature_settings', methods=['GET', 'POST'])
 @admin_required
 def feature_settings():
-    """Feature-Einstellungen verwalten"""
+    """Feature-Einstellungen verwalten (department-scoped)"""
     try:
+        # Aktuelle Abteilung aus der Session
+        current_department = session.get('department')
+        if not current_department:
+            flash('Keine Abteilung ausgewählt', 'error')
+            return redirect(url_for('admin.dashboard'))
+        
         if request.method == 'POST':
             # Feature-Einstellungen verarbeiten
             features = {
@@ -2538,24 +2586,95 @@ def feature_settings():
                 'tool_field_software': request.form.get('tool_field_software') == 'on'
             }
             
-            # Einstellungen speichern
+            # Einstellungen für aktuelle Abteilung speichern
+            from app.models.feature_system import feature_system
             for feature_name, enabled in features.items():
-                set_feature_setting(feature_name, enabled)
+                feature_system.set_feature_setting(feature_name, enabled, current_department)
             
-            flash('Feature-Einstellungen erfolgreich gespeichert', 'success')
+            flash(f'Feature-Einstellungen für {current_department} erfolgreich gespeichert', 'success')
             return redirect(url_for('admin.feature_settings'))
         
-        # Aktuelle Feature-Einstellungen laden
-        feature_settings = get_feature_settings()
+        # Aktuelle Feature-Einstellungen für aktuelle Abteilung laden
+        from app.models.feature_system import feature_system
+        feature_settings = feature_system.get_feature_settings(current_department)
+        
+        # Alle verfügbaren Abteilungen für Abteilungswechsel
+        from app.utils.context_processors import inject_departments
+        departments_ctx = inject_departments()
+        available_departments = departments_ctx['departments']['allowed']
         
         return render_template('admin/feature_settings.html',
-                             feature_settings=feature_settings)
+                             feature_settings=feature_settings,
+                             current_department=current_department,
+                             available_departments=available_departments)
                              
     except Exception as e:
         logger.error(f"Fehler beim Laden der Feature-Einstellungen: {str(e)}")
         flash('Fehler beim Laden der Feature-Einstellungen', 'error')
         return redirect(url_for('admin.dashboard'))
 
+@bp.route('/department_features', methods=['GET', 'POST'])
+@admin_required
+def department_features():
+    """Feature-Einstellungen für alle Abteilungen verwalten"""
+    try:
+        from app.models.feature_system import feature_system
+        
+        if request.method == 'POST':
+            action = request.form.get('action')
+            source_dept = request.form.get('source_department')
+            target_dept = request.form.get('target_department')
+            reset_dept = request.form.get('reset_department')
+            
+            if action == 'copy' and source_dept and target_dept:
+                if feature_system.copy_features_from_department(source_dept, target_dept):
+                    flash(f'Features von {source_dept} zu {target_dept} kopiert', 'success')
+                else:
+                    flash('Fehler beim Kopieren der Features', 'error')
+                    
+            elif action == 'reset' and reset_dept:
+                if feature_system.reset_department_features(reset_dept):
+                    flash(f'Features für {reset_dept} zurückgesetzt', 'success')
+                else:
+                    flash('Fehler beim Zurücksetzen der Features', 'error')
+            
+            return redirect(url_for('admin.department_features'))
+        
+        # Alle Department-Features laden
+        all_features = feature_system.get_all_department_features()
+        
+        # Verfügbare Abteilungen
+        from app.utils.context_processors import inject_departments
+        departments_ctx = inject_departments()
+        available_departments = departments_ctx['departments']['allowed']
+        
+        return render_template('admin/department_features.html',
+                             all_features=all_features,
+                             available_departments=available_departments)
+                             
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Department-Features: {str(e)}")
+        flash('Fehler beim Laden der Department-Features', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@bp.route('/change_department', methods=['POST'])
+@admin_required
+def change_department():
+    """Wechselt die aktuelle Abteilung in der Session"""
+    try:
+        data = request.get_json()
+        new_department = data.get('department')
+        
+        if new_department:
+            session['department'] = new_department
+            g.current_department = new_department
+            return jsonify({'success': True, 'department': new_department})
+        else:
+            return jsonify({'success': False, 'error': 'Keine Abteilung angegeben'}), 400
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Wechseln der Abteilung: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp.route('/role_permissions', methods=['GET', 'POST'])
 @admin_required
@@ -2853,10 +2972,11 @@ def get_categories_admin():
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': True, 'categories': []})
-        docs = list(mongodb.find('categories', {'deleted': {'$ne': True}}))
-        docs = [d for d in docs if d.get('department') == current_dept]
-        names = sorted({d.get('name') for d in docs if d.get('name')})
-        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
+        
+        # Verwende den neuen CategoryService
+        from app.services.category_service import category_service
+        categories = category_service.get_categories_for_department(current_dept)
+        return jsonify({'success': True, 'categories': [{'name': n} for n in categories]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Kategorien: {str(e)}")
         return jsonify({'success': False, 'message': 'Fehler beim Laden der Kategorien'})
@@ -2874,29 +2994,22 @@ def add_category():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
+        # Verwende den neuen CategoryService
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        exists = mongodb.find_one('categories', {
-            'name': {'$regex': f'^{name}$', '$options': 'i'},
-            'department': current_dept,
-            'deleted': {'$ne': True}
-        })
-        if exists:
+        
+        from app.services.category_service import category_service
+        if category_service.create_category(name, current_dept):
+            return jsonify({
+                'success': True,
+                'message': 'Kategorie erfolgreich hinzugefügt.'
+            })
+        else:
             return jsonify({'success': False, 'message': 'Diese Kategorie existiert bereits in dieser Abteilung.'})
-        mongodb.insert_one('categories', {
-            'name': name,
-            'department': current_dept,
-            'deleted': False
-        })
-
-        return jsonify({
-            'success': True,
-            'message': 'Kategorie erfolgreich hinzugefügt.'
-        })
+            
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Kategorie: {str(e)}")
         return jsonify({
@@ -2914,6 +3027,9 @@ def delete_category(name):
         from flask import g
         current_dept = getattr(g, 'current_department', None)
         
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        
         # Überprüfen, ob die Kategorie in Verwendung ist (nur aktuelle Abteilung)
         tools_with_category = mongodb.db.tools.find_one({'category': decoded_name, 'department': current_dept})
         if tools_with_category:
@@ -2921,22 +3037,17 @@ def delete_category(name):
                 'success': False,
                 'message': 'Die Kategorie kann nicht gelöscht werden, da sie noch von Werkzeugen verwendet wird.'
             })
-        if not current_dept:
-            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        # Soft-Delete in dedizierter Collection
-        ok = mongodb.update_one('categories', {
-            'name': decoded_name,
-            'department': current_dept
-        }, {
-            'deleted': True
-        })
-        if not ok:
-            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
-        return jsonify({
-            'success': True,
-            'message': 'Kategorie erfolgreich gelöscht.'
-        })
+        # Verwende den neuen CategoryService
+        from app.services.category_service import category_service
+        if category_service.delete_category(decoded_name, current_dept):
+            return jsonify({
+                'success': True,
+                'message': 'Kategorie erfolgreich gelöscht.'
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Kategorie nicht gefunden (Abteilung prüfen).'}), 404
+            
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Kategorie: {str(e)}")
         return jsonify({
@@ -2955,10 +3066,11 @@ def get_locations():
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': True, 'locations': []})
-        docs = list(mongodb.find('locations', {'deleted': {'$ne': True}}))
-        docs = [d for d in docs if d.get('department') == current_dept]
-        names = sorted({d.get('name') for d in docs if d.get('name')})
-        return jsonify({'success': True, 'locations': [{'name': n} for n in names]})
+        
+        # Verwende den neuen LocationService
+        from app.services.location_service import location_service
+        locations = location_service.get_locations_for_department(current_dept)
+        return jsonify({'success': True, 'locations': [{'name': n} for n in locations]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Standorte: {str(e)}")
         return jsonify({
@@ -2979,29 +3091,22 @@ def add_location():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Schreibe in neue Collection 'locations' mit Abteilung
+        # Verwende den neuen LocationService
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        exists = mongodb.find_one('locations', {
-            'name': {'$regex': f'^{name}$', '$options': 'i'},
-            'department': current_dept,
-            'deleted': {'$ne': True}
-        })
-        if exists:
+        
+        from app.services.location_service import location_service
+        if location_service.create_location(name, current_dept):
+            return jsonify({
+                'success': True,
+                'message': 'Standort erfolgreich hinzugefügt.'
+            })
+        else:
             return jsonify({'success': False, 'message': 'Dieser Standort existiert bereits in dieser Abteilung.'})
-        mongodb.insert_one('locations', {
-            'name': name,
-            'department': current_dept,
-            'deleted': False
-        })
-
-        return jsonify({
-            'success': True,
-            'message': 'Standort erfolgreich hinzugefügt.'
-        })
+            
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen des Standorts: {str(e)}")
         return jsonify({
@@ -3017,6 +3122,10 @@ def delete_location(name):
         decoded_name = unquote(name)
         from flask import g
         current_dept = getattr(g, 'current_department', None)
+        
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        
         # Überprüfen, ob der Standort in Verwendung ist (nur aktuelle Abteilung)
         tools_with_location = mongodb.db.tools.find_one({'location': decoded_name, 'department': current_dept})
         if tools_with_location:
@@ -3024,24 +3133,20 @@ def delete_location(name):
                 'success': False,
                 'message': 'Der Standort kann nicht gelöscht werden, da er noch von Werkzeugen verwendet wird.'
             })
-        if not current_dept:
-            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        # Soft-Delete in dedizierter Collection
-        ok = mongodb.update_one('locations', {
-            'name': decoded_name,
-            'department': current_dept
-        }, {
-            'deleted': True
-        })
-        if not ok:
-            return jsonify({'success': False, 'message': 'Standort nicht gefunden (Abteilung prüfen).'}), 404
         
-        return jsonify({
-            'success': True,
-            'message': 'Standort erfolgreich gelöscht.'
-        })
+        # Verwende den neuen LocationService
+        from app.services.location_service import location_service
+        success = location_service.delete_location(decoded_name, current_dept)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Standort erfolgreich gelöscht.'
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Standort nicht gefunden (Abteilung prüfen).'}), 404
+            
     except Exception as e:
-        logger.error(f"Fehler beim Löschen des Standorts: {str(e)}")
+        logger.error(f"Fehler beim Löschen des Standorts '{decoded_name}' in {current_dept}: {str(e)}")
         return jsonify({
             'success': False,
             'message': 'Ein Fehler ist aufgetreten.'
@@ -3058,10 +3163,11 @@ def get_ticket_categories():
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': True, 'categories': []})
-        docs = list(mongodb.find('ticket_categories', {'deleted': {'$ne': True}}))
-        docs = [d for d in docs if d.get('department') == current_dept]
-        names = sorted({d.get('name') for d in docs if d.get('name')})
-        return jsonify({'success': True, 'categories': [{'name': n} for n in names]})
+        
+        # Verwende den neuen HandlungsfeldService
+        from app.services.handlungsfeld_service import handlungsfeld_service
+        categories = handlungsfeld_service.get_handlungsfelder_for_department(current_dept)
+        return jsonify({'success': True, 'categories': [{'name': n} for n in categories]})
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Ticket-Kategorien: {str(e)}")
         return jsonify({'success': False, 'message': 'Fehler beim Laden der Ticket-Kategorien'})
@@ -3079,29 +3185,22 @@ def add_ticket_category_json():
                 'message': 'Bitte geben Sie einen Namen ein.'
             })
 
-        # Prüfe auf Duplikate (case-insensitive) innerhalb der aktuellen Abteilung – dedizierte Collection
+        # Verwende den neuen HandlungsfeldService
         from flask import g
         req_dept = request.form.get('dept')
         current_dept = req_dept or getattr(g, 'current_department', None)
         if not current_dept:
             return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        exists = mongodb.find_one('ticket_categories', {
-            'name': {'$regex': f'^{name}$', '$options': 'i'},
-            'department': current_dept,
-            'deleted': {'$ne': True}
-        })
-        if exists:
+        
+        from app.services.handlungsfeld_service import handlungsfeld_service
+        if handlungsfeld_service.create_handlungsfeld(name, current_dept):
+            return jsonify({
+                'success': True,
+                'message': 'Ticket-Kategorie erfolgreich hinzugefügt.'
+            })
+        else:
             return jsonify({'success': False, 'message': 'Diese Ticket-Kategorie existiert bereits in dieser Abteilung.'})
-        mongodb.insert_one('ticket_categories', {
-            'name': name,
-            'department': current_dept,
-            'deleted': False
-        })
-
-        return jsonify({
-            'success': True,
-            'message': 'Ticket-Kategorie erfolgreich hinzugefügt.'
-        })
+            
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen der Ticket-Kategorie: {str(e)}")
         return jsonify({
@@ -3119,25 +3218,21 @@ def delete_ticket_category_json(name):
         # Überprüfen, ob die Ticket-Kategorie in Verwendung ist (nur aktuelle Abteilung)
         from flask import g
         current_dept = getattr(g, 'current_department', None)
+        
+        if not current_dept:
+            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
+        
         tickets_with_category = mongodb.db.tickets.find_one({'category': decoded_name, 'department': current_dept})
         if tickets_with_category:
             return jsonify({
                 'success': False,
                 'message': 'Die Ticket-Kategorie kann nicht gelöscht werden, da sie noch von Tickets verwendet wird.'
             })
-        if not current_dept:
-            return jsonify({'success': False, 'message': 'Keine Abteilung ausgewählt.'})
-        # Soft-Delete in dedizierter Collection
-        ok = mongodb.update_one('ticket_categories', {
-            'name': decoded_name,
-            'department': current_dept
-        }, {
-            'deleted': True
-        })
-        if not ok:
-            return jsonify({'success': False, 'message': 'Ticket-Kategorie nicht gefunden (Abteilung prüfen).'}), 404
         
-        return jsonify({
+        # Verwende den neuen HandlungsfeldService
+        from app.services.handlungsfeld_service import handlungsfeld_service
+        if handlungsfeld_service.delete_handlungsfeld(decoded_name, current_dept):
+            return jsonify({
             'success': True,
             'message': 'Ticket-Kategorie erfolgreich gelöscht.'
         })
