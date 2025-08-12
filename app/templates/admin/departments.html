@@ -30,7 +30,10 @@
           </form>
         </div>
         <div class="bg-base-200 rounded-lg p-4">
-          <h3 class="font-semibold mb-3">Vorhandene Abteilungen</h3>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold">Vorhandene Abteilungen</h3>
+            <div class="text-sm opacity-70">Umbenennen oder löschen</div>
+          </div>
           <div id="departmentsList" class="space-y-2 max-h-80 overflow-y-auto">
             <div class="text-sm opacity-70">Lade Abteilungen…</div>
           </div>
@@ -60,7 +63,8 @@
 </div>
 
 <script>
-const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
 let pendingDeleteName = null;
 
 async function loadDepartments(){
@@ -72,7 +76,10 @@ async function loadDepartments(){
     if(!data.success){ c.innerHTML = '<div class="text-error">Fehler beim Laden</div>'; return; }
     const items = (data.departments||[]).map(d=>`
       <div class="flex items-center justify-between p-2 bg-base-100 rounded border">
-        <div class="font-medium">${d.name}</div>
+        <div class="flex items-center gap-2">
+          <input class="input input-bordered input-xs w-56" value="${d.name}" id="rename-input-${encodeURIComponent(d.name)}">
+          <button class="btn btn-xs" onclick="renameDepartment('${d.name}')"><i class="fas fa-pen"></i></button>
+        </div>
         <button class="btn btn-error btn-xs" onclick="openDeleteDialog('${d.name}')"><i class="fas fa-trash"></i></button>
       </div>`).join('');
     c.innerHTML = items || '<div class="text-sm opacity-70">Keine Abteilungen vorhanden</div>';
@@ -107,7 +114,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async ()=>
   try{
     const res = await fetch(`/admin/departments/delete/${encodeURIComponent(pendingDeleteName)}`, {
       method:'POST',
-      headers: { 'X-CSRFToken': csrfToken }
+      headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
     });
     const data = await res.json();
     if(data.success){
@@ -119,6 +126,33 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async ()=>
 });
 
 document.addEventListener('DOMContentLoaded', loadDepartments);
+
+async function renameDepartment(oldName){
+  const input = document.getElementById(`rename-input-${encodeURIComponent(oldName)}`);
+  if(!input) return;
+  const newName = input.value.trim();
+  if(!newName){
+    window.showToast && window.showToast('error', 'Neuer Name darf nicht leer sein');
+    return;
+  }
+  if(newName === oldName){
+    window.showToast && window.showToast('info', 'Name unverändert');
+    return;
+  }
+  try{
+    const fd = new FormData();
+    fd.append('old_name', oldName);
+    fd.append('new_name', newName);
+    const res = await fetch('/admin/departments/rename', {method:'POST', body: fd, headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {} });
+    const data = await res.json();
+    if(data.success){
+      window.showToast && window.showToast('success', data.message||'Abteilung umbenannt');
+      loadDepartments();
+    }else{
+      window.showToast && window.showToast('error', data.message||'Umbenennen fehlgeschlagen');
+    }
+  }catch(e){ console.error(e); }
+}
 </script>
 {% endblock %}
 

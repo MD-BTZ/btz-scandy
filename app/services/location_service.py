@@ -54,11 +54,7 @@ class LocationService:
                 if name:
                     location_names.append(name)
             
-            # Fallback: Lade aus settings (Legacy)
-            if not location_names:
-                from app.utils.database_helpers import get_locations_from_settings
-                location_names = get_locations_from_settings()
-                logger.info(f"Fallback zu Legacy-Standorten für {department}: {len(location_names)}")
+            # Kein Fallback mehr: Standorte sind strikt abteilungsgebunden
             
             return sorted(location_names, key=str.casefold)
             

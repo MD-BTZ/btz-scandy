@@ -54,11 +54,7 @@ class TicketCategoryService:
                 if name:
                     category_names.append(name)
             
-            # Fallback: Lade aus settings (Legacy)
-            if not category_names:
-                from app.utils.database_helpers import get_ticket_categories_from_settings
-                category_names = get_ticket_categories_from_settings()
-                logger.info(f"Fallback zu Legacy-Ticket-Kategorien für {department}: {len(category_names)}")
+            # Kein Fallback mehr: Ticket-Kategorien sind strikt abteilungsgebunden
             
             return sorted(category_names, key=str.casefold)
             

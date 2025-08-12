@@ -6,6 +6,7 @@ das Features pro Abteilung verwaltet und persistent speichert.
 """
 
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 from flask import g
 import logging
 from app.models.mongodb_database import mongodb
@@ -121,7 +122,6 @@ class FeatureSystem:
             
             if existing:
                 # Update bestehende Einstellung
-                from datetime import datetime
                 mongodb.update_one('feature_settings', 
                                  {'_id': existing['_id']}, 
                                  {'$set': {'enabled': enabled, 'updated_at': datetime.now()}})

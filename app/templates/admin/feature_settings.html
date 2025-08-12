@@ -26,10 +26,7 @@
                     </option>
                     {% endfor %}
                 </select>
-                <a href="{{ url_for('admin.department_features') }}" class="btn btn-outline btn-sm">
-                    <i class="fas fa-cogs"></i>
-                    Alle Abteilungen verwalten
-                </a>
+                {# Entfernt: Link zur Department-Features-Seite #}
             </div>
         </div>
     </div>
@@ -38,6 +35,7 @@
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
             <form method="POST" class="space-y-6">
+                {# CSRF optional #}
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <!-- System-Features -->
@@ -166,8 +164,7 @@ document.getElementById('departmentSelector').addEventListener('change', functio
         fetch('{{ url_for("admin.change_department") }}', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 department: selectedDepartment

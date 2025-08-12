@@ -6,7 +6,12 @@ import logging
 from app.models.mongodb_database import mongodb
 from flask_login import current_user
 from flask import g
-from flask_wtf.csrf import generate_csrf
+try:
+    from flask_wtf.csrf import generate_csrf
+except Exception:
+    # Optional: CSRF kann global deaktiviert sein
+    def generate_csrf():
+        return ''
 
 # Import mit try-except um Circular Imports zu vermeiden
 try:

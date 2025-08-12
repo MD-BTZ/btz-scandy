@@ -209,35 +209,15 @@ def get_departments_from_settings():
 def ensure_default_settings():
     """
     Stellt sicher, dass die settings Collection existiert.
-    
-    Erstellt leere Einträge für:
-    - Kategorien
-    - Standorte  
-    - Abteilungen
-    - Ticket-Kategorien
-    
-    Die Werte werden ausschließlich über das Dashboard verwaltet.
-    
+
+    Wichtig:
+    - KEINE globalen Kategorien/Standorte mehr initialisieren (müssen pro Abteilung angelegt werden)
+    - Nur Abteilungen- und Ticket-Kategorien-Keys vorbereiten
+
     Raises:
         Exception: Bei Fehlern während der Initialisierung
     """
     try:
-        # Prüfe und erstelle leere Kategorien-Collection
-        if not mongodb.find_one('settings', {"key": "categories"}):
-            mongodb.insert_one('settings', {
-                "key": "categories",
-                "value": []
-            })
-            logger.info("Kategorien-Collection initialisiert")
-        
-        # Prüfe und erstelle leere Standorte-Collection
-        if not mongodb.find_one('settings', {"key": "locations"}):
-            mongodb.insert_one('settings', {
-                "key": "locations",
-                "value": []
-            })
-            logger.info("Standorte-Collection initialisiert")
-        
         # Prüfe und erstelle leere Abteilungen-Collection
         if not mongodb.find_one('settings', {"key": "departments"}):
             mongodb.insert_one('settings', {
@@ -245,7 +225,7 @@ def ensure_default_settings():
                 "value": []
             })
             logger.info("Abteilungen-Collection initialisiert")
-        
+
         # Prüfe und erstelle leere Ticket-Kategorien-Collection
         if not mongodb.find_one('settings', {"key": "ticket_categories"}):
             mongodb.insert_one('settings', {
@@ -253,7 +233,7 @@ def ensure_default_settings():
                 "value": []
             })
             logger.info("Ticket-Kategorien-Collection initialisiert")
-            
+
     except Exception as e:
         logger.error(f"Fehler beim Initialisieren der Settings Collections: {e}")
         raise

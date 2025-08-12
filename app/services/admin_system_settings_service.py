@@ -225,6 +225,95 @@ class AdminSystemSettingsService:
             return False, f"Fehler beim Löschen der Abteilung: {str(e)}"
 
     @staticmethod
+    def rename_department(old_name: str, new_name: str) -> Tuple[bool, str]:
+        """
+        Bennent eine Abteilung um und migriert referenzierte Daten.
+
+        Args:
+            old_name: bisheriger Name
+            new_name: neuer Name
+
+        Returns:
+            (success, message)
+        """
+        try:
+            if not old_name or not old_name.strip() or not new_name or not new_name.strip():
+                return False, "Alter und neuer Abteilungsname sind erforderlich"
+
+            old_name = old_name.strip()
+            new_name = new_name.strip()
+
+            if old_name == new_name:
+                return False, "Neuer Name ist identisch mit dem alten"
+
+            departments = AdminSystemSettingsService.get_departments_from_settings()
+            if old_name not in departments:
+                return False, f"Abteilung '{old_name}' nicht gefunden"
+            if new_name in departments:
+                return False, f"Abteilung '{new_name}' existiert bereits"
+
+            # 1) Globale Department-Liste aktualisieren
+            try:
+                departments = [new_name if d == old_name else d for d in departments]
+                mongodb.update_one('settings', {'key': 'departments'}, {
+                    '$set': {
+                        'value': departments,
+                        'updated_at': datetime.now()
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Fehler beim Aktualisieren der Abteilungsliste: {e}")
+                return False, f"Fehler beim Aktualisieren der Abteilungsliste: {e}"
+
+            # 2) Collections mit direktem department-Feld migrieren
+            direct_collections = [
+                'tools', 'consumables', 'workers', 'lendings', 'consumable_usages',
+                'tickets', 'timesheets', 'homepage_notices',
+                'locations', 'categories', 'ticket_categories'
+            ]
+            changed_total = 0
+            for coll in direct_collections:
+                try:
+                    res = mongodb.db[coll].update_many({'department': old_name}, {'$set': {'department': new_name}})
+                    changed_total += getattr(res, 'modified_count', 0)
+                except Exception as ce:
+                    logger.warning(f"Konnte Collection '{coll}' nicht migrieren: {ce}")
+
+            # 3) Feature-Settings migrieren
+            try:
+                res = mongodb.db.feature_settings.update_many({'department': old_name}, {'$set': {'department': new_name}})
+                changed_total += getattr(res, 'modified_count', 0)
+            except Exception as fe:
+                logger.warning(f"Konnte feature_settings nicht migrieren: {fe}")
+
+            # 4) Referenzen in Messages/History nach ticket_id und/oder department
+            ref_collections = ['messages', 'ticket_history', 'ticket_messages', 'ticket_notes']
+            # Ermittle betroffene Tickets
+            ticket_ids = [t['_id'] for t in mongodb.db.tickets.find({'department': new_name}, {'_id': 1})]
+            for coll in ref_collections:
+                try:
+                    # Setze department-Feld, falls vorhanden
+                    mongodb.db[coll].update_many({'department': old_name}, {'$set': {'department': new_name}})
+                    if ticket_ids:
+                        mongodb.db[coll].update_many({'ticket_id': {'$in': ticket_ids}}, {'$set': {'department': new_name}})
+                except Exception as re:
+                    logger.warning(f"Konnte referenzielle Collection '{coll}' nicht migrieren: {re}")
+
+            # 5) Nutzer-Defaults und -Berechtigungen
+            try:
+                mongodb.db.users.update_many({'default_department': old_name}, {'$set': {'default_department': new_name}})
+                mongodb.db.users.update_many({'allowed_departments': old_name}, {'$addToSet': {'allowed_departments': new_name}})
+                mongodb.db.users.update_many({}, {'$pull': {'allowed_departments': old_name}})
+            except Exception as ue:
+                logger.warning(f"Konnte Nutzerberechtigungen nicht migrieren: {ue}")
+
+            logger.info(f"Abteilung '{old_name}' in '{new_name}' umbenannt. Betroffene Dokumente ~{changed_total}.")
+            return True, f"Abteilung umbenannt von '{old_name}' in '{new_name}'."
+        except Exception as e:
+            logger.error(f"Fehler beim Umbenennen der Abteilung '{old_name}' in '{new_name}': {str(e)}")
+            return False, f"Fehler beim Umbenennen der Abteilung: {str(e)}"
+
+    @staticmethod
     def add_category(name: str) -> Tuple[bool, str]:
         """
         Fügt eine neue Kategorie hinzu

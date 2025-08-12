@@ -17,6 +17,7 @@ from PIL import Image
 from app.config.config import Config
 from app.models.mongodb_database import mongodb
 from app.models.feature_system import feature_system, get_feature_settings, set_feature_setting, is_feature_enabled
+from app.services.admin_system_settings_service import AdminSystemSettingsService
 from app.models.mongodb_models import MongoDBTool, MongoDBWorker, MongoDBConsumable
 from bson import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1765,8 +1766,9 @@ def add_user():
         # Departments für Formularkontext
         from app.services.admin_system_settings_service import AdminSystemSettingsService
         departments = AdminSystemSettingsService.get_departments_from_settings()
-        allowed_departments = request.form.getlist('allowed_departments')
+        # Nur eine Abteilung aus Dropdown
         default_department = request.form.get('default_department') or None
+        allowed_departments = [default_department] if default_department else []
         
         if not is_valid:
             for error in errors:
@@ -1991,9 +1993,8 @@ def edit_user(user_id):
             user_data['password'] = processed_data['password']
         
         # Abteilungsrechte
-        allowed_departments = request.form.getlist('allowed_departments')
         default_department = request.form.get('default_department') or None
-        user_data['allowed_departments'] = allowed_departments
+        user_data['allowed_departments'] = [default_department] if default_department else []
         user_data['default_department'] = default_department if default_department else None
 
         success, message = AdminUserService.update_user(user_id, user_data)
@@ -2564,33 +2565,27 @@ def feature_settings():
             return redirect(url_for('admin.dashboard'))
         
         if request.method == 'POST':
-            # Feature-Einstellungen verarbeiten
-            features = {
-                'tools': request.form.get('feature_tools') == 'on',
-                'consumables': request.form.get('feature_consumables') == 'on',
-                'workers': request.form.get('feature_workers') == 'on',
-                'lending_system': request.form.get('feature_lending_system') == 'on',
-                'ticket_system': request.form.get('feature_ticket_system') == 'on',
-                'timesheet': request.form.get('feature_timesheet') == 'on',
-                'media_management': request.form.get('feature_media_management') == 'on',
-                'software_management': request.form.get('feature_software_management') == 'on',
-                'job_board': request.form.get('feature_job_board') == 'on',
-                'weekly_reports': request.form.get('feature_weekly_reports') == 'on',
-                'canteen_plan': request.form.get('feature_canteen_plan') == 'on',
-                # Werkzeug-Felder
-                'tool_field_serial_number': request.form.get('tool_field_serial_number') == 'on',
-                'tool_field_invoice_number': request.form.get('tool_field_invoice_number') == 'on',
-                'tool_field_mac_address': request.form.get('tool_field_mac_address') == 'on',
-                'tool_field_mac_address_wlan': request.form.get('tool_field_mac_address_wlan') == 'on',
-                'tool_field_user_groups': request.form.get('tool_field_user_groups') == 'on',
-                'tool_field_software': request.form.get('tool_field_software') == 'on'
+            # Nur Features aktualisieren, die auf der Seite tatsächlich vorhanden sind
+            # (kein implizites Deaktivieren nicht angezeigter Features)
+            form_to_feature_keys = {
+                'feature_job_board': 'job_board',
+                'feature_weekly_reports': 'weekly_reports',
+                'feature_software_management': 'software_management',
+                'feature_ticket_system': 'ticket_system',
+                'feature_canteen_plan': 'canteen_plan',
             }
-            
+
+            updates = {}
+            for form_key, feature_key in form_to_feature_keys.items():
+                # Checkboxen senden nur etwas, wenn sie angehakt sind →
+                # abgehakte müssen explizit auf False gesetzt werden
+                updates[feature_key] = (request.form.get(form_key) == 'on')
+
             # Einstellungen für aktuelle Abteilung speichern
             from app.models.feature_system import feature_system
-            for feature_name, enabled in features.items():
+            for feature_name, enabled in updates.items():
                 feature_system.set_feature_setting(feature_name, enabled, current_department)
-            
+
             flash(f'Feature-Einstellungen für {current_department} erfolgreich gespeichert', 'success')
             return redirect(url_for('admin.feature_settings'))
         
@@ -2613,49 +2608,7 @@ def feature_settings():
         flash('Fehler beim Laden der Feature-Einstellungen', 'error')
         return redirect(url_for('admin.dashboard'))
 
-@bp.route('/department_features', methods=['GET', 'POST'])
-@admin_required
-def department_features():
-    """Feature-Einstellungen für alle Abteilungen verwalten"""
-    try:
-        from app.models.feature_system import feature_system
-        
-        if request.method == 'POST':
-            action = request.form.get('action')
-            source_dept = request.form.get('source_department')
-            target_dept = request.form.get('target_department')
-            reset_dept = request.form.get('reset_department')
-            
-            if action == 'copy' and source_dept and target_dept:
-                if feature_system.copy_features_from_department(source_dept, target_dept):
-                    flash(f'Features von {source_dept} zu {target_dept} kopiert', 'success')
-                else:
-                    flash('Fehler beim Kopieren der Features', 'error')
-                    
-            elif action == 'reset' and reset_dept:
-                if feature_system.reset_department_features(reset_dept):
-                    flash(f'Features für {reset_dept} zurückgesetzt', 'success')
-                else:
-                    flash('Fehler beim Zurücksetzen der Features', 'error')
-            
-            return redirect(url_for('admin.department_features'))
-        
-        # Alle Department-Features laden
-        all_features = feature_system.get_all_department_features()
-        
-        # Verfügbare Abteilungen
-        from app.utils.context_processors import inject_departments
-        departments_ctx = inject_departments()
-        available_departments = departments_ctx['departments']['allowed']
-        
-        return render_template('admin/department_features.html',
-                             all_features=all_features,
-                             available_departments=available_departments)
-                             
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Department-Features: {str(e)}")
-        flash('Fehler beim Laden der Department-Features', 'error')
-        return redirect(url_for('admin.dashboard'))
+## Entfernt: Department-Features (Seite) – war Overkill und wird nicht mehr genutzt
 
 @bp.route('/change_department', methods=['POST'])
 @admin_required
@@ -2953,13 +2906,26 @@ def delete_department(name):
             return jsonify({
                 'success': False,
                 'message': message
-        })
+            })
     except Exception as e:
         logger.error(f"Fehler beim Löschen der Abteilung: {str(e)}")
         return jsonify({
             'success': False,
             'message': 'Ein Fehler ist aufgetreten.'
         })
+
+@bp.route('/departments/rename', methods=['POST'])
+@mitarbeiter_required
+def rename_department():
+    """Benennt eine Abteilung um (inkl. Migration)."""
+    try:
+        old_name = request.form.get('old_name', '').strip()
+        new_name = request.form.get('new_name', '').strip()
+        success, message = AdminSystemSettingsService.rename_department(old_name, new_name)
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        logger.error(f"Fehler beim Umbenennen der Abteilung: {str(e)}")
+        return jsonify({'success': False, 'message': 'Ein Fehler ist aufgetreten.'})
 
 # Kategorienverwaltung
 @bp.route('/categories')
@@ -5070,6 +5036,20 @@ def switch_department(department):
     """Setzt das aktive Department in der Session, falls der Benutzer berechtigt ist."""
     try:
         user = mongodb.find_one('users', {'username': current_user.username})
+        user_role = (user or {}).get('role') or getattr(current_user, 'role', None)
+
+        # Admins: dürfen in jedes vorhandene Department wechseln
+        if user_role == 'admin':
+            depts_setting = mongodb.find_one('settings', {'key': 'departments'})
+            all_departments = (depts_setting or {}).get('value', [])
+            if department in all_departments:
+                session['department'] = department
+                flash(f'Aktives Department: {department}', 'success')
+            else:
+                flash('Abteilung existiert nicht', 'error')
+            return redirect(request.referrer or url_for('main.index'))
+
+        # Nicht-Admins: nur innerhalb erlaubter Abteilungen
         allowed = user.get('allowed_departments', []) if user else []
         if department in allowed:
             session['department'] = department
