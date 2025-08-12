@@ -984,4 +984,4 @@ def create_mongodb_indexes():
         
     except Exception as e:
         logger.error(f"Fehler beim Erstellen der MongoDB-Indizes: {str(e)}")
-        raise 
+        raise   

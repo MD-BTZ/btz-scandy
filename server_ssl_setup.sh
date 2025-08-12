@@ -1,4 +1,4 @@
-#!/bin/bash
+./11#!/bin/bash
 
 # Server SSL Setup für Scandy
 # Überprüft und konfiguriert alle Voraussetzungen für HTTPS

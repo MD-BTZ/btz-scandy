@@ -251,6 +251,7 @@ User=root
 Group=root
 WorkingDirectory=/opt/scandy
 Environment=PATH=/opt/scandy/venv/bin
+Environment=PYTHONPATH=/opt/scandy
 EnvironmentFile=/opt/scandy/.env
 ExecStart=$EXEC_START
 Restart=always
