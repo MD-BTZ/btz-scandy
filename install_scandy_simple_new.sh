@@ -207,7 +207,6 @@ done
 # 4. Scandy-Verzeichnis einrichten
 log "Richte Scandy ein..."
 mkdir -p /opt/scandy
-cd /opt/scandy
 
 # Code kopieren (robust)
 log "Kopiere Scandy-Code..."
@@ -233,6 +232,9 @@ else
     ls -la "$CURRENT_DIR" | head -10
     exit 1
 fi
+
+# Wechsle zu /opt/scandy für den Rest des Scripts
+cd /opt/scandy
 
 # Prüfe welche App-Dateien existieren
 log "Prüfe verfügbare App-Dateien..."
