@@ -108,7 +108,7 @@ if [ -f ".env" ]; then
     fi
 else
     # Erstelle .env neu falls nicht vorhanden
-    cat > .env << EOF
+            cat > .env << EOF
 # Scandy - Einfache Konfiguration
 WEB_PORT=$NEW_PORT
 MONGODB_URI=mongodb://localhost:27017/scandy
@@ -117,8 +117,10 @@ SECRET_KEY=scandy_secret_key_123
 FLASK_ENV=production
 SESSION_COOKIE_SECURE=false
 REMEMBER_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=Lax
+REMEMBER_COOKIE_SAMESITE=Lax
 EOF
-    success ".env-Datei erstellt mit WEB_PORT=$NEW_PORT"
+        success ".env-Datei erstellt mit WEB_PORT=$NEW_PORT"
 fi
 
 # 3. Firewall aktualisieren

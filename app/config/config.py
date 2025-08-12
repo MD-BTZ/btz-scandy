@@ -103,13 +103,13 @@ class Config:
             # Fallback auf localhost
             BASE_URL = f"http://localhost:{PORT}"
     
-    # Sicherheitseinstellungen
+    # Sicherheitseinstellungen - für HTTP/Proxy-Setups lockerer
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für Login
     REMEMBER_COOKIE_SECURE = os.environ.get('REMEMBER_COOKIE_SECURE', 'False').lower() == 'true'
     REMEMBER_COOKIE_HTTPONLY = True
-    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SAMESITE = 'Lax'  # Erlaubt Cross-Site-Requests für Login
     
     # Datumsformat-Konfiguration (Deutsch)
     DATE_FORMAT = '%d.%m.%Y'

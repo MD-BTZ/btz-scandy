@@ -254,7 +254,7 @@ fi
 
 # 6. Einfache .env-Datei erstellen
 log "Erstelle .env-Datei..."
-cat > .env << 'EOF'
+cat > .env << EOF
 # Scandy - Einfache Konfiguration
 WEB_PORT=$WEB_PORT
 MONGODB_URI=mongodb://localhost:27017/scandy
@@ -263,6 +263,8 @@ SECRET_KEY=scandy_secret_key_123
 FLASK_ENV=production
 SESSION_COOKIE_SECURE=false
 REMEMBER_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=Lax
+REMEMBER_COOKIE_SAMESITE=Lax
 EOF
 success ".env-Datei erstellt"
 

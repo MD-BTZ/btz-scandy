@@ -81,28 +81,9 @@ def handle_errors(app):
             return jsonify({'error': 'Unauthorized'}), 401
         return render_template('errors/401.html'), 401
     
-    # Session-Fehler Handler
+    # Bad Request Handler
     @app.errorhandler(400)
     def bad_request_error(error):
-        # CSRF-Handling differenziert nach Route
-        if hasattr(error, 'description') and 'CSRF token' in str(error.description):
-            logger.warning("CSRF-Token-Fehler erkannt")
-            # Für Auth/Setup: zurück zur Login-/Setup-Seite mit Hinweis
-            try:
-                from flask import redirect, url_for, flash
-                if request.path.startswith('/auth') or request.path.startswith('/setup'):
-                    flash('Sicherheits-Token abgelaufen. Bitte erneut versuchen.', 'error')
-                    # Leite je nach Route passend um
-                    if request.path.startswith('/auth'):
-                        return redirect(url_for('auth.login'))
-                    return redirect(url_for('auth.setup'))
-            except Exception:
-                pass
-            # Für API: JSON, sonst 400-Seite
-            if request.path.startswith('/api/'):
-                return jsonify({'error': 'Bad request'}), 400
-            return render_template('errors/400.html'), 400
-
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Bad request'}), 400
         return render_template('errors/400.html'), 400
@@ -110,11 +91,6 @@ def handle_errors(app):
     # Allgemeiner Exception-Handler
     @app.errorhandler(Exception)
     def handle_exception(e):
-        # Prüfe ob es ein Session-Problem ist
-        if isinstance(e, Exception) and ('load_user' in str(e) or 'CSRF token' in str(e)):
-            logger.warning("Session-Problem erkannt - ignoriere für Setup/Login")
-            return jsonify({'error': 'Internal server error'}), 500
-        
         # Logge den Fehler
         logger.error(f"Unbehandelter Fehler: {str(e)}")
         

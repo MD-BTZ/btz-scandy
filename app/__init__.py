@@ -34,7 +34,7 @@ from app.utils.context_processors import register_context_processors
 from app.config import Config
 from app.routes import init_app
 from dotenv import load_dotenv
-from flask_wtf.csrf import CSRFProtect
+# from flask_wtf.csrf import CSRFProtect  # CSRF deaktiviert
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask import g, session
@@ -161,8 +161,8 @@ def ensure_directories_exist():
         else:
             logging.info(f"Verzeichnis existiert bereits: {dir_path}")
 
-# CSRF-Schutz initialisieren
-csrf = CSRFProtect()
+# CSRF-Schutz deaktiviert (nicht nötig für interne Netzwerke)
+csrf = None
 
 # Rate Limiter initialisieren (lazy initialization)
 limiter = None
@@ -214,8 +214,8 @@ def create_app(test_config=None):
     if not app.config.get('SECRET_KEY'):
         app.config['SECRET_KEY'] = secrets.token_hex(32)
     
-    # ===== CSRF-SCHUTZ AKTIVIEREN =====
-    csrf.init_app(app)
+    # ===== CSRF-SCHUTZ DEAKTIVIERT =====
+    # csrf.init_app(app)  # CSRF-Schutz deaktiviert
     
     # ===== RATE LIMITING AKTIVIEREN =====
     get_limiter().init_app(app)
@@ -409,18 +409,8 @@ def create_app(test_config=None):
 
     # ===== BLUEPRINTS REGISTRIEREN =====
     init_app(app)
-    # Nach Blueprint-Registrierung: nur Login und Reset-Password von CSRF ausnehmen
-    # (vermeidet Zirkularimporte und hält übrige Auth-Routen geschützt)
-    try:
-        login_view = app.view_functions.get('auth.login')
-        reset_view = app.view_functions.get('auth.reset_password')
-        if login_view:
-            csrf.exempt(login_view)
-        if reset_view:
-            csrf.exempt(reset_view)
-        logging.info("CSRF-Ausnahme gesetzt für 'auth.login' und 'auth.reset_password'")
-    except Exception as e:
-        logging.warning(f"Konnte CSRF-Exemptions nicht setzen: {e}")
+    # CSRF-Schutz komplett deaktiviert
+    logging.info("CSRF-Schutz deaktiviert - alle Routen ohne CSRF-Validierung")
 
     
     # ===== AUTOMATISCHES BACKUP-SYSTEM STARTEN =====
@@ -511,7 +501,6 @@ def create_app(test_config=None):
     @app.context_processor
     def utility_processor():
         """Injiziert Farben für Status und Prioritäten in alle Templates"""
-        from flask_wtf.csrf import generate_csrf
         return {
             'status_colors': {
                 'offen': 'danger',
@@ -525,8 +514,7 @@ def create_app(test_config=None):
                 'normal': 'primary',
                 'hoch': 'error',
                 'dringend': 'error'
-            },
-            'csrf_token': generate_csrf
+            }
         }
     
     # ===== CONTEXT PROCESSOR FÜR FEATURE-EINSTELLUNGEN =====
