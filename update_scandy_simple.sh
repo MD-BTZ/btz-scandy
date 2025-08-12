@@ -18,6 +18,51 @@ success() { echo "✅ $*"; }
 error() { echo "❌ $*"; }
 info() { echo "ℹ️  $*"; }
 
+# Port-Auswahl
+echo ""
+echo "🌐 Port-Auswahl für Scandy:"
+echo "1) Port 80 (Standard-HTTP, keine Port-Angabe in URL nötig)"
+echo "2) Port 443 (Standard-HTTPS, keine Port-Angabe in URL nötig)"
+echo "3) Port 5001 (Standard-Scandy-Port)"
+echo "4) Benutzerdefinierter Port"
+echo ""
+read -p "Wähle Port (1-4): " PORT_CHOICE
+
+case $PORT_CHOICE in
+    1)
+        WEB_PORT=80
+        PORT_NAME="Standard-HTTP"
+        ;;
+    2)
+        WEB_PORT=443
+        PORT_NAME="Standard-HTTPS"
+        ;;
+    3)
+        WEB_PORT=5001
+        PORT_NAME="Standard-Scandy"
+        ;;
+    4)
+        read -p "Gib benutzerdefinierten Port ein (z.B. 8080): " WEB_PORT
+        PORT_NAME="Benutzerdefiniert"
+        ;;
+    *)
+        WEB_PORT=80
+        PORT_NAME="Standard-HTTP (Standardauswahl)"
+        ;;
+esac
+
+# Prüfe ob Port verfügbar ist
+if [ "$WEB_PORT" = "80" ] || [ "$WEB_PORT" = "443" ]; then
+    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT "; then
+        error "Port $WEB_PORT ist bereits belegt!"
+        info "Verwende stattdessen Port 5001"
+        WEB_PORT=5001
+        PORT_NAME="Standard-Scandy (Port 80/443 belegt)"
+    fi
+fi
+
+success "Verwende Port: $WEB_PORT ($PORT_NAME)"
+
 # Prüfe ob Scandy installiert ist
 if [ ! -d "/opt/scandy" ]; then
     error "Scandy ist nicht installiert. Verwende install_scandy_simple_new.sh"
@@ -65,7 +110,33 @@ fi
 chown -R root:root /opt/scandy 2>/dev/null || true
 chmod -R 755 /opt/scandy
 
-# 4. Python-Abhängigkeiten aktualisieren
+# 4. .env-Datei aktualisieren
+log "Aktualisiere .env-Datei..."
+if [ -f ".env" ]; then
+    # Aktualisiere WEB_PORT in .env
+    if grep -q "WEB_PORT=" .env; then
+        sed -i "s/WEB_PORT=.*/WEB_PORT=$WEB_PORT/" .env
+        success "WEB_PORT in .env auf $WEB_PORT aktualisiert"
+    else
+        echo "WEB_PORT=$WEB_PORT" >> .env
+        success "WEB_PORT=$WEB_PORT zu .env hinzugefügt"
+    fi
+else
+    # Erstelle .env neu falls nicht vorhanden
+    cat > .env << EOF
+# Scandy - Einfache Konfiguration
+WEB_PORT=$WEB_PORT
+MONGODB_URI=mongodb://localhost:27017/scandy
+MONGODB_DB=scandy
+SECRET_KEY=scandy_secret_key_123
+FLASK_ENV=production
+SESSION_COOKIE_SECURE=false
+REMEMBER_COOKIE_SECURE=false
+EOF
+    success ".env-Datei erstellt mit WEB_PORT=$WEB_PORT"
+fi
+
+# 5. Python-Abhängigkeiten aktualisieren
 log "Aktualisiere Python-Abhängigkeiten..."
 if [ -d "venv" ]; then
     source venv/bin/activate
@@ -199,8 +270,8 @@ systemctl restart scandy
 # 8. Warten auf App-Start
 log "Warte auf App-Start..."
 for i in {1..60}; do
-    if ss -H -ltn 2>/dev/null | grep -q ':5001 '; then
-        success "Scandy läuft auf Port 5001"
+    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT "; then
+        success "Scandy läuft auf Port $WEB_PORT"
         break
     fi
     
@@ -247,7 +318,7 @@ done
 # 9. Fertig!
 echo ""
 success "Update abgeschlossen!"
-echo "🌐 Web-App: http://$(hostname -I | awk '{print $1}'):5001"
+echo "🌐 Web-App: http://$(hostname -I | awk '{print $1}'):$WEB_PORT"
 echo "📊 MongoDB: mongodb://localhost:27017/scandy"
 echo "📝 Logs: journalctl -u scandy -f"
 echo "💾 Backup: $BACKUP_DIR"

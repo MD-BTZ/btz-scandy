@@ -18,6 +18,51 @@ success() { echo "✅ $*"; }
 error() { echo "❌ $*"; }
 info() { echo "ℹ️  $*"; }
 
+# Port-Auswahl
+echo ""
+echo "🌐 Port-Auswahl für Scandy:"
+echo "1) Port 80 (Standard-HTTP, keine Port-Angabe in URL nötig)"
+echo "2) Port 443 (Standard-HTTPS, keine Port-Angabe in URL nötig)"
+echo "3) Port 5001 (Standard-Scandy-Port)"
+echo "4) Benutzerdefinierter Port"
+echo ""
+read -p "Wähle Port (1-4): " PORT_CHOICE
+
+case $PORT_CHOICE in
+    1)
+        WEB_PORT=80
+        PORT_NAME="Standard-HTTP"
+        ;;
+    2)
+        WEB_PORT=443
+        PORT_NAME="Standard-HTTPS"
+        ;;
+    3)
+        WEB_PORT=5001
+        PORT_NAME="Standard-Scandy"
+        ;;
+    4)
+        read -p "Gib benutzerdefinierten Port ein (z.B. 8080): " WEB_PORT
+        PORT_NAME="Benutzerdefiniert"
+        ;;
+    *)
+        WEB_PORT=80
+        PORT_NAME="Standard-HTTP (Standardauswahl)"
+        ;;
+esac
+
+# Prüfe ob Port verfügbar ist
+if [ "$WEB_PORT" = "80" ] || [ "$WEB_PORT" = "443" ]; then
+    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT "; then
+        error "Port $WEB_PORT ist bereits belegt!"
+        info "Verwende stattdessen Port 5001"
+        WEB_PORT=5001
+        PORT_NAME="Standard-Scandy (Port 80/443 belegt)"
+    fi
+fi
+
+success "Verwende Port: $WEB_PORT ($PORT_NAME)"
+
 # 1. System-Pakete installieren
 log "Installiere System-Pakete..."
 apt update -y >/dev/null 2>&1
@@ -211,7 +256,7 @@ fi
 log "Erstelle .env-Datei..."
 cat > .env << 'EOF'
 # Scandy - Einfache Konfiguration
-WEB_PORT=5001
+WEB_PORT=$WEB_PORT
 MONGODB_URI=mongodb://localhost:27017/scandy
 MONGODB_DB=scandy
 SECRET_KEY=scandy_secret_key_123
@@ -328,8 +373,8 @@ success "Systemd-Service erstellt"
 # 8. Firewall öffnen
 log "Öffne Firewall..."
 if command -v ufw >/dev/null 2>&1; then
-    ufw allow 5001/tcp >/dev/null 2>&1 || true
-    info "Port 5001 freigegeben"
+    ufw allow $WEB_PORT/tcp >/dev/null 2>&1 || true
+    info "Port $WEB_PORT freigegeben"
 fi
 
 # 9. Services starten
@@ -340,8 +385,8 @@ systemctl restart scandy
 # 10. Warten auf App-Start
 log "Warte auf App-Start..."
 for i in {1..60}; do
-    if ss -H -ltn 2>/dev/null | grep -q ':5001 '; then
-        success "Scandy läuft auf Port 5001"
+    if ss -H -ltn 2>/dev/null | grep -q ":$WEB_PORT "; then
+        success "Scandy läuft auf Port $WEB_PORT"
         break
     fi
     
@@ -385,7 +430,7 @@ done
 # 11. Fertig!
 echo ""
 success "Installation abgeschlossen!"
-echo "🌐 Web-App: http://$(hostname -I | awk '{print $1}'):5001"
+echo "🌐 Web-App: http://$(hostname -I | awk '{print $1}'):$WEB_PORT"
 echo "📊 MongoDB: mongodb://localhost:27017/scandy"
 echo "📝 Logs: journalctl -u scandy -f"
 echo ""
